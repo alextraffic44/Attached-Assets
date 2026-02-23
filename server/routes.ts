@@ -237,7 +237,11 @@ export async function registerRoutes(
           }
         } else {
           const jsonBody = await kieResponse.json();
-          console.log("KIE API JSON response keys:", Object.keys(jsonBody));
+          console.log("KIE API JSON response:", JSON.stringify(jsonBody).substring(0, 2000));
+          if (jsonBody.code && jsonBody.msg) {
+            console.error("KIE API returned error:", jsonBody.code, jsonBody.msg);
+            throw new Error(`KIE API error: ${jsonBody.code} - ${jsonBody.msg}`);
+          }
           const content = jsonBody.choices?.[0]?.message?.content || "";
           fullResponse = content;
           if (content) {
