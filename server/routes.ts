@@ -492,5 +492,23 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/proxy-image", bypassAuth, async (req, res) => {
+    try {
+      const imageUrl = req.query.url as string;
+      if (!imageUrl || !imageUrl.startsWith("http")) {
+        return res.status(400).json({ message: "URL обязателен" });
+      }
+      const response = await fetch(imageUrl);
+      if (!response.ok) throw new Error("Не удалось загрузить изображение");
+      const contentType = response.headers.get("content-type") || "image/png";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка загрузки изображения" });
+    }
+  });
+
   return httpServer;
 }

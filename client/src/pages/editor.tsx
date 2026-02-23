@@ -168,15 +168,77 @@ export default function EditorPage() {
 
   const handleDownloadZip = async () => {
     if (!currentCode) return;
+    toast({ title: "Подготовка архива...", description: "Скачиваем изображения" });
+
     const zip = new JSZip();
-    zip.file("index.html", currentCode);
+    const imgFolder = zip.folder("images");
+    let htmlCode = currentCode;
+
+    const allImageUrls = new Map<string, string>();
+
+    const downloadImage = async (imageUrl: string): Promise<Blob | null> => {
+      try {
+        const resp = await fetch(`/api/proxy-image?url=${encodeURIComponent(imageUrl)}`);
+        if (!resp.ok) throw new Error("proxy failed");
+        return await resp.blob();
+      } catch {
+        try {
+          const resp = await fetch(imageUrl);
+          return await resp.blob();
+        } catch {
+          return null;
+        }
+      }
+    };
+
+    if (projectImages.length > 0 && imgFolder) {
+      for (const img of projectImages) {
+        const ext = img.url.match(/\.(png|jpg|jpeg|webp|gif|svg)(\?|$)/i)?.[1] || "png";
+        const fileName = `${img.name.replace(/[^a-zA-Zа-яА-Я0-9_-]/g, "_")}.${ext}`;
+        const blob = await downloadImage(img.url);
+        if (blob) {
+          imgFolder.file(fileName, blob);
+          allImageUrls.set(img.url, `images/${fileName}`);
+        }
+      }
+    }
+
+    const externalImgRegex = /(?:src\s*=\s*["']|url\s*\(\s*["']?)(https?:\/\/[^"'\s)]+(?:\.(?:png|jpg|jpeg|webp|gif|svg)|\/[^"'\s)]*))(?:\?[^"'\s)]*)?/gi;
+    let match;
+    const externalUrls = new Set<string>();
+    while ((match = externalImgRegex.exec(htmlCode)) !== null) {
+      const url = match[1];
+      if (!allImageUrls.has(url) && !url.includes("placehold.co")) {
+        externalUrls.add(url);
+      }
+    }
+
+    if (externalUrls.size > 0 && imgFolder) {
+      let idx = 0;
+      for (const url of externalUrls) {
+        const ext = url.match(/\.(png|jpg|jpeg|webp|gif|svg)(\?|$)/i)?.[1] || "png";
+        const fileName = `image_${idx++}.${ext}`;
+        const blob = await downloadImage(url);
+        if (blob) {
+          imgFolder.file(fileName, blob);
+          allImageUrls.set(url, `images/${fileName}`);
+        }
+      }
+    }
+
+    for (const [remoteUrl, localPath] of allImageUrls) {
+      htmlCode = htmlCode.split(remoteUrl).join(localPath);
+    }
+
+    zip.file("index.html", htmlCode);
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `${project?.title || "site"}.zip`;
     a.click();
-    toast({ title: "Архив готов" });
+    URL.revokeObjectURL(url);
+    toast({ title: "Архив готов!", description: `${allImageUrls.size} изображений включено` });
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
