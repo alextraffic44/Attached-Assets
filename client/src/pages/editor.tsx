@@ -265,6 +265,39 @@ export default function EditorPage() {
       } catch {}
     }
 
+    const leadExportScript = `<script>
+(function(){
+  var API='${window.location.origin}/api/leads/${projectId}';
+  function showToast(msg){
+    var t=document.createElement('div');
+    t.textContent=msg;
+    t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:12px 24px;border-radius:12px;font-weight:600;font-size:14px;z-index:99999;box-shadow:0 8px 32px rgba(0,0,0,0.3);transition:opacity 0.5s';
+    document.body.appendChild(t);
+    setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove()},500)},3000);
+  }
+  document.addEventListener('submit',function(e){
+    var form=e.target;
+    if(!form||form.tagName!=='FORM') return;
+    e.preventDefault();
+    var fd=new FormData(form);
+    var data={name:'',email:'',phone:'',message:'',source:form.dataset.leadForm||'form'};
+    fd.forEach(function(v,k){
+      var kl=k.toLowerCase();
+      if(kl.indexOf('name')>-1||kl.indexOf('имя')>-1||kl.indexOf('фио')>-1) data.name=v;
+      else if(kl.indexOf('email')>-1||kl.indexOf('почт')>-1||kl.indexOf('mail')>-1) data.email=v;
+      else if(kl.indexOf('phone')>-1||kl.indexOf('тел')>-1) data.phone=v;
+      else if(kl.indexOf('message')>-1||kl.indexOf('сооб')>-1||kl.indexOf('коммент')>-1||kl.indexOf('пожелан')>-1||kl.indexOf('текст')>-1) data.message=v;
+      else if(!data.message) data.message=v;
+    });
+    if(!data.name&&!data.email&&!data.phone&&!data.message) return;
+    fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+    .then(function(r){if(r.ok){showToast('Заявка отправлена!');form.reset();}})
+    .catch(function(){});
+  },true);
+})();
+</script>`;
+    htmlCode = htmlCode.replace('</body>', leadExportScript + '\n</body>');
+
     zip.file("index.html", htmlCode);
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);

@@ -663,8 +663,15 @@ export async function registerRoutes(
 
   // ═══ LEADS API ═══
 
-  // Public endpoint — generated sites POST here (no auth needed)
+  app.options("/api/leads/:projectId", (req, res) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type");
+    res.sendStatus(204);
+  });
+
   app.post("/api/leads/:projectId", async (req, res) => {
+    res.header("Access-Control-Allow-Origin", "*");
     try {
       const projectId = parseInt(req.params.projectId);
       const project = await storage.getProject(projectId);
