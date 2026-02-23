@@ -659,7 +659,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-violet-500 mt-1.5">Напишите в чат: "вставь изображение [имя] в hero секцию"</p>
+              <p className="text-[10px] text-violet-500 mt-1.5">Включите Редактор → кликните на placeholder → выберите фото</p>
             </div>
           )}
 
