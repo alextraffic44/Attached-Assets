@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, projects, projectMessages, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { users, projects, projectMessages, projectImages, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage } from "@shared/schema";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -16,6 +16,10 @@ export interface IStorage {
 
   getProjectMessages(projectId: number): Promise<ProjectMessage[]>;
   createProjectMessage(message: InsertProjectMessage): Promise<ProjectMessage>;
+
+  getProjectImages(projectId: number): Promise<ProjectImage[]>;
+  createProjectImage(image: InsertProjectImage): Promise<ProjectImage>;
+  deleteProjectImage(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -70,6 +74,19 @@ export class DatabaseStorage implements IStorage {
   async createProjectMessage(message: InsertProjectMessage): Promise<ProjectMessage> {
     const [msg] = await db.insert(projectMessages).values(message).returning();
     return msg;
+  }
+
+  async getProjectImages(projectId: number): Promise<ProjectImage[]> {
+    return db.select().from(projectImages).where(eq(projectImages.projectId, projectId)).orderBy(desc(projectImages.createdAt));
+  }
+
+  async createProjectImage(image: InsertProjectImage): Promise<ProjectImage> {
+    const [img] = await db.insert(projectImages).values(image).returning();
+    return img;
+  }
+
+  async deleteProjectImage(id: number): Promise<void> {
+    await db.delete(projectImages).where(eq(projectImages.id, id));
   }
 }
 

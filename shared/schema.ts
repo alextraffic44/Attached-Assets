@@ -31,6 +31,15 @@ export const projectMessages = pgTable("project_messages", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const projectImages = pgTable("project_images", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  prompt: text("prompt").notNull().default(""),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -49,9 +58,16 @@ export const insertProjectMessageSchema = createInsertSchema(projectMessages).om
   createdAt: true,
 });
 
+export const insertProjectImageSchema = createInsertSchema(projectImages).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type ProjectMessage = typeof projectMessages.$inferSelect;
 export type InsertProjectMessage = z.infer<typeof insertProjectMessageSchema>;
+export type ProjectImage = typeof projectImages.$inferSelect;
+export type InsertProjectImage = z.infer<typeof insertProjectImageSchema>;

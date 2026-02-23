@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { useLocation, useParams } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Project, ProjectMessage } from "@shared/schema";
+import type { Project, ProjectMessage, ProjectImage } from "@shared/schema";
 import JSZip from "jszip";
 import {
   ArrowLeft,
@@ -29,8 +30,8 @@ import {
   Wand2,
   CheckCircle2,
   XCircle,
-  Replace,
-  PlusCircle,
+  Trash2,
+  ImagePlus,
 } from "lucide-react";
 import {
   Dialog,
@@ -47,7 +48,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const SkeuoPanel = ({ children, className = "" }) => (
+const SkeuoPanel = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
   <div className={`bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-white/20 dark:border-white/5 shadow-skeuo-lg rounded-[2rem] overflow-hidden flex flex-col ${className}`}>
     {children}
   </div>
@@ -68,16 +69,15 @@ export default function EditorPage() {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
   const [imgGenOpen, setImgGenOpen] = useState(false);
+  const [imgName, setImgName] = useState("");
   const [imgPrompt, setImgPrompt] = useState("");
   const [imgSize, setImgSize] = useState("16:9");
   const [imgGenerating, setImgGenerating] = useState(false);
-  const [imgTaskId, setImgTaskId] = useState<string | null>(null);
   const [imgStatus, setImgStatus] = useState<"idle" | "creating" | "waiting" | "success" | "fail">("idle");
   const [imgResultUrls, setImgResultUrls] = useState<string[]>([]);
   const [imgError, setImgError] = useState("");
-  const [imgSections, setImgSections] = useState<Array<{ id: string; label: string; type: string; hasImage: boolean }>>([]);
-  const [imgTargetSection, setImgTargetSection] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -88,6 +88,10 @@ export default function EditorPage() {
 
   const { data: messages = [] } = useQuery<ProjectMessage[]>({
     queryKey: ["/api/projects", projectId, "messages"],
+  });
+
+  const { data: projectImages = [] } = useQuery<ProjectImage[]>({
+    queryKey: ["/api/projects", projectId, "images"],
   });
 
   const currentCode = streamedCode || project?.generatedCode || "";
@@ -187,7 +191,7 @@ export default function EditorPage() {
   };
 
   const handleGenerateImage = useCallback(async () => {
-    if (!imgPrompt.trim()) return;
+    if (!imgPrompt.trim() || !imgName.trim()) return;
     setImgGenerating(true);
     setImgStatus("creating");
     setImgResultUrls([]);
@@ -204,7 +208,6 @@ export default function EditorPage() {
       if (!resp.ok) throw new Error(data.message);
 
       const taskId = data.taskId;
-      setImgTaskId(taskId);
       setImgStatus("waiting");
 
       const pollInterval = setInterval(async () => {
@@ -231,65 +234,47 @@ export default function EditorPage() {
         }
       }, 3000);
 
-      setTimeout(() => {
-        clearInterval(pollInterval);
-        if (imgStatus === "waiting") {
-          setImgError("Таймаут генерации");
-          setImgStatus("fail");
-          setImgGenerating(false);
-        }
-      }, 180000);
+      setTimeout(() => clearInterval(pollInterval), 180000);
     } catch (err: any) {
       setImgError(err.message);
       setImgStatus("fail");
       setImgGenerating(false);
     }
-  }, [imgPrompt, imgSize, imgStatus]);
+  }, [imgPrompt, imgSize, imgName]);
 
-  const loadSections = useCallback(async () => {
+  const handleSaveImage = useCallback(async (url: string) => {
     try {
-      const resp = await fetch(`/api/projects/${projectId}/analyze-sections`, { credentials: "include" });
-      if (resp.ok) {
-        const data = await resp.json();
-        setImgSections(data.targets || []);
-        if (data.targets?.length > 0) setImgTargetSection(data.targets[0].id);
-      }
-    } catch {}
-  }, [projectId]);
-
-  useEffect(() => {
-    if (imgGenOpen && currentCode) loadSections();
-  }, [imgGenOpen, currentCode, loadSections]);
-
-  const handleInsertImage = useCallback(async (url: string, mode: string, target?: string) => {
-    try {
-      const resp = await fetch(`/api/projects/${projectId}/insert-image`, {
+      const resp = await fetch(`/api/projects/${projectId}/images`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageUrl: url,
-          altText: imgPrompt || "AI изображение",
-          insertMode: mode,
-          targetSection: target || imgTargetSection,
-        }),
+        body: JSON.stringify({ name: imgName.trim(), url, prompt: imgPrompt }),
         credentials: "include",
       });
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.message || "Ошибка вставки");
-      }
-      const updated = await resp.json();
-      setStreamedCode(updated.generatedCode);
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
-      toast({ title: "Изображение вставлено" });
+      if (!resp.ok) throw new Error("Ошибка сохранения");
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "images"] });
+      toast({ title: "Сохранено в библиотеку", description: `Изображение "${imgName}" готово к использованию` });
       setImgGenOpen(false);
       setImgStatus("idle");
       setImgResultUrls([]);
+      setImgName("");
       setImgPrompt("");
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
     }
-  }, [projectId, imgPrompt, imgTargetSection, toast]);
+  }, [projectId, imgName, imgPrompt, toast]);
+
+  const handleDeleteImage = useCallback(async (imageId: number) => {
+    try {
+      await fetch(`/api/projects/${projectId}/images/${imageId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "images"] });
+      toast({ title: "Изображение удалено" });
+    } catch {
+      toast({ title: "Ошибка удаления", variant: "destructive" });
+    }
+  }, [projectId, toast]);
 
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
 
@@ -299,12 +284,12 @@ export default function EditorPage() {
     <div className="h-screen bg-[#F8FAFC] dark:bg-[#0F172A] flex flex-col p-4 gap-4 overflow-hidden">
       <header className="h-16 flex items-center justify-between gap-4 px-2">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" className="rounded-xl shadow-skeuo-sm bg-white dark:bg-slate-900" onClick={() => setLocation("/dashboard")}>
+          <Button variant="ghost" size="icon" className="rounded-xl shadow-skeuo-sm bg-white dark:bg-slate-900" onClick={() => setLocation("/dashboard")} data-testid="button-back">
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex flex-col">
             <span className="text-sm font-black uppercase tracking-widest text-primary leading-none mb-1">PRO-PROJECT</span>
-            <h1 className="text-xl font-black tracking-tighter leading-none">{project?.title}</h1>
+            <h1 className="text-xl font-black tracking-tighter leading-none" data-testid="text-project-title">{project?.title}</h1>
           </div>
         </div>
 
@@ -315,7 +300,7 @@ export default function EditorPage() {
               { d: "tablet" as const, i: Tablet },
               { d: "mobile" as const, i: Smartphone },
             ].map(({ d, i: Icon }) => (
-              <Button key={d} variant={previewDevice === d ? "secondary" : "ghost"} size="icon" className="h-8 w-8 rounded-lg" onClick={() => setPreviewDevice(d)}>
+              <Button key={d} variant={previewDevice === d ? "secondary" : "ghost"} size="icon" className="h-8 w-8 rounded-lg" onClick={() => setPreviewDevice(d)} data-testid={`button-device-${d}`}>
                 <Icon className="w-3.5 h-3.5" />
               </Button>
             ))}
@@ -323,22 +308,25 @@ export default function EditorPage() {
 
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
-          <Button variant={showCode ? "secondary" : "ghost"} size="sm" className="rounded-xl font-bold px-4" onClick={() => setShowCode(!showCode)}>
+          <Button variant={showCode ? "secondary" : "ghost"} size="sm" className="rounded-xl font-bold px-4" onClick={() => setShowCode(!showCode)} data-testid="button-toggle-code">
             {showCode ? <Eye className="w-4 h-4 mr-2" /> : <Code2 className="w-4 h-4 mr-2" />}
             {showCode ? "Сайт" : "Код"}
           </Button>
 
-          <Button variant="outline" size="sm" className="rounded-xl font-bold px-4" onClick={handleDownloadZip} disabled={!currentCode}>
+          <Button variant="outline" size="sm" className="rounded-xl font-bold px-4" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip">
             <Download className="w-4 h-4 mr-2" />
             ZIP
           </Button>
 
-          <Button variant="outline" size="sm" className="rounded-xl font-bold px-4 bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20" onClick={() => setImgGenOpen(true)} disabled={!currentCode} data-testid="button-open-image-gen">
+          <Button variant="outline" size="sm" className="rounded-xl font-bold px-4 bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen">
             <Wand2 className="w-4 h-4 mr-2" />
             AI Фото
+            {projectImages.length > 0 && (
+              <Badge className="ml-1.5 bg-violet-500 text-white text-[10px] px-1.5 py-0 rounded-full">{projectImages.length}</Badge>
+            )}
           </Button>
 
-          <Button size="sm" className="rounded-xl font-black px-6 shadow-lg shadow-primary/20 hover-elevate" onClick={() => toast({ title: "Публикация", description: "Скоро!" })}>
+          <Button size="sm" className="rounded-xl font-black px-6 shadow-lg shadow-primary/20 hover-elevate" onClick={() => toast({ title: "Публикация", description: "Скоро!" })} data-testid="button-publish">
             <ExternalLink className="w-4 h-4 mr-2" />
             Live
           </Button>
@@ -371,7 +359,25 @@ export default function EditorPage() {
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
-          
+
+          {projectImages.length > 0 && (
+            <div className="px-6 py-3 border-t bg-violet-50/50 dark:bg-violet-900/10">
+              <p className="text-xs font-bold text-violet-600 dark:text-violet-400 mb-2 flex items-center gap-1.5">
+                <ImagePlus className="w-3.5 h-3.5" />
+                Библиотека изображений ({projectImages.length})
+              </p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {projectImages.map((img) => (
+                  <div key={img.id} className="relative shrink-0 group" data-testid={`image-library-${img.id}`}>
+                    <img src={img.url} alt={img.name} className="w-12 h-12 rounded-lg object-cover border-2 border-violet-200 dark:border-violet-700" title={img.name} />
+                    <span className="absolute -bottom-1 left-0 right-0 text-[8px] font-black text-center text-violet-700 dark:text-violet-300 bg-white/90 dark:bg-slate-900/90 rounded-b-lg truncate px-0.5">{img.name}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-violet-500 mt-1.5">Напишите в чат: "вставь изображение [имя] в hero секцию"</p>
+            </div>
+          )}
+
           <div className="p-6 border-t bg-slate-50/50 dark:bg-slate-800/20">
             {imagePreview && (
               <div className="mb-4 relative w-20 h-20 group">
@@ -381,18 +387,19 @@ export default function EditorPage() {
             )}
             <div className="flex items-end gap-3">
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-              <Button variant="outline" size="icon" className="h-12 w-12 rounded-xl shrink-0 bg-white dark:bg-slate-900" onClick={() => fileInputRef.current?.click()} disabled={isGenerating}>
+              <Button variant="outline" size="icon" className="h-12 w-12 rounded-xl shrink-0 bg-white dark:bg-slate-900" onClick={() => fileInputRef.current?.click()} disabled={isGenerating} data-testid="button-upload-image">
                 <ImageIcon className="w-5 h-5" />
               </Button>
               <Textarea 
-                placeholder="Что добавим?"
+                placeholder={projectImages.length > 0 ? `Вставь "${projectImages[0].name}" в hero...` : "Что добавим?"}
                 value={prompt}
                 onChange={e => setPrompt(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleGenerate())}
                 className="min-h-[48px] h-12 rounded-xl border-none bg-white dark:bg-slate-900 shadow-skeuo-inner font-medium py-3"
                 disabled={isGenerating}
+                data-testid="input-prompt"
               />
-              <Button className="h-12 w-12 rounded-xl shrink-0 shadow-lg shadow-primary/20" onClick={() => handleGenerate()} disabled={isGenerating || (!prompt.trim() && !imageBase64)}>
+              <Button className="h-12 w-12 rounded-xl shrink-0 shadow-lg shadow-primary/20" onClick={() => handleGenerate()} disabled={isGenerating || (!prompt.trim() && !imageBase64)} data-testid="button-send">
                 <Send className="w-5 h-5" />
               </Button>
             </div>
@@ -402,6 +409,7 @@ export default function EditorPage() {
         <button 
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-12 bg-white dark:bg-slate-900 shadow-skeuo-md border border-white/20 dark:border-white/5 rounded-r-xl flex items-center justify-center hover:bg-primary hover:text-white transition-all ${sidebarOpen ? 'translate-x-[400px]' : 'translate-x-0'}`}
+          data-testid="button-toggle-sidebar"
         >
           {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
@@ -429,22 +437,35 @@ export default function EditorPage() {
       </div>
 
       <Dialog open={imgGenOpen} onOpenChange={setImgGenOpen}>
-        <DialogContent className="sm:max-w-lg bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-skeuo-lg rounded-3xl" aria-describedby="img-gen-description">
+        <DialogContent className="sm:max-w-lg bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-skeuo-lg rounded-3xl max-h-[90vh] overflow-y-auto" aria-describedby="img-gen-description">
           <DialogHeader>
             <DialogTitle className="text-xl font-black tracking-tight flex items-center gap-2">
               <Wand2 className="w-5 h-5 text-violet-500" />
               AI Генерация изображений
             </DialogTitle>
             <DialogDescription id="img-gen-description">
-              Nano Banana создаст изображение и вставит его в ваш сайт
+              Создайте изображение, дайте ему имя, а потом скажите Gemini куда его вставить
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 pt-2">
             <div>
+              <label className="text-sm font-bold mb-1.5 block text-slate-700 dark:text-slate-300">Имя изображения</label>
+              <Input
+                placeholder="например: персик, баннер, офис..."
+                value={imgName}
+                onChange={e => setImgName(e.target.value)}
+                className="rounded-xl bg-white dark:bg-slate-800 shadow-skeuo-inner"
+                disabled={imgGenerating}
+                data-testid="input-image-name"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">Это имя вы будете использовать в чате: "вставь [имя] в hero секцию"</p>
+            </div>
+
+            <div>
               <label className="text-sm font-bold mb-1.5 block text-slate-700 dark:text-slate-300">Описание изображения</label>
               <Textarea
-                placeholder="Современный офис с панорамными окнами, минималистичный дизайн..."
+                placeholder="Сочный персик на белом фоне, студийное фото..."
                 value={imgPrompt}
                 onChange={e => setImgPrompt(e.target.value)}
                 className="min-h-[80px] rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-skeuo-inner"
@@ -475,7 +496,7 @@ export default function EditorPage() {
             <Button
               className="w-full rounded-xl font-black h-12 shadow-lg bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-700 hover:to-pink-700 text-white"
               onClick={handleGenerateImage}
-              disabled={imgGenerating || !imgPrompt.trim()}
+              disabled={imgGenerating || !imgPrompt.trim() || !imgName.trim()}
               data-testid="button-generate-image"
             >
               {imgGenerating ? (
@@ -506,71 +527,48 @@ export default function EditorPage() {
             )}
 
             {imgStatus === "success" && imgResultUrls.length > 0 && (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
                   <CheckCircle2 className="w-4 h-4" />
-                  Изображение готово!
+                  Изображение "{imgName}" готово!
                 </div>
                 {imgResultUrls.map((url, i) => (
-                  <div key={i} className="space-y-4">
-                    <img src={url} alt="Сгенерированное изображение" className="w-full rounded-xl shadow-skeuo-md border border-white/20" data-testid={`img-result-${i}`} />
-
-                    {imgSections.length > 0 && (
-                      <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
-                        <label className="text-sm font-bold block text-slate-700 dark:text-slate-300">Вставить в секцию</label>
-                        <Select value={imgTargetSection} onValueChange={setImgTargetSection}>
-                          <SelectTrigger className="rounded-xl" data-testid="select-target-section">
-                            <SelectValue placeholder="Выберите секцию" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {imgSections.map(s => (
-                              <SelectItem key={s.id} value={s.id}>
-                                <span className="flex items-center gap-2">
-                                  {s.type === "placeholder" && <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />}
-                                  {s.type === "has-image" && <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />}
-                                  {s.type === "no-image" && <span className="w-2 h-2 rounded-full bg-slate-300 inline-block" />}
-                                  {s.label}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          size="sm"
-                          className="w-full rounded-xl font-bold bg-violet-600 hover:bg-violet-700 text-white"
-                          onClick={() => handleInsertImage(url, "into-section", imgTargetSection)}
-                          disabled={!imgTargetSection}
-                          data-testid={`button-insert-section-${i}`}
-                        >
-                          <ImageIcon className="w-3.5 h-3.5 mr-1.5" />
-                          Вставить в {imgSections.find(s => s.id === imgTargetSection)?.label || "секцию"}
-                        </Button>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        className="flex-1 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700"
-                        onClick={() => handleInsertImage(url, "replace-first-placeholder")}
-                        data-testid={`button-replace-placeholder-${i}`}
-                      >
-                        <Replace className="w-3.5 h-3.5 mr-1.5" />
-                        Заменить placeholder
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 rounded-xl font-bold"
-                        onClick={() => handleInsertImage(url, "append")}
-                        data-testid={`button-append-image-${i}`}
-                      >
-                        <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
-                        В конец сайта
-                      </Button>
-                    </div>
+                  <div key={i} className="space-y-3">
+                    <img src={url} alt={imgName} className="w-full rounded-xl shadow-skeuo-md border border-white/20" data-testid={`img-result-${i}`} />
+                    <Button
+                      className="w-full rounded-xl font-black h-11 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
+                      onClick={() => handleSaveImage(url)}
+                      data-testid={`button-save-image-${i}`}
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Сохранить как "{imgName}" в библиотеку
+                    </Button>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {projectImages.length > 0 && (
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                <h3 className="text-sm font-black text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                  <ImagePlus className="w-4 h-4 text-violet-500" />
+                  Библиотека проекта
+                </h3>
+                <div className="space-y-2">
+                  {projectImages.map((img) => (
+                    <div key={img.id} className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700" data-testid={`image-item-${img.id}`}>
+                      <img src={img.url} alt={img.name} className="w-14 h-14 rounded-lg object-cover shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-black truncate">{img.name}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{img.prompt}</p>
+                        <code className="text-[10px] text-violet-500 font-mono">{`{{IMG:${img.name}}}`}</code>
+                      </div>
+                      <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteImage(img.id)} data-testid={`button-delete-image-${img.id}`}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

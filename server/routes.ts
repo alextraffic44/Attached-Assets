@@ -42,12 +42,20 @@ const SYSTEM_PROMPT = `Ты — профессиональный веб-разр
 - Добавляй интерактивные SVG-анимации где уместно
 - Код должен быть адаптивным (Mobile First)
 - Используй современные CSS-свойства: grid, flexbox, custom properties
-- Для изображений используй placeholder от https://placehold.co/ (например https://placehold.co/600x400)
+- Для изображений-заглушек используй placeholder от https://placehold.co/ (например https://placehold.co/600x400)
 - Дизайн должен быть современным, стильным и профессиональным
 - Все тексты на русском языке, если не указано иное
 - НЕ используй внешние библиотеки и CDN, только чистый HTML/CSS/JS
 - Отвечай ТОЛЬКО кодом HTML, без пояснений и комментариев
-- Весь код должен быть в одном HTML-файле`;
+- Весь код должен быть в одном HTML-файле
+
+РАБОТА С ИЗОБРАЖЕНИЯМИ:
+- У пользователя есть библиотека сгенерированных AI-изображений. Каждое изображение имеет уникальное имя.
+- Когда пользователь просит вставить конкретное изображение по имени (например "персик", "офис", "баннер"), используй специальный маркер: {{IMG:имя_изображения}}
+- Например: <img src="{{IMG:персик}}" alt="Персик" /> или background-image: url('{{IMG:баннер}}')
+- Маркер {{IMG:имя}} будет автоматически заменён на реальный URL изображения
+- Если пользователь не указал конкретное изображение — используй placeholder от placehold.co
+- Маркер должен содержать ТОЧНОЕ имя изображения, как его назвал пользователь`;
 
 function bypassAuth(req: any, res: any, next: any) {
   // Временно отключаем проверку авторизации
@@ -163,8 +171,19 @@ export async function registerRoutes(
       });
 
       const previousMessages = await storage.getProjectMessages(project.id);
+      const projectImgs = await storage.getProjectImages(project.id);
+
+      let systemContent = SYSTEM_PROMPT;
+      if (projectImgs.length > 0) {
+        systemContent += `\n\nДОСТУПНЫЕ ИЗОБРАЖЕНИЯ В БИБЛИОТЕКЕ ПОЛЬЗОВАТЕЛЯ:\n`;
+        for (const img of projectImgs) {
+          systemContent += `- "${img.name}" (описание: ${img.prompt})\n`;
+        }
+        systemContent += `\nИспользуй маркер {{IMG:имя}} для вставки этих изображений. Например: <img src="{{IMG:${projectImgs[0].name}}}" />`;
+      }
+
       const chatMessages: any[] = [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemContent },
       ];
 
       for (const msg of previousMessages.slice(0, -1)) {
@@ -319,6 +338,16 @@ export async function registerRoutes(
         htmlCode = fullResponse.trim();
       }
 
+      const imgMarkerRegex = /\{\{IMG:([^}]+)\}\}/g;
+      let markerMatch;
+      while ((markerMatch = imgMarkerRegex.exec(htmlCode)) !== null) {
+        const imgName = markerMatch[1].trim().toLowerCase();
+        const found = projectImgs.find(img => img.name.toLowerCase() === imgName);
+        if (found) {
+          htmlCode = htmlCode.replace(markerMatch[0], found.url);
+        }
+      }
+
       await storage.updateProject(project.id, { generatedCode: htmlCode });
       await storage.createProjectMessage({
         projectId: project.id,
@@ -404,156 +433,44 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/projects/:id/analyze-sections", bypassAuth, async (req, res) => {
+  app.get("/api/projects/:id/images", bypassAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
-      if (!project) {
-        return res.status(404).json({ message: "Проект не найден" });
-      }
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
       const user = req.user as any;
-      if (project.userId !== user.id) {
-        return res.status(403).json({ message: "Доступ запрещён" });
-      }
-
-      const code = project.generatedCode || "";
-      const targets: Array<{ id: string; label: string; type: string; hasImage: boolean }> = [];
-
-      const sectionRegex = /<(section|header|footer|main|div|article|aside|nav)\b[^>]*(?:id\s*=\s*["']([^"']+)["'])?[^>]*(?:class\s*=\s*["']([^"']+)["'])?[^>]*>/gi;
-      let match;
-      const seen = new Set<string>();
-
-      while ((match = sectionRegex.exec(code)) !== null) {
-        const tag = match[1].toLowerCase();
-        const id = match[2] || "";
-        const cls = match[3] || "";
-
-        if (tag === "div" && !id && !cls.match(/hero|banner|about|feature|section|card|footer|header|cta|contact|case|team|portfolio|gallery|pricing|service|testimonial/i)) continue;
-
-        const sectionId = id || cls.split(/\s+/).find((c: string) => c.match(/hero|banner|about|feature|section|card|footer|header|cta|contact|case|team|portfolio|gallery|pricing|service|testimonial/i)) || "";
-        if (!sectionId || seen.has(sectionId)) continue;
-        seen.add(sectionId);
-
-        const sectionStart = match.index;
-        const closingTag = `</${match[1]}>`;
-        const sectionEnd = code.indexOf(closingTag, sectionStart + match[0].length);
-        const sectionContent = sectionEnd !== -1 ? code.slice(sectionStart, sectionEnd + closingTag.length) : "";
-        const hasImage = /(<img\b|background-image|background:\s*url)/i.test(sectionContent);
-        const hasPlaceholder = /placehold\.co/i.test(sectionContent);
-
-        let label = sectionId.replace(/[-_]/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase());
-        if (hasPlaceholder) label += " (placeholder)";
-
-        targets.push({
-          id: sectionId,
-          label,
-          type: hasPlaceholder ? "placeholder" : hasImage ? "has-image" : "no-image",
-          hasImage,
-        });
-      }
-
-      const placeholderCount = (code.match(/https?:\/\/placehold\.co\/[^\s"'<>]+/g) || []).length;
-
-      res.json({ targets, placeholderCount });
-    } catch (err: any) {
-      console.error("Analyze sections error:", err);
-      res.status(500).json({ message: "Ошибка анализа секций" });
+      if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
+      const images = await storage.getProjectImages(project.id);
+      res.json(images);
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка загрузки изображений" });
     }
   });
 
-  app.post("/api/projects/:id/insert-image", bypassAuth, async (req, res) => {
+  app.post("/api/projects/:id/images", bypassAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
-      if (!project) {
-        return res.status(404).json({ message: "Проект не найден" });
-      }
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
       const user = req.user as any;
-      if (project.userId !== user.id) {
-        return res.status(403).json({ message: "Доступ запрещён" });
-      }
+      if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
+      const { name, url, prompt } = req.body;
+      if (!name || !url) return res.status(400).json({ message: "Имя и URL обязательны" });
+      const image = await storage.createProjectImage({ projectId: project.id, name, url, prompt: prompt || "" });
+      res.status(201).json(image);
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка сохранения изображения" });
+    }
+  });
 
-      const { imageUrl, altText = "Сгенерированное изображение", insertMode = "replace-first-placeholder", targetSection = "" } = req.body;
-      if (!imageUrl) {
-        return res.status(400).json({ message: "URL изображения обязателен" });
-      }
-
-      let code = project.generatedCode || "";
-
-      if (insertMode === "into-section" && targetSection) {
-        const idPattern = new RegExp(`(<(?:section|header|footer|main|div|article|aside)[^>]*(?:id\\s*=\\s*["']${targetSection}["']|class\\s*=\\s*["'][^"']*${targetSection}[^"']*["'])[^>]*>)`, "i");
-        const sectionMatch = code.match(idPattern);
-        if (sectionMatch) {
-          const sectionStart = code.indexOf(sectionMatch[0]);
-          const afterOpen = sectionStart + sectionMatch[0].length;
-
-          const tag = sectionMatch[0].match(/<(\w+)/)?.[1] || "div";
-          const closingTag = `</${tag}>`;
-          const sectionEnd = code.indexOf(closingTag, afterOpen);
-          const sectionContent = sectionEnd !== -1 ? code.slice(afterOpen, sectionEnd) : "";
-
-          const placeholderInSection = sectionContent.match(/https?:\/\/placehold\.co\/[^\s"'<>]+/);
-          if (placeholderInSection) {
-            const placeholderPos = code.indexOf(placeholderInSection[0], afterOpen);
-            code = code.slice(0, placeholderPos) + imageUrl + code.slice(placeholderPos + placeholderInSection[0].length);
-          } else {
-            const imgInSection = sectionContent.match(/<img\b[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/i);
-            if (imgInSection) {
-              const oldSrc = imgInSection[1];
-              const srcPos = code.indexOf(oldSrc, afterOpen);
-              if (srcPos !== -1 && srcPos < (sectionEnd !== -1 ? sectionEnd : code.length)) {
-                code = code.slice(0, srcPos) + imageUrl + code.slice(srcPos + oldSrc.length);
-              }
-            } else {
-              const bgMatch = sectionContent.match(/background(?:-image)?\s*:\s*url\(["']?([^"')]+)["']?\)/i);
-              if (bgMatch) {
-                const oldBg = bgMatch[1];
-                const bgPos = code.indexOf(oldBg, afterOpen);
-                if (bgPos !== -1 && bgPos < (sectionEnd !== -1 ? sectionEnd : code.length)) {
-                  code = code.slice(0, bgPos) + imageUrl + code.slice(bgPos + oldBg.length);
-                }
-              } else {
-                const imgTag = `<img src="${imageUrl}" alt="${altText}" style="width:100%;height:auto;border-radius:12px;object-fit:cover;" />`;
-                code = code.slice(0, afterOpen) + "\n" + imgTag + "\n" + code.slice(afterOpen);
-              }
-            }
-          }
-        } else {
-          return res.status(400).json({ message: `Секция "${targetSection}" не найдена` });
-        }
-      } else if (insertMode === "replace-first-placeholder") {
-        const placeholderRegex = /https?:\/\/placehold\.co\/[^\s"'<>]+/;
-        if (placeholderRegex.test(code)) {
-          code = code.replace(placeholderRegex, imageUrl);
-        } else {
-          const bodyClose = code.lastIndexOf("</body>");
-          const imgTag = `\n<div style="text-align:center;padding:20px;"><img src="${imageUrl}" alt="${altText}" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.3);" /></div>\n`;
-          code = bodyClose !== -1 ? code.slice(0, bodyClose) + imgTag + code.slice(bodyClose) : code + imgTag;
-        }
-      } else if (insertMode === "replace-all-placeholders") {
-        code = code.replace(/https?:\/\/placehold\.co\/[^\s"'<>]+/g, imageUrl);
-      } else if (insertMode === "as-hero-bg") {
-        const heroRegex = /(<(?:section|div)[^>]*(?:id\s*=\s*["']hero["']|class\s*=\s*["'][^"']*hero[^"']*["'])[^>]*)(>)/i;
-        const heroMatch = code.match(heroRegex);
-        if (heroMatch) {
-          const existingStyle = heroMatch[1].match(/style\s*=\s*["']([^"']*)["']/);
-          if (existingStyle) {
-            const newStyle = existingStyle[1].replace(/background(?:-image)?\s*:[^;]+;?/gi, "") +
-              `;background-image:url('${imageUrl}');background-size:cover;background-position:center;`;
-            code = code.replace(existingStyle[0], `style="${newStyle}"`);
-          } else {
-            code = code.replace(heroMatch[0], `${heroMatch[1]} style="background-image:url('${imageUrl}');background-size:cover;background-position:center;"${heroMatch[2]}`);
-          }
-        }
-      } else {
-        const bodyClose = code.lastIndexOf("</body>");
-        const imgTag = `\n<div style="text-align:center;padding:20px;"><img src="${imageUrl}" alt="${altText}" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.3);" /></div>\n`;
-        code = bodyClose !== -1 ? code.slice(0, bodyClose) + imgTag + code.slice(bodyClose) : code + imgTag;
-      }
-
-      const updated = await storage.updateProject(project.id, { generatedCode: code });
-      res.json(updated);
-    } catch (err: any) {
-      console.error("Insert image error:", err);
-      res.status(500).json({ message: "Ошибка вставки изображения" });
+  app.delete("/api/projects/:id/images/:imageId", bypassAuth, async (req, res) => {
+    try {
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      const user = req.user as any;
+      if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
+      await storage.deleteProjectImage(parseInt(req.params.imageId));
+      res.json({ message: "Изображение удалено" });
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка удаления изображения" });
     }
   });
 
