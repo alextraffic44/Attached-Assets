@@ -1,8 +1,9 @@
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useLocation } from "wouter";
+import { useRef } from "react";
 import {
   Sparkles,
   Zap,
@@ -15,414 +16,372 @@ import {
   ArrowRight,
   Check,
   Star,
+  Globe,
+  Cpu,
+  MousePointer2,
 } from "lucide-react";
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 30 },
+const fadeInUp = {
+  hidden: { opacity: 0, y: 40 },
   visible: { opacity: 1, y: 0 },
 };
 
-const stagger = {
+const staggerContainer = {
   visible: {
-    transition: { staggerChildren: 0.1 },
+    transition: { staggerChildren: 0.15 },
   },
 };
+
+const FloatingSVG = () => (
+  <motion.svg
+    width="100%"
+    height="100%"
+    viewBox="0 0 800 600"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className="absolute top-0 left-0 w-full h-full -z-10 opacity-30 pointer-events-none"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 0.3 }}
+    transition={{ duration: 2 }}
+  >
+    <motion.circle
+      cx="400"
+      cy="300"
+      r="200"
+      stroke="url(#paint0_linear)"
+      strokeWidth="2"
+      initial={{ pathLength: 0 }}
+      animate={{ pathLength: 1 }}
+      transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+    />
+    <motion.rect
+      x="200"
+      y="150"
+      width="400"
+      height="300"
+      rx="20"
+      stroke="url(#paint1_linear)"
+      strokeWidth="1"
+      initial={{ pathLength: 0 }}
+      animate={{ pathLength: 1 }}
+      transition={{ duration: 4, repeat: Infinity, ease: "linear", delay: 1 }}
+    />
+    <defs>
+      <linearGradient id="paint0_linear" x1="400" y1="100" x2="400" y2="500" gradientUnits="userSpaceOnUse">
+        <stop stopColor="hsl(var(--primary))" />
+        <stop offset="1" stopColor="hsl(var(--chart-3))" />
+      </linearGradient>
+      <linearGradient id="paint1_linear" x1="200" y1="300" x2="600" y2="300" gradientUnits="userSpaceOnUse">
+        <stop stopColor="hsl(var(--chart-1))" />
+        <stop offset="1" stopColor="hsl(var(--chart-2))" />
+      </linearGradient>
+    </defs>
+  </motion.svg>
+);
+
+const SkeuoCard = ({ children, className = "", dataTestId = "" }) => (
+  <Card 
+    className={`bg-slate-50/50 dark:bg-slate-900/50 backdrop-blur-md border-white/20 dark:border-white/5 shadow-skeuo-md hover:shadow-skeuo-lg transition-all duration-300 rounded-3xl p-8 ${className}`}
+    data-testid={dataTestId}
+  >
+    {children}
+  </Card>
+);
 
 const plans = [
   {
     name: "Бронза",
-    price: "Бесплатно",
+    price: "0₽",
     credits: 10,
-    color: "from-amber-700 to-amber-900",
-    borderColor: "border-amber-700/30",
-    features: ["10 генераций", "Базовые шаблоны", "Скачивание HTML"],
-    popular: false,
+    features: ["10 генераций", "Базовые шаблоны", "Чистый HTML"],
+    color: "from-slate-400 to-slate-500",
   },
   {
     name: "Серебро",
-    price: "490 руб/мес",
+    price: "490₽",
     credits: 50,
-    color: "from-slate-400 to-slate-600",
-    borderColor: "border-slate-400/30",
-    features: ["50 генераций", "Все шаблоны", "Правки через чат", "Скачивание ZIP"],
-    popular: false,
+    features: ["50 генераций", "Все шаблоны", "Правки через чат"],
+    color: "from-blue-400 to-blue-600",
   },
   {
     name: "Золото",
-    price: "990 руб/мес",
+    price: "990₽",
     credits: 200,
-    color: "from-yellow-500 to-amber-600",
-    borderColor: "border-yellow-500/30",
-    features: [
-      "200 генераций",
-      "Все шаблоны",
-      "Генерация по фото",
-      "Приоритетная генерация",
-      "Экспорт в ZIP",
-    ],
+    features: ["200 генераций", "Генерация по фото", "Приоритет"],
     popular: true,
+    color: "from-amber-400 to-orange-500",
   },
   {
     name: "Платина",
-    price: "2490 руб/мес",
+    price: "2490₽",
     credits: 1000,
-    color: "from-cyan-400 to-blue-600",
-    borderColor: "border-cyan-400/30",
-    features: [
-      "1000 генераций",
-      "Все функции",
-      "API доступ",
-      "Приоритетная поддержка",
-      "Генерация изображений",
-    ],
-    popular: false,
-  },
-];
-
-const features = [
-  {
-    icon: MessageSquare,
-    title: "Генерация по промту",
-    description: "Опишите сайт текстом — ИИ создаст полный HTML/CSS/JS код за секунды",
-  },
-  {
-    icon: Layers,
-    title: "Готовые шаблоны",
-    description: "Выберите структуру из библиотеки шаблонов и настройте под себя",
-  },
-  {
-    icon: Image,
-    title: "Генерация по фото",
-    description: "Загрузите скриншот — ИИ воссоздаст дизайн в чистом коде",
-  },
-  {
-    icon: Eye,
-    title: "Живой превью",
-    description: "Мгновенный предпросмотр сайта прямо в редакторе",
-  },
-  {
-    icon: Code2,
-    title: "Чистый код",
-    description: "Семантический HTML5, адаптивный CSS и современный JavaScript",
-  },
-  {
-    icon: Download,
-    title: "Экспорт в ZIP",
-    description: "Скачайте готовый сайт одним архивом и разместите где угодно",
+    features: ["1000 генераций", "API доступ", "Все функции"],
+    color: "from-purple-500 to-pink-600",
   },
 ];
 
 export default function LandingPage() {
   const [, setLocation] = useLocation();
+  const heroRef = useRef(null);
+  const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
+  const y = useTransform(scrollYProgress, [0, 1], [0, 200]);
+  const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
 
   return (
-    <div className="min-h-screen bg-background overflow-x-hidden">
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-bold" data-testid="text-logo">НейроЗодчий</span>
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 selection:bg-primary/20">
+      <FloatingSVG />
+      
+      <header className="fixed top-0 w-full z-50 px-6 py-4">
+        <nav className="max-w-7xl mx-auto flex items-center justify-between bg-white/40 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-2xl px-6 py-3 shadow-glass">
+          <div className="flex items-center gap-3 group cursor-pointer">
+            <motion.div 
+              whileHover={{ rotate: 180 }}
+              className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-chart-3 flex items-center justify-center shadow-lg shadow-primary/20"
+            >
+              <Sparkles className="w-5 h-5 text-white" />
+            </motion.div>
+            <span className="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-500 dark:from-white dark:to-slate-400">
+              НЕЙРОЗОДЧИЙ
+            </span>
           </div>
-          <nav className="hidden md:flex items-center gap-6">
-            <a href="#features" className="text-sm text-muted-foreground transition-colors" data-testid="link-features">Возможности</a>
-            <a href="#pricing" className="text-sm text-muted-foreground transition-colors" data-testid="link-pricing">Тарифы</a>
-          </nav>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setLocation("/auth")} data-testid="button-login">
-              Войти
-            </Button>
-            <Button size="sm" onClick={() => setLocation("/auth")} data-testid="button-register">
-              Начать бесплатно
+          
+          <div className="hidden md:flex items-center gap-8 text-sm font-medium">
+            <a href="#features" className="hover:text-primary transition-colors">Возможности</a>
+            <a href="#pricing" className="hover:text-primary transition-colors">Тарифы</a>
+            <Button variant="ghost" className="rounded-xl" onClick={() => setLocation("/auth")}>Войти</Button>
+            <Button className="rounded-xl shadow-lg shadow-primary/25 hover-elevate px-6" onClick={() => setLocation("/auth")}>
+              Создать сайт
             </Button>
           </div>
-        </div>
+        </nav>
       </header>
 
-      <section className="relative pt-20 pb-32 overflow-hidden">
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
-          <div className="absolute top-20 -left-20 w-72 h-72 rounded-full bg-chart-3/5 blur-3xl" />
-          <div className="absolute bottom-0 right-1/3 w-80 h-80 rounded-full bg-chart-2/5 blur-3xl" />
-        </div>
-
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            className="text-center max-w-4xl mx-auto"
-            initial="hidden"
-            animate="visible"
-            variants={stagger}
-          >
-            <motion.div variants={fadeUp} transition={{ duration: 0.6 }}>
-              <Badge variant="secondary" className="mb-6 px-4 py-1.5">
-                <Zap className="w-3 h-3 mr-1" />
-                Gemini 3.1 Pro
-              </Badge>
-            </motion.div>
-
-            <motion.h1
-              className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6 leading-tight"
-              variants={fadeUp}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              data-testid="text-hero-title"
-            >
-              Создавайте сайты{" "}
-              <span className="text-primary">силой мысли</span>
-            </motion.h1>
-
-            <motion.p
-              className="text-lg sm:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed"
-              variants={fadeUp}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              data-testid="text-hero-description"
-            >
-              ИИ-конструктор нового поколения. Опишите сайт, загрузите скриншот
-              или выберите шаблон — получите готовый код за секунды.
-            </motion.p>
-
+      <main>
+        <section ref={heroRef} className="relative pt-40 pb-20 px-6 overflow-hidden min-h-screen flex items-center">
+          <motion.div style={{ y, opacity }} className="max-w-7xl mx-auto w-full grid lg:grid-cols-2 gap-12 items-center">
             <motion.div
-              className="flex flex-wrap justify-center gap-3"
-              variants={fadeUp}
-              transition={{ duration: 0.6, delay: 0.3 }}
+              initial="hidden"
+              animate="visible"
+              variants={staggerContainer}
+              className="space-y-8"
             >
-              <Button size="lg" onClick={() => setLocation("/auth")} data-testid="button-hero-start">
-                Создать сайт бесплатно
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-              <Button size="lg" variant="outline" onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })} data-testid="button-hero-learn">
-                Узнать больше
-              </Button>
-            </motion.div>
-          </motion.div>
-
-          <motion.div
-            className="mt-20 relative max-w-5xl mx-auto"
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.5 }}
-          >
-            <div className="rounded-xl border bg-card/50 backdrop-blur-sm p-1.5 shadow-xl">
-              <div className="rounded-lg bg-card overflow-hidden">
-                <div className="flex items-center gap-1.5 px-4 py-3 border-b bg-muted/30">
-                  <div className="w-2.5 h-2.5 rounded-full bg-destructive/60" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-chart-4/60" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-chart-2/60" />
-                  <span className="text-xs text-muted-foreground ml-2">НейроЗодчий — Редактор</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
-                  <div className="p-6 border-r border-border/50">
-                    <div className="space-y-3">
-                      <div className="flex items-start gap-3">
-                        <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                          <MessageSquare className="w-3.5 h-3.5 text-primary" />
-                        </div>
-                        <div className="rounded-lg bg-muted/50 p-3 text-sm">
-                          Создай лендинг для кофейни с тёмным дизайном, меню и формой бронирования
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3 justify-end">
-                        <div className="rounded-lg bg-primary/10 p-3 text-sm max-w-[80%]">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <Sparkles className="w-3 h-3 text-primary" />
-                            <span className="text-xs font-medium text-primary">НейроЗодчий</span>
-                          </div>
-                          Генерирую сайт с адаптивным дизайном...
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-6 bg-muted/20">
-                    <div className="space-y-2">
-                      <div className="h-4 w-3/4 rounded bg-muted/50" />
-                      <div className="h-20 w-full rounded bg-muted/30" />
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="h-14 rounded bg-muted/40" />
-                        <div className="h-14 rounded bg-muted/40" />
-                        <div className="h-14 rounded bg-muted/40" />
-                      </div>
-                      <div className="h-3 w-1/2 rounded bg-muted/30" />
-                      <div className="h-3 w-2/3 rounded bg-muted/30" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      <section id="features" className="py-24 bg-muted/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            className="text-center mb-16"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-100px" }}
-            variants={stagger}
-          >
-            <motion.h2
-              className="text-3xl sm:text-4xl font-bold mb-4"
-              variants={fadeUp}
-              transition={{ duration: 0.5 }}
-              data-testid="text-features-title"
-            >
-              Всё для создания сайтов
-            </motion.h2>
-            <motion.p
-              className="text-muted-foreground text-lg max-w-2xl mx-auto"
-              variants={fadeUp}
-              transition={{ duration: 0.5, delay: 0.1 }}
-            >
-              Мощные инструменты для превращения ваших идей в работающие сайты
-            </motion.p>
-          </motion.div>
-
-          <motion.div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-50px" }}
-            variants={stagger}
-          >
-            {features.map((feature) => (
-              <motion.div key={feature.title} variants={fadeUp} transition={{ duration: 0.5 }}>
-                <Card className="p-6 h-full hover-elevate cursor-default" data-testid={`card-feature-${feature.title}`}>
-                  <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center mb-4">
-                    <feature.icon className="w-5 h-5 text-primary" />
-                  </div>
-                  <h3 className="font-semibold text-lg mb-2">{feature.title}</h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
-                </Card>
+              <motion.div variants={fadeInUp}>
+                <Badge className="bg-primary/10 text-primary border-primary/20 px-4 py-1 rounded-full text-xs font-bold tracking-widest uppercase">
+                  AI-POWERED REVOLUTION
+                </Badge>
               </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
+              
+              <motion.h1 
+                variants={fadeInUp}
+                className="text-6xl sm:text-7xl font-black leading-[1.1] tracking-tight"
+              >
+                Создавайте <br />
+                <span className="italic font-serif text-primary">шедевры</span> <br />
+                голосом и ИИ
+              </motion.h1>
+              
+              <motion.p 
+                variants={fadeInUp}
+                className="text-xl text-slate-500 dark:text-slate-400 max-w-lg leading-relaxed"
+              >
+                Первый в мире конструктор, который понимает ваши чувства. Загрузите фото или опишите мечту — мы превратим её в код.
+              </motion.p>
+              
+              <motion.div variants={fadeInUp} className="flex flex-wrap gap-4">
+                <Button size="lg" className="h-16 px-8 rounded-2xl text-lg font-bold shadow-xl shadow-primary/30 active-elevate-2" onClick={() => setLocation("/auth")}>
+                  Начать бесплатно
+                  <ArrowRight className="ml-2 w-5 h-5" />
+                </Button>
+                <Button size="lg" variant="outline" className="h-16 px-8 rounded-2xl text-lg font-bold border-2 hover:bg-slate-100 dark:hover:bg-slate-800">
+                  Посмотреть демо
+                </Button>
+              </motion.div>
 
-      <section id="pricing" className="py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            className="text-center mb-16"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-100px" }}
-            variants={stagger}
-          >
-            <motion.h2
-              className="text-3xl sm:text-4xl font-bold mb-4"
-              variants={fadeUp}
-              transition={{ duration: 0.5 }}
-              data-testid="text-pricing-title"
-            >
-              Выберите свой тариф
-            </motion.h2>
-            <motion.p
-              className="text-muted-foreground text-lg max-w-2xl mx-auto"
-              variants={fadeUp}
-              transition={{ duration: 0.5, delay: 0.1 }}
-            >
-              Начните бесплатно и масштабируйте по мере роста
-            </motion.p>
-          </motion.div>
+              <motion.div variants={fadeInUp} className="flex items-center gap-4 pt-4">
+                <div className="flex -space-x-3">
+                  {[1,2,3,4].map(i => (
+                    <div key={i} className="w-10 h-10 rounded-full border-2 border-background bg-slate-200 dark:bg-slate-800 overflow-hidden shadow-sm">
+                      <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${i+10}`} alt="avatar" />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-slate-500">
+                  <span className="font-bold text-slate-900 dark:text-white">10,000+</span> дизайнеров уже с нами
+                </p>
+              </motion.div>
+            </motion.div>
 
-          <motion.div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-50px" }}
-            variants={stagger}
-          >
-            {plans.map((plan) => (
-              <motion.div key={plan.name} variants={fadeUp} transition={{ duration: 0.5 }}>
-                <Card
-                  className={`relative p-6 h-full flex flex-col ${plan.popular ? "ring-2 ring-primary" : ""}`}
-                  data-testid={`card-plan-${plan.name}`}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.8, rotateY: 20 }}
+              animate={{ opacity: 1, scale: 1, rotateY: 0 }}
+              transition={{ duration: 1, ease: "easeOut" }}
+              className="relative hidden lg:block"
+            >
+              <div className="absolute inset-0 bg-primary/20 blur-[120px] rounded-full" />
+              <SkeuoCard className="relative overflow-hidden aspect-[4/3] flex items-center justify-center group">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-chart-3 to-primary" />
+                <div className="grid grid-cols-2 gap-4 w-full">
+                  <div className="space-y-4">
+                    <motion.div animate={{ scale: [1, 1.02, 1] }} transition={{ repeat: Infinity, duration: 3 }} className="h-32 rounded-2xl bg-slate-100 dark:bg-slate-800 shadow-skeuo-inner border border-white/10" />
+                    <div className="h-20 rounded-2xl bg-primary/10 shadow-skeuo-inner" />
+                  </div>
+                  <div className="space-y-4 pt-8">
+                    <div className="h-24 rounded-2xl bg-chart-2/10 shadow-skeuo-inner" />
+                    <div className="h-32 rounded-2xl bg-slate-100 dark:bg-slate-800 shadow-skeuo-inner border border-white/10" />
+                  </div>
+                </div>
+                <div className="absolute bottom-8 left-8 right-8 bg-white/80 dark:bg-black/80 backdrop-blur-xl p-4 rounded-2xl border border-white/20 shadow-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-green-500 flex items-center justify-center">
+                      <Check className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-sm font-bold">Сайт готов!</span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] uppercase tracking-tighter">Gemini 3.1 Pro</Badge>
+                </div>
+                <motion.div 
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                  animate={{ y: [0, -10, 0] }}
+                  transition={{ repeat: Infinity, duration: 2 }}
                 >
-                  {plan.popular && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <Badge className="px-3">
-                        <Star className="w-3 h-3 mr-1" />
-                        Популярный
-                      </Badge>
-                    </div>
-                  )}
-
-                  <div className={`w-full h-1.5 rounded-full bg-gradient-to-r ${plan.color} mb-5`} />
-
-                  <h3 className="text-xl font-bold mb-1">{plan.name}</h3>
-                  <p className="text-2xl font-bold mb-1">{plan.price}</p>
-                  <p className="text-sm text-muted-foreground mb-5">{plan.credits} генераций</p>
-
-                  <ul className="space-y-2.5 mb-6 flex-1">
-                    {plan.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm">
-                        <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                        <span>{f}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <Button
-                    className="w-full"
-                    variant={plan.popular ? "default" : "outline"}
-                    onClick={() => setLocation("/auth")}
-                    data-testid={`button-plan-${plan.name}`}
-                  >
-                    {plan.price === "Бесплатно" ? "Начать бесплатно" : "Подключить"}
-                  </Button>
-                </Card>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      <section className="py-24 bg-muted/20">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            variants={stagger}
-          >
-            <motion.h2
-              className="text-3xl sm:text-4xl font-bold mb-4"
-              variants={fadeUp}
-              transition={{ duration: 0.5 }}
-            >
-              Готовы создать свой сайт?
-            </motion.h2>
-            <motion.p
-              className="text-muted-foreground text-lg mb-8 max-w-xl mx-auto"
-              variants={fadeUp}
-              transition={{ duration: 0.5, delay: 0.1 }}
-            >
-              Присоединяйтесь к тысячам пользователей, которые уже создают сайты с помощью ИИ
-            </motion.p>
-            <motion.div variants={fadeUp} transition={{ duration: 0.5, delay: 0.2 }}>
-              <Button size="lg" onClick={() => setLocation("/auth")} data-testid="button-cta-start">
-                Начать бесплатно
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
+                  <div className="w-20 h-20 rounded-3xl bg-white/20 backdrop-blur-2xl border border-white/30 flex items-center justify-center shadow-glass">
+                    <Sparkles className="w-10 h-10 text-primary animate-pulse" />
+                  </div>
+                </motion.div>
+              </SkeuoCard>
             </motion.div>
           </motion.div>
-        </div>
-      </section>
+        </section>
 
-      <footer className="border-t py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded bg-primary flex items-center justify-center">
-                <Sparkles className="w-3 h-3 text-primary-foreground" />
-              </div>
-              <span className="text-sm font-semibold">НейроЗодчий</span>
+        <section id="features" className="py-32 px-6">
+          <div className="max-w-7xl mx-auto space-y-20">
+            <div className="text-center space-y-4">
+              <h2 className="text-4xl sm:text-5xl font-black">Будущее уже здесь</h2>
+              <p className="text-xl text-slate-500 max-w-2xl mx-auto">Мы переосмыслили процесс создания сайтов, сделав его интуитивным и тактильным.</p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              2025 НейроЗодчий. Все права защищены.
-            </p>
+
+            <div className="grid md:grid-cols-3 gap-8">
+              {[
+                { icon: MessageSquare, title: "Магия промтов", desc: "Просто скажите, что вы хотите. Наш ИИ понимает контекст и эстетику.", color: "text-blue-500" },
+                { icon: Image, title: "Vision-движок", desc: "Сфотографируйте набросок на салфетке или скриншот — мы оживим его.", color: "text-purple-500" },
+                { icon: Cpu, title: "Умная вёрстка", desc: "Чистый HTML5 и CSS3, который обожают поисковики и разработчики.", color: "text-emerald-500" },
+                { icon: MousePointer2, title: "Интерактивность", desc: "Автоматическое добавление анимаций и микро-взаимодействий.", color: "text-orange-500" },
+                { icon: Globe, title: "Мгновенный деплой", desc: "Публикация в один клик. Ваш сайт доступен миру за считанные секунды.", color: "text-cyan-500" },
+                { icon: Layers, title: "Компоненты", desc: "Огромная библиотека скевоморфных элементов в вашем распоряжении.", color: "text-rose-500" },
+              ].map((feat, i) => (
+                <motion.div
+                  key={i}
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: true }}
+                  variants={fadeInUp}
+                >
+                  <SkeuoCard className="h-full group hover:-translate-y-2 transition-transform duration-500">
+                    <div className={`w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 shadow-skeuo-inner flex items-center justify-center mb-6 ${feat.color}`}>
+                      <feat.icon className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-2xl font-bold mb-3">{feat.title}</h3>
+                    <p className="text-slate-500 dark:text-slate-400 leading-relaxed">{feat.desc}</p>
+                  </SkeuoCard>
+                </motion.div>
+              ))}
+            </div>
           </div>
+        </section>
+
+        <section id="pricing" className="py-32 px-6 bg-slate-50 dark:bg-slate-900/50">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-20 space-y-4">
+              <h2 className="text-4xl font-black">Простые тарифы</h2>
+              <p className="text-slate-500">Выбирайте тот, который подходит вашему масштабу</p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {plans.map((plan, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
+                >
+                  <SkeuoCard className={`relative h-full flex flex-col ${plan.popular ? "border-primary/50 ring-4 ring-primary/10" : ""}`}>
+                    {plan.popular && (
+                      <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                        <Badge className="bg-primary px-4 py-1 text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-primary/30">BEST VALUE</Badge>
+                      </div>
+                    )}
+                    <div className="mb-8">
+                      <h3 className="text-lg font-bold text-slate-500 uppercase tracking-widest mb-2">{plan.name}</h3>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-5xl font-black tracking-tighter">{plan.price.replace('₽', '')}</span>
+                        <span className="text-xl font-bold text-slate-400">₽</span>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4 flex-1 mb-8">
+                      <div className="flex items-center gap-2 text-sm font-bold text-primary">
+                        <Sparkles className="w-4 h-4" />
+                        {plan.credits} кредитов
+                      </div>
+                      <div className="h-px bg-slate-200 dark:bg-slate-800" />
+                      {plan.features.map((f, j) => (
+                        <div key={j} className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+                          <div className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                            <Check className="w-3 h-3 text-primary" />
+                          </div>
+                          {f}
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button 
+                      className={`w-full h-14 rounded-2xl font-bold text-lg shadow-lg transition-all ${
+                        plan.popular ? "bg-primary hover:bg-primary/90 shadow-primary/20" : "bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-900 dark:text-white"
+                      }`}
+                      onClick={() => setLocation("/auth")}
+                    >
+                      Выбрать
+                    </Button>
+                  </SkeuoCard>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="py-32 px-6">
+          <SkeuoCard className="max-w-5xl mx-auto bg-gradient-to-br from-primary/10 to-chart-3/10 border-primary/20 p-12 text-center overflow-hidden relative">
+            <motion.div 
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 20, ease: "linear" }}
+              className="absolute -top-24 -right-24 w-64 h-64 bg-primary/20 rounded-full blur-[80px]"
+            />
+            <div className="relative z-10 space-y-8">
+              <h2 className="text-5xl font-black tracking-tight leading-tight">Готовы изменить <br /> своё будущее?</h2>
+              <p className="text-xl text-slate-600 dark:text-slate-400 max-w-xl mx-auto">Присоединяйтесь к революции в веб-разработке. Создайте свой первый сайт за 60 секунд.</p>
+              <Button size="lg" className="h-16 px-12 rounded-2xl text-xl font-black shadow-2xl shadow-primary/40 hover-elevate" onClick={() => setLocation("/auth")}>
+                Попробовать сейчас
+              </Button>
+            </div>
+          </SkeuoCard>
+        </section>
+      </main>
+
+      <footer className="py-12 px-6 border-t border-slate-200 dark:border-slate-800">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
+          <div className="flex items-center gap-3 opacity-50">
+            <div className="w-8 h-8 rounded-lg bg-slate-400 flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+            <span className="font-black tracking-tighter">НЕЙРОЗОДЧИЙ</span>
+          </div>
+          <div className="flex gap-8 text-sm text-slate-500 font-medium">
+            <a href="#" className="hover:text-primary transition-colors">Twitter</a>
+            <a href="#" className="hover:text-primary transition-colors">Dribbble</a>
+            <a href="#" className="hover:text-primary transition-colors">Github</a>
+          </div>
+          <p className="text-sm text-slate-400 font-medium">© 2024 НейроЗодчий. Все права защищены.</p>
         </div>
       </footer>
     </div>

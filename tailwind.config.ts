@@ -82,6 +82,13 @@ export default {
           offline: "rgb(156 163 175)",
         },
       },
+      boxShadow: {
+        'skeuo-sm': '2px 2px 5px rgba(0,0,0,0.1), -2px -2px 5px rgba(255,255,255,0.7)',
+        'skeuo-md': '5px 5px 10px rgba(0,0,0,0.1), -5px -5px 10px rgba(255,255,255,0.8)',
+        'skeuo-lg': '10px 10px 20px rgba(0,0,0,0.1), -10px -10px 20px rgba(255,255,255,0.8)',
+        'skeuo-inner': 'inset 2px 2px 5px rgba(0,0,0,0.1), inset -2px -2px 5px rgba(255,255,255,0.7)',
+        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+      },
       fontFamily: {
         sans: ["Inter", "var(--font-sans)", "sans-serif"],
         serif: ["var(--font-serif)"],

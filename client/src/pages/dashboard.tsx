@@ -2,7 +2,6 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,50 +30,17 @@ import {
   Loader2,
   FolderOpen,
   Coins,
+  ChevronRight,
 } from "lucide-react";
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 },
-};
-
-const stagger = {
-  visible: {
-    transition: { staggerChildren: 0.06 },
-  },
-};
-
-type CreateMode = "prompt" | "template" | "photo";
-
-const createModes: { mode: CreateMode; icon: typeof MessageSquare; title: string; description: string }[] = [
-  {
-    mode: "prompt",
-    icon: MessageSquare,
-    title: "По описанию",
-    description: "Опишите сайт текстом и ИИ создаст его для вас",
-  },
-  {
-    mode: "template",
-    icon: Layers,
-    title: "Промт + Шаблон",
-    description: "Выберите тип сайта и опишите детали",
-  },
-  {
-    mode: "photo",
-    icon: Image,
-    title: "По фото (Vision)",
-    description: "Загрузите скриншот сайта-примера",
-  },
-];
-
-const templates = [
-  "Лендинг для бизнеса",
-  "Портфолио дизайнера",
-  "Интернет-магазин",
-  "Блог/Медиа",
-  "Ресторан/Кафе",
-  "Сайт-визитка",
-];
+const SkeuoCard = ({ children, className = "", onClick = undefined }) => (
+  <div 
+    onClick={onClick}
+    className={`bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/20 dark:border-white/5 shadow-skeuo-md hover:shadow-skeuo-lg transition-all duration-300 rounded-[2rem] p-6 ${onClick ? 'cursor-pointer' : ''} ${className}`}
+  >
+    {children}
+  </div>
+);
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
@@ -82,7 +48,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createStep, setCreateStep] = useState<"choose" | "details">("choose");
-  const [selectedMode, setSelectedMode] = useState<CreateMode>("prompt");
+  const [selectedMode, setSelectedMode] = useState<"prompt" | "template" | "photo">("prompt");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -102,13 +68,8 @@ export default function DashboardPage() {
     onSuccess: (project: Project) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       setShowCreateModal(false);
-      resetForm();
-
-      const prompt = buildInitialPrompt();
-      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}&mode=${selectedMode}`);
-    },
-    onError: () => {
-      toast({ title: "Ошибка", description: "Не удалось создать проект", variant: "destructive" });
+      const prompt = selectedMode === "template" ? `Создай сайт: ${selectedTemplate}. ${description}` : description || title;
+      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}`);
     },
   });
 
@@ -118,273 +79,173 @@ export default function DashboardPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Проект удалён" });
+      toast({ title: "Удалено" });
     },
   });
 
-  function buildInitialPrompt() {
-    if (selectedMode === "template" && selectedTemplate) {
-      return `Создай сайт: ${selectedTemplate}. ${description}`;
-    }
-    return description || title || "Создай современный лендинг";
-  }
-
-  function resetForm() {
-    setTitle("");
-    setDescription("");
-    setSelectedTemplate("");
-    setCreateStep("choose");
-    setSelectedMode("prompt");
-  }
-
-  const handleLogout = async () => {
-    await logout();
-    setLocation("/");
-  };
-
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-bold">НейроЗодчий</span>
-          </div>
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] pb-20">
+      <header className="fixed top-0 w-full z-50 px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between bg-white/40 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-2xl px-6 py-3 shadow-glass">
           <div className="flex items-center gap-3">
-            <Badge variant="secondary" className="hidden sm:flex">
-              <Coins className="w-3 h-3 mr-1" />
-              {user?.credits ?? 0} кредитов
-            </Badge>
-            <span className="text-sm text-muted-foreground hidden sm:block" data-testid="text-user-name">
-              {user?.displayName}
-            </span>
-            <Button variant="ghost" size="icon" onClick={handleLogout} data-testid="button-logout">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-chart-3 flex items-center justify-center shadow-lg">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-black tracking-tight uppercase text-sm">НЕЙРОЗОДЧИЙ</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-full px-4 py-1.5 shadow-skeuo-inner">
+              <Coins className="w-4 h-4 text-primary" />
+              <span className="text-xs font-black">{user?.credits}</span>
+            </div>
+            <Button variant="ghost" size="icon" className="rounded-full" onClick={logout}>
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">Мои проекты</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              {userProjects.length > 0
-                ? `${userProjects.length} проект${userProjects.length === 1 ? "" : userProjects.length < 5 ? "а" : "ов"}`
-                : "Пока нет проектов"}
-            </p>
+      <main className="max-w-7xl mx-auto px-6 pt-28 space-y-12">
+        <div className="flex items-end justify-between">
+          <div className="space-y-1">
+            <h1 className="text-4xl font-black tracking-tighter">Ваши проекты</h1>
+            <p className="text-slate-500 font-medium">Создайте что-то потрясающее сегодня</p>
           </div>
-          <Button onClick={() => setShowCreateModal(true)} data-testid="button-create-project">
-            <Plus className="w-4 h-4 mr-2" />
-            Создать проект
+          <Button 
+            className="h-14 px-8 rounded-2xl font-black text-lg shadow-xl shadow-primary/20 hover-elevate"
+            onClick={() => setShowCreateModal(true)}
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            Новый сайт
           </Button>
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[1,2,3].map(i => <div key={i} className="h-64 rounded-[2rem] bg-slate-100 dark:bg-slate-800 animate-pulse" />)}
           </div>
         ) : userProjects.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center py-20"
-          >
-            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
-              <FolderOpen className="w-8 h-8 text-muted-foreground" />
+          <SkeuoCard className="flex flex-col items-center justify-center py-24 text-center space-y-6">
+            <div className="w-20 h-20 rounded-3xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-skeuo-inner">
+              <FolderOpen className="w-10 h-10 text-slate-300" />
             </div>
-            <h2 className="text-lg font-semibold mb-2">Начните создавать</h2>
-            <p className="text-muted-foreground text-sm mb-6 max-w-sm mx-auto">
-              Создайте свой первый сайт с помощью ИИ за считанные секунды
-            </p>
-            <Button onClick={() => setShowCreateModal(true)} data-testid="button-create-first">
-              <Plus className="w-4 h-4 mr-2" />
-              Создать первый проект
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold tracking-tight">Пока здесь пусто</h2>
+              <p className="text-slate-500 max-w-xs mx-auto">Создайте свой первый проект, используя возможности искусственного интеллекта.</p>
+            </div>
+            <Button onClick={() => setShowCreateModal(true)} className="rounded-xl h-12 px-6 font-bold">
+              Создать первый сайт
             </Button>
-          </motion.div>
+          </SkeuoCard>
         ) : (
-          <motion.div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-            initial="hidden"
-            animate="visible"
-            variants={stagger}
-          >
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {userProjects.map((project) => (
-              <motion.div key={project.id} variants={fadeUp} transition={{ duration: 0.3 }}>
-                <Card
-                  className="group cursor-pointer hover-elevate p-0"
-                  onClick={() => setLocation(`/editor/${project.id}`)}
-                  data-testid={`card-project-${project.id}`}
-                >
-                  <div className="h-36 bg-muted/30 rounded-t-md flex items-center justify-center border-b">
-                    {project.generatedCode ? (
-                      <div className="w-full h-full overflow-hidden rounded-t-md relative">
-                        <iframe
-                          srcDoc={project.generatedCode}
-                          className="w-[200%] h-[200%] origin-top-left scale-50 pointer-events-none"
-                          sandbox="allow-scripts"
-                          title={project.title}
-                        />
-                      </div>
-                    ) : (
-                      <Code2 className="w-8 h-8 text-muted-foreground/40" />
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-semibold truncate mb-1">{project.title}</h3>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(project.createdAt).toLocaleDateString("ru-RU")}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteMutation.mutate(project.id);
-                        }}
-                        data-testid={`button-delete-${project.id}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
-                      </Button>
+              <SkeuoCard 
+                key={project.id} 
+                className="group p-0 overflow-hidden"
+                onClick={() => setLocation(`/editor/${project.id}`)}
+              >
+                <div className="h-48 bg-slate-50 dark:bg-slate-800/50 relative overflow-hidden flex items-center justify-center">
+                  {project.generatedCode ? (
+                    <div className="w-full h-full scale-[0.3] origin-center opacity-40 group-hover:opacity-100 transition-opacity duration-500">
+                       <iframe srcDoc={project.generatedCode} className="w-[333%] h-[333%] border-none pointer-events-none" />
                     </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-2xl bg-white dark:bg-slate-900 shadow-skeuo-md flex items-center justify-center">
+                      <Code2 className="w-8 h-8 text-slate-200" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-white/90 dark:from-slate-900/90 to-transparent flex items-end p-6">
+                    <h3 className="text-xl font-black tracking-tight truncate">{project.title}</h3>
                   </div>
-                </Card>
-              </motion.div>
+                </div>
+                <div className="p-6 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                    <Calendar className="w-3.5 h-3.5" />
+                    {new Date(project.createdAt).toLocaleDateString()}
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10"
+                    onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(project.id); }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </SkeuoCard>
             ))}
-          </motion.div>
+          </div>
         )}
       </main>
 
-      <Dialog open={showCreateModal} onOpenChange={(open) => { setShowCreateModal(open); if (!open) resetForm(); }}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {createStep === "choose" ? "Создать проект" : "Детали проекта"}
-            </DialogTitle>
-          </DialogHeader>
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent className="sm:max-w-xl rounded-[3rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="p-10 space-y-8">
+            <DialogHeader>
+              <DialogTitle className="text-3xl font-black tracking-tighter">
+                {createStep === "choose" ? "С чего начнём?" : "Оживите мечту"}
+              </DialogTitle>
+            </DialogHeader>
 
-          <AnimatePresence mode="wait">
-            {createStep === "choose" ? (
-              <motion.div
-                key="choose"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="space-y-3"
-              >
-                {createModes.map((m) => (
-                  <button
-                    key={m.mode}
-                    className={`w-full flex items-start gap-4 p-4 rounded-md border text-left transition-colors ${
-                      selectedMode === m.mode ? "border-primary bg-primary/5" : "border-border"
-                    }`}
-                    onClick={() => {
-                      setSelectedMode(m.mode);
-                      setCreateStep("details");
-                    }}
-                    data-testid={`button-mode-${m.mode}`}
-                  >
-                    <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                      <m.icon className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-sm">{m.title}</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">{m.description}</p>
-                    </div>
-                  </button>
-                ))}
-              </motion.div>
-            ) : (
-              <motion.div
-                key="details"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="space-y-4"
-              >
-                <div className="space-y-2">
-                  <Label>Название проекта</Label>
-                  <Input
-                    placeholder="Мой сайт"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    data-testid="input-project-title"
-                  />
-                </div>
-
-                {selectedMode === "template" && (
+            <AnimatePresence mode="wait">
+              {createStep === "choose" ? (
+                <motion.div key="c" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+                  {[
+                    { m: "prompt", t: "По описанию", d: "Просто напишите, что вам нужно", i: MessageSquare },
+                    { m: "template", t: "Промт + Шаблон", d: "Выберите структуру и детали", i: Layers },
+                    { m: "photo", t: "По фото", d: "Загрузите скриншот-пример", i: Image },
+                  ].map(x => (
+                    <button 
+                      key={x.m}
+                      className="w-full flex items-center gap-6 p-6 rounded-[2rem] bg-slate-50 dark:bg-slate-800/50 hover:bg-primary/5 dark:hover:bg-primary/5 hover:ring-2 ring-primary/20 transition-all text-left shadow-skeuo-inner"
+                      onClick={() => { setSelectedMode(x.m as any); setCreateStep("details"); }}
+                    >
+                      <div className="w-14 h-14 rounded-2xl bg-white dark:bg-slate-900 shadow-skeuo-md flex items-center justify-center shrink-0">
+                        <x.i className="w-6 h-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-lg font-black">{x.t}</h4>
+                        <p className="text-sm text-slate-500 font-medium">{x.d}</p>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-slate-300" />
+                    </button>
+                  ))}
+                </motion.div>
+              ) : (
+                <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
                   <div className="space-y-2">
-                    <Label>Шаблон</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {templates.map((t) => (
-                        <button
-                          key={t}
-                          className={`p-3 rounded-md border text-sm text-left transition-colors ${
-                            selectedTemplate === t ? "border-primary bg-primary/5" : "border-border"
-                          }`}
-                          onClick={() => setSelectedTemplate(t)}
-                          data-testid={`button-template-${t}`}
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
+                    <Label className="text-xs font-black uppercase tracking-widest text-slate-400 px-2">Название</Label>
+                    <Input 
+                      placeholder="Например: Моё кафе"
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      className="h-14 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none shadow-skeuo-inner font-bold"
+                    />
                   </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label>
-                    {selectedMode === "photo"
-                      ? "Описание (что изменить или добавить)"
-                      : "Описание сайта"}
-                  </Label>
-                  <Textarea
-                    placeholder={
-                      selectedMode === "prompt"
-                        ? "Опишите сайт, который хотите создать..."
-                        : selectedMode === "template"
-                          ? "Добавьте детали к выбранному шаблону..."
-                          : "Опишите, что хотите получить на основе фото..."
-                    }
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={3}
-                    data-testid="input-project-description"
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <Button variant="outline" onClick={() => setCreateStep("choose")} data-testid="button-back-step">
-                    Назад
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={() => createMutation.mutate()}
-                    disabled={createMutation.isPending}
-                    data-testid="button-create-confirm"
-                  >
-                    {createMutation.isPending ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Создание...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Создать
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-black uppercase tracking-widest text-slate-400 px-2">Описание</Label>
+                    <Textarea 
+                      placeholder="Опишите структуру, цвета и контент..."
+                      value={description}
+                      onChange={e => setDescription(e.target.value)}
+                      className="min-h-[120px] rounded-2xl bg-slate-50 dark:bg-slate-800 border-none shadow-skeuo-inner font-medium"
+                    />
+                  </div>
+                  <div className="flex gap-4 pt-4">
+                    <Button variant="ghost" className="h-14 rounded-2xl font-bold flex-1" onClick={() => setCreateStep("choose")}>Назад</Button>
+                    <Button 
+                      className="h-14 rounded-2xl font-black text-lg flex-[2] shadow-xl shadow-primary/20"
+                      onClick={() => createMutation.mutate()}
+                      disabled={createMutation.isPending}
+                    >
+                      {createMutation.isPending ? <Loader2 className="w-6 h-6 animate-spin" /> : "Создать проект"}
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -3,11 +3,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, Mail, Lock, User, ArrowLeft, Loader2 } from "lucide-react";
+
+const SkeuoCard = ({ children, className = "" }) => (
+  <div className={`bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/20 dark:border-white/5 shadow-skeuo-lg rounded-[2.5rem] p-10 ${className}`}>
+    {children}
+  </div>
+);
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -33,11 +38,7 @@ export default function AuthPage() {
     } catch (err: any) {
       toast({
         title: "Ошибка",
-        description: err.message?.includes("401")
-          ? "Неверный email или пароль"
-          : err.message?.includes("400")
-            ? "Проверьте введённые данные"
-            : "Произошла ошибка. Попробуйте снова.",
+        description: err.message?.includes("401") ? "Неверный email или пароль" : "Произошла ошибка",
         variant: "destructive",
       });
     } finally {
@@ -46,152 +47,115 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
-        <div className="w-full max-w-md">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mb-8"
-            onClick={() => setLocation("/")}
-            data-testid="button-back-landing"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            На главную
-          </Button>
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] flex items-center justify-center p-6 overflow-hidden relative">
+      <div className="absolute top-0 left-0 w-full h-full -z-10">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-chart-3/10 rounded-full blur-[100px]" />
+      </div>
 
-          <div className="flex items-center gap-2 mb-8">
-            <div className="w-9 h-9 rounded-md bg-primary flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-primary-foreground" />
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="w-full max-w-lg"
+      >
+        <Button
+          variant="ghost"
+          className="mb-8 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+          onClick={() => setLocation("/")}
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Назад
+        </Button>
+
+        <SkeuoCard>
+          <div className="flex items-center gap-3 mb-10">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-chart-3 flex items-center justify-center shadow-lg shadow-primary/20">
+              <Sparkles className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold">НейроЗодчий</span>
+            <span className="text-2xl font-black tracking-tighter uppercase">НЕЙРОЗОДЧИЙ</span>
           </div>
 
           <AnimatePresence mode="wait">
             <motion.div
               key={isLogin ? "login" : "register"}
-              initial={{ opacity: 0, x: isLogin ? -20 : 20 }}
+              initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: isLogin ? 20 : -20 }}
-              transition={{ duration: 0.2 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
             >
-              <h1 className="text-2xl font-bold mb-1" data-testid="text-auth-title">
-                {isLogin ? "Войти в аккаунт" : "Создать аккаунт"}
+              <h1 className="text-3xl font-black mb-2 tracking-tight">
+                {isLogin ? "С возвращением" : "Создать аккаунт"}
               </h1>
-              <p className="text-muted-foreground mb-6">
-                {isLogin
-                  ? "Введите данные для входа в личный кабинет"
-                  : "Заполните данные для регистрации"}
+              <p className="text-slate-500 mb-8 font-medium">
+                {isLogin ? "Рады видеть вас снова в системе" : "Присоединяйтесь к нашему сообществу"}
               </p>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-6">
                 {!isLogin && (
                   <div className="space-y-2">
-                    <Label htmlFor="displayName">Имя</Label>
+                    <Label className="text-xs font-black uppercase tracking-widest text-slate-400 px-1">Имя</Label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <Input
-                        id="displayName"
-                        type="text"
                         placeholder="Ваше имя"
                         value={displayName}
                         onChange={(e) => setDisplayName(e.target.value)}
-                        className="pl-9"
+                        className="h-14 pl-12 rounded-2xl border-none bg-slate-100 dark:bg-slate-800 shadow-skeuo-inner focus-visible:ring-2 ring-primary/20 font-medium"
                         required={!isLogin}
-                        data-testid="input-displayname"
                       />
                     </div>
                   </div>
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label className="text-xs font-black uppercase tracking-widest text-slate-400 px-1">Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <Input
-                      id="email"
                       type="email"
                       placeholder="name@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-9"
+                      className="h-14 pl-12 rounded-2xl border-none bg-slate-100 dark:bg-slate-800 shadow-skeuo-inner focus-visible:ring-2 ring-primary/20 font-medium"
                       required
-                      data-testid="input-email"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Пароль</Label>
+                  <Label className="text-xs font-black uppercase tracking-widest text-slate-400 px-1">Пароль</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <Input
-                      id="password"
                       type="password"
-                      placeholder="Минимум 6 символов"
+                      placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-9"
+                      className="h-14 pl-12 rounded-2xl border-none bg-slate-100 dark:bg-slate-800 shadow-skeuo-inner focus-visible:ring-2 ring-primary/20 font-medium"
                       required
-                      minLength={6}
-                      data-testid="input-password"
                     />
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={isSubmitting} data-testid="button-submit-auth">
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      {isLogin ? "Вход..." : "Регистрация..."}
-                    </>
-                  ) : (
-                    isLogin ? "Войти" : "Зарегистрироваться"
-                  )}
+                <Button type="submit" className="w-full h-16 rounded-2xl text-lg font-black shadow-xl shadow-primary/25 hover-elevate mt-4" disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : (isLogin ? "Войти" : "Начать")}
                 </Button>
               </form>
 
-              <p className="text-sm text-muted-foreground text-center mt-6">
-                {isLogin ? "Нет аккаунта?" : "Уже есть аккаунт?"}{" "}
+              <div className="mt-8 pt-8 border-t border-slate-200 dark:border-slate-800 text-center">
                 <button
                   type="button"
-                  className="text-primary font-medium"
+                  className="text-sm font-bold text-slate-500 hover:text-primary transition-colors"
                   onClick={() => setIsLogin(!isLogin)}
-                  data-testid="button-toggle-auth"
                 >
-                  {isLogin ? "Зарегистрироваться" : "Войти"}
+                  {isLogin ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
                 </button>
-              </p>
+              </div>
             </motion.div>
           </AnimatePresence>
-        </div>
-      </div>
-
-      <div className="hidden lg:flex flex-1 items-center justify-center bg-muted/30 p-8 relative overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-64 h-64 rounded-full bg-primary/5 blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-48 h-48 rounded-full bg-chart-3/5 blur-3xl" />
-        </div>
-
-        <div className="relative max-w-md text-center">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-8">
-              <Sparkles className="w-10 h-10 text-primary" />
-            </div>
-            <h2 className="text-2xl font-bold mb-3">
-              Создавайте сайты с помощью ИИ
-            </h2>
-            <p className="text-muted-foreground leading-relaxed">
-              Опишите свой сайт текстом, загрузите скриншот или выберите шаблон.
-              НейроЗодчий сгенерирует полный HTML/CSS/JS код за секунды.
-            </p>
-          </motion.div>
-        </div>
-      </div>
+        </SkeuoCard>
+      </motion.div>
     </div>
   );
 }
