@@ -21,16 +21,21 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `users` — id, email, password, displayName, credits, plan, createdAt
 - `projects` — id, userId, title, description, generatedCode, createdAt, updatedAt
 - `project_messages` — id, projectId, role, content, createdAt
+- `project_images` — id, projectId, name, url, prompt, createdAt (named image library)
+- `project_versions` — id, projectId, code, label, createdAt (version history/rollback)
 - `session` — auto-managed by connect-pg-simple
 
 ## Key Features
 - Text-to-website generation via Gemini AI
 - Photo/screenshot to website (Vision API)
 - AI image generation via Nano Banana (create task → poll → insert into HTML)
+- Named image library with {{IMG:name}} marker system
 - Template-based generation
 - Live preview with responsive device switching
 - Chat-based iterative editing
-- ZIP export with separate HTML/CSS/JS files
+- ZIP export with all images as local files (images/ folder)
+- Version history with manual checkpoints and auto-save before each generation
+- One-click rollback to any previous version
 - Credit-based usage system
 
 ## API Endpoints (Images)

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { users, projects, projectMessages, projectImages, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage } from "@shared/schema";
+import { users, projects, projectMessages, projectImages, projectVersions, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion } from "@shared/schema";
 import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
@@ -20,6 +20,9 @@ export interface IStorage {
   getProjectImages(projectId: number): Promise<ProjectImage[]>;
   createProjectImage(image: InsertProjectImage): Promise<ProjectImage>;
   deleteProjectImage(id: number): Promise<void>;
+
+  getProjectVersions(projectId: number): Promise<ProjectVersion[]>;
+  createProjectVersion(version: InsertProjectVersion): Promise<ProjectVersion>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -87,6 +90,15 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProjectImage(id: number): Promise<void> {
     await db.delete(projectImages).where(eq(projectImages.id, id));
+  }
+
+  async getProjectVersions(projectId: number): Promise<ProjectVersion[]> {
+    return db.select().from(projectVersions).where(eq(projectVersions.projectId, projectId)).orderBy(desc(projectVersions.createdAt));
+  }
+
+  async createProjectVersion(version: InsertProjectVersion): Promise<ProjectVersion> {
+    const [v] = await db.insert(projectVersions).values(version).returning();
+    return v;
   }
 }
 

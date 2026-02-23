@@ -40,6 +40,14 @@ export const projectImages = pgTable("project_images", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const projectVersions = pgTable("project_versions", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  code: text("code").notNull(),
+  label: text("label").notNull().default(""),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -71,3 +79,10 @@ export type ProjectMessage = typeof projectMessages.$inferSelect;
 export type InsertProjectMessage = z.infer<typeof insertProjectMessageSchema>;
 export type ProjectImage = typeof projectImages.$inferSelect;
 export type InsertProjectImage = z.infer<typeof insertProjectImageSchema>;
+
+export const insertProjectVersionSchema = createInsertSchema(projectVersions).omit({
+  id: true,
+  createdAt: true,
+});
+export type ProjectVersion = typeof projectVersions.$inferSelect;
+export type InsertProjectVersion = z.infer<typeof insertProjectVersionSchema>;

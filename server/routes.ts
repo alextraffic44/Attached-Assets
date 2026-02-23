@@ -348,6 +348,14 @@ export async function registerRoutes(
         }
       }
 
+      if (project.generatedCode && project.generatedCode.trim()) {
+        await storage.createProjectVersion({
+          projectId: project.id,
+          code: project.generatedCode,
+          label: `До: "${prompt.substring(0, 50)}${prompt.length > 50 ? "..." : ""}"`,
+        });
+      }
+
       await storage.updateProject(project.id, { generatedCode: htmlCode });
       await storage.createProjectMessage({
         projectId: project.id,
@@ -489,6 +497,64 @@ export async function registerRoutes(
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Ошибка обновления кода" });
+    }
+  });
+
+  app.get("/api/projects/:id/versions", bypassAuth, async (req, res) => {
+    try {
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      const user = req.user as any;
+      if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
+      const versions = await storage.getProjectVersions(project.id);
+      res.json(versions);
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка загрузки версий" });
+    }
+  });
+
+  app.post("/api/projects/:id/versions", bypassAuth, async (req, res) => {
+    try {
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      const user = req.user as any;
+      if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
+      if (!project.generatedCode?.trim()) return res.status(400).json({ message: "Нет кода для сохранения" });
+      const { label } = req.body;
+      const version = await storage.createProjectVersion({
+        projectId: project.id,
+        code: project.generatedCode,
+        label: label || "Ручной чекпоинт",
+      });
+      res.status(201).json(version);
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка сохранения версии" });
+    }
+  });
+
+  app.post("/api/projects/:id/versions/:versionId/restore", bypassAuth, async (req, res) => {
+    try {
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      const user = req.user as any;
+      if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
+
+      const versions = await storage.getProjectVersions(project.id);
+      const version = versions.find(v => v.id === parseInt(req.params.versionId));
+      if (!version) return res.status(404).json({ message: "Версия не найдена" });
+
+      if (project.generatedCode?.trim()) {
+        await storage.createProjectVersion({
+          projectId: project.id,
+          code: project.generatedCode,
+          label: "До отката",
+        });
+      }
+
+      const updated = await storage.updateProject(project.id, { generatedCode: version.code });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка восстановления версии" });
     }
   });
 

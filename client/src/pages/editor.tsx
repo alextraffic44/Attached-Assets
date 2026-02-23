@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { useLocation, useParams } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Project, ProjectMessage, ProjectImage } from "@shared/schema";
+import type { Project, ProjectMessage, ProjectImage, ProjectVersion } from "@shared/schema";
 import JSZip from "jszip";
 import {
   ArrowLeft,
@@ -32,6 +32,10 @@ import {
   XCircle,
   Trash2,
   ImagePlus,
+  History,
+  RotateCcw,
+  Save,
+  Clock,
 } from "lucide-react";
 import {
   Dialog,
@@ -70,6 +74,7 @@ export default function EditorPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [imgGenOpen, setImgGenOpen] = useState(false);
   const [imgName, setImgName] = useState("");
   const [imgPrompt, setImgPrompt] = useState("");
@@ -92,6 +97,10 @@ export default function EditorPage() {
 
   const { data: projectImages = [] } = useQuery<ProjectImage[]>({
     queryKey: ["/api/projects", projectId, "images"],
+  });
+
+  const { data: versions = [] } = useQuery<ProjectVersion[]>({
+    queryKey: ["/api/projects", projectId, "versions"],
   });
 
   const currentCode = streamedCode || project?.generatedCode || "";
@@ -338,6 +347,40 @@ export default function EditorPage() {
     }
   }, [projectId, toast]);
 
+  const handleSaveCheckpoint = useCallback(async () => {
+    try {
+      const resp = await fetch(`/api/projects/${projectId}/versions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: "Ручной чекпоинт" }),
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error("Ошибка сохранения");
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
+      toast({ title: "Чекпоинт сохранён" });
+    } catch (err: any) {
+      toast({ title: "Ошибка", description: err.message, variant: "destructive" });
+    }
+  }, [projectId, toast]);
+
+  const handleRestoreVersion = useCallback(async (versionId: number) => {
+    try {
+      const resp = await fetch(`/api/projects/${projectId}/versions/${versionId}/restore`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error("Ошибка восстановления");
+      const updated = await resp.json();
+      setStreamedCode(updated.generatedCode);
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
+      toast({ title: "Версия восстановлена" });
+      setHistoryOpen(false);
+    } catch (err: any) {
+      toast({ title: "Ошибка", description: err.message, variant: "destructive" });
+    }
+  }, [projectId, toast]);
+
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
 
   if (projectLoading) return <div className="h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#0F172A]"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
@@ -378,6 +421,16 @@ export default function EditorPage() {
           <Button variant="outline" size="sm" className="rounded-xl font-bold px-4" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip">
             <Download className="w-4 h-4 mr-2" />
             ZIP
+          </Button>
+
+          <Button variant="outline" size="sm" className="rounded-xl font-bold px-3" onClick={handleSaveCheckpoint} disabled={!currentCode} data-testid="button-save-checkpoint">
+            <Save className="w-4 h-4 mr-1.5" />
+            Чекпоинт
+          </Button>
+
+          <Button variant="outline" size="sm" className="rounded-xl font-bold px-3 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300" onClick={() => setHistoryOpen(true)} disabled={versions.length === 0} data-testid="button-open-history">
+            <History className="w-4 h-4 mr-1.5" />
+            {versions.length > 0 && <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0 rounded-full">{versions.length}</Badge>}
           </Button>
 
           <Button variant="outline" size="sm" className="rounded-xl font-bold px-4 bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen">
@@ -632,6 +685,56 @@ export default function EditorPage() {
                   ))}
                 </div>
               </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="sm:max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-skeuo-lg rounded-3xl max-h-[80vh] overflow-y-auto" aria-describedby="history-description">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black tracking-tight flex items-center gap-2">
+              <History className="w-5 h-5 text-amber-500" />
+              История версий
+            </DialogTitle>
+            <DialogDescription id="history-description">
+              Откатитесь к любой предыдущей версии сайта
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+              <div className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">Текущая версия</p>
+                <p className="text-[11px] text-emerald-500">Сейчас активна</p>
+              </div>
+            </div>
+
+            {versions.map((v) => (
+              <div key={v.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700 transition-colors" data-testid={`version-item-${v.id}`}>
+                <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold truncate">{v.label}</p>
+                  <p className="text-[11px] text-slate-400">
+                    {new Date(v.createdAt).toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 rounded-lg font-bold text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-900/20"
+                  onClick={() => handleRestoreVersion(v.id)}
+                  data-testid={`button-restore-${v.id}`}
+                >
+                  <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                  Откатить
+                </Button>
+              </div>
+            ))}
+
+            {versions.length === 0 && (
+              <p className="text-center text-sm text-slate-400 py-6">Пока нет сохранённых версий</p>
             )}
           </div>
         </DialogContent>
