@@ -2,15 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
-import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
-});
+const KIE_API_URL = "https://api.kie.ai/gemini-3-pro/v1/chat/completions";
+const KIE_API_KEY = process.env.KIE_API_KEY;
 
 const SYSTEM_PROMPT = `Ты — профессиональный веб-разработчик. Твоя задача — генерировать полный HTML-код сайта.
 
@@ -146,39 +140,34 @@ export async function registerRoutes(
       });
 
       const previousMessages = await storage.getProjectMessages(project.id);
-      const chatHistory: any[] = [
-        { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
-        { role: "model", parts: [{ text: "Понял. Я буду генерировать полный HTML-код сайта, следуя всем указанным требованиям. Готов к работе." }] },
+      const chatMessages: any[] = [
+        { role: "system", content: SYSTEM_PROMPT },
       ];
 
       for (const msg of previousMessages.slice(0, -1)) {
-        chatHistory.push({
-          role: msg.role === "user" ? "user" : "model",
-          parts: [{ text: msg.content }],
+        chatMessages.push({
+          role: msg.role === "user" ? "user" : "assistant",
+          content: msg.content,
         });
       }
 
-      const userParts: any[] = [];
-
-      if (project.generatedCode) {
-        userParts.push({ text: `Текущий код сайта:\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n\nЗапрос пользователя: ${prompt}\n\nВнеси изменения и верни ПОЛНЫЙ обновлённый HTML-код.` });
-      } else {
-        userParts.push({ text: prompt });
-      }
+      let userContent: any;
 
       if (imageBase64) {
-        userParts.push({
-          inlineData: {
-            mimeType: "image/png",
-            data: imageBase64,
-          },
-        });
-        if (!project.generatedCode) {
-          userParts[0] = { text: `Создай сайт на основе этого изображения-примера. ${prompt}` };
-        }
+        const textPart = project.generatedCode
+          ? `Текущий код сайта:\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n\nЗапрос пользователя: ${prompt}\n\nВнеси изменения и верни ПОЛНЫЙ обновлённый HTML-код.`
+          : `Создай сайт на основе этого изображения-примера. ${prompt}`;
+        userContent = [
+          { type: "text", text: textPart },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${imageBase64}` } },
+        ];
+      } else if (project.generatedCode) {
+        userContent = `Текущий код сайта:\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n\nЗапрос пользователя: ${prompt}\n\nВнеси изменения и верни ПОЛНЫЙ обновлённый HTML-код.`;
+      } else {
+        userContent = prompt;
       }
 
-      chatHistory.push({ role: "user", parts: userParts });
+      chatMessages.push({ role: "user", content: userContent });
 
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
@@ -186,17 +175,54 @@ export async function registerRoutes(
 
       let fullResponse = "";
 
-      const stream = await ai.models.generateContentStream({
-        model: "gemini-1.5-pro",
-        contents: chatHistory,
-        config: { maxOutputTokens: 65536 },
+      const kieResponse = await fetch(KIE_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${KIE_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gemini-3-pro",
+          messages: chatMessages,
+          max_tokens: 65536,
+          stream: true,
+        }),
       });
 
-      for await (const chunk of stream) {
-        const text = chunk.text || "";
-        if (text) {
-          fullResponse += text;
-          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+      if (!kieResponse.ok) {
+        const errText = await kieResponse.text();
+        console.error("KIE API error:", kieResponse.status, errText);
+        throw new Error(`KIE API error: ${kieResponse.status}`);
+      }
+
+      const reader = kieResponse.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+          const dataStr = trimmed.slice(6);
+          if (dataStr === "[DONE]") continue;
+
+          try {
+            const parsed = JSON.parse(dataStr);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) {
+              fullResponse += delta;
+              res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+            }
+          } catch {}
         }
       }
 
@@ -214,8 +240,6 @@ export async function registerRoutes(
         role: "model",
         content: htmlCode,
       });
-
-      // await storage.updateUserCredits(user.id, Math.max(0, user.credits - 1));
 
       res.write(`data: ${JSON.stringify({ done: true, code: htmlCode })}\n\n`);
       res.end();
