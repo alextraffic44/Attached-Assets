@@ -375,101 +375,85 @@ export default function EditorPage() {
 
   const getEditableCode = useCallback((code: string) => {
     if (!editMode || !code) return code;
-    const editorScript = `
-<style>
-  [contenteditable]:hover { outline: 2px dashed rgba(59,130,246,0.5); outline-offset: 2px; cursor: text; }
-  [contenteditable]:focus { outline: 2px solid rgba(59,130,246,0.8); outline-offset: 2px; background: rgba(59,130,246,0.05); }
-  img:hover, .image-placeholder:hover { outline: 2px dashed rgba(168,85,247,0.6); outline-offset: 2px; cursor: pointer; }
-  .__edit-tooltip { position: fixed; background: #1e293b; color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; pointer-events: none; z-index: 99999; white-space: nowrap; }
-</style>
-<script>
-(function() {
-  var tooltip = null;
-  function showTooltip(el, text) {
-    if (!tooltip) { tooltip = document.createElement('div'); tooltip.className = '__edit-tooltip'; document.body.appendChild(tooltip); }
-    tooltip.textContent = text;
-    var r = el.getBoundingClientRect();
-    tooltip.style.left = r.left + 'px';
-    tooltip.style.top = (r.top - 28) + 'px';
-    tooltip.style.display = 'block';
+    const editorScript = `<!--NZ_EDITOR_START--><style data-nz-editor>
+[contenteditable]:hover{outline:2px dashed rgba(59,130,246,0.5);outline-offset:2px;cursor:text}
+[contenteditable]:focus{outline:2px solid rgba(59,130,246,0.8);outline-offset:2px;background:rgba(59,130,246,0.05)}
+img:hover,.image-placeholder:hover{outline:2px dashed rgba(168,85,247,0.6);outline-offset:2px;cursor:pointer}
+.__nz-tooltip{position:fixed;background:#1e293b;color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;pointer-events:none;z-index:99999;white-space:nowrap}
+</style><script data-nz-editor>
+(function(){
+  function getCleanHtml(){
+    var clone=document.documentElement.cloneNode(true);
+    var eds=clone.querySelectorAll('[data-nz-editor]');
+    for(var i=0;i<eds.length;i++) eds[i].parentNode.removeChild(eds[i]);
+    var tips=clone.querySelectorAll('.__nz-tooltip');
+    for(var i=0;i<tips.length;i++) tips[i].parentNode.removeChild(tips[i]);
+    var ces=clone.querySelectorAll('[contenteditable]');
+    for(var i=0;i<ces.length;i++) ces[i].removeAttribute('contenteditable');
+    var html=clone.outerHTML;
+    html=html.replace(/<!--NZ_EDITOR_START-->|<!--NZ_EDITOR_END-->/g,'');
+    return '<!DOCTYPE html>\\n'+html;
   }
-  function hideTooltip() { if (tooltip) tooltip.style.display = 'none'; }
+  function getPath(el){
+    var path=[];var node=el;
+    while(node&&node!==document.body){
+      var idx=0;var sib=node;
+      while(sib.previousElementSibling){sib=sib.previousElementSibling;idx++}
+      path.unshift(idx);node=node.parentElement;
+    }
+    return path.join(',');
+  }
+  var tooltip=null;
+  function showTip(el,text){
+    if(!tooltip){tooltip=document.createElement('div');tooltip.className='__nz-tooltip';document.body.appendChild(tooltip)}
+    tooltip.textContent=text;var r=el.getBoundingClientRect();
+    tooltip.style.left=r.left+'px';tooltip.style.top=(r.top-28)+'px';tooltip.style.display='block';
+  }
+  function hideTip(){if(tooltip)tooltip.style.display='none'}
 
-  document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,td,th,button,label,figcaption').forEach(function(el) {
-    if (el.children.length === 0 || el.childNodes.length === 1) {
-      el.setAttribute('contenteditable', 'true');
-      el.addEventListener('mouseenter', function() { showTooltip(el, 'Клик для редактирования текста'); });
-      el.addEventListener('mouseleave', hideTooltip);
-      el.addEventListener('blur', function() {
-        window.parent.postMessage({ type: 'nz-text-edit', html: document.documentElement.outerHTML }, '*');
+  document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,td,th,button,label,figcaption').forEach(function(el){
+    if(el.children.length===0||el.childNodes.length===1){
+      el.setAttribute('contenteditable','true');
+      el.addEventListener('mouseenter',function(){showTip(el,'Клик для редактирования')});
+      el.addEventListener('mouseleave',hideTip);
+      el.addEventListener('blur',function(){
+        window.parent.postMessage({type:'nz-text-edit',html:getCleanHtml()},'*');
       });
     }
   });
-
-  document.querySelectorAll('img').forEach(function(img) {
-    img.addEventListener('mouseenter', function() { showTooltip(img, 'Клик для замены изображения'); });
-    img.addEventListener('mouseleave', hideTooltip);
-    img.addEventListener('click', function(e) {
-      e.preventDefault(); e.stopPropagation();
-      hideTooltip();
-      var path = [];
-      var node = img;
-      while (node && node !== document.body) {
-        var idx = 0;
-        var sib = node;
-        while (sib.previousElementSibling) { sib = sib.previousElementSibling; idx++; }
-        path.unshift(idx);
-        node = node.parentElement;
-      }
-      window.parent.postMessage({ type: 'nz-img-click', path: path.join(','), src: img.src }, '*');
+  document.querySelectorAll('img').forEach(function(img){
+    img.addEventListener('mouseenter',function(){showTip(img,'Клик для замены')});
+    img.addEventListener('mouseleave',hideTip);
+    img.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();hideTip();
+      window.parent.postMessage({type:'nz-img-click',path:getPath(img),src:img.src},'*');
     });
   });
-
-  document.querySelectorAll('.image-placeholder').forEach(function(ph) {
-    ph.addEventListener('mouseenter', function() { showTooltip(ph, 'Клик для добавления изображения'); });
-    ph.addEventListener('mouseleave', hideTooltip);
-    ph.addEventListener('click', function(e) {
-      e.preventDefault(); e.stopPropagation();
-      hideTooltip();
-      var path = [];
-      var node = ph;
-      while (node && node !== document.body) {
-        var idx = 0;
-        var sib = node;
-        while (sib.previousElementSibling) { sib = sib.previousElementSibling; idx++; }
-        path.unshift(idx);
-        node = node.parentElement;
-      }
-      window.parent.postMessage({ type: 'nz-placeholder-click', path: path.join(','), hint: ph.getAttribute('data-image-hint') || '' }, '*');
+  document.querySelectorAll('.image-placeholder').forEach(function(ph){
+    ph.addEventListener('mouseenter',function(){showTip(ph,'Клик для добавления')});
+    ph.addEventListener('mouseleave',hideTip);
+    ph.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();hideTip();
+      window.parent.postMessage({type:'nz-placeholder-click',path:getPath(ph),hint:ph.getAttribute('data-image-hint')||''},'*');
     });
   });
-
-  window.addEventListener('message', function(e) {
-    if (e.data && e.data.type === 'nz-replace-image') {
-      var path = e.data.path.split(',').map(Number);
-      var node = document.body;
-      for (var i = 0; i < path.length; i++) {
-        if (node.children[path[i]]) node = node.children[path[i]];
-        else break;
+  window.addEventListener('message',function(e){
+    if(e.data&&e.data.type==='nz-replace-image'){
+      var path=e.data.path.split(',').map(Number);var node=document.body;
+      for(var i=0;i<path.length;i++){if(node.children[path[i]])node=node.children[path[i]];else break}
+      if(node.tagName==='IMG'){node.src=e.data.url;node.style.objectFit='cover'}
+      else if(node.classList&&node.classList.contains('image-placeholder')){
+        var img=document.createElement('img');img.src=e.data.url;
+        img.alt=node.getAttribute('data-image-hint')||'';
+        img.style.width=node.style.width||'100%';img.style.height=node.style.height||'400px';
+        img.style.objectFit='cover';img.style.borderRadius=node.style.borderRadius||'16px';
+        node.parentNode.replaceChild(img,node);
       }
-      if (node.tagName === 'IMG') {
-        node.src = e.data.url;
-        node.style.objectFit = 'cover';
-      } else if (node.classList && node.classList.contains('image-placeholder')) {
-        var img = document.createElement('img');
-        img.src = e.data.url;
-        img.alt = node.getAttribute('data-image-hint') || '';
-        img.style.width = node.style.width || '100%';
-        img.style.height = node.style.height || '400px';
-        img.style.objectFit = 'cover';
-        img.style.borderRadius = node.style.borderRadius || '16px';
-        node.parentNode.replaceChild(img, node);
-      }
-      window.parent.postMessage({ type: 'nz-text-edit', html: document.documentElement.outerHTML }, '*');
+      window.parent.postMessage({type:'nz-text-edit',html:getCleanHtml()},'*');
     }
   });
 })();
-</script>`;
+<\/script><!--NZ_EDITOR_END-->`;
     return code.replace('</body>', editorScript + '</body>');
   }, [editMode]);
 
@@ -477,13 +461,7 @@ export default function EditorPage() {
     const handler = (e: MessageEvent) => {
       if (!e.data || typeof e.data !== 'object') return;
       if (e.data.type === 'nz-text-edit') {
-        const cleanHtml = e.data.html
-          .replace(/<style>[\s\S]*?\[contenteditable\][\s\S]*?<\/style>/g, '')
-          .replace(/<script>[\s\S]*?nz-text-edit[\s\S]*?<\/script>/g, '')
-          .replace(/<div class="__edit-tooltip"[\s\S]*?<\/div>/g, '')
-          .replace(/\s*contenteditable="true"/g, '');
-        const doctype = '<!DOCTYPE html>\n';
-        const finalHtml = cleanHtml.startsWith('<!DOCTYPE') ? cleanHtml : doctype + cleanHtml;
+        const finalHtml = e.data.html;
         setStreamedCode(finalHtml);
         fetch(`/api/projects/${projectId}/code`, {
           method: "PUT",
