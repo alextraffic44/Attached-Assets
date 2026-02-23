@@ -429,6 +429,14 @@ export default function EditorPage() {
 window.__PROJECT_ID__=${projectId};
 (function(){
   var API=(window.location.origin==='null'?window.parent.location.origin:window.location.origin)+'/api/leads/${projectId}';
+  document.addEventListener('click',function(e){
+    var a=e.target.closest('a');
+    if(!a) return;
+    var href=a.getAttribute('href');
+    if(!href||href==='#') return;
+    if(href.startsWith('#')){e.preventDefault();var el=document.querySelector(href);if(el)el.scrollIntoView({behavior:'smooth'});return;}
+    e.preventDefault();
+  },true);
   function showToast(msg){
     var t=document.createElement('div');
     t.textContent=msg;
