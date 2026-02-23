@@ -3,8 +3,10 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { ai } from "./replit_integrations/image/client";
-import { Modality } from "@google/genai";
 
+const KIE_API_KEY = process.env.KIE_API_KEY;
+const NANO_BANANA_CREATE_URL = "https://api.kie.ai/api/v1/jobs/createTask";
+const NANO_BANANA_STATUS_URL = "https://api.kie.ai/api/v1/jobs/recordInfo";
 
 const SYSTEM_PROMPT = `Ты — профессиональный веб-разработчик. Твоя задача — генерировать полный HTML-код сайта.
 
