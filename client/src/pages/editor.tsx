@@ -26,7 +26,26 @@ import {
   ChevronLeft,
   ChevronRight,
   Maximize2,
+  Wand2,
+  CheckCircle2,
+  XCircle,
+  Replace,
+  PlusCircle,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const SkeuoPanel = ({ children, className = "" }) => (
   <div className={`bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-white/20 dark:border-white/5 shadow-skeuo-lg rounded-[2rem] overflow-hidden flex flex-col ${className}`}>
@@ -49,6 +68,14 @@ export default function EditorPage() {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [imgGenOpen, setImgGenOpen] = useState(false);
+  const [imgPrompt, setImgPrompt] = useState("");
+  const [imgSize, setImgSize] = useState("16:9");
+  const [imgGenerating, setImgGenerating] = useState(false);
+  const [imgTaskId, setImgTaskId] = useState<string | null>(null);
+  const [imgStatus, setImgStatus] = useState<"idle" | "creating" | "waiting" | "success" | "fail">("idle");
+  const [imgResultUrls, setImgResultUrls] = useState<string[]>([]);
+  const [imgError, setImgError] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -157,6 +184,88 @@ export default function EditorPage() {
     reader.readAsDataURL(file);
   };
 
+  const handleGenerateImage = useCallback(async () => {
+    if (!imgPrompt.trim()) return;
+    setImgGenerating(true);
+    setImgStatus("creating");
+    setImgResultUrls([]);
+    setImgError("");
+
+    try {
+      const resp = await fetch("/api/images/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: imgPrompt, imageSize: imgSize }),
+        credentials: "include",
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.message);
+
+      const taskId = data.taskId;
+      setImgTaskId(taskId);
+      setImgStatus("waiting");
+
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusResp = await fetch(`/api/images/status/${taskId}`, { credentials: "include" });
+          const statusData = await statusResp.json();
+
+          if (statusData.state === "success") {
+            clearInterval(pollInterval);
+            setImgResultUrls(statusData.urls || []);
+            setImgStatus("success");
+            setImgGenerating(false);
+          } else if (statusData.state === "fail") {
+            clearInterval(pollInterval);
+            setImgError(statusData.error || "Ошибка генерации");
+            setImgStatus("fail");
+            setImgGenerating(false);
+          }
+        } catch {
+          clearInterval(pollInterval);
+          setImgError("Ошибка соединения");
+          setImgStatus("fail");
+          setImgGenerating(false);
+        }
+      }, 3000);
+
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        if (imgStatus === "waiting") {
+          setImgError("Таймаут генерации");
+          setImgStatus("fail");
+          setImgGenerating(false);
+        }
+      }, 180000);
+    } catch (err: any) {
+      setImgError(err.message);
+      setImgStatus("fail");
+      setImgGenerating(false);
+    }
+  }, [imgPrompt, imgSize, imgStatus]);
+
+  const handleInsertImage = useCallback(async (url: string, mode: string) => {
+    try {
+      const resp = await fetch(`/api/projects/${projectId}/insert-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: url, altText: imgPrompt || "AI изображение", insertMode: mode }),
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error("Ошибка вставки");
+      const updated = await resp.json();
+      setStreamedCode(updated.generatedCode);
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      toast({ title: "Изображение вставлено" });
+      setImgGenOpen(false);
+      setImgStatus("idle");
+      setImgResultUrls([]);
+      setImgPrompt("");
+    } catch (err: any) {
+      toast({ title: "Ошибка", description: err.message, variant: "destructive" });
+    }
+  }, [projectId, imgPrompt, toast]);
+
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
 
   if (projectLoading) return <div className="h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#0F172A]"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
@@ -197,6 +306,11 @@ export default function EditorPage() {
           <Button variant="outline" size="sm" className="rounded-xl font-bold px-4" onClick={handleDownloadZip} disabled={!currentCode}>
             <Download className="w-4 h-4 mr-2" />
             ZIP
+          </Button>
+
+          <Button variant="outline" size="sm" className="rounded-xl font-bold px-4 bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20" onClick={() => setImgGenOpen(true)} disabled={!currentCode} data-testid="button-open-image-gen">
+            <Wand2 className="w-4 h-4 mr-2" />
+            AI Фото
           </Button>
 
           <Button size="sm" className="rounded-xl font-black px-6 shadow-lg shadow-primary/20 hover-elevate" onClick={() => toast({ title: "Публикация", description: "Скоро!" })}>
@@ -288,6 +402,121 @@ export default function EditorPage() {
           )}
         </SkeuoPanel>
       </div>
+
+      <Dialog open={imgGenOpen} onOpenChange={setImgGenOpen}>
+        <DialogContent className="sm:max-w-lg bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-skeuo-lg rounded-3xl" aria-describedby="img-gen-description">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black tracking-tight flex items-center gap-2">
+              <Wand2 className="w-5 h-5 text-violet-500" />
+              AI Генерация изображений
+            </DialogTitle>
+            <DialogDescription id="img-gen-description">
+              Nano Banana создаст изображение и вставит его в ваш сайт
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            <div>
+              <label className="text-sm font-bold mb-1.5 block text-slate-700 dark:text-slate-300">Описание изображения</label>
+              <Textarea
+                placeholder="Современный офис с панорамными окнами, минималистичный дизайн..."
+                value={imgPrompt}
+                onChange={e => setImgPrompt(e.target.value)}
+                className="min-h-[80px] rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-skeuo-inner"
+                disabled={imgGenerating}
+                data-testid="input-image-prompt"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-bold mb-1.5 block text-slate-700 dark:text-slate-300">Соотношение сторон</label>
+              <Select value={imgSize} onValueChange={setImgSize} disabled={imgGenerating}>
+                <SelectTrigger className="rounded-xl" data-testid="select-image-size">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="16:9">16:9 (Широкий баннер)</SelectItem>
+                  <SelectItem value="1:1">1:1 (Квадрат)</SelectItem>
+                  <SelectItem value="4:3">4:3 (Стандарт)</SelectItem>
+                  <SelectItem value="3:2">3:2 (Фото)</SelectItem>
+                  <SelectItem value="9:16">9:16 (Вертикальный)</SelectItem>
+                  <SelectItem value="3:4">3:4 (Портрет)</SelectItem>
+                  <SelectItem value="21:9">21:9 (Ультраширокий)</SelectItem>
+                  <SelectItem value="auto">Авто</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button
+              className="w-full rounded-xl font-black h-12 shadow-lg bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-700 hover:to-pink-700 text-white"
+              onClick={handleGenerateImage}
+              disabled={imgGenerating || !imgPrompt.trim()}
+              data-testid="button-generate-image"
+            >
+              {imgGenerating ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {imgStatus === "creating" ? "Создаём задачу..." : "Генерируем изображение..."}</>
+              ) : (
+                <><Wand2 className="w-4 h-4 mr-2" /> Сгенерировать</>
+              )}
+            </Button>
+
+            {imgStatus === "waiting" && (
+              <div className="flex items-center gap-3 p-4 bg-violet-50 dark:bg-violet-900/20 rounded-xl border border-violet-200 dark:border-violet-800">
+                <Loader2 className="w-5 h-5 animate-spin text-violet-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-violet-700 dark:text-violet-300">Генерация в процессе</p>
+                  <p className="text-xs text-violet-500">Обычно занимает 15-60 секунд</p>
+                </div>
+              </div>
+            )}
+
+            {imgStatus === "fail" && (
+              <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
+                <XCircle className="w-5 h-5 text-red-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-red-700 dark:text-red-300">Ошибка генерации</p>
+                  <p className="text-xs text-red-500">{imgError}</p>
+                </div>
+              </div>
+            )}
+
+            {imgStatus === "success" && imgResultUrls.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Изображение готово!
+                </div>
+                {imgResultUrls.map((url, i) => (
+                  <div key={i} className="space-y-3">
+                    <img src={url} alt="Сгенерированное изображение" className="w-full rounded-xl shadow-skeuo-md border border-white/20" data-testid={`img-result-${i}`} />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700"
+                        onClick={() => handleInsertImage(url, "replace-first-placeholder")}
+                        data-testid={`button-replace-placeholder-${i}`}
+                      >
+                        <Replace className="w-3.5 h-3.5 mr-1.5" />
+                        Заменить placeholder
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 rounded-xl font-bold"
+                        onClick={() => handleInsertImage(url, "append")}
+                        data-testid={`button-append-image-${i}`}
+                      >
+                        <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
+                        Добавить на сайт
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -6,6 +6,29 @@ import { setupAuth } from "./auth";
 const KIE_API_URL = "https://api.kie.ai/gemini-3-pro/v1/chat/completions";
 const KIE_API_KEY = process.env.KIE_API_KEY;
 
+const NANO_BANANA_CREATE_URL = "https://api.kie.ai/api/v1/jobs/createTask";
+const NANO_BANANA_STATUS_URL = "https://api.kie.ai/api/v1/jobs/recordInfo";
+
+async function pollNanoBananaTask(taskId: string, maxAttempts = 60): Promise<string[]> {
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
+      headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
+    });
+    const body = await resp.json();
+    if (body.code !== 200) throw new Error(body.msg || "Ошибка проверки статуса");
+    const state = body.data?.state;
+    if (state === "success") {
+      const result = JSON.parse(body.data.resultJson);
+      return result.resultUrls || [];
+    }
+    if (state === "fail") {
+      throw new Error(body.data.failMsg || "Генерация изображения не удалась");
+    }
+  }
+  throw new Error("Таймаут генерации изображения");
+}
+
 const SYSTEM_PROMPT = `Ты — профессиональный веб-разработчик. Твоя задача — генерировать полный HTML-код сайта.
 
 ВАЖНЫЕ ТРЕБОВАНИЯ:
@@ -313,6 +336,122 @@ export async function registerRoutes(
       } else {
         res.status(500).json({ message: "Ошибка генерации" });
       }
+    }
+  });
+
+  app.post("/api/images/generate", bypassAuth, async (req, res) => {
+    try {
+      const { prompt, imageSize = "16:9", outputFormat = "png" } = req.body;
+      if (!prompt) {
+        return res.status(400).json({ message: "Промпт обязателен" });
+      }
+
+      const createResp = await fetch(NANO_BANANA_CREATE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${KIE_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "google/nano-banana",
+          input: {
+            prompt,
+            output_format: outputFormat,
+            image_size: imageSize,
+          },
+        }),
+      });
+
+      const createBody = await createResp.json();
+      console.log("Nano Banana create response:", JSON.stringify(createBody));
+
+      if (createBody.code !== 200 || !createBody.data?.taskId) {
+        return res.status(500).json({ message: createBody.msg || "Ошибка создания задачи" });
+      }
+
+      res.json({ taskId: createBody.data.taskId });
+    } catch (err: any) {
+      console.error("Image generation error:", err);
+      res.status(500).json({ message: "Ошибка генерации изображения" });
+    }
+  });
+
+  app.get("/api/images/status/:taskId", bypassAuth, async (req, res) => {
+    try {
+      const { taskId } = req.params;
+      const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
+        headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
+      });
+      const body = await resp.json();
+      console.log("Nano Banana status:", JSON.stringify(body).substring(0, 500));
+
+      if (body.code !== 200) {
+        return res.status(500).json({ message: body.msg || "Ошибка проверки статуса" });
+      }
+
+      const state = body.data?.state;
+      if (state === "success") {
+        const result = JSON.parse(body.data.resultJson);
+        return res.json({ state: "success", urls: result.resultUrls || [] });
+      }
+      if (state === "fail") {
+        return res.json({ state: "fail", error: body.data.failMsg || "Ошибка генерации" });
+      }
+      return res.json({ state: "waiting" });
+    } catch (err: any) {
+      console.error("Image status error:", err);
+      res.status(500).json({ message: "Ошибка проверки статуса" });
+    }
+  });
+
+  app.post("/api/projects/:id/insert-image", bypassAuth, async (req, res) => {
+    try {
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project) {
+        return res.status(404).json({ message: "Проект не найден" });
+      }
+      const user = req.user as any;
+      if (project.userId !== user.id) {
+        return res.status(403).json({ message: "Доступ запрещён" });
+      }
+
+      const { imageUrl, altText = "Сгенерированное изображение", insertMode = "replace-first-placeholder" } = req.body;
+      if (!imageUrl) {
+        return res.status(400).json({ message: "URL изображения обязателен" });
+      }
+
+      let code = project.generatedCode || "";
+
+      if (insertMode === "replace-first-placeholder") {
+        const placeholderRegex = /https?:\/\/placehold\.co\/[^\s"'<>]+/;
+        if (placeholderRegex.test(code)) {
+          code = code.replace(placeholderRegex, imageUrl);
+        } else {
+          const bodyClose = code.lastIndexOf("</body>");
+          const imgTag = `\n<div style="text-align:center;padding:20px;"><img src="${imageUrl}" alt="${altText}" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.3);" /></div>\n`;
+          if (bodyClose !== -1) {
+            code = code.slice(0, bodyClose) + imgTag + code.slice(bodyClose);
+          } else {
+            code += imgTag;
+          }
+        }
+      } else if (insertMode === "replace-all-placeholders") {
+        code = code.replace(/https?:\/\/placehold\.co\/[^\s"'<>]+/g, imageUrl);
+      } else {
+        const bodyClose = code.lastIndexOf("</body>");
+        const imgTag = `\n<div style="text-align:center;padding:20px;"><img src="${imageUrl}" alt="${altText}" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.3);" /></div>\n`;
+        if (bodyClose !== -1) {
+          code = code.slice(0, bodyClose) + imgTag + code.slice(bodyClose);
+        } else {
+          code += imgTag;
+        }
+      }
+
+      const updated = await storage.updateProject(project.id, { generatedCode: code });
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Insert image error:", err);
+      res.status(500).json({ message: "Ошибка вставки изображения" });
     }
   });
 
