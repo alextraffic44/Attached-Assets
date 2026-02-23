@@ -187,7 +187,7 @@ export async function registerRoutes(
       let fullResponse = "";
 
       const stream = await ai.models.generateContentStream({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-pro",
         contents: chatHistory,
         config: { maxOutputTokens: 65536 },
       });
