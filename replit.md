@@ -27,18 +27,19 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `session` — auto-managed by connect-pg-simple
 
 ## Key Features
-- Text-to-website generation via Gemini 3.1 Pro
+- Text-to-website generation via Gemini 3.1 Pro with premium design system prompt
 - Auto web research before first generation (Google Search grounding, 7+ sources)
-- Auto image generation: Gemini outputs {{GENERATE_IMG:prompt||WxH}} markers, system auto-generates via KIE API
+- High-end design output: Awwwards-level quality with scroll animations, glassmorphism, noise textures, deep shadows
 - Photo/screenshot to website (Vision API)
 - Manual AI image generation via Nano Banana (create task → poll → insert into HTML)
 - Named image library with {{IMG:name}} marker system
-- Template-based generation
+- Styled gradient placeholder blocks for images (users replace via AI generator or upload)
+- Visual WYSIWYG editor: inline text editing + image replacement via popup picker
+- Image picker dialog: choose from generated library or upload from PC
 - Live preview with responsive device switching
-- Chat-based iterative editing
+- Chat-based iterative editing with inline rollback buttons
 - ZIP export with all images as local files (images/ folder)
-- Version history with manual checkpoints and auto-save before each generation
-- One-click rollback to any previous version
+- Auto-save before each generation (version history)
 - Credit-based usage system
 
 ## API Endpoints (Images)
