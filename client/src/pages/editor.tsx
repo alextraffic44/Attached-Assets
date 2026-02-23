@@ -70,6 +70,7 @@ export default function EditorPage() {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [generationStatus, setGenerationStatus] = useState<string | null>(null);
 
   const [imgGenOpen, setImgGenOpen] = useState(false);
   const [imgName, setImgName] = useState("");
@@ -145,12 +146,19 @@ export default function EditorPage() {
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             const data = JSON.parse(line.slice(6));
+            if (data.status) {
+              setGenerationStatus(data.status);
+            }
             if (data.content) {
+              setGenerationStatus(null);
               fullText += data.content;
               const htmlMatch = fullText.match(/```html\n?([\s\S]*?)```/);
               setStreamedCode(htmlMatch ? htmlMatch[1].trim() : (fullText.includes("<html") ? fullText.trim() : ""));
             }
-            if (data.done && data.code) setStreamedCode(data.code);
+            if (data.done && data.code) {
+              setGenerationStatus(null);
+              setStreamedCode(data.code);
+            }
           }
         }
       }
@@ -456,7 +464,7 @@ export default function EditorPage() {
                 <div className="flex justify-start">
                   <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-sm font-black flex items-center gap-3 shadow-skeuo-md animate-pulse">
                     <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                    Генерируем шедевр...
+                    {generationStatus || "Генерируем шедевр..."}
                   </div>
                 </div>
               )}

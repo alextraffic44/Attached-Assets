@@ -21,7 +21,6 @@ const SYSTEM_PROMPT = `Ты — профессиональный веб-разр
 - Добавляй интерактивные SVG-анимации где уместно
 - Код должен быть адаптивным (Mobile First)
 - Используй современные CSS-свойства: grid, flexbox, custom properties
-- Для изображений-заглушек используй placeholder от https://placehold.co/ (например https://placehold.co/600x400)
 - Дизайн должен быть современным, стильным и профессиональным
 - Все тексты на русском языке, если не указано иное
 - НЕ используй внешние библиотеки и CDN, только чистый HTML/CSS/JS
@@ -29,12 +28,71 @@ const SYSTEM_PROMPT = `Ты — профессиональный веб-разр
 - Весь код должен быть в одном HTML-файле
 
 РАБОТА С ИЗОБРАЖЕНИЯМИ:
-- У пользователя есть библиотека сгенерированных AI-изображений. Каждое изображение имеет уникальное имя.
-- Когда пользователь просит вставить конкретное изображение по имени (например "персик", "офис", "баннер"), используй специальный маркер: {{IMG:имя_изображения}}
-- Например: <img src="{{IMG:персик}}" alt="Персик" /> или background-image: url('{{IMG:баннер}}')
-- Маркер {{IMG:имя}} будет автоматически заменён на реальный URL изображения
-- Если пользователь не указал конкретное изображение — используй placeholder от placehold.co
-- Маркер должен содержать ТОЧНОЕ имя изображения, как его назвал пользователь`;
+- Для КАЖДОГО изображения на сайте используй маркер: {{GENERATE_IMG:описание_на_английском||ширинаxвысота}}
+- Описание должно быть на АНГЛИЙСКОМ языке и описывать нужную картинку максимально детально
+- Формат размера: ширинаxвысота (например 1200x600, 400x400, 800x500)
+- Примеры: 
+  <img src="{{GENERATE_IMG:modern AI neural network abstract visualization with blue neon lights||1200x600}}" />
+  <img src="{{GENERATE_IMG:professional team working in modern office||800x500}}" />
+  background-image: url('{{GENERATE_IMG:dark gradient tech background with glowing particles||1920x1080}}')
+- Каждое изображение должно быть тематически релевантно содержимому сайта
+- Используй 4-8 изображений для полноценного лендинга
+- НЕ используй placeholder сервисы (placehold.co, placeholder.com и т.д.)
+- НЕ используй внешние URL изображений
+
+ЕСЛИ у пользователя есть библиотека AI-изображений:
+- Когда пользователь просит вставить конкретное изображение по имени, используй маркер: {{IMG:имя_изображения}}
+- Маркер {{IMG:имя}} будет автоматически заменён на реальный URL из библиотеки`;
+
+const RESEARCH_PROMPT = `Ты — аналитик-исследователь. Твоя задача — собрать максимум реальной информации по теме для создания веб-сайта.
+
+На основе предоставленных результатов поиска, составь подробную структурированную справку:
+
+1. ОСНОВНАЯ ИНФОРМАЦИЯ: Что это за продукт/услуга/тема? Официальное описание.
+2. КЛЮЧЕВЫЕ ОСОБЕННОСТИ: Минимум 5-7 реальных особенностей/функций с описанием
+3. ПРЕИМУЩЕСТВА: Реальные преимущества, подтверждённые источниками
+4. ТЕХНИЧЕСКИЕ ДЕТАЛИ: Технологии, характеристики, спецификации
+5. ФАКТЫ И ЦИФРЫ: Любые числа, статистика, даты
+6. ЦИТАТЫ/ОТЗЫВЫ: Реальные отзывы или высказывания, если найдены
+7. ЦЕНООБРАЗОВАНИЕ: Информация о ценах/тарифах, если доступна
+8. ЦЕЛЕВАЯ АУДИТОРИЯ: Для кого предназначен продукт
+
+Пиши ТОЛЬКО факты из источников. НЕ придумывай информацию. Если чего-то нет — так и напиши.
+Отвечай на русском языке.`;
+
+async function performWebResearch(query: string): Promise<string> {
+  try {
+    console.log("Starting web research for:", query);
+
+    const researchResult = await ai.models.generateContent({
+      model: "gemini-3.1-pro-preview",
+      contents: [{ role: "user", parts: [{ text: `Исследуй тему "${query}" для создания сайта. Найди реальную информацию минимум из 7 источников. Дай подробные факты, цифры, особенности, преимущества.` }] }],
+      config: {
+        systemInstruction: RESEARCH_PROMPT,
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    const researchText = researchResult.text || "";
+    console.log("Research completed, length:", researchText.length);
+
+    const groundingMeta = (researchResult as any).candidates?.[0]?.groundingMetadata;
+    let sources = "";
+    if (groundingMeta?.groundingChunks) {
+      sources = "\n\nИСТОЧНИКИ:\n";
+      for (const chunk of groundingMeta.groundingChunks.slice(0, 10)) {
+        if (chunk.web) {
+          sources += `- ${chunk.web.title}: ${chunk.web.uri}\n`;
+        }
+      }
+    }
+
+    return researchText + sources;
+  } catch (err: any) {
+    console.error("Web research error:", err.message);
+    return `Не удалось выполнить исследование. Создай сайт на основе общих знаний о теме: "${query}"`;
+  }
+}
 
 function bypassAuth(req: any, res: any, next: any) {
   // Временно отключаем проверку авторизации
@@ -152,6 +210,20 @@ export async function registerRoutes(
       const previousMessages = await storage.getProjectMessages(project.id);
       const projectImgs = await storage.getProjectImages(project.id);
 
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      let researchData = "";
+      const isNewSite = !project.generatedCode;
+
+      if (isNewSite) {
+        res.write(`data: ${JSON.stringify({ status: "Исследуем тему в интернете..." })}\n\n`);
+        researchData = await performWebResearch(prompt);
+        console.log("Research data length:", researchData.length);
+        res.write(`data: ${JSON.stringify({ status: "Исследование завершено. Генерируем сайт..." })}\n\n`);
+      }
+
       let systemContent = SYSTEM_PROMPT;
       if (projectImgs.length > 0) {
         systemContent += `\n\nДОСТУПНЫЕ ИЗОБРАЖЕНИЯ В БИБЛИОТЕКЕ ПОЛЬЗОВАТЕЛЯ:\n`;
@@ -181,12 +253,12 @@ export async function registerRoutes(
       } else if (project.generatedCode) {
         userParts.push({ text: `Текущий код сайта:\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n\nЗапрос пользователя: ${prompt}\n\nВнеси изменения и верни ПОЛНЫЙ обновлённый HTML-код.` });
       } else {
-        userParts.push({ text: prompt });
+        let researchBlock = "";
+        if (researchData) {
+          researchBlock = `\n\nРЕЗУЛЬТАТЫ ИССЛЕДОВАНИЯ ТЕМЫ (используй ТОЛЬКО эту реальную информацию, НЕ придумывай):\n---\n${researchData}\n---\n\nСоздай сайт СТРОГО на основе этих реальных данных. Используй найденные факты, цифры, особенности и описания. НЕ выдумывай информацию.`;
+        }
+        userParts.push({ text: `${prompt}${researchBlock}` });
       }
-
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
 
       let fullResponse = "";
 
@@ -231,6 +303,91 @@ export async function registerRoutes(
         if (found) {
           htmlCode = htmlCode.replace(markerMatch[0], found.url);
         }
+      }
+
+      const genImgRegex = /\{\{GENERATE_IMG:([^|]+)\|\|(\d+x\d+)\}\}/g;
+      const imageMarkers: { full: string; prompt: string; size: string }[] = [];
+      let genMatch;
+      while ((genMatch = genImgRegex.exec(htmlCode)) !== null) {
+        imageMarkers.push({ full: genMatch[0], prompt: genMatch[1].trim(), size: genMatch[2] });
+      }
+
+      if (imageMarkers.length > 0) {
+        res.write(`data: ${JSON.stringify({ status: `Генерируем ${imageMarkers.length} изображений...` })}\n\n`);
+        console.log(`Auto-generating ${imageMarkers.length} images`);
+
+        const imageResults = await Promise.allSettled(
+          imageMarkers.map(async (marker) => {
+            try {
+              const [w, h] = marker.size.split("x");
+              let kieSize = "16:9";
+              const ratio = parseInt(w) / parseInt(h);
+              if (ratio > 1.5) kieSize = "16:9";
+              else if (ratio > 1.1) kieSize = "4:3";
+              else if (ratio > 0.9) kieSize = "1:1";
+              else kieSize = "9:16";
+
+              const createResp = await fetch(NANO_BANANA_CREATE_URL, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${KIE_API_KEY}`,
+                },
+                body: JSON.stringify({
+                  model: "google/nano-banana",
+                  input: {
+                    prompt: marker.prompt,
+                    output_format: "png",
+                    image_size: kieSize,
+                  },
+                }),
+              });
+              const createBody = await createResp.json();
+              if (createBody.code !== 200 || !createBody.data?.taskId) {
+                throw new Error(createBody.msg || "Task creation failed");
+              }
+
+              const taskId = createBody.data.taskId;
+              for (let i = 0; i < 40; i++) {
+                await new Promise(r => setTimeout(r, 3000));
+                const statusResp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
+                  headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
+                });
+                const statusBody = await statusResp.json();
+                if (statusBody.code !== 200) continue;
+                const state = statusBody.data?.state;
+                if (state === "success") {
+                  const result = JSON.parse(statusBody.data.resultJson);
+                  const urls = result.resultUrls || [];
+                  return { marker: marker.full, url: urls[0] || null };
+                }
+                if (state === "fail") throw new Error("Generation failed");
+              }
+              throw new Error("Timeout");
+            } catch (err: any) {
+              console.error(`Image gen failed for "${marker.prompt}":`, err.message);
+              return { marker: marker.full, url: null };
+            }
+          })
+        );
+
+        let imgCount = 0;
+        for (const result of imageResults) {
+          if (result.status === "fulfilled" && result.value.url) {
+            htmlCode = htmlCode.replace(result.value.marker, result.value.url);
+            imgCount++;
+          }
+        }
+
+        const remaining = htmlCode.match(/\{\{GENERATE_IMG:[^}]+\}\}/g);
+        if (remaining) {
+          for (const r of remaining) {
+            htmlCode = htmlCode.replace(r, `https://placehold.co/800x400/1a1a2e/e0e0e0?text=Image`);
+          }
+        }
+
+        console.log(`Generated ${imgCount}/${imageMarkers.length} images successfully`);
+        res.write(`data: ${JSON.stringify({ status: `Готово! ${imgCount} из ${imageMarkers.length} изображений создано` })}\n\n`);
       }
 
       if (project.generatedCode && project.generatedCode.trim()) {

@@ -7,8 +7,9 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - **Frontend**: React with Tailwind CSS, Framer Motion, shadcn/ui components
 - **Backend**: Express.js with session-based authentication (Passport.js)
 - **Database**: PostgreSQL with Drizzle ORM
-- **AI Code**: Gemini 3 Pro via KIE API (KIE_API_KEY env var)
-- **AI Images**: Nano Banana via KIE API (same key, async task-based)
+- **AI Code**: Gemini 3.1 Pro via Replit AI Integrations (@google/genai SDK)
+- **AI Images**: Nano Banana via KIE API (KIE_API_KEY env var, async task-based)
+- **Web Research**: Gemini with Google Search grounding (auto-research before first generation)
 - **Routing**: wouter for client-side routing
 
 ## Pages
@@ -26,9 +27,11 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `session` — auto-managed by connect-pg-simple
 
 ## Key Features
-- Text-to-website generation via Gemini AI
+- Text-to-website generation via Gemini 3.1 Pro
+- Auto web research before first generation (Google Search grounding, 7+ sources)
+- Auto image generation: Gemini outputs {{GENERATE_IMG:prompt||WxH}} markers, system auto-generates via KIE API
 - Photo/screenshot to website (Vision API)
-- AI image generation via Nano Banana (create task → poll → insert into HTML)
+- Manual AI image generation via Nano Banana (create task → poll → insert into HTML)
 - Named image library with {{IMG:name}} marker system
 - Template-based generation
 - Live preview with responsive device switching
