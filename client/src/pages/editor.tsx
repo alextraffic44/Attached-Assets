@@ -645,23 +645,6 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             </div>
           </ScrollArea>
 
-          {projectImages.length > 0 && (
-            <div className="px-6 py-3 border-t bg-violet-50/50 dark:bg-violet-900/10">
-              <p className="text-xs font-bold text-violet-600 dark:text-violet-400 mb-2 flex items-center gap-1.5">
-                <ImagePlus className="w-3.5 h-3.5" />
-                Библиотека изображений ({projectImages.length})
-              </p>
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {projectImages.map((img) => (
-                  <div key={img.id} className="relative shrink-0 group" data-testid={`image-library-${img.id}`}>
-                    <img src={img.url} alt={img.name} className="w-12 h-12 rounded-lg object-cover border-2 border-violet-200 dark:border-violet-700" title={img.name} />
-                    <span className="absolute -bottom-1 left-0 right-0 text-[8px] font-black text-center text-violet-700 dark:text-violet-300 bg-white/90 dark:bg-slate-900/90 rounded-b-lg truncate px-0.5">{img.name}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[10px] text-violet-500 mt-1.5">Включите Редактор → кликните на placeholder → выберите фото</p>
-            </div>
-          )}
 
           <div className="p-6 border-t bg-slate-50/50 dark:bg-slate-800/20">
             {imagePreview && (
