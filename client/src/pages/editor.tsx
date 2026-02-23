@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { useLocation, useParams } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Project, ProjectMessage, ProjectImage } from "@shared/schema";
+import type { Project, ProjectMessage, ProjectImage, ProjectVersion } from "@shared/schema";
 import JSZip from "jszip";
 import {
   ArrowLeft,
@@ -35,6 +35,8 @@ import {
   RotateCcw,
   MousePointer2,
   Type,
+  History,
+  Clock,
 } from "lucide-react";
 import {
   Dialog,
@@ -104,6 +106,12 @@ export default function EditorPage() {
   const { data: projectImages = [] } = useQuery<ProjectImage[]>({
     queryKey: ["/api/projects", projectId, "images"],
   });
+
+  const { data: versions = [] } = useQuery<ProjectVersion[]>({
+    queryKey: ["/api/projects", projectId, "versions"],
+  });
+
+  const [showVersions, setShowVersions] = useState(false);
 
   const currentCode = streamedCode || project?.generatedCode || "";
 
@@ -176,6 +184,7 @@ export default function EditorPage() {
       setImagePreview(null);
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
@@ -406,17 +415,17 @@ export default function EditorPage() {
     }
   }, [projectId, toast]);
 
-  const handleRestoreFromMessage = useCallback(async (code: string) => {
+  const handleRestoreVersion = useCallback(async (versionId: number) => {
     try {
-      const resp = await fetch(`/api/projects/${projectId}/code`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ generatedCode: code }),
+      const resp = await fetch(`/api/projects/${projectId}/versions/${versionId}/restore`, {
+        method: "POST",
         credentials: "include",
       });
       if (!resp.ok) throw new Error("Ошибка восстановления");
-      setStreamedCode(code);
+      const updated = await resp.json();
+      setStreamedCode(updated.generatedCode || "");
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
       toast({ title: "Версия восстановлена" });
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
@@ -676,8 +685,52 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
         <SkeuoPanel className={`transition-all duration-500 ease-in-out ${sidebarOpen ? 'w-full sm:w-[400px]' : 'w-0 opacity-0 -translate-x-full'}`}>
           <div className="p-6 border-b flex items-center justify-between">
             <h2 className="text-lg font-black tracking-tight">AI Конструктор</h2>
-            <Badge className="bg-primary/10 text-primary border-primary/20 rounded-lg">Gemini 3.1</Badge>
+            <div className="flex items-center gap-2">
+              {versions.length > 0 && (
+                <Button
+                  variant={showVersions ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 rounded-lg text-xs gap-1.5"
+                  onClick={() => setShowVersions(!showVersions)}
+                  data-testid="button-toggle-versions"
+                >
+                  <History className="w-3.5 h-3.5" />
+                  {versions.length}
+                </Button>
+              )}
+              <Badge className="bg-primary/10 text-primary border-primary/20 rounded-lg">Gemini 3.1</Badge>
+            </div>
           </div>
+          {showVersions && versions.length > 0 && (
+            <div className="border-b bg-slate-50/80 dark:bg-slate-900/50 max-h-[240px] overflow-y-auto">
+              <div className="px-4 py-3">
+                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Чекпоинты</p>
+                <div className="space-y-1.5">
+                  {versions.slice().reverse().map((v) => (
+                    <div key={v.id} className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 rounded-xl px-3 py-2 shadow-sm border border-slate-100 dark:border-slate-700/50" data-testid={`version-item-${v.id}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-semibold text-slate-700 dark:text-slate-300 truncate">{v.label}</p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {new Date(v.createdAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20 shrink-0"
+                        onClick={() => handleRestoreVersion(v.id)}
+                        data-testid={`button-restore-version-${v.id}`}
+                      >
+                        <RotateCcw className="w-3 h-3 mr-1" />
+                        <span className="text-[11px] font-bold">Откатить</span>
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
           <ScrollArea className="flex-1 px-6">
             <div className="py-6 space-y-6">
               {messages.map((msg, idx) => {
