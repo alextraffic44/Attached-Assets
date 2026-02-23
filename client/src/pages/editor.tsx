@@ -705,227 +705,215 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       </div>
 
       <Dialog open={imgGenOpen} onOpenChange={setImgGenOpen}>
-        <DialogContent className="sm:max-w-lg bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-skeuo-lg rounded-3xl max-h-[90vh] overflow-y-auto" aria-describedby="img-gen-description">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-black tracking-tight flex items-center gap-2">
-              <Wand2 className="w-5 h-5 text-violet-500" />
-              AI Генерация изображений
-            </DialogTitle>
-            <DialogDescription id="img-gen-description">
-              Создайте изображение, дайте ему имя, а потом скажите Gemini куда его вставить
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 pt-2">
-            <div>
-              <label className="text-sm font-bold mb-1.5 block text-slate-700 dark:text-slate-300">Имя изображения</label>
-              <Input
-                placeholder="например: персик, баннер, офис..."
-                value={imgName}
-                onChange={e => setImgName(e.target.value)}
-                className="rounded-xl bg-white dark:bg-slate-800 shadow-skeuo-inner"
-                disabled={imgGenerating}
-                data-testid="input-image-name"
-              />
-              <p className="text-[11px] text-slate-400 mt-1">Это имя вы будете использовать в чате: "вставь [имя] в hero секцию"</p>
-            </div>
-
-            <div>
-              <label className="text-sm font-bold mb-1.5 block text-slate-700 dark:text-slate-300">Описание изображения</label>
-              <Textarea
-                placeholder="Сочный персик на белом фоне, студийное фото..."
-                value={imgPrompt}
-                onChange={e => setImgPrompt(e.target.value)}
-                className="min-h-[80px] rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-skeuo-inner"
-                disabled={imgGenerating}
-                data-testid="input-image-prompt"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-bold mb-1.5 block text-slate-700 dark:text-slate-300">Соотношение сторон</label>
-              <Select value={imgSize} onValueChange={setImgSize} disabled={imgGenerating}>
-                <SelectTrigger className="rounded-xl" data-testid="select-image-size">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="16:9">16:9 (Широкий баннер)</SelectItem>
-                  <SelectItem value="1:1">1:1 (Квадрат)</SelectItem>
-                  <SelectItem value="4:3">4:3 (Стандарт)</SelectItem>
-                  <SelectItem value="3:2">3:2 (Фото)</SelectItem>
-                  <SelectItem value="9:16">9:16 (Вертикальный)</SelectItem>
-                  <SelectItem value="3:4">3:4 (Портрет)</SelectItem>
-                  <SelectItem value="21:9">21:9 (Ультраширокий)</SelectItem>
-                  <SelectItem value="auto">Авто</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button
-              className="w-full rounded-xl font-black h-12 shadow-lg bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-700 hover:to-pink-700 text-white"
-              onClick={handleGenerateImage}
-              disabled={imgGenerating || !imgPrompt.trim() || !imgName.trim()}
-              data-testid="button-generate-image"
-            >
-              {imgGenerating ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {imgStatus === "creating" ? "Создаём задачу..." : "Генерируем изображение..."}</>
-              ) : (
-                <><Wand2 className="w-4 h-4 mr-2" /> Сгенерировать</>
-              )}
-            </Button>
-
-            {imgStatus === "waiting" && (
-              <div className="flex items-center gap-3 p-4 bg-violet-50 dark:bg-violet-900/20 rounded-xl border border-violet-200 dark:border-violet-800">
-                <Loader2 className="w-5 h-5 animate-spin text-violet-500 shrink-0" />
-                <div>
-                  <p className="text-sm font-bold text-violet-700 dark:text-violet-300">Генерация в процессе</p>
-                  <p className="text-xs text-violet-500">Обычно занимает 15-60 секунд</p>
-                </div>
-              </div>
-            )}
-
-            {imgStatus === "fail" && (
-              <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
-                <XCircle className="w-5 h-5 text-red-500 shrink-0" />
-                <div>
-                  <p className="text-sm font-bold text-red-700 dark:text-red-300">Ошибка генерации</p>
-                  <p className="text-xs text-red-500">{imgError}</p>
-                </div>
-              </div>
-            )}
-
-            {imgStatus === "success" && imgResultUrls.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Изображение "{imgName}" готово!
-                </div>
-                {imgResultUrls.map((url, i) => (
-                  <div key={i} className="space-y-3">
-                    <img src={url} alt={imgName} className="w-full rounded-xl shadow-skeuo-md border border-white/20" data-testid={`img-result-${i}`} />
-                    <Button
-                      className="w-full rounded-xl font-black h-11 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
-                      onClick={() => handleSaveImage(url)}
-                      data-testid={`button-save-image-${i}`}
-                    >
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Сохранить как "{imgName}" в библиотеку
-                    </Button>
+        <DialogContent className="sm:max-w-md p-0 bg-[#0c0c0f] border border-white/[0.08] shadow-[0_24px_80px_rgba(0,0,0,0.6)] rounded-2xl max-h-[85vh] overflow-hidden" aria-describedby="img-gen-description">
+          <div className="relative overflow-y-auto max-h-[85vh]">
+            <div className="sticky top-0 z-10 bg-[#0c0c0f]/90 backdrop-blur-xl border-b border-white/[0.06] px-6 py-5">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-black tracking-tight text-white flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
+                    <Wand2 className="w-4 h-4 text-white" />
                   </div>
-                ))}
-              </div>
-            )}
+                  AI Генератор
+                </DialogTitle>
+                <DialogDescription id="img-gen-description" className="text-white/40 text-sm mt-1">
+                  Создайте уникальное изображение с помощью ИИ
+                </DialogDescription>
+              </DialogHeader>
+            </div>
 
-            {projectImages.length > 0 && (
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-                <h3 className="text-sm font-black text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                  <ImagePlus className="w-4 h-4 text-violet-500" />
-                  Библиотека проекта
-                </h3>
-                <div className="space-y-2">
-                  {projectImages.map((img) => (
-                    <div key={img.id} className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700" data-testid={`image-item-${img.id}`}>
-                      <img src={img.url} alt={img.name} className="w-14 h-14 rounded-lg object-cover shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-black truncate">{img.name}</p>
-                        <p className="text-[11px] text-slate-400 truncate">{img.prompt}</p>
-                        <code className="text-[10px] text-violet-500 font-mono">{`{{IMG:${img.name}}}`}</code>
+            <div className="px-6 py-5 space-y-5">
+              <div>
+                <label className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2 block">Название</label>
+                <Input
+                  placeholder="баннер, логотип, фон..."
+                  value={imgName}
+                  onChange={e => setImgName(e.target.value)}
+                  className="rounded-xl bg-white/[0.05] border-white/[0.08] text-white placeholder:text-white/25 focus:border-violet-500/50 focus:ring-violet-500/20 h-11"
+                  disabled={imgGenerating}
+                  data-testid="input-image-name"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2 block">Описание</label>
+                <Textarea
+                  placeholder="Опишите что должно быть на изображении..."
+                  value={imgPrompt}
+                  onChange={e => setImgPrompt(e.target.value)}
+                  className="min-h-[90px] rounded-xl bg-white/[0.05] border-white/[0.08] text-white placeholder:text-white/25 focus:border-violet-500/50 focus:ring-violet-500/20 resize-none"
+                  disabled={imgGenerating}
+                  data-testid="input-image-prompt"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2 block">Формат</label>
+                <Select value={imgSize} onValueChange={setImgSize} disabled={imgGenerating}>
+                  <SelectTrigger className="rounded-xl bg-white/[0.05] border-white/[0.08] text-white h-11" data-testid="select-image-size">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1a1a1f] border-white/[0.08] text-white">
+                    <SelectItem value="16:9">16:9 — Широкий</SelectItem>
+                    <SelectItem value="1:1">1:1 — Квадрат</SelectItem>
+                    <SelectItem value="4:3">4:3 — Стандарт</SelectItem>
+                    <SelectItem value="3:2">3:2 — Фото</SelectItem>
+                    <SelectItem value="9:16">9:16 — Вертикальный</SelectItem>
+                    <SelectItem value="3:4">3:4 — Портрет</SelectItem>
+                    <SelectItem value="21:9">21:9 — Ультраширокий</SelectItem>
+                    <SelectItem value="auto">Авто</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                className="w-full rounded-xl font-bold h-12 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-lg shadow-violet-500/20 hover:shadow-violet-500/30 transition-all border-0"
+                onClick={handleGenerateImage}
+                disabled={imgGenerating || !imgPrompt.trim() || !imgName.trim()}
+                data-testid="button-generate-image"
+              >
+                {imgGenerating ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {imgStatus === "creating" ? "Создаём..." : "Генерируем..."}</>
+                ) : (
+                  <><Sparkles className="w-4 h-4 mr-2" /> Сгенерировать</>
+                )}
+              </Button>
+
+              {imgStatus === "waiting" && (
+                <div className="flex items-center gap-3 p-4 bg-violet-500/[0.08] rounded-xl border border-violet-500/[0.15]">
+                  <Loader2 className="w-5 h-5 animate-spin text-violet-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-violet-300">Генерация...</p>
+                    <p className="text-xs text-violet-400/60">15–60 секунд</p>
+                  </div>
+                </div>
+              )}
+
+              {imgStatus === "fail" && (
+                <div className="flex items-center gap-3 p-4 bg-red-500/[0.08] rounded-xl border border-red-500/[0.15]">
+                  <XCircle className="w-5 h-5 text-red-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-red-300">Ошибка</p>
+                    <p className="text-xs text-red-400/70">{imgError}</p>
+                  </div>
+                </div>
+              )}
+
+              {imgStatus === "success" && imgResultUrls.length > 0 && (
+                <div className="space-y-4">
+                  {imgResultUrls.map((url, i) => (
+                    <div key={i} className="space-y-3">
+                      <div className="relative rounded-xl overflow-hidden border border-white/[0.08]">
+                        <img src={url} alt={imgName} className="w-full" data-testid={`img-result-${i}`} />
+                        <div className="absolute top-3 left-3 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Готово
+                        </div>
                       </div>
-                      <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteImage(img.id)} data-testid={`button-delete-image-${img.id}`}>
-                        <Trash2 className="w-4 h-4" />
+                      <Button
+                        className="w-full rounded-xl font-bold h-11 bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 border-0"
+                        onClick={() => handleSaveImage(url)}
+                        data-testid={`button-save-image-${i}`}
+                      >
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                        Сохранить в библиотеку
                       </Button>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={imagePickerOpen} onOpenChange={setImagePickerOpen}>
-        <DialogContent className="sm:max-w-lg rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ImageIcon className="w-5 h-5 text-purple-500" />
-              Выберите изображение
-            </DialogTitle>
-            <DialogDescription>Выберите из библиотеки или загрузите с компьютера</DialogDescription>
-          </DialogHeader>
+        <DialogContent className="sm:max-w-lg p-0 bg-[#0c0c0f] border border-white/[0.08] shadow-[0_24px_80px_rgba(0,0,0,0.6)] rounded-2xl max-h-[85vh] overflow-hidden">
+          <div className="px-6 py-5 border-b border-white/[0.06]">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-black text-white flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                  <ImageIcon className="w-4 h-4 text-white" />
+                </div>
+                Выбор изображения
+              </DialogTitle>
+              <DialogDescription className="text-white/40 text-sm mt-1">Библиотека или загрузка с компьютера</DialogDescription>
+            </DialogHeader>
 
-          <div className="flex gap-2 mb-4">
-            <Button
-              variant={imagePickerTab === "library" ? "default" : "outline"}
-              size="sm"
-              className="rounded-xl font-bold"
-              onClick={() => setImagePickerTab("library")}
-              data-testid="button-picker-library"
-            >
-              <ImagePlus className="w-4 h-4 mr-2" />
-              Библиотека ({projectImages.length})
-            </Button>
-            <Button
-              variant={imagePickerTab === "upload" ? "default" : "outline"}
-              size="sm"
-              className="rounded-xl font-bold"
-              onClick={() => setImagePickerTab("upload")}
-              data-testid="button-picker-upload"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              С компьютера
-            </Button>
+            <div className="flex gap-1.5 mt-4 bg-white/[0.04] rounded-xl p-1">
+              <button
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${imagePickerTab === "library" ? "bg-white/[0.1] text-white shadow-sm" : "text-white/40 hover:text-white/60"}`}
+                onClick={() => setImagePickerTab("library")}
+                data-testid="button-picker-library"
+              >
+                <ImagePlus className="w-3.5 h-3.5" />
+                Библиотека
+                {projectImages.length > 0 && <span className="text-[10px] bg-violet-500/30 text-violet-300 px-1.5 py-0.5 rounded-full">{projectImages.length}</span>}
+              </button>
+              <button
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${imagePickerTab === "upload" ? "bg-white/[0.1] text-white shadow-sm" : "text-white/40 hover:text-white/60"}`}
+                onClick={() => setImagePickerTab("upload")}
+                data-testid="button-picker-upload"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Загрузка
+              </button>
+            </div>
           </div>
 
-          {imagePickerTab === "library" ? (
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {projectImages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                  <ImageIcon className="w-12 h-12 mb-3 opacity-50" />
-                  <p className="text-sm font-semibold">Библиотека пуста</p>
-                  <p className="text-xs mt-1">Сгенерируйте изображения через AI Фото</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {projectImages.map((img) => (
-                    <button
-                      key={img.id}
-                      className="group relative rounded-xl overflow-hidden border-2 border-transparent hover:border-purple-500 transition-all cursor-pointer aspect-video bg-slate-100 dark:bg-slate-800"
-                      onClick={() => applyImageToIframe(img.url)}
-                      data-testid={`picker-image-${img.id}`}
-                    >
-                      <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-end">
-                        <div className="w-full p-2 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                          <p className="text-white text-xs font-bold truncate">{img.name}</p>
+          <div className="px-6 py-5 overflow-y-auto max-h-[50vh]">
+            {imagePickerTab === "library" ? (
+              <>
+                {projectImages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-14 text-white/30">
+                    <div className="w-16 h-16 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-4">
+                      <ImageIcon className="w-8 h-8 opacity-40" />
+                    </div>
+                    <p className="text-sm font-bold text-white/50">Пока пусто</p>
+                    <p className="text-xs mt-1 text-white/30">Сгенерируйте через AI Фото</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {projectImages.map((img) => (
+                      <button
+                        key={img.id}
+                        className="group relative rounded-xl overflow-hidden border border-white/[0.06] hover:border-violet-500/50 transition-all cursor-pointer aspect-video bg-white/[0.03] hover:scale-[1.02]"
+                        onClick={() => applyImageToIframe(img.url)}
+                        data-testid={`picker-image-${img.id}`}
+                      >
+                        <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all flex items-end">
+                          <p className="text-white text-xs font-bold p-2.5 truncate w-full">{img.name}</p>
                         </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 border border-dashed border-white/[0.1] rounded-2xl bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
+                <input
+                  ref={replaceFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleReplaceFileUpload}
+                  className="hidden"
+                />
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center mb-4">
+                  <Download className="w-6 h-6 text-cyan-400" />
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl">
-              <input
-                ref={replaceFileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleReplaceFileUpload}
-                className="hidden"
-              />
-              <ImagePlus className="w-12 h-12 text-slate-400 mb-3" />
-              <p className="text-sm font-semibold text-slate-500 mb-4">Перетащите файл или нажмите кнопку</p>
-              <Button
-                variant="outline"
-                className="rounded-xl font-bold"
-                onClick={() => replaceFileInputRef.current?.click()}
-                data-testid="button-picker-file-upload"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Выбрать файл
-              </Button>
-            </div>
-          )}
+                <p className="text-sm font-bold text-white/60 mb-1">Загрузить с компьютера</p>
+                <p className="text-xs text-white/30 mb-5">PNG, JPG, WEBP</p>
+                <Button
+                  className="rounded-xl font-bold bg-white/[0.08] hover:bg-white/[0.12] text-white border border-white/[0.1] shadow-none"
+                  onClick={() => replaceFileInputRef.current?.click()}
+                  data-testid="button-picker-file-upload"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Выбрать файл
+                </Button>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
