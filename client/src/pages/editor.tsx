@@ -75,6 +75,7 @@ export default function EditorPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
+  const [streamingReply, setStreamingReply] = useState("");
   const [editMode, setEditMode] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -134,6 +135,7 @@ export default function EditorPage() {
     if (!text.trim() && !imageBase64) return;
 
     setIsGenerating(true);
+    setStreamingReply("");
     setStreamedCode("");
     setPrompt("");
 
@@ -169,8 +171,24 @@ export default function EditorPage() {
             if (data.content) {
               setGenerationStatus(null);
               fullText += data.content;
-              const htmlMatch = fullText.match(/```html\n?([\s\S]*?)```/);
-              setStreamedCode(htmlMatch ? htmlMatch[1].trim() : (fullText.includes("<html") ? fullText.trim() : ""));
+
+              const htmlBlockStart = fullText.indexOf("```html\n");
+              if (htmlBlockStart > 0) {
+                const textBefore = fullText.substring(0, htmlBlockStart).trim();
+                if (textBefore) setStreamingReply(textBefore);
+              }
+
+              const htmlMatchComplete = fullText.match(/```html\n?([\s\S]*?)```/);
+              if (htmlMatchComplete) {
+                setStreamedCode(htmlMatchComplete[1].trim());
+              } else if (htmlBlockStart !== -1) {
+                const codeAfterMarker = fullText.substring(htmlBlockStart + 8);
+                if (codeAfterMarker.trim()) {
+                  setStreamedCode(codeAfterMarker);
+                }
+              } else if (fullText.trimStart().startsWith("<!DOCTYPE") || fullText.trimStart().startsWith("<html")) {
+                setStreamedCode(fullText.trim());
+              }
             }
             if (data.done && data.code) {
               setGenerationStatus(null);
@@ -757,9 +775,17 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               })}
               {isGenerating && (
                 <div className="flex justify-start">
-                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-sm font-black flex items-center gap-3 shadow-skeuo-md animate-pulse">
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                    {generationStatus || "Генерируем шедевр..."}
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-sm shadow-skeuo-md max-w-[90%]">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <span className="text-primary font-black text-[11px]">Gemini</span>
+                      <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                    </div>
+                    {streamingReply ? (
+                      <p className="text-slate-700 dark:text-slate-300 text-[13px] leading-relaxed">{streamingReply}</p>
+                    ) : (
+                      <p className="text-slate-500 text-[13px] font-medium animate-pulse">{generationStatus || "Генерируем шедевр..."}</p>
+                    )}
                   </div>
                 </div>
               )}
