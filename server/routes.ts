@@ -176,18 +176,24 @@ export async function registerRoutes(
       let fullResponse = "";
 
       try {
+        const requestBody = {
+          model: "gemini-3-pro",
+          messages: chatMessages,
+          max_tokens: 65536,
+          stream: true,
+        };
+        console.log("KIE request URL:", KIE_API_URL);
+        console.log("KIE request body keys:", Object.keys(requestBody));
+        console.log("KIE messages count:", chatMessages.length);
+
         const kieResponse = await fetch(KIE_API_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${KIE_API_KEY}`,
+            "api-key": KIE_API_KEY || "",
           },
-          body: JSON.stringify({
-            model: "gemini-3-pro",
-            messages: chatMessages,
-            max_tokens: 65536,
-            stream: true,
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         console.log("KIE API response status:", kieResponse.status);
@@ -258,6 +264,7 @@ export async function registerRoutes(
             headers: {
               "Content-Type": "application/json",
               "Authorization": `Bearer ${KIE_API_KEY}`,
+              "api-key": KIE_API_KEY || "",
             },
             body: JSON.stringify({
               model: "gemini-3-pro",
