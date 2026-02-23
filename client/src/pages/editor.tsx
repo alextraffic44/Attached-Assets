@@ -78,6 +78,10 @@ export default function EditorPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingImageTarget = useRef<string | null>(null);
 
+  const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  const [imagePickerTab, setImagePickerTab] = useState<"library" | "upload">("library");
+  const replaceFileInputRef = useRef<HTMLInputElement>(null);
+
   const [imgGenOpen, setImgGenOpen] = useState(false);
   const [imgName, setImgName] = useState("");
   const [imgPrompt, setImgPrompt] = useState("");
@@ -490,24 +494,8 @@ export default function EditorPage() {
       }
       if (e.data.type === 'nz-img-click' || e.data.type === 'nz-placeholder-click') {
         pendingImageTarget.current = e.data.path;
-        const imgInput = document.createElement('input');
-        imgInput.type = 'file';
-        imgInput.accept = 'image/*';
-        imgInput.onchange = (ev) => {
-          const file = (ev.target as HTMLInputElement).files?.[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            const dataUrl = reader.result as string;
-            iframeRef.current?.contentWindow?.postMessage({
-              type: 'nz-replace-image',
-              path: pendingImageTarget.current,
-              url: dataUrl,
-            }, '*');
-          };
-          reader.readAsDataURL(file);
-        };
-        imgInput.click();
+        setImagePickerTab("library");
+        setImagePickerOpen(true);
       }
     };
     window.addEventListener('message', handler);
@@ -515,6 +503,27 @@ export default function EditorPage() {
   }, [projectId]);
 
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
+
+  const applyImageToIframe = useCallback((url: string) => {
+    if (!pendingImageTarget.current) return;
+    iframeRef.current?.contentWindow?.postMessage({
+      type: 'nz-replace-image',
+      path: pendingImageTarget.current,
+      url,
+    }, '*');
+    setImagePickerOpen(false);
+  }, []);
+
+  const handleReplaceFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      applyImageToIframe(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }, [applyImageToIframe]);
 
   if (projectLoading) return <div className="h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#0F172A]"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
 
@@ -841,6 +850,92 @@ export default function EditorPage() {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={imagePickerOpen} onOpenChange={setImagePickerOpen}>
+        <DialogContent className="sm:max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ImageIcon className="w-5 h-5 text-purple-500" />
+              Выберите изображение
+            </DialogTitle>
+            <DialogDescription>Выберите из библиотеки или загрузите с компьютера</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex gap-2 mb-4">
+            <Button
+              variant={imagePickerTab === "library" ? "default" : "outline"}
+              size="sm"
+              className="rounded-xl font-bold"
+              onClick={() => setImagePickerTab("library")}
+              data-testid="button-picker-library"
+            >
+              <ImagePlus className="w-4 h-4 mr-2" />
+              Библиотека ({projectImages.length})
+            </Button>
+            <Button
+              variant={imagePickerTab === "upload" ? "default" : "outline"}
+              size="sm"
+              className="rounded-xl font-bold"
+              onClick={() => setImagePickerTab("upload")}
+              data-testid="button-picker-upload"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              С компьютера
+            </Button>
+          </div>
+
+          {imagePickerTab === "library" ? (
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {projectImages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                  <ImageIcon className="w-12 h-12 mb-3 opacity-50" />
+                  <p className="text-sm font-semibold">Библиотека пуста</p>
+                  <p className="text-xs mt-1">Сгенерируйте изображения через AI Фото</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {projectImages.map((img) => (
+                    <button
+                      key={img.id}
+                      className="group relative rounded-xl overflow-hidden border-2 border-transparent hover:border-purple-500 transition-all cursor-pointer aspect-video bg-slate-100 dark:bg-slate-800"
+                      onClick={() => applyImageToIframe(img.url)}
+                      data-testid={`picker-image-${img.id}`}
+                    >
+                      <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-end">
+                        <div className="w-full p-2 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                          <p className="text-white text-xs font-bold truncate">{img.name}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl">
+              <input
+                ref={replaceFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleReplaceFileUpload}
+                className="hidden"
+              />
+              <ImagePlus className="w-12 h-12 text-slate-400 mb-3" />
+              <p className="text-sm font-semibold text-slate-500 mb-4">Перетащите файл или нажмите кнопку</p>
+              <Button
+                variant="outline"
+                className="rounded-xl font-bold"
+                onClick={() => replaceFileInputRef.current?.click()}
+                data-testid="button-picker-file-upload"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Выбрать файл
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
