@@ -248,6 +248,23 @@ export default function EditorPage() {
       htmlCode = htmlCode.split(remoteUrl).join(localPath);
     }
 
+    const dataUriRegex = /(?:src\s*=\s*["'])(data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,([^"']+))["']/gi;
+    let dataMatch;
+    let dataIdx = 0;
+    while ((dataMatch = dataUriRegex.exec(htmlCode)) !== null) {
+      const fullDataUri = dataMatch[1];
+      const ext = dataMatch[2].replace('+xml', '').replace('jpeg', 'jpg');
+      const b64 = dataMatch[3];
+      const fileName = `uploaded_${dataIdx++}.${ext}`;
+      try {
+        const byteChars = atob(b64);
+        const byteArr = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+        imgFolder?.file(fileName, byteArr);
+        htmlCode = htmlCode.split(fullDataUri).join(`images/${fileName}`);
+      } catch {}
+    }
+
     zip.file("index.html", htmlCode);
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
