@@ -76,6 +76,8 @@ export default function EditorPage() {
   const [imgStatus, setImgStatus] = useState<"idle" | "creating" | "waiting" | "success" | "fail">("idle");
   const [imgResultUrls, setImgResultUrls] = useState<string[]>([]);
   const [imgError, setImgError] = useState("");
+  const [imgSections, setImgSections] = useState<Array<{ id: string; label: string; type: string; hasImage: boolean }>>([]);
+  const [imgTargetSection, setImgTargetSection] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -244,15 +246,38 @@ export default function EditorPage() {
     }
   }, [imgPrompt, imgSize, imgStatus]);
 
-  const handleInsertImage = useCallback(async (url: string, mode: string) => {
+  const loadSections = useCallback(async () => {
+    try {
+      const resp = await fetch(`/api/projects/${projectId}/analyze-sections`, { credentials: "include" });
+      if (resp.ok) {
+        const data = await resp.json();
+        setImgSections(data.targets || []);
+        if (data.targets?.length > 0) setImgTargetSection(data.targets[0].id);
+      }
+    } catch {}
+  }, [projectId]);
+
+  useEffect(() => {
+    if (imgGenOpen && currentCode) loadSections();
+  }, [imgGenOpen, currentCode, loadSections]);
+
+  const handleInsertImage = useCallback(async (url: string, mode: string, target?: string) => {
     try {
       const resp = await fetch(`/api/projects/${projectId}/insert-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: url, altText: imgPrompt || "AI изображение", insertMode: mode }),
+        body: JSON.stringify({
+          imageUrl: url,
+          altText: imgPrompt || "AI изображение",
+          insertMode: mode,
+          targetSection: target || imgTargetSection,
+        }),
         credentials: "include",
       });
-      if (!resp.ok) throw new Error("Ошибка вставки");
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.message || "Ошибка вставки");
+      }
       const updated = await resp.json();
       setStreamedCode(updated.generatedCode);
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
@@ -264,7 +289,7 @@ export default function EditorPage() {
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
     }
-  }, [projectId, imgPrompt, toast]);
+  }, [projectId, imgPrompt, imgTargetSection, toast]);
 
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
 
@@ -481,14 +506,48 @@ export default function EditorPage() {
             )}
 
             {imgStatus === "success" && imgResultUrls.length > 0 && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
                   <CheckCircle2 className="w-4 h-4" />
                   Изображение готово!
                 </div>
                 {imgResultUrls.map((url, i) => (
-                  <div key={i} className="space-y-3">
+                  <div key={i} className="space-y-4">
                     <img src={url} alt="Сгенерированное изображение" className="w-full rounded-xl shadow-skeuo-md border border-white/20" data-testid={`img-result-${i}`} />
+
+                    {imgSections.length > 0 && (
+                      <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+                        <label className="text-sm font-bold block text-slate-700 dark:text-slate-300">Вставить в секцию</label>
+                        <Select value={imgTargetSection} onValueChange={setImgTargetSection}>
+                          <SelectTrigger className="rounded-xl" data-testid="select-target-section">
+                            <SelectValue placeholder="Выберите секцию" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {imgSections.map(s => (
+                              <SelectItem key={s.id} value={s.id}>
+                                <span className="flex items-center gap-2">
+                                  {s.type === "placeholder" && <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />}
+                                  {s.type === "has-image" && <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />}
+                                  {s.type === "no-image" && <span className="w-2 h-2 rounded-full bg-slate-300 inline-block" />}
+                                  {s.label}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          className="w-full rounded-xl font-bold bg-violet-600 hover:bg-violet-700 text-white"
+                          onClick={() => handleInsertImage(url, "into-section", imgTargetSection)}
+                          disabled={!imgTargetSection}
+                          data-testid={`button-insert-section-${i}`}
+                        >
+                          <ImageIcon className="w-3.5 h-3.5 mr-1.5" />
+                          Вставить в {imgSections.find(s => s.id === imgTargetSection)?.label || "секцию"}
+                        </Button>
+                      </div>
+                    )}
+
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -507,7 +566,7 @@ export default function EditorPage() {
                         data-testid={`button-append-image-${i}`}
                       >
                         <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
-                        Добавить на сайт
+                        В конец сайта
                       </Button>
                     </div>
                   </div>

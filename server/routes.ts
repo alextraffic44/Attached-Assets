@@ -404,6 +404,62 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/projects/:id/analyze-sections", bypassAuth, async (req, res) => {
+    try {
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project) {
+        return res.status(404).json({ message: "Проект не найден" });
+      }
+      const user = req.user as any;
+      if (project.userId !== user.id) {
+        return res.status(403).json({ message: "Доступ запрещён" });
+      }
+
+      const code = project.generatedCode || "";
+      const targets: Array<{ id: string; label: string; type: string; hasImage: boolean }> = [];
+
+      const sectionRegex = /<(section|header|footer|main|div|article|aside|nav)\b[^>]*(?:id\s*=\s*["']([^"']+)["'])?[^>]*(?:class\s*=\s*["']([^"']+)["'])?[^>]*>/gi;
+      let match;
+      const seen = new Set<string>();
+
+      while ((match = sectionRegex.exec(code)) !== null) {
+        const tag = match[1].toLowerCase();
+        const id = match[2] || "";
+        const cls = match[3] || "";
+
+        if (tag === "div" && !id && !cls.match(/hero|banner|about|feature|section|card|footer|header|cta|contact|case|team|portfolio|gallery|pricing|service|testimonial/i)) continue;
+
+        const sectionId = id || cls.split(/\s+/).find((c: string) => c.match(/hero|banner|about|feature|section|card|footer|header|cta|contact|case|team|portfolio|gallery|pricing|service|testimonial/i)) || "";
+        if (!sectionId || seen.has(sectionId)) continue;
+        seen.add(sectionId);
+
+        const sectionStart = match.index;
+        const closingTag = `</${match[1]}>`;
+        const sectionEnd = code.indexOf(closingTag, sectionStart + match[0].length);
+        const sectionContent = sectionEnd !== -1 ? code.slice(sectionStart, sectionEnd + closingTag.length) : "";
+        const hasImage = /(<img\b|background-image|background:\s*url)/i.test(sectionContent);
+        const hasPlaceholder = /placehold\.co/i.test(sectionContent);
+
+        let label = sectionId.replace(/[-_]/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase());
+        if (hasPlaceholder) label += " (placeholder)";
+
+        targets.push({
+          id: sectionId,
+          label,
+          type: hasPlaceholder ? "placeholder" : hasImage ? "has-image" : "no-image",
+          hasImage,
+        });
+      }
+
+      const placeholderCount = (code.match(/https?:\/\/placehold\.co\/[^\s"'<>]+/g) || []).length;
+
+      res.json({ targets, placeholderCount });
+    } catch (err: any) {
+      console.error("Analyze sections error:", err);
+      res.status(500).json({ message: "Ошибка анализа секций" });
+    }
+  });
+
   app.post("/api/projects/:id/insert-image", bypassAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
@@ -415,36 +471,82 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Доступ запрещён" });
       }
 
-      const { imageUrl, altText = "Сгенерированное изображение", insertMode = "replace-first-placeholder" } = req.body;
+      const { imageUrl, altText = "Сгенерированное изображение", insertMode = "replace-first-placeholder", targetSection = "" } = req.body;
       if (!imageUrl) {
         return res.status(400).json({ message: "URL изображения обязателен" });
       }
 
       let code = project.generatedCode || "";
 
-      if (insertMode === "replace-first-placeholder") {
+      if (insertMode === "into-section" && targetSection) {
+        const idPattern = new RegExp(`(<(?:section|header|footer|main|div|article|aside)[^>]*(?:id\\s*=\\s*["']${targetSection}["']|class\\s*=\\s*["'][^"']*${targetSection}[^"']*["'])[^>]*>)`, "i");
+        const sectionMatch = code.match(idPattern);
+        if (sectionMatch) {
+          const sectionStart = code.indexOf(sectionMatch[0]);
+          const afterOpen = sectionStart + sectionMatch[0].length;
+
+          const tag = sectionMatch[0].match(/<(\w+)/)?.[1] || "div";
+          const closingTag = `</${tag}>`;
+          const sectionEnd = code.indexOf(closingTag, afterOpen);
+          const sectionContent = sectionEnd !== -1 ? code.slice(afterOpen, sectionEnd) : "";
+
+          const placeholderInSection = sectionContent.match(/https?:\/\/placehold\.co\/[^\s"'<>]+/);
+          if (placeholderInSection) {
+            const placeholderPos = code.indexOf(placeholderInSection[0], afterOpen);
+            code = code.slice(0, placeholderPos) + imageUrl + code.slice(placeholderPos + placeholderInSection[0].length);
+          } else {
+            const imgInSection = sectionContent.match(/<img\b[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/i);
+            if (imgInSection) {
+              const oldSrc = imgInSection[1];
+              const srcPos = code.indexOf(oldSrc, afterOpen);
+              if (srcPos !== -1 && srcPos < (sectionEnd !== -1 ? sectionEnd : code.length)) {
+                code = code.slice(0, srcPos) + imageUrl + code.slice(srcPos + oldSrc.length);
+              }
+            } else {
+              const bgMatch = sectionContent.match(/background(?:-image)?\s*:\s*url\(["']?([^"')]+)["']?\)/i);
+              if (bgMatch) {
+                const oldBg = bgMatch[1];
+                const bgPos = code.indexOf(oldBg, afterOpen);
+                if (bgPos !== -1 && bgPos < (sectionEnd !== -1 ? sectionEnd : code.length)) {
+                  code = code.slice(0, bgPos) + imageUrl + code.slice(bgPos + oldBg.length);
+                }
+              } else {
+                const imgTag = `<img src="${imageUrl}" alt="${altText}" style="width:100%;height:auto;border-radius:12px;object-fit:cover;" />`;
+                code = code.slice(0, afterOpen) + "\n" + imgTag + "\n" + code.slice(afterOpen);
+              }
+            }
+          }
+        } else {
+          return res.status(400).json({ message: `Секция "${targetSection}" не найдена` });
+        }
+      } else if (insertMode === "replace-first-placeholder") {
         const placeholderRegex = /https?:\/\/placehold\.co\/[^\s"'<>]+/;
         if (placeholderRegex.test(code)) {
           code = code.replace(placeholderRegex, imageUrl);
         } else {
           const bodyClose = code.lastIndexOf("</body>");
           const imgTag = `\n<div style="text-align:center;padding:20px;"><img src="${imageUrl}" alt="${altText}" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.3);" /></div>\n`;
-          if (bodyClose !== -1) {
-            code = code.slice(0, bodyClose) + imgTag + code.slice(bodyClose);
-          } else {
-            code += imgTag;
-          }
+          code = bodyClose !== -1 ? code.slice(0, bodyClose) + imgTag + code.slice(bodyClose) : code + imgTag;
         }
       } else if (insertMode === "replace-all-placeholders") {
         code = code.replace(/https?:\/\/placehold\.co\/[^\s"'<>]+/g, imageUrl);
+      } else if (insertMode === "as-hero-bg") {
+        const heroRegex = /(<(?:section|div)[^>]*(?:id\s*=\s*["']hero["']|class\s*=\s*["'][^"']*hero[^"']*["'])[^>]*)(>)/i;
+        const heroMatch = code.match(heroRegex);
+        if (heroMatch) {
+          const existingStyle = heroMatch[1].match(/style\s*=\s*["']([^"']*)["']/);
+          if (existingStyle) {
+            const newStyle = existingStyle[1].replace(/background(?:-image)?\s*:[^;]+;?/gi, "") +
+              `;background-image:url('${imageUrl}');background-size:cover;background-position:center;`;
+            code = code.replace(existingStyle[0], `style="${newStyle}"`);
+          } else {
+            code = code.replace(heroMatch[0], `${heroMatch[1]} style="background-image:url('${imageUrl}');background-size:cover;background-position:center;"${heroMatch[2]}`);
+          }
+        }
       } else {
         const bodyClose = code.lastIndexOf("</body>");
         const imgTag = `\n<div style="text-align:center;padding:20px;"><img src="${imageUrl}" alt="${altText}" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.3);" /></div>\n`;
-        if (bodyClose !== -1) {
-          code = code.slice(0, bodyClose) + imgTag + code.slice(bodyClose);
-        } else {
-          code += imgTag;
-        }
+        code = bodyClose !== -1 ? code.slice(0, bodyClose) + imgTag + code.slice(bodyClose) : code + imgTag;
       }
 
       const updated = await storage.updateProject(project.id, { generatedCode: code });
