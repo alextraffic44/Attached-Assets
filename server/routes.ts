@@ -28,17 +28,19 @@ const SYSTEM_PROMPT = `Ты — профессиональный веб-разр
 - Весь код должен быть в одном HTML-файле
 
 РАБОТА С ИЗОБРАЖЕНИЯМИ:
-- Для КАЖДОГО изображения на сайте используй маркер: {{GENERATE_IMG:описание_на_английском||ширинаxвысота}}
-- Описание должно быть на АНГЛИЙСКОМ языке и описывать нужную картинку максимально детально
-- Формат размера: ширинаxвысота (например 1200x600, 400x400, 800x500)
-- Примеры: 
-  <img src="{{GENERATE_IMG:modern AI neural network abstract visualization with blue neon lights||1200x600}}" />
-  <img src="{{GENERATE_IMG:professional team working in modern office||800x500}}" />
-  background-image: url('{{GENERATE_IMG:dark gradient tech background with glowing particles||1920x1080}}')
-- Каждое изображение должно быть тематически релевантно содержимому сайта
-- Используй 4-8 изображений для полноценного лендинга
-- НЕ используй placeholder сервисы (placehold.co, placeholder.com и т.д.)
-- НЕ используй внешние URL изображений
+- Для каждого места где нужна картинка — создавай красивый placeholder-блок прямо в HTML/CSS
+- Placeholder должен быть стильным: градиентный фон, иконка (SVG) и подпись что здесь будет
+- Используй div с классом "image-placeholder" и атрибутом data-image-hint="описание нужной картинки на русском"
+- Пример placeholder блока:
+  <div class="image-placeholder" data-image-hint="Абстрактная нейросеть" style="width:100%;height:400px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:white;">
+    <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+    <span style="margin-top:12px;font-weight:600;opacity:0.9;">Изображение: Абстрактная нейросеть</span>
+  </div>
+- Делай placeholder блоки разных размеров в зависимости от контекста (герой — большой, карточка — маленький)
+- Используй разные градиенты для разных блоков чтобы было визуально разнообразно
+- НЕ используй placeholder сервисы (placehold.co) и внешние URL
+- НЕ используй тег <img> без реального src — только div-placeholder
+- Пользователь потом сам создаст и добавит изображения через AI-генератор
 
 ЕСЛИ у пользователя есть библиотека AI-изображений:
 - Когда пользователь просит вставить конкретное изображение по имени, используй маркер: {{IMG:имя_изображения}}
@@ -303,91 +305,6 @@ export async function registerRoutes(
         if (found) {
           htmlCode = htmlCode.replace(markerMatch[0], found.url);
         }
-      }
-
-      const genImgRegex = /\{\{GENERATE_IMG:([^|]+)\|\|(\d+x\d+)\}\}/g;
-      const imageMarkers: { full: string; prompt: string; size: string }[] = [];
-      let genMatch;
-      while ((genMatch = genImgRegex.exec(htmlCode)) !== null) {
-        imageMarkers.push({ full: genMatch[0], prompt: genMatch[1].trim(), size: genMatch[2] });
-      }
-
-      if (imageMarkers.length > 0) {
-        res.write(`data: ${JSON.stringify({ status: `Генерируем ${imageMarkers.length} изображений...` })}\n\n`);
-        console.log(`Auto-generating ${imageMarkers.length} images`);
-
-        const imageResults = await Promise.allSettled(
-          imageMarkers.map(async (marker) => {
-            try {
-              const [w, h] = marker.size.split("x");
-              let kieSize = "16:9";
-              const ratio = parseInt(w) / parseInt(h);
-              if (ratio > 1.5) kieSize = "16:9";
-              else if (ratio > 1.1) kieSize = "4:3";
-              else if (ratio > 0.9) kieSize = "1:1";
-              else kieSize = "9:16";
-
-              const createResp = await fetch(NANO_BANANA_CREATE_URL, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${KIE_API_KEY}`,
-                },
-                body: JSON.stringify({
-                  model: "google/nano-banana",
-                  input: {
-                    prompt: marker.prompt,
-                    output_format: "png",
-                    image_size: kieSize,
-                  },
-                }),
-              });
-              const createBody = await createResp.json();
-              if (createBody.code !== 200 || !createBody.data?.taskId) {
-                throw new Error(createBody.msg || "Task creation failed");
-              }
-
-              const taskId = createBody.data.taskId;
-              for (let i = 0; i < 40; i++) {
-                await new Promise(r => setTimeout(r, 3000));
-                const statusResp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
-                  headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
-                });
-                const statusBody = await statusResp.json();
-                if (statusBody.code !== 200) continue;
-                const state = statusBody.data?.state;
-                if (state === "success") {
-                  const result = JSON.parse(statusBody.data.resultJson);
-                  const urls = result.resultUrls || [];
-                  return { marker: marker.full, url: urls[0] || null };
-                }
-                if (state === "fail") throw new Error("Generation failed");
-              }
-              throw new Error("Timeout");
-            } catch (err: any) {
-              console.error(`Image gen failed for "${marker.prompt}":`, err.message);
-              return { marker: marker.full, url: null };
-            }
-          })
-        );
-
-        let imgCount = 0;
-        for (const result of imageResults) {
-          if (result.status === "fulfilled" && result.value.url) {
-            htmlCode = htmlCode.replace(result.value.marker, result.value.url);
-            imgCount++;
-          }
-        }
-
-        const remaining = htmlCode.match(/\{\{GENERATE_IMG:[^}]+\}\}/g);
-        if (remaining) {
-          for (const r of remaining) {
-            htmlCode = htmlCode.replace(r, `https://placehold.co/800x400/1a1a2e/e0e0e0?text=Image`);
-          }
-        }
-
-        console.log(`Generated ${imgCount}/${imageMarkers.length} images successfully`);
-        res.write(`data: ${JSON.stringify({ status: `Готово! ${imgCount} из ${imageMarkers.length} изображений создано` })}\n\n`);
       }
 
       if (project.generatedCode && project.generatedCode.trim()) {
