@@ -687,24 +687,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[90%] rounded-2xl p-4 text-sm font-medium shadow-skeuo-md ${msg.role === "user" ? "bg-primary text-white" : "bg-white dark:bg-slate-800"}`}>
                       {msg.role === "user" ? msg.content : (
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-primary" />
-                          <span className="text-primary font-black">Сайт обновлён</span>
-                          {!isLatestModel && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="ml-1 h-7 px-2 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
-                              onClick={() => handleRestoreFromMessage(msg.content)}
-                              data-testid={`button-rollback-msg-${msg.id}`}
-                            >
-                              <RotateCcw className="w-3.5 h-3.5 mr-1" />
-                              <span className="text-xs font-bold">Откатить</span>
-                            </Button>
-                          )}
-                          {isLatestModel && (
-                            <Badge className="ml-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0 text-[10px] px-1.5 py-0 rounded-full">текущий</Badge>
-                          )}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+                            <span className="text-primary font-black text-[11px]">Gemini</span>
+                            {isLatestModel && (
+                              <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0 text-[10px] px-1.5 py-0 rounded-full">текущий</Badge>
+                            )}
+                          </div>
+                          <p className="text-slate-700 dark:text-slate-300 text-[13px] leading-relaxed">{msg.content.startsWith("<!") || msg.content.startsWith("<html") ? "Сайт обновлён" : msg.content}</p>
                         </div>
                       )}
                     </div>

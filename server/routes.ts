@@ -18,7 +18,8 @@ const SYSTEM_PROMPT = `Ты — элитный Creative Technologist и Lead Fro
 - HTML5 семантика, мета-теги (description, viewport, charset, Open Graph)
 - Полная адаптивность (Mobile First): min 3 брейкпоинта (mobile, tablet, desktop)
 - НЕ используй внешние CDN/библиотеки — только чистый HTML/CSS/JS
-- Отвечай ТОЛЬКО кодом HTML, без пояснений
+- Если это ПЕРВАЯ генерация (новый сайт): отвечай ТОЛЬКО кодом HTML
+- Если это РЕДАКТИРОВАНИЕ (Canvas-режим): сначала напиши 1-3 предложения о внесённых изменениях, потом блок \`\`\`html с ПОЛНЫМ обновлённым кодом
 - Весь код в одном файле
 - Все тексты на русском языке, если не указано иное
 
@@ -392,12 +393,12 @@ export async function registerRoutes(
 
       if (imageBase64) {
         const textPart = project.generatedCode
-          ? `Текущий код сайта:\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n\nЗапрос пользователя: ${prompt}\n\nВнеси изменения и верни ПОЛНЫЙ обновлённый HTML-код.`
+          ? `ТЕКУЩИЙ КОД САЙТА (Canvas-режим — сохрани ВСЕ!):\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n\nЗапрос пользователя: ${prompt}\n\nИНСТРУКЦИЯ: Сначала короткий ответ (1-3 предложения), потом \`\`\`html с ПОЛНЫМ кодом. Сохрани ВСЕ существующие секции.`
           : `Создай сайт на основе этого изображения-примера. ${prompt}`;
         userParts.push({ text: textPart });
         userParts.push({ inlineData: { data: imageBase64, mimeType: "image/png" } });
       } else if (project.generatedCode) {
-        userParts.push({ text: `Текущий код сайта:\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n\nЗапрос пользователя: ${prompt}\n\nВнеси изменения и верни ПОЛНЫЙ обновлённый HTML-код.` });
+        userParts.push({ text: `ТЕКУЩИЙ КОД САЙТА (Canvas-режим — ты ОБЯЗАН сохранить весь существующий контент!):\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n\nЗапрос пользователя: ${prompt}\n\nИНСТРУКЦИЯ: Работай в режиме Canvas. Сначала напиши короткий ответ (1-3 предложения) о том что ты сделал/изменил, потом блок \`\`\`html с ПОЛНЫМ обновлённым кодом. КРИТИЧНО: сохрани ВСЕ существующие секции, стили, контент и структуру. Добавляй/изменяй ТОЛЬКО то, что просит пользователь. НЕ удаляй и НЕ упрощай существующий код.` });
       } else {
         let researchBlock = "";
         if (researchData) {
@@ -434,9 +435,11 @@ export async function registerRoutes(
       console.log("Response preview:", fullResponse.substring(0, 200));
 
       let htmlCode = fullResponse;
+      let aiTextReply = "";
       const htmlMatch = fullResponse.match(/```html\n?([\s\S]*?)```/);
       if (htmlMatch) {
         htmlCode = htmlMatch[1].trim();
+        aiTextReply = fullResponse.substring(0, fullResponse.indexOf("```html")).trim();
       } else if (fullResponse.includes("<!DOCTYPE") || fullResponse.includes("<html")) {
         htmlCode = fullResponse.trim();
       }
@@ -463,10 +466,10 @@ export async function registerRoutes(
       await storage.createProjectMessage({
         projectId: project.id,
         role: "model",
-        content: htmlCode,
+        content: aiTextReply || "Сайт обновлён",
       });
 
-      res.write(`data: ${JSON.stringify({ done: true, code: htmlCode })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, code: htmlCode, reply: aiTextReply })}\n\n`);
       res.end();
     } catch (err: any) {
       console.error("Generation error:", err);
