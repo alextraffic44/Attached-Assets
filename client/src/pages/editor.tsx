@@ -33,6 +33,8 @@ import {
   Trash2,
   ImagePlus,
   RotateCcw,
+  MousePointer2,
+  Type,
 } from "lucide-react";
 import {
   Dialog,
@@ -71,6 +73,10 @@ export default function EditorPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingImageTarget = useRef<string | null>(null);
 
   const [imgGenOpen, setImgGenOpen] = useState(false);
   const [imgName, setImgName] = useState("");
@@ -82,7 +88,6 @@ export default function EditorPage() {
   const [imgError, setImgError] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: project, isLoading: projectLoading } = useQuery<Project>({
     queryKey: ["/api/projects", projectId],
@@ -364,6 +369,151 @@ export default function EditorPage() {
     }
   }, [projectId, toast]);
 
+  const getEditableCode = useCallback((code: string) => {
+    if (!editMode || !code) return code;
+    const editorScript = `
+<style>
+  [contenteditable]:hover { outline: 2px dashed rgba(59,130,246,0.5); outline-offset: 2px; cursor: text; }
+  [contenteditable]:focus { outline: 2px solid rgba(59,130,246,0.8); outline-offset: 2px; background: rgba(59,130,246,0.05); }
+  img:hover, .image-placeholder:hover { outline: 2px dashed rgba(168,85,247,0.6); outline-offset: 2px; cursor: pointer; }
+  .__edit-tooltip { position: fixed; background: #1e293b; color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; pointer-events: none; z-index: 99999; white-space: nowrap; }
+</style>
+<script>
+(function() {
+  var tooltip = null;
+  function showTooltip(el, text) {
+    if (!tooltip) { tooltip = document.createElement('div'); tooltip.className = '__edit-tooltip'; document.body.appendChild(tooltip); }
+    tooltip.textContent = text;
+    var r = el.getBoundingClientRect();
+    tooltip.style.left = r.left + 'px';
+    tooltip.style.top = (r.top - 28) + 'px';
+    tooltip.style.display = 'block';
+  }
+  function hideTooltip() { if (tooltip) tooltip.style.display = 'none'; }
+
+  document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,td,th,button,label,figcaption').forEach(function(el) {
+    if (el.children.length === 0 || el.childNodes.length === 1) {
+      el.setAttribute('contenteditable', 'true');
+      el.addEventListener('mouseenter', function() { showTooltip(el, 'Клик для редактирования текста'); });
+      el.addEventListener('mouseleave', hideTooltip);
+      el.addEventListener('blur', function() {
+        window.parent.postMessage({ type: 'nz-text-edit', html: document.documentElement.outerHTML }, '*');
+      });
+    }
+  });
+
+  document.querySelectorAll('img').forEach(function(img) {
+    img.addEventListener('mouseenter', function() { showTooltip(img, 'Клик для замены изображения'); });
+    img.addEventListener('mouseleave', hideTooltip);
+    img.addEventListener('click', function(e) {
+      e.preventDefault(); e.stopPropagation();
+      hideTooltip();
+      var path = [];
+      var node = img;
+      while (node && node !== document.body) {
+        var idx = 0;
+        var sib = node;
+        while (sib.previousElementSibling) { sib = sib.previousElementSibling; idx++; }
+        path.unshift(idx);
+        node = node.parentElement;
+      }
+      window.parent.postMessage({ type: 'nz-img-click', path: path.join(','), src: img.src }, '*');
+    });
+  });
+
+  document.querySelectorAll('.image-placeholder').forEach(function(ph) {
+    ph.addEventListener('mouseenter', function() { showTooltip(ph, 'Клик для добавления изображения'); });
+    ph.addEventListener('mouseleave', hideTooltip);
+    ph.addEventListener('click', function(e) {
+      e.preventDefault(); e.stopPropagation();
+      hideTooltip();
+      var path = [];
+      var node = ph;
+      while (node && node !== document.body) {
+        var idx = 0;
+        var sib = node;
+        while (sib.previousElementSibling) { sib = sib.previousElementSibling; idx++; }
+        path.unshift(idx);
+        node = node.parentElement;
+      }
+      window.parent.postMessage({ type: 'nz-placeholder-click', path: path.join(','), hint: ph.getAttribute('data-image-hint') || '' }, '*');
+    });
+  });
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'nz-replace-image') {
+      var path = e.data.path.split(',').map(Number);
+      var node = document.body;
+      for (var i = 0; i < path.length; i++) {
+        if (node.children[path[i]]) node = node.children[path[i]];
+        else break;
+      }
+      if (node.tagName === 'IMG') {
+        node.src = e.data.url;
+        node.style.objectFit = 'cover';
+      } else if (node.classList && node.classList.contains('image-placeholder')) {
+        var img = document.createElement('img');
+        img.src = e.data.url;
+        img.alt = node.getAttribute('data-image-hint') || '';
+        img.style.width = node.style.width || '100%';
+        img.style.height = node.style.height || '400px';
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = node.style.borderRadius || '16px';
+        node.parentNode.replaceChild(img, node);
+      }
+      window.parent.postMessage({ type: 'nz-text-edit', html: document.documentElement.outerHTML }, '*');
+    }
+  });
+})();
+</script>`;
+    return code.replace('</body>', editorScript + '</body>');
+  }, [editMode]);
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (!e.data || typeof e.data !== 'object') return;
+      if (e.data.type === 'nz-text-edit') {
+        const cleanHtml = e.data.html
+          .replace(/<style>[\s\S]*?\[contenteditable\][\s\S]*?<\/style>/g, '')
+          .replace(/<script>[\s\S]*?nz-text-edit[\s\S]*?<\/script>/g, '')
+          .replace(/<div class="__edit-tooltip"[\s\S]*?<\/div>/g, '')
+          .replace(/\s*contenteditable="true"/g, '');
+        const doctype = '<!DOCTYPE html>\n';
+        const finalHtml = cleanHtml.startsWith('<!DOCTYPE') ? cleanHtml : doctype + cleanHtml;
+        setStreamedCode(finalHtml);
+        fetch(`/api/projects/${projectId}/code`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ generatedCode: finalHtml }),
+          credentials: "include",
+        });
+      }
+      if (e.data.type === 'nz-img-click' || e.data.type === 'nz-placeholder-click') {
+        pendingImageTarget.current = e.data.path;
+        const imgInput = document.createElement('input');
+        imgInput.type = 'file';
+        imgInput.accept = 'image/*';
+        imgInput.onchange = (ev) => {
+          const file = (ev.target as HTMLInputElement).files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            iframeRef.current?.contentWindow?.postMessage({
+              type: 'nz-replace-image',
+              path: pendingImageTarget.current,
+              url: dataUrl,
+            }, '*');
+          };
+          reader.readAsDataURL(file);
+        };
+        imgInput.click();
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [projectId]);
+
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
 
   if (projectLoading) return <div className="h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#0F172A]"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
@@ -396,10 +546,17 @@ export default function EditorPage() {
 
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
-          <Button variant={showCode ? "secondary" : "ghost"} size="sm" className="rounded-xl font-bold px-4" onClick={() => setShowCode(!showCode)} data-testid="button-toggle-code">
+          <Button variant={showCode ? "secondary" : "ghost"} size="sm" className="rounded-xl font-bold px-4" onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }} data-testid="button-toggle-code">
             {showCode ? <Eye className="w-4 h-4 mr-2" /> : <Code2 className="w-4 h-4 mr-2" />}
             {showCode ? "Сайт" : "Код"}
           </Button>
+
+          {!showCode && currentCode && (
+            <Button variant={editMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-4 ${editMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} onClick={() => setEditMode(!editMode)} data-testid="button-toggle-edit">
+              <MousePointer2 className="w-4 h-4 mr-2" />
+              {editMode ? "Редактор ВКЛ" : "Редактор"}
+            </Button>
+          )}
 
           <Button variant="outline" size="sm" className="rounded-xl font-bold px-4" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip">
             <Download className="w-4 h-4 mr-2" />
@@ -534,7 +691,7 @@ export default function EditorPage() {
           ) : currentCode ? (
             <div className="w-full h-full flex items-center justify-center overflow-hidden">
                <div className="bg-white rounded-2xl shadow-2xl transition-all duration-500 overflow-hidden border border-white/20" style={{ width: deviceWidths[previewDevice], height: '100%' }}>
-                  <iframe srcDoc={currentCode} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin" />
+                  <iframe ref={iframeRef} srcDoc={getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin" />
                </div>
             </div>
           ) : (
