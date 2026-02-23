@@ -18,8 +18,7 @@ const SYSTEM_PROMPT = `Ты — элитный Creative Technologist и Lead Fro
 - HTML5 семантика, мета-теги (description, viewport, charset, Open Graph)
 - Полная адаптивность (Mobile First): min 3 брейкпоинта (mobile, tablet, desktop)
 - НЕ используй внешние CDN/библиотеки — только чистый HTML/CSS/JS
-- Если это ПЕРВАЯ генерация (новый сайт): отвечай ТОЛЬКО кодом HTML
-- Если это РЕДАКТИРОВАНИЕ (Canvas-режим): сначала напиши 1-3 предложения о внесённых изменениях, потом блок \`\`\`html с ПОЛНЫМ обновлённым кодом
+- При первой генерации: отвечай ТОЛЬКО кодом HTML без пояснений
 - Весь код в одном файле
 - Все тексты на русском языке, если не указано иное
 
@@ -380,25 +379,33 @@ export async function registerRoutes(
         systemContent += `\nИспользуй маркер {{IMG:имя}} для вставки этих изображений. Например: <img src="{{IMG:${projectImgs[0].name}}}" />`;
       }
 
+      const isEditMode = !!project.generatedCode;
+
+      if (isEditMode) {
+        systemContent += `\n\n${"═".repeat(43)}\nРЕЖИМ РЕДАКТИРОВАНИЯ — ТЕКУЩИЙ КОД САЙТА\n${"═".repeat(43)}\nНиже приведён ТЕКУЩИЙ HTML-код сайта пользователя. Это твой РАБОЧИЙ ДОКУМЕНТ.\nТы ОБЯЗАН:\n1. Сохранить ВСЕ существующие секции, стили, контент, анимации и структуру\n2. Изменять/добавлять ТОЛЬКО то, что явно просит пользователь\n3. НЕ удалять, НЕ упрощать, НЕ сокращать существующий код\n4. Вернуть ПОЛНЫЙ документ целиком (от <!DOCTYPE html> до </html>)\n\nФОРМАТ ОТВЕТА при редактировании:\n- Сначала напиши 1-3 предложения о внесённых изменениях\n- Затем блок \`\`\`html с ПОЛНЫМ обновлённым кодом\n\nТЕКУЩИЙ КОД:\n\`\`\`html\n${project.generatedCode}\n\`\`\``;
+      }
+
       const geminiHistory: any[] = [];
 
-      for (const msg of previousMessages.slice(0, -1)) {
-        geminiHistory.push({
-          role: msg.role === "user" ? "user" : "model",
-          parts: [{ text: msg.content }],
-        });
+      if (!isEditMode) {
+        for (const msg of previousMessages.slice(0, -1)) {
+          geminiHistory.push({
+            role: msg.role === "user" ? "user" : "model",
+            parts: [{ text: msg.content }],
+          });
+        }
       }
 
       const userParts: any[] = [];
 
       if (imageBase64) {
-        const textPart = project.generatedCode
-          ? `ТЕКУЩИЙ КОД САЙТА (Canvas-режим — сохрани ВСЕ!):\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n\nЗапрос пользователя: ${prompt}\n\nИНСТРУКЦИЯ: Сначала короткий ответ (1-3 предложения), потом \`\`\`html с ПОЛНЫМ кодом. Сохрани ВСЕ существующие секции.`
+        const textPart = isEditMode
+          ? prompt
           : `Создай сайт на основе этого изображения-примера. ${prompt}`;
         userParts.push({ text: textPart });
         userParts.push({ inlineData: { data: imageBase64, mimeType: "image/png" } });
-      } else if (project.generatedCode) {
-        userParts.push({ text: `ТЕКУЩИЙ КОД САЙТА (Canvas-режим — ты ОБЯЗАН сохранить весь существующий контент!):\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n\nЗапрос пользователя: ${prompt}\n\nИНСТРУКЦИЯ: Работай в режиме Canvas. Сначала напиши короткий ответ (1-3 предложения) о том что ты сделал/изменил, потом блок \`\`\`html с ПОЛНЫМ обновлённым кодом. КРИТИЧНО: сохрани ВСЕ существующие секции, стили, контент и структуру. Добавляй/изменяй ТОЛЬКО то, что просит пользователь. НЕ удаляй и НЕ упрощай существующий код.` });
+      } else if (isEditMode) {
+        userParts.push({ text: prompt });
       } else {
         let researchBlock = "";
         if (researchData) {
