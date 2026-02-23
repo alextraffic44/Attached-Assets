@@ -175,56 +175,107 @@ export async function registerRoutes(
 
       let fullResponse = "";
 
-      const kieResponse = await fetch(KIE_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${KIE_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gemini-3-pro",
-          messages: chatMessages,
-          max_tokens: 65536,
-          stream: true,
-        }),
-      });
+      try {
+        const kieResponse = await fetch(KIE_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${KIE_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "gemini-3-pro",
+            messages: chatMessages,
+            max_tokens: 65536,
+            stream: true,
+          }),
+        });
 
-      if (!kieResponse.ok) {
-        const errText = await kieResponse.text();
-        console.error("KIE API error:", kieResponse.status, errText);
-        throw new Error(`KIE API error: ${kieResponse.status}`);
-      }
+        console.log("KIE API response status:", kieResponse.status);
+        console.log("KIE API response headers:", Object.fromEntries(kieResponse.headers.entries()));
 
-      const reader = kieResponse.body?.getReader();
-      if (!reader) throw new Error("No response body");
+        if (!kieResponse.ok) {
+          const errText = await kieResponse.text();
+          console.error("KIE API error body:", errText);
+          throw new Error(`KIE API error: ${kieResponse.status} - ${errText}`);
+        }
 
-      const decoder = new TextDecoder();
-      let buffer = "";
+        const contentType = kieResponse.headers.get("content-type") || "";
+        console.log("KIE API content-type:", contentType);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        if (contentType.includes("text/event-stream")) {
+          const reader = kieResponse.body?.getReader();
+          if (!reader) throw new Error("No response body");
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+          const decoder = new TextDecoder();
+          let buffer = "";
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith("data: ")) continue;
-          const dataStr = trimmed.slice(6);
-          if (dataStr === "[DONE]") continue;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          try {
-            const parsed = JSON.parse(dataStr);
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) {
-              fullResponse += delta;
-              res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith("data: ")) continue;
+              const dataStr = trimmed.slice(6);
+              if (dataStr === "[DONE]") continue;
+
+              try {
+                const parsed = JSON.parse(dataStr);
+                const delta = parsed.choices?.[0]?.delta?.content;
+                if (delta) {
+                  fullResponse += delta;
+                  res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+                }
+              } catch (parseErr) {
+                console.log("SSE parse chunk:", dataStr.substring(0, 200));
+              }
             }
-          } catch {}
+          }
+        } else {
+          const jsonBody = await kieResponse.json();
+          console.log("KIE API JSON response keys:", Object.keys(jsonBody));
+          const content = jsonBody.choices?.[0]?.message?.content || "";
+          fullResponse = content;
+          if (content) {
+            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          }
+        }
+      } catch (fetchErr: any) {
+        console.error("KIE fetch error:", fetchErr.message);
+
+        if (!fullResponse) {
+          console.log("Falling back to non-streaming request...");
+          const fallbackResponse = await fetch(KIE_API_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${KIE_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: "gemini-3-pro",
+              messages: chatMessages,
+              max_tokens: 65536,
+              stream: false,
+            }),
+          });
+
+          console.log("Fallback status:", fallbackResponse.status);
+          const fallbackBody = await fallbackResponse.json();
+          console.log("Fallback response keys:", Object.keys(fallbackBody));
+          const content = fallbackBody.choices?.[0]?.message?.content || "";
+          fullResponse = content;
+          if (content) {
+            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          }
         }
       }
+
+      console.log("Total response length:", fullResponse.length);
+      console.log("Response preview:", fullResponse.substring(0, 200));
 
       let htmlCode = fullResponse;
       const htmlMatch = fullResponse.match(/```html\n?([\s\S]*?)```/);
