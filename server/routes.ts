@@ -32,9 +32,10 @@ const SYSTEM_PROMPT = `Ты — профессиональный веб-разр
 - Отвечай ТОЛЬКО кодом HTML, без пояснений и комментариев
 - Весь код должен быть в одном HTML-файле`;
 
-function requireAuth(req: any, res: any, next: any) {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ message: "Не авторизован" });
+function bypassAuth(req: any, res: any, next: any) {
+  // Временно отключаем проверку авторизации
+  if (!req.user) {
+    req.user = { id: 1, credits: 999, displayName: "Гость" };
   }
   next();
 }
@@ -45,7 +46,7 @@ export async function registerRoutes(
 ): Promise<Server> {
   setupAuth(app);
 
-  app.get("/api/projects", requireAuth, async (req, res) => {
+  app.get("/api/projects", bypassAuth, async (req, res) => {
     try {
       const user = req.user as any;
       const userProjects = await storage.getProjectsByUser(user.id);
@@ -55,7 +56,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/projects/:id", requireAuth, async (req, res) => {
+  app.get("/api/projects/:id", bypassAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
@@ -71,7 +72,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/projects", requireAuth, async (req, res) => {
+  app.post("/api/projects", bypassAuth, async (req, res) => {
     try {
       const user = req.user as any;
       const { title, description } = req.body;
@@ -87,7 +88,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/projects/:id", requireAuth, async (req, res) => {
+  app.delete("/api/projects/:id", bypassAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
@@ -104,7 +105,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/projects/:id/messages", requireAuth, async (req, res) => {
+  app.get("/api/projects/:id/messages", bypassAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
@@ -121,16 +122,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/projects/:id/generate", requireAuth, async (req, res) => {
+  app.post("/api/projects/:id/generate", bypassAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
         return res.status(404).json({ message: "Проект не найден" });
       }
       const user = req.user as any;
-      if (project.userId !== user.id) {
-        return res.status(403).json({ message: "Доступ запрещён" });
-      }
 
       if (user.credits <= 0) {
         return res.status(403).json({ message: "Недостаточно кредитов" });
@@ -217,7 +215,7 @@ export async function registerRoutes(
         content: htmlCode,
       });
 
-      await storage.updateUserCredits(user.id, Math.max(0, user.credits - 1));
+      // await storage.updateUserCredits(user.id, Math.max(0, user.credits - 1));
 
       res.write(`data: ${JSON.stringify({ done: true, code: htmlCode })}\n\n`);
       res.end();
@@ -232,7 +230,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/projects/:id/code", requireAuth, async (req, res) => {
+  app.put("/api/projects/:id/code", bypassAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {

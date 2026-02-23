@@ -148,8 +148,8 @@ export default function LandingPage() {
           <div className="hidden md:flex items-center gap-8 text-sm font-medium">
             <a href="#features" className="hover:text-primary transition-colors">Возможности</a>
             <a href="#pricing" className="hover:text-primary transition-colors">Тарифы</a>
-            <Button variant="ghost" className="rounded-xl" onClick={() => setLocation("/auth")}>Войти</Button>
-            <Button className="rounded-xl shadow-lg shadow-primary/25 hover-elevate px-6" onClick={() => setLocation("/auth")}>
+            <Button variant="ghost" className="rounded-xl" onClick={() => setLocation("/dashboard")}>Начать</Button>
+            <Button className="rounded-xl shadow-lg shadow-primary/25 hover-elevate px-6" onClick={() => setLocation("/dashboard")}>
               Создать сайт
             </Button>
           </div>
@@ -188,7 +188,7 @@ export default function LandingPage() {
               </motion.p>
               
               <motion.div variants={fadeInUp} className="flex flex-wrap gap-4">
-                <Button size="lg" className="h-16 px-8 rounded-2xl text-lg font-bold shadow-xl shadow-primary/30 active-elevate-2" onClick={() => setLocation("/auth")}>
+                <Button size="lg" className="h-16 px-8 rounded-2xl text-lg font-bold shadow-xl shadow-primary/30 active-elevate-2" onClick={() => setLocation("/dashboard")}>
                   Начать бесплатно
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
@@ -339,7 +339,7 @@ export default function LandingPage() {
                       className={`w-full h-14 rounded-2xl font-bold text-lg shadow-lg transition-all ${
                         plan.popular ? "bg-primary hover:bg-primary/90 shadow-primary/20" : "bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-900 dark:text-white"
                       }`}
-                      onClick={() => setLocation("/auth")}
+                      onClick={() => setLocation("/dashboard")}
                     >
                       Выбрать
                     </Button>
@@ -360,7 +360,7 @@ export default function LandingPage() {
             <div className="relative z-10 space-y-8">
               <h2 className="text-5xl font-black tracking-tight leading-tight">Готовы изменить <br /> своё будущее?</h2>
               <p className="text-xl text-slate-600 dark:text-slate-400 max-w-xl mx-auto">Присоединяйтесь к революции в веб-разработке. Создайте свой первый сайт за 60 секунд.</p>
-              <Button size="lg" className="h-16 px-12 rounded-2xl text-xl font-black shadow-2xl shadow-primary/40 hover-elevate" onClick={() => setLocation("/auth")}>
+              <Button size="lg" className="h-16 px-12 rounded-2xl text-xl font-black shadow-2xl shadow-primary/40 hover-elevate" onClick={() => setLocation("/dashboard")}>
                 Попробовать сейчас
               </Button>
             </div>

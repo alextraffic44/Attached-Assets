@@ -51,13 +51,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={LandingPage} />
-      <Route path="/auth" component={AuthRoute} />
-      <Route path="/dashboard">
-        <ProtectedRoute component={DashboardPage} />
-      </Route>
-      <Route path="/editor/:id">
-        <ProtectedRoute component={EditorPage} />
-      </Route>
+      <Route path="/dashboard" component={DashboardPage} />
+      <Route path="/editor/:id" component={EditorPage} />
       <Route component={NotFound} />
     </Switch>
   );
