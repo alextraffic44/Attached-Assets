@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { users, projects, projectMessages, projectImages, projectVersions, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion } from "@shared/schema";
+import { users, projects, projectMessages, projectImages, projectVersions, leads, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion, type Lead, type InsertLead } from "@shared/schema";
 import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
@@ -23,6 +23,13 @@ export interface IStorage {
 
   getProjectVersions(projectId: number): Promise<ProjectVersion[]>;
   createProjectVersion(version: InsertProjectVersion): Promise<ProjectVersion>;
+
+  getLeadsByProject(projectId: number): Promise<Lead[]>;
+  getLeadsByUser(userId: number): Promise<(Lead & { projectTitle: string })[]>;
+  createLead(lead: InsertLead): Promise<Lead>;
+  markLeadRead(id: number): Promise<Lead | undefined>;
+  deleteLead(id: number): Promise<void>;
+  getUnreadLeadCount(userId: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -99,6 +106,49 @@ export class DatabaseStorage implements IStorage {
   async createProjectVersion(version: InsertProjectVersion): Promise<ProjectVersion> {
     const [v] = await db.insert(projectVersions).values(version).returning();
     return v;
+  }
+
+  async getLeadsByProject(projectId: number): Promise<Lead[]> {
+    return db.select().from(leads).where(eq(leads.projectId, projectId)).orderBy(desc(leads.createdAt));
+  }
+
+  async getLeadsByUser(userId: number): Promise<(Lead & { projectTitle: string })[]> {
+    const userProjects = await db.select().from(projects).where(eq(projects.userId, userId));
+    const projectIds = userProjects.map(p => p.id);
+    if (projectIds.length === 0) return [];
+    const allLeads: (Lead & { projectTitle: string })[] = [];
+    for (const proj of userProjects) {
+      const projLeads = await db.select().from(leads).where(eq(leads.projectId, proj.id)).orderBy(desc(leads.createdAt));
+      for (const l of projLeads) {
+        allLeads.push({ ...l, projectTitle: proj.title });
+      }
+    }
+    allLeads.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return allLeads;
+  }
+
+  async createLead(lead: InsertLead): Promise<Lead> {
+    const [l] = await db.insert(leads).values(lead).returning();
+    return l;
+  }
+
+  async markLeadRead(id: number): Promise<Lead | undefined> {
+    const [l] = await db.update(leads).set({ isRead: 1 }).where(eq(leads.id, id)).returning();
+    return l;
+  }
+
+  async deleteLead(id: number): Promise<void> {
+    await db.delete(leads).where(eq(leads.id, id));
+  }
+
+  async getUnreadLeadCount(userId: number): Promise<number> {
+    const userProjects = await db.select().from(projects).where(eq(projects.userId, userId));
+    let count = 0;
+    for (const proj of userProjects) {
+      const projLeads = await db.select().from(leads).where(eq(leads.projectId, proj.id));
+      count += projLeads.filter(l => l.isRead === 0).length;
+    }
+    return count;
   }
 }
 

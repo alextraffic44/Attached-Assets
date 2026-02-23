@@ -145,6 +145,31 @@ const SYSTEM_PROMPT = `Ты — элитный Creative Technologist и Lead Fro
 - Маркер будет автоматически заменён на реальный URL
 
 ═══════════════════════════════════════════
+ФОРМЫ И СБОР ЛИДОВ (ВАЖНО)
+═══════════════════════════════════════════
+Все формы на сайте (обратная связь, заказ, бронь, заявка, подписка) должны отправлять данные на API:
+- endpoint: window.location.origin + "/api/leads/PROJECT_ID"  (PROJECT_ID будет заменён автоматически)
+- Метод: POST, Content-Type: application/json
+- Тело: { name, email, phone, message, source }  (source = название формы, например "hero-cta", "contact", "booking")
+- После отправки покажи красивое уведомление об успехе (без alert — используй кастомный toast/notification)
+- Обязательно добавь preventDefault на submit и валидацию полей
+
+Шаблон JS для формы:
+document.querySelectorAll('form[data-lead-form]').forEach(form => {
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const data = { name: fd.get('name')||'', email: fd.get('email')||'', phone: fd.get('phone')||'', message: fd.get('message')||'', source: form.dataset.leadForm||'form' };
+    try {
+      const r = await fetch(window.location.origin.replace(/:\\d+$/, ':5000') + '/api/leads/' + (window.__PROJECT_ID__ || '0'), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      if(r.ok) { /* показать toast success */ form.reset(); }
+    } catch(err) { console.error(err); }
+  });
+});
+
+Каждую форму оборачивай в <form data-lead-form="имя_формы">, а полям давай атрибуты name="name", name="email", name="phone", name="message".
+
+═══════════════════════════════════════════
 АБСОЛЮТНЫЕ ЗАПРЕТЫ
 ═══════════════════════════════════════════
 ❌ Простые, плоские, "шаблонные" дизайны без глубины
@@ -633,6 +658,68 @@ export async function registerRoutes(
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Ошибка восстановления версии" });
+    }
+  });
+
+  // ═══ LEADS API ═══
+
+  // Public endpoint — generated sites POST here (no auth needed)
+  app.post("/api/leads/:projectId", async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+
+      const { name, email, phone, message, source } = req.body;
+      const lead = await storage.createLead({
+        projectId,
+        name: name || "",
+        email: email || "",
+        phone: phone || "",
+        message: message || "",
+        source: source || "form",
+      });
+      res.json({ success: true, id: lead.id });
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка сохранения заявки" });
+    }
+  });
+
+  app.get("/api/leads", bypassAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user?.id || 1;
+      const allLeads = await storage.getLeadsByUser(userId);
+      res.json(allLeads);
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка получения заявок" });
+    }
+  });
+
+  app.get("/api/leads/unread-count", bypassAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user?.id || 1;
+      const count = await storage.getUnreadLeadCount(userId);
+      res.json({ count });
+    } catch (err) {
+      res.json({ count: 0 });
+    }
+  });
+
+  app.patch("/api/leads/:id/read", bypassAuth, async (req, res) => {
+    try {
+      const lead = await storage.markLeadRead(parseInt(req.params.id));
+      res.json(lead);
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка" });
+    }
+  });
+
+  app.delete("/api/leads/:id", bypassAuth, async (req, res) => {
+    try {
+      await storage.deleteLead(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка удаления" });
     }
   });
 

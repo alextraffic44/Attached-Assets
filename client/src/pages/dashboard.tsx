@@ -31,6 +31,7 @@ import {
   FolderOpen,
   Coins,
   ChevronRight,
+  Inbox,
 } from "lucide-react";
 
 const SkeuoCard = ({ children, className = "", onClick = undefined }) => (
@@ -55,6 +56,11 @@ export default function DashboardPage() {
 
   const { data: userProjects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
+  });
+
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/leads/unread-count"],
+    refetchInterval: 30000,
   });
 
   const createMutation = useMutation({
@@ -93,7 +99,20 @@ export default function DashboardPage() {
             </div>
             <span className="font-black tracking-tight uppercase text-sm">НЕЙРОЗОДЧИЙ</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setLocation("/leads")}
+              className="relative flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-full px-4 py-1.5 shadow-skeuo-inner hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              data-testid="button-leads"
+            >
+              <Inbox className="w-4 h-4 text-emerald-500" />
+              <span className="text-xs font-black">Лиды</span>
+              {(unreadData?.count ?? 0) > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center bg-emerald-500 text-white text-[10px] font-black rounded-full px-1 shadow-lg shadow-emerald-500/30">
+                  {unreadData!.count}
+                </span>
+              )}
+            </button>
             <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-full px-4 py-1.5 shadow-skeuo-inner">
               <Coins className="w-4 h-4 text-primary" />
               <span className="text-xs font-black">{user?.credits}</span>

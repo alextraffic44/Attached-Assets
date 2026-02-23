@@ -86,3 +86,23 @@ export const insertProjectVersionSchema = createInsertSchema(projectVersions).om
 });
 export type ProjectVersion = typeof projectVersions.$inferSelect;
 export type InsertProjectVersion = z.infer<typeof insertProjectVersionSchema>;
+
+export const leads = pgTable("leads", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  name: text("name").notNull().default(""),
+  email: text("email").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  message: text("message").notNull().default(""),
+  source: text("source").notNull().default("form"),
+  isRead: integer("is_read").notNull().default(0),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertLeadSchema = createInsertSchema(leads).omit({
+  id: true,
+  createdAt: true,
+  isRead: true,
+});
+export type Lead = typeof leads.$inferSelect;
+export type InsertLead = z.infer<typeof insertLeadSchema>;

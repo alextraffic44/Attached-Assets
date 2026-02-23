@@ -390,8 +390,14 @@ export default function EditorPage() {
     }
   }, [projectId, toast]);
 
+  const injectProjectId = useCallback((code: string) => {
+    if (!code) return code;
+    const script = `<script>window.__PROJECT_ID__=${projectId};</script>`;
+    return code.replace('</head>', script + '</head>');
+  }, [projectId]);
+
   const getEditableCode = useCallback((code: string) => {
-    if (!editMode || !code) return code;
+    if (!editMode || !code) return injectProjectId(code);
     const editorScript = `<!--NZ_EDITOR_START--><style data-nz-editor>
 [contenteditable]:hover{outline:2px dashed rgba(59,130,246,0.5);outline-offset:2px;cursor:text}
 [contenteditable]:focus{outline:2px solid rgba(59,130,246,0.8);outline-offset:2px;background:rgba(59,130,246,0.05)}
@@ -483,8 +489,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
   });
 })();
 <\/script><!--NZ_EDITOR_END-->`;
-    return code.replace('</body>', editorScript + '</body>');
-  }, [editMode]);
+    return injectProjectId(code.replace('</body>', editorScript + '</body>'));
+  }, [editMode, injectProjectId]);
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
