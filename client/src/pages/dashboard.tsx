@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [isEnhanced, setIsEnhanced] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
 
   const { data: userProjects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -117,6 +118,15 @@ export default function DashboardPage() {
               <Coins className="w-4 h-4 text-primary" />
               <span className="text-xs font-black">{user?.credits}</span>
             </div>
+            <Button
+              data-testid="button-topup"
+              variant="outline"
+              size="sm"
+              className="rounded-full font-bold text-xs border-primary/30 text-primary"
+              onClick={() => setShowTopUpModal(true)}
+            >
+              Пополнить
+            </Button>
             <Button variant="ghost" size="icon" className="rounded-full" onClick={logout}>
               <LogOut className="w-4 h-4" />
             </Button>
@@ -370,6 +380,51 @@ export default function DashboardPage() {
                 </motion.div>
               )}
             </AnimatePresence>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showTopUpModal} onOpenChange={setShowTopUpModal}>
+        <DialogContent className="sm:max-w-[560px] rounded-[32px] p-0 overflow-hidden border border-gray-100/50 shadow-2xl bg-white">
+          <div className="px-8 pt-10 pb-8">
+            <DialogHeader>
+              <DialogTitle className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                Пополнить баланс
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-slate-500 mt-2 mb-6">Выберите подходящий тариф для пополнения токенов</p>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { price: 990, tokens: 1000, popular: false },
+                { price: 1690, tokens: 1900, popular: true },
+                { price: 3990, tokens: 4500, popular: false },
+                { price: 5990, tokens: 6000, popular: false },
+              ].map((plan) => (
+                <button
+                  key={plan.price}
+                  data-testid={`button-plan-${plan.price}`}
+                  onClick={() => {
+                    toast({ title: "Скоро!", description: "Оплата будет доступна в ближайшее время" });
+                  }}
+                  className={`relative flex flex-col items-center p-6 rounded-2xl border-2 transition-all duration-200 text-center group ${
+                    plan.popular
+                      ? "border-primary bg-primary/5 shadow-lg shadow-primary/10"
+                      : "border-gray-200 hover:border-primary/40 hover:bg-gray-50"
+                  }`}
+                >
+                  {plan.popular && (
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-white text-[10px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider">
+                      Выгодно
+                    </span>
+                  )}
+                  <span className="text-3xl font-black text-gray-900">{plan.tokens.toLocaleString("ru-RU")}</span>
+                  <span className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">токенов</span>
+                  <div className="mt-4 w-full pt-4 border-t border-gray-100">
+                    <span className="text-lg font-extrabold text-gray-800">{plan.price.toLocaleString("ru-RU")} ₽</span>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
