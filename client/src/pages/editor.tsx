@@ -76,6 +76,7 @@ export default function EditorPage() {
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
   const [streamingReply, setStreamingReply] = useState("");
@@ -251,6 +252,7 @@ export default function EditorPage() {
 
       setImageBase64(null);
       setImagePreview(null);
+      setUploadedFileName(null);
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
@@ -405,9 +407,11 @@ export default function EditorPage() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadedFileName(file.name);
     const reader = new FileReader();
     reader.onload = () => {
-      setImagePreview(reader.result as string);
+      const isImage = file.type.startsWith("image/");
+      setImagePreview(isImage ? (reader.result as string) : null);
       setImageBase64((reader.result as string).split(",")[1]);
     };
     reader.readAsDataURL(file);
@@ -883,10 +887,19 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
 
           <div className="p-4 border-t bg-slate-50/50 dark:bg-slate-800/20">
-            {imagePreview && (
-              <div className="mb-3 relative w-16 h-16 group">
-                <img src={imagePreview} className="w-full h-full object-cover rounded-lg shadow-md" />
-                <button className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-lg" onClick={() => {setImagePreview(null); setImageBase64(null);}}>×</button>
+            {(imagePreview || (imageBase64 && uploadedFileName)) && (
+              <div className="mb-3 relative group inline-flex items-center gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 shadow-sm border border-slate-200/50 dark:border-slate-700/50">
+                {imagePreview ? (
+                  <img src={imagePreview} className="w-12 h-12 object-cover rounded-md" />
+                ) : (
+                  <div className="w-12 h-12 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-slate-400" />
+                  </div>
+                )}
+                <span className="text-xs text-slate-500 dark:text-slate-400 max-w-[120px] truncate">{uploadedFileName}</span>
+                <button className="ml-1 text-slate-400 hover:text-destructive transition-colors" onClick={() => {setImagePreview(null); setImageBase64(null); setUploadedFileName(null);}}>
+                  <XCircle className="w-4 h-4" />
+                </button>
               </div>
             )}
             <div className="relative flex items-end">
