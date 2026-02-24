@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
-import { ai } from "./replit_integrations/image/client";
+import { gemini } from "./gemini";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
@@ -118,7 +118,7 @@ async function researchAndEnhance(query: string): Promise<{ research: string; en
   try {
     console.log("Starting combined research + enhancement for:", query);
 
-    const result = await ai.models.generateContent({
+    const result = await gemini.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nИсследуй эту тему для создания premium-сайта. Найди реальную информацию из интернета, затем создай улучшенный промпт для генерации сайта.\n\nВАЖНО: Ответ ОБЯЗАТЕЛЬНО должен содержать ОБА маркера ===RESEARCH=== и ===PROMPT===. Секция PROMPT должна быть 300-500 слов.` }] }],
       config: {
@@ -154,7 +154,7 @@ async function researchAndEnhance(query: string): Promise<{ research: string; en
     if (!enhancedPrompt || enhancedPrompt.length < 100) {
       console.log("Prompt section missing or too short, generating enhancement separately...");
       const researchText = researchMatch?.[1]?.trim() || fullText.replace(/===\s*RESEARCH\s*===/, "").trim();
-      const enhanceResult = await ai.models.generateContent({
+      const enhanceResult = await gemini.models.generateContent({
         model: "gemini-2.5-flash",
         contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nИсследование по теме:\n${researchText.substring(0, 3000)}\n\nНа основе этой информации создай детальный промпт (300-500 слов, на русском) для AI-генератора premium-сайта. Промпт должен включать: skeuomorphic UI, SVG анимации, цветовую палитру (4 цвета), типографику, hero-секцию, 5-7 секций сайта, микро-интеракции. Пиши ТОЛЬКО промпт, без маркеров и заголовков.` }] }],
         config: { maxOutputTokens: 4096 },
@@ -465,7 +465,7 @@ export async function registerRoutes(
 
       console.log("Gemini generation started, history length:", geminiHistory.length);
 
-      const streamResult = await ai.models.generateContentStream({
+      const streamResult = await gemini.models.generateContentStream({
         model: "gemini-3.1-pro-preview",
         contents: [
           ...geminiHistory,
@@ -475,7 +475,7 @@ export async function registerRoutes(
           systemInstruction: systemContent,
           maxOutputTokens: 65536,
           thinkingConfig: {
-            thinkingLevel: isEditMode ? "low" : "high",
+            thinkingLevel: (isEditMode ? "low" : "high") as any,
           },
         },
       });
