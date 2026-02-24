@@ -3,6 +3,31 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { ai } from "./replit_integrations/image/client";
+async function extractTextFromFile(base64Data: string, mimeType: string): Promise<string | null> {
+  try {
+    const buffer = Buffer.from(base64Data, "base64");
+    if (mimeType === "application/pdf") {
+      const pdfParse = (await import("pdf-parse")).default;
+      const result = await pdfParse(buffer);
+      return result.text?.trim() || null;
+    }
+    if (
+      mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      mimeType === "application/msword"
+    ) {
+      const mammoth = (await import("mammoth")).default;
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value?.trim() || null;
+    }
+    if (mimeType === "text/plain" || mimeType === "text/csv" || mimeType === "text/html" || mimeType === "text/markdown" || mimeType.startsWith("text/")) {
+      return buffer.toString("utf-8").trim() || null;
+    }
+    return null;
+  } catch (e) {
+    console.error("Error extracting text from file:", e);
+    return null;
+  }
+}
 
 const KIE_API_KEY = process.env.KIE_API_KEY;
 const NANO_BANANA_CREATE_URL = "https://api.kie.ai/api/v1/jobs/createTask";
@@ -467,7 +492,13 @@ export async function registerRoutes(
         if (isImage) {
           userParts.push({ inlineData: { data: imageBase64, mimeType: mime } });
         } else {
-          userParts.push({ text: `[Прикреплён файл: ${mime}. Учти его при генерации, но визуально обрабатывать его не нужно.]` });
+          const extractedText = await extractTextFromFile(imageBase64, mime);
+          if (extractedText) {
+            const truncated = extractedText.length > 15000 ? extractedText.substring(0, 15000) + "\n...[текст обрезан]" : extractedText;
+            userParts.push({ text: `\n\nСОДЕРЖИМОЕ ПРИКРЕПЛЁННОГО ДОКУМЕНТА (${mime}):\n---\n${truncated}\n---\n\nИспользуй этот текст из документа при создании/редактировании сайта.` });
+          } else {
+            userParts.push({ text: `[Прикреплён файл формата ${mime}, но его содержимое не удалось извлечь. Создай сайт на основе текстового запроса.]` });
+          }
         }
       } else if (isEditMode) {
         userParts.push({ text: prompt });
