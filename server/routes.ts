@@ -275,11 +275,17 @@ export async function registerRoutes(
   app.post("/api/enhance-prompt", bypassAuth, async (req, res) => {
     try {
       const { prompt } = req.body;
+      const user = req.user as any;
       if (!prompt || prompt.trim().length < 3) {
         return res.status(400).json({ message: "Введите описание для улучшения" });
       }
+      const ENHANCE_COST = 5;
+      if (user.credits < ENHANCE_COST) {
+        return res.status(402).json({ message: `Недостаточно токенов. Нужно ${ENHANCE_COST}, у вас ${user.credits}.` });
+      }
       const result = await researchAndEnhance(prompt);
-      res.json({ enhancedPrompt: result.enhancedPrompt, research: result.research });
+      await storage.updateUserCredits(user.id, user.credits - ENHANCE_COST);
+      res.json({ enhancedPrompt: result.enhancedPrompt, research: result.research, creditsUsed: ENHANCE_COST });
     } catch (err: any) {
       console.error("Enhance prompt error:", err.message);
       if (err.message === "RATE_LIMIT") {
