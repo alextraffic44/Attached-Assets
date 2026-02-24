@@ -84,62 +84,51 @@ document.querySelectorAll('form[data-lead-form]').forEach(form => {
 });
 Оборачивай формы в <form data-lead-form="имя_формы">.`;
 
-const PROMPT_ENHANCE_INSTRUCTION = `Ты — AI-улучшитель промптов для генерации веб-сайтов. Твоя задача — взять короткое описание пользователя и превратить его в детальный, профессиональный промпт для создания premium-сайта.
+const RESEARCH_AND_ENHANCE_PROMPT = `Ты выполняешь ДВЕ задачи одновременно:
 
-ПРАВИЛА УЛУЧШЕНИЯ:
-1. Проанализируй тему и определи идеальную эстетику для ниши
-2. Добавь конкретные дизайн-указания в стиле современных трендов:
-   - Skeuomorphic UI элементы (реалистичные тени, глубина, текстуры, стеклянные эффекты)
-   - Кастомные inline SVG анимации по теме (минимум 2 штуки — например, для кафе: анимация пара над чашкой; для недвижимости: рисующийся план этажа)
-   - Плавные CSS transitions и scroll-анимации через IntersectionObserver
-   - Многослойные тени (box-shadow с 2-3 уровнями), glassmorphism, noise-текстуры
-   - Микро-интеракции: hover-эффекты с подъёмом, scale, сменой теней
-   - Морфинг навбара: прозрачный → стеклянный при скролле
-3. Определи цветовую палитру (4 цвета: фон, текст, акцент/CTA, границы)
-4. Подбери стиль типографики (serif/sans-serif пара, подходящая нише)
-5. Опиши структуру: Hero (100dvh) + минимум 5-7 секций + Footer
-6. Добавь интерактивные элементы вместо статичных карточек (мини-дашборды, анимированные счётчики, слайдеры)
-7. Укажи стиль скругления (мягкий rounded-3xl для дружелюбных брендов, строгий rounded-sm для техно)
+ЗАДАЧА 1 — ИССЛЕДОВАНИЕ: Собери реальную информацию по теме из результатов поиска:
+- Основная информация, ключевые особенности (5-7), преимущества
+- Технические детали, факты и цифры, цитаты/отзывы
+- Ценообразование, целевая аудитория
+Пиши ТОЛЬКО факты из источников. НЕ придумывай.
 
-ФОРМАТ ОТВЕТА:
-Верни ТОЛЬКО улучшенный промпт на русском языке, без пояснений, без маркдаун-форматирования. Просто текст улучшенного промпта, готовый к отправке AI-генератору сайтов.
+ЗАДАЧА 2 — УЛУЧШЕНИЕ ПРОМПТА: На основе найденных фактов, создай детальный промпт для AI-генератора premium-сайта:
+- Skeuomorphic UI (реалистичные тени, глубина, стеклянные эффекты)
+- Кастомные inline SVG анимации по теме (минимум 2 штуки)
+- Плавные CSS transitions и scroll-анимации через IntersectionObserver
+- Многослойные тени (2-3 уровня), glassmorphism, noise-текстуры
+- Микро-интеракции: hover с подъёмом, scale, сменой теней
+- Морфинг навбара: прозрачный → стеклянный при скролле
+- Цветовую палитру (4 цвета), типографику, скругления
+- Hero (100dvh) + минимум 5-7 секций + Footer
+- Интерактивные элементы (счётчики, слайдеры, мини-дашборды)
 
-Промпт должен быть подробным (300-500 слов), но не содержать технических инструкций вроде "используй HTML/CSS" — только ДИЗАЙН и КОНТЕНТ.`;
+ФОРМАТ ОТВЕТА (строго!):
+===RESEARCH===
+[Структурированная информация из исследования]
+===PROMPT===
+[Улучшенный промпт 300-500 слов, только дизайн и контент, без технических инструкций вроде "используй HTML/CSS"]
 
-
-const RESEARCH_PROMPT = `Ты — аналитик-исследователь. Твоя задача — собрать максимум реальной информации по теме для создания веб-сайта.
-
-На основе предоставленных результатов поиска, составь подробную структурированную справку:
-
-1. ОСНОВНАЯ ИНФОРМАЦИЯ: Что это за продукт/услуга/тема? Официальное описание.
-2. КЛЮЧЕВЫЕ ОСОБЕННОСТИ: Минимум 5-7 реальных особенностей/функций с описанием
-3. ПРЕИМУЩЕСТВА: Реальные преимущества, подтверждённые источниками
-4. ТЕХНИЧЕСКИЕ ДЕТАЛИ: Технологии, характеристики, спецификации
-5. ФАКТЫ И ЦИФРЫ: Любые числа, статистика, даты
-6. ЦИТАТЫ/ОТЗЫВЫ: Реальные отзывы или высказывания, если найдены
-7. ЦЕНООБРАЗОВАНИЕ: Информация о ценах/тарифах, если доступна
-8. ЦЕЛЕВАЯ АУДИТОРИЯ: Для кого предназначен продукт
-
-Пиши ТОЛЬКО факты из источников. НЕ придумывай информацию. Если чего-то нет — так и напиши.
 Отвечай на русском языке.`;
 
-async function performWebResearch(query: string): Promise<string> {
+async function researchAndEnhance(query: string): Promise<{ research: string; enhancedPrompt: string }> {
   try {
-    console.log("Starting web research for:", query);
+    console.log("Starting combined research + enhancement for:", query);
 
-    const researchResult = await ai.models.generateContent({
+    const result = await ai.models.generateContent({
       model: "gemini-3.1-pro-preview",
-      contents: [{ role: "user", parts: [{ text: `Исследуй тему "${query}" для создания сайта. Найди реальную информацию минимум из 7 источников. Дай подробные факты, цифры, особенности, преимущества.` }] }],
+      contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nИсследуй эту тему для создания premium-сайта. Найди реальную информацию из интернета, затем создай улучшенный промпт для генерации сайта. Формат ответа: ===RESEARCH=== ... ===PROMPT=== ...` }] }],
       config: {
-        systemInstruction: RESEARCH_PROMPT,
+        systemInstruction: RESEARCH_AND_ENHANCE_PROMPT,
         tools: [{ googleSearch: {} }],
+        maxOutputTokens: 4096,
       },
     });
 
-    const researchText = researchResult.text || "";
-    console.log("Research completed, length:", researchText.length);
+    const fullText = result.text || "";
+    console.log("Research+Enhancement completed, length:", fullText.length);
 
-    const groundingMeta = (researchResult as any).candidates?.[0]?.groundingMetadata;
+    const groundingMeta = (result as any).candidates?.[0]?.groundingMetadata;
     let sources = "";
     if (groundingMeta?.groundingChunks) {
       sources = "\n\nИСТОЧНИКИ:\n";
@@ -150,40 +139,18 @@ async function performWebResearch(query: string): Promise<string> {
       }
     }
 
-    return researchText + sources;
+    const researchMatch = fullText.match(/===RESEARCH===([\s\S]*?)===PROMPT===/);
+    const promptMatch = fullText.match(/===PROMPT===([\s\S]*?)$/);
+
+    const research = (researchMatch?.[1]?.trim() || fullText) + sources;
+    const enhancedPrompt = promptMatch?.[1]?.trim() || query;
+
+    console.log("Research length:", research.length, "Enhanced prompt length:", enhancedPrompt.length);
+
+    return { research, enhancedPrompt: enhancedPrompt.length > 100 ? enhancedPrompt : query };
   } catch (err: any) {
-    console.error("Web research error:", err.message);
-    return `Не удалось выполнить исследование. Создай сайт на основе общих знаний о теме: "${query}"`;
-  }
-}
-
-async function enhancePrompt(userPrompt: string, researchData: string): Promise<string> {
-  try {
-    console.log("Enhancing prompt for:", userPrompt.substring(0, 100));
-
-    const contextPart = researchData 
-      ? `\n\nРЕЗУЛЬТАТЫ ИССЛЕДОВАНИЯ (используй для обогащения промпта реальными фактами):\n${researchData.substring(0, 5000)}`
-      : "";
-
-    const result = await ai.models.generateContent({
-      model: "gemini-3.1-pro-preview",
-      contents: [{ role: "user", parts: [{ text: `Описание пользователя: "${userPrompt}"${contextPart}\n\nУлучши этот промпт для генерации premium веб-сайта.` }] }],
-      config: {
-        systemInstruction: PROMPT_ENHANCE_INSTRUCTION,
-        maxOutputTokens: 2048,
-      },
-    });
-
-    const enhanced = result.text?.trim() || "";
-    console.log("Prompt enhanced, length:", enhanced.length);
-
-    if (enhanced.length > 100) {
-      return enhanced;
-    }
-    return userPrompt;
-  } catch (err: any) {
-    console.error("Prompt enhancement error:", err.message);
-    return userPrompt;
+    console.error("Research+Enhancement error:", err.message);
+    return { research: "", enhancedPrompt: query };
   }
 }
 
@@ -313,14 +280,11 @@ export async function registerRoutes(
       let enhancedPrompt = prompt;
 
       if (isNewSite) {
-        res.write(`data: ${JSON.stringify({ status: "Исследуем тему в интернете..." })}\n\n`);
-        researchData = await performWebResearch(prompt);
-        console.log("Research data length:", researchData.length);
-
-        res.write(`data: ${JSON.stringify({ status: "Улучшаем промпт с помощью AI..." })}\n\n`);
-        enhancedPrompt = await enhancePrompt(prompt, researchData);
-        console.log("Enhanced prompt preview:", enhancedPrompt.substring(0, 200));
-
+        res.write(`data: ${JSON.stringify({ status: "Исследуем тему и готовим дизайн-концепцию..." })}\n\n`);
+        const result = await researchAndEnhance(prompt);
+        researchData = result.research;
+        enhancedPrompt = result.enhancedPrompt;
+        console.log("Research+Enhancement done. Research:", researchData.length, "Prompt:", enhancedPrompt.substring(0, 200));
         res.write(`data: ${JSON.stringify({ status: "Генерируем сайт..." })}\n\n`);
       }
 
