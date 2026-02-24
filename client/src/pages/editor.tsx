@@ -209,7 +209,11 @@ export default function EditorPage() {
         credentials: "include",
       });
 
-      if (!response.ok) throw new Error("Ошибка генерации");
+      if (!response.ok) {
+        const errData = await response.json().catch(() => null);
+        const errMsg = errData?.message || "Ошибка генерации";
+        throw new Error(errMsg);
+      }
 
       const reader = response.body?.getReader();
       if (!reader) return;

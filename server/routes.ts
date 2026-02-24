@@ -322,7 +322,7 @@ export async function registerRoutes(
 
       const GENERATION_COST = 100;
       if (user.credits < GENERATION_COST) {
-        return res.status(403).json({ message: `Недостаточно токенов. Нужно ${GENERATION_COST}, у вас ${user.credits}` });
+        return res.status(402).json({ message: "Не хватает токенов для выполнения, пожалуйста пополните баланс." });
       }
 
       const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance } = req.body;
