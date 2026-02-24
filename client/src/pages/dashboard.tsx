@@ -28,6 +28,7 @@ import {
   FolderOpen,
   Coins,
   Inbox,
+  Wand2,
 } from "lucide-react";
 
 const SkeuoCard = ({ children, className = "", onClick = undefined }) => (
@@ -49,6 +50,8 @@ export default function DashboardPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [isEnhanced, setIsEnhanced] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
 
   const { data: userProjects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -71,7 +74,8 @@ export default function DashboardPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       setShowCreateModal(false);
       const prompt = selectedMode === "template" ? `Создай сайт: ${selectedTemplate}. ${description}` : description || title;
-      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}`);
+      const enhancedParam = isEnhanced ? "&enhanced=1" : "";
+      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}`);
     },
   });
 
@@ -299,16 +303,62 @@ export default function DashboardPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-gray-400 px-2">Описание</Label>
+                    <div className="flex items-center justify-between px-2">
+                      <Label className="text-xs font-bold uppercase tracking-widest text-gray-400">Описание</Label>
+                      {isEnhanced && (
+                        <span data-testid="text-enhanced-status" className="text-xs font-semibold text-emerald-500 flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" /> Улучшено AI
+                        </span>
+                      )}
+                    </div>
                     <Textarea 
                       placeholder="Опишите структуру, цвета и контент..."
                       value={description}
-                      onChange={e => setDescription(e.target.value)}
-                      className="min-h-[120px] rounded-2xl bg-gray-50 border border-gray-200 font-medium text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
+                      onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
+                      className={`min-h-[120px] rounded-2xl bg-gray-50 border font-medium text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all ${isEnhanced ? 'border-emerald-300 bg-emerald-50/30 min-h-[200px] text-sm' : 'border-gray-200'}`}
                     />
                   </div>
-                  <div className="flex gap-4 pt-4">
-                    <Button variant="ghost" className="h-14 rounded-2xl font-bold flex-1 text-gray-600 hover:bg-gray-100" onClick={() => setCreateStep("choose")}>Назад</Button>
+                  <Button
+                    data-testid="button-enhance-prompt"
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      if (!description.trim() || description.trim().length < 3) {
+                        toast({ title: "Введите описание", description: "Напишите хотя бы несколько слов для улучшения", variant: "destructive" });
+                        return;
+                      }
+                      setIsEnhancing(true);
+                      try {
+                        const res = await apiRequest("POST", "/api/enhance-prompt", { prompt: description });
+                        const data = await res.json();
+                        if (data.enhancedPrompt) {
+                          setDescription(data.enhancedPrompt);
+                          setIsEnhanced(true);
+                          toast({ title: "Промпт улучшен!", description: "Проверьте описание и нажмите «Создать проект»" });
+                        }
+                      } catch {
+                        toast({ title: "Ошибка", description: "Не удалось улучшить промпт", variant: "destructive" });
+                      } finally {
+                        setIsEnhancing(false);
+                      }
+                    }}
+                    disabled={isEnhancing || !description.trim()}
+                    className="w-full h-12 rounded-2xl font-bold text-sm border-2 border-dashed border-violet-300 text-violet-600"
+                  >
+                    {isEnhancing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        AI улучшает промпт...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="w-4 h-4 mr-2" />
+                        AI улучшение промпта
+                      </>
+                    )}
+                  </Button>
+                  <div className="flex gap-4 pt-2">
+                    <Button variant="ghost" className="h-14 rounded-2xl font-bold flex-1 text-gray-600 hover:bg-gray-100" onClick={() => { setCreateStep("choose"); setIsEnhanced(false); }}>Назад</Button>
                     <Button 
                       className="h-14 rounded-2xl font-extrabold text-lg flex-[2] shadow-xl shadow-primary/20"
                       onClick={() => createMutation.mutate()}

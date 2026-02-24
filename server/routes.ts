@@ -142,10 +142,14 @@ async function researchAndEnhance(query: string): Promise<{ research: string; en
     const researchMatch = fullText.match(/===RESEARCH===([\s\S]*?)===PROMPT===/);
     const promptMatch = fullText.match(/===PROMPT===([\s\S]*?)$/);
 
+    console.log("Parse result - researchMatch found:", !!researchMatch, "promptMatch found:", !!promptMatch);
+    console.log("Full response preview (first 500):", fullText.substring(0, 500));
+
     const research = (researchMatch?.[1]?.trim() || fullText) + sources;
     const enhancedPrompt = promptMatch?.[1]?.trim() || query;
 
     console.log("Research length:", research.length, "Enhanced prompt length:", enhancedPrompt.length);
+    console.log("Enhanced prompt preview:", enhancedPrompt.substring(0, 300));
 
     return { research, enhancedPrompt: enhancedPrompt.length > 100 ? enhancedPrompt : query };
   } catch (err: any) {
@@ -227,6 +231,20 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/enhance-prompt", bypassAuth, async (req, res) => {
+    try {
+      const { prompt } = req.body;
+      if (!prompt || prompt.trim().length < 3) {
+        return res.status(400).json({ message: "Введите описание для улучшения" });
+      }
+      const result = await researchAndEnhance(prompt);
+      res.json({ enhancedPrompt: result.enhancedPrompt, research: result.research });
+    } catch (err: any) {
+      console.error("Enhance prompt error:", err.message);
+      res.status(500).json({ message: "Ошибка улучшения промпта" });
+    }
+  });
+
   app.get("/api/projects/:id/messages", bypassAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
@@ -256,7 +274,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Недостаточно кредитов" });
       }
 
-      const { prompt, imageBase64, imageMimeType, activeFile } = req.body;
+      const { prompt, imageBase64, imageMimeType, activeFile, skipEnhance } = req.body;
       if (!prompt) {
         return res.status(400).json({ message: "Запрос обязателен" });
       }
@@ -279,12 +297,14 @@ export async function registerRoutes(
 
       let enhancedPrompt = prompt;
 
-      if (isNewSite) {
+      if (isNewSite && !skipEnhance) {
         res.write(`data: ${JSON.stringify({ status: "Исследуем тему и готовим дизайн-концепцию..." })}\n\n`);
         const result = await researchAndEnhance(prompt);
         researchData = result.research;
         enhancedPrompt = result.enhancedPrompt;
         console.log("Research+Enhancement done. Research:", researchData.length, "Prompt:", enhancedPrompt.substring(0, 200));
+        res.write(`data: ${JSON.stringify({ status: "Генерируем сайт..." })}\n\n`);
+      } else if (isNewSite && skipEnhance) {
         res.write(`data: ${JSON.stringify({ status: "Генерируем сайт..." })}\n\n`);
       }
 

@@ -141,9 +141,10 @@ export default function EditorPage() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const initialPrompt = urlParams.get("prompt");
+    const enhanced = urlParams.get("enhanced") === "1";
     if (initialPrompt && !project?.generatedCode && messages.length === 0) {
       setPrompt(initialPrompt);
-      setTimeout(() => handleGenerate(initialPrompt), 500);
+      setTimeout(() => handleGenerate(initialPrompt, enhanced), 500);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [project, messages.length]);
@@ -192,7 +193,7 @@ export default function EditorPage() {
     }
   }, [newPageName, projectId, allFiles, project, toast]);
 
-  const handleGenerate = useCallback(async (customPrompt?: string) => {
+  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean) => {
     const text = customPrompt || prompt;
     if (!text.trim() && !imageBase64) return;
 
@@ -205,7 +206,7 @@ export default function EditorPage() {
       const response = await fetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text, imageBase64, imageMimeType, activeFile }),
+        body: JSON.stringify({ prompt: text, imageBase64, imageMimeType, activeFile, skipEnhance: !!skipEnhance }),
         credentials: "include",
       });
 
