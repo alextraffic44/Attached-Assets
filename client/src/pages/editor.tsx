@@ -1063,7 +1063,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   onChange={e => setPrompt(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleGenerate())}
                   onPaste={handlePaste}
-                  className="min-h-[56px] max-h-[160px] resize-none rounded-2xl border-none bg-transparent font-medium pl-4 pr-20 py-4 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="min-h-[80px] max-h-[200px] resize-none rounded-2xl border-none bg-transparent font-medium pl-4 pr-20 py-4 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   disabled={isGenerating}
                   data-testid="input-prompt"
                 />
