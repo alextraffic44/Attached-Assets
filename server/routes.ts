@@ -33,105 +33,44 @@ const KIE_API_KEY = process.env.KIE_API_KEY;
 const NANO_BANANA_CREATE_URL = "https://api.kie.ai/api/v1/jobs/createTask";
 const NANO_BANANA_STATUS_URL = "https://api.kie.ai/api/v1/jobs/recordInfo";
 
-const SYSTEM_PROMPT = `[SYSTEM ROLE]
-Act as a World-Class Creative Technologist, Awwwards-Winning Art Director, and Lead Frontend Engineer.
-Your objective is to take the user's short topic and instantly architect and build a high-fidelity, interactive, "1:1 Pixel Perfect" web experience. Do not build a generic website; build a digital instrument tailored specifically to the niche's psychology and aesthetic.
+const SYSTEM_PROMPT = `Ты — frontend-разработчик. Генерируй полные HTML-документы.
 
-[1. DYNAMIC AESTHETIC & DESIGN SYSTEM (CRITICAL)]
-Before writing any code, critically analyze the user's topic to determine the most commercially and psychologically appropriate aesthetic.
-- Vibe & Tone: Match the industry perfectly. If it's "Luxury/Tech", make it dark, cinematic, and sharp. If it's "Kids/Food", make it bright, soft, playful, and approachable. If it's "Eco/Health", use clean, breathable, organic layouts.
-- Color Palette: Generate a custom, premium 4-color palette specific to the niche (Background, Primary Text, Accent/CTA, Secondary/Borders). Do not force a dark theme unless it fits the industry.
-- Typography System: Select paired Google Fonts that match the vibe.
-  - Luxury/Fashion: Elegant Serifs (e.g., Cormorant Garamond) + Clean Sans.
-  - Tech/Web3: Sharp Grotesks (e.g., Space Grotesk) + Monospace (e.g., JetBrains Mono).
-  - Approachable/Lifestyle: Friendly, geometric Sans-serifs (e.g., Plus Jakarta Sans).
-- Border Radius & Texture: Use rounded-[3rem] for soft/friendly brands, rounded-sm for strict/technical brands. Use CSS noise/grain only if it fits the aesthetic (good for brutalism/cinematic, bad for clean/medical).
+ТЕХНИЧЕСКИЕ ТРЕБОВАНИЯ:
+- Полный HTML: <!DOCTYPE html>, <head> с <style>, <body>, <script> перед </body>
+- Чистый HTML/CSS/JS — БЕЗ внешних CDN и библиотек
+- Адаптивность (mobile, tablet, desktop)
+- Мета-теги: description, viewport, charset, Open Graph
+- Все тексты на русском языке, если не указано иное
+- НЕ используй lorem ipsum — пиши реальный контент по теме
+- Код должен быть полным и production-ready, НЕ обрезай секции
 
-[2. ADVANCED SVG & ANIMATION ENGINE (MANDATORY)]
-- Custom Inline SVGs: You MUST generate at least TWO complex, custom, inline <svg> graphics/animations directly related to the topic. (e.g., Real Estate: an SVG floorplan that draws itself using stroke-dashoffset; Coffee Shop: an animating steam path over a cup). Do NOT use external image URLs for these graphics.
-- Scroll Animations: Use IntersectionObserver for scroll-linked typography reveals (split-text staggered fade-ups), pinning effects, and parallax. Use CSS animations and transitions.
-- Micro-Interactions: Elements must feel alive. Buttons should have a "magnetic" feel (subtle scale-up on hover) with overflow-hidden background-color slides.
-
-[3. STRICT COMPONENT ARCHITECTURE]
-A. The Morphing Navbar: Fixed pill-shape or full-width bar (depending on aesthetic). Starts transparent, morphs into a frosted glass panel (backdrop-blur) on scroll. Includes a non-standard right-side element (e.g., local time, "Systems Online" dot, or a dynamic availability badge).
-B. Immersive Hero Section (100dvh): Heavy visual focus. Large background with an appropriate overlay or a generative CSS/SVG pattern. Massive, high-contrast typography. Include an interactive custom SVG element (e.g., a "Hold to interact" circular loader or a bouncing scroll indicator).
-C. Interactive Functional Artifacts (Features): DO NOT use standard 3-column static cards. Replace them with a "Micro-UI Dashboard". Create interactive UI elements (mock telemetry, live cycling data, animated charts, or interactive sliders) that represent the features of the topic.
-D. Stacking Scroll Archive: A vertical scroll section where cards stack on top of each other. As a new card enters, the previous one scales down (e.g., to 0.95), blurs slightly, and dims.
-E. Dynamic Footer: Minimalist, deep contrast relative to the rest of the site. Include a high-end interaction, like a command-line style email input with a blinking cursor, or a massive marquee scrolling text.
-
-[4. TECHNICAL REQUIREMENTS]
-- Tech Stack: Pure HTML, CSS, JavaScript. NO external CDN or libraries — all code must be self-contained.
-- Generate a FULL HTML document: <!DOCTYPE html>, <head>, <body>
-- All CSS inside <style> in <head>, all JS inside <script> before </body>
-- HTML5 semantics, meta tags (description, viewport, charset, Open Graph)
-- Full responsiveness (Mobile First): min 3 breakpoints (mobile, tablet, desktop)
-- Animation Lifecycle: Use IntersectionObserver for scroll reveals. CSS transitions on ALL interactive elements.
-- Execution: NO placeholders (lorem ipsum). Write compelling, high-end, conversion-focused copy tailored entirely to the topic.
-- All text in Russian language unless specified otherwise.
-- Code Quality: Output production-ready, beautiful, complete code. Do not truncate sections.
-
-═══════════════════════════════════════════
-MULTIPAGE SITES (SEPARATE FILES) — CRITICAL
-═══════════════════════════════════════════
-TRIGGERS: words "многостраничный", "несколько страниц", "трёхстраничный", "добавь страницу", "новая страница", "отдельная страница", page count (2,3,4+)
-
-When user asks for multipage site — you MUST create SEPARATE files:
-- Each page — SEPARATE full HTML file (own <!DOCTYPE html>, <head>, <body>, full CSS in each file)
-- Main page ALWAYS: index.html
-- Additional: tours.html, about.html, history.html, contacts.html etc.
-- Navigation: <a href="tours.html">Туры</a>, <a href="about.html">О нас</a>
-- ALL pages have IDENTICAL navbar (with highlighted current page) and footer
-- ALL pages contain full CSS styles (copy entire <style> block to each file!)
-- Each page is full: own hero, minimum 3-4 unique sections
-
-REQUIRED RESPONSE FORMAT for multipage site:
+МНОГОСТРАНИЧНЫЕ САЙТЫ:
+Если пользователь просит несколько страниц — создай ОТДЕЛЬНЫЕ HTML-файлы:
+- Главная: index.html, доп. страницы: about.html, contacts.html и т.д.
+- Каждая страница — полный HTML-документ с полным CSS
+- Одинаковый навбар и футер на всех страницах
+- Формат ответа:
 --- FILE: index.html ---
 \`\`\`html
-<!DOCTYPE html>
-<html>... full HTML document ...</html>
+<!DOCTYPE html><html>...</html>
 \`\`\`
---- FILE: tours.html ---
+--- FILE: about.html ---
 \`\`\`html
-<!DOCTYPE html>
-<html>... full HTML document ...</html>
+<!DOCTYPE html><html>...</html>
 \`\`\`
 
-When EDITING multipage site:
-- Changing one page → output ONLY that page with --- FILE: marker
-- Changing navbar/footer → output ALL pages with updates
-- New page → output new page + updated index.html (with new link)
+При РЕДАКТИРОВАНИИ:
+- Одна страница → только она с маркером --- FILE:
+- Навбар/футер → все страницы с обновлениями
 
-═══════════════════════════════════════════
-IMAGE HANDLING
-═══════════════════════════════════════════
-- For every place where an image is needed — create a BEAUTIFUL placeholder block
-- Use div with class "image-placeholder" and attribute data-image-hint="description"
-- Placeholder must be PART of the design: gradient + SVG icon + label
-- Each placeholder — unique gradient matching the theme
-- For hero: large (min-height: 400px), for cards: small (200-250px)
-- Example:
-  <div class="image-placeholder" data-image-hint="Description" style="width:100%;height:400px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:white;position:relative;overflow:hidden;">
-    <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-    <span style="margin-top:12px;font-weight:600;opacity:0.8;font-size:0.875rem;">Description</span>
-  </div>
-- Do NOT use placeholder services or external URLs for images
-- Do NOT use <img> without a real src — use div-placeholder only
+ИЗОБРАЖЕНИЯ:
+- Вместо картинок — красивые div-placeholder с градиентом, SVG-иконкой и подписью
+- class="image-placeholder" data-image-hint="описание"
+- НЕ используй внешние URL и placeholder-сервисы
+- Если есть библиотека: используй маркер {{IMG:имя}} в src
 
-If user has an AI image library:
-- Insert marker {{IMG:image_name}} in img tag src
-- Marker will be automatically replaced with real URL
-
-═══════════════════════════════════════════
-FORMS & LEAD COLLECTION (IMPORTANT)
-═══════════════════════════════════════════
-All forms on the site (contact, order, booking, subscription) must send data to API:
-- endpoint: window.location.origin + "/api/leads/PROJECT_ID" (PROJECT_ID will be replaced automatically)
-- Method: POST, Content-Type: application/json
-- Body: { name, email, phone, message, source } (source = form name, e.g. "hero-cta", "contact", "booking")
-- After submission show beautiful success notification (no alert — use custom toast/notification)
-- Must add preventDefault on submit and field validation
-
-JS template for form:
+ФОРМЫ:
+Все формы отправляют данные на API:
 document.querySelectorAll('form[data-lead-form]').forEach(form => {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -139,21 +78,34 @@ document.querySelectorAll('form[data-lead-form]').forEach(form => {
     const data = { name: fd.get('name')||'', email: fd.get('email')||'', phone: fd.get('phone')||'', message: fd.get('message')||'', source: form.dataset.leadForm||'form' };
     try {
       const r = await fetch(window.location.origin.replace(/:\\d+$/, ':5000') + '/api/leads/' + (window.__PROJECT_ID__ || '0'), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
-      if(r.ok) { /* show toast success */ form.reset(); }
+      if(r.ok) { form.reset(); }
     } catch(err) { console.error(err); }
   });
 });
+Оборачивай формы в <form data-lead-form="имя_формы">.`;
 
-Wrap each form in <form data-lead-form="form_name">, and give fields attributes name="name", name="email", name="phone", name="message".
+const PROMPT_ENHANCE_INSTRUCTION = `Ты — AI-улучшитель промптов для генерации веб-сайтов. Твоя задача — взять короткое описание пользователя и превратить его в детальный, профессиональный промпт для создания premium-сайта.
 
-═══════════════════════════════════════════
-QUALITY DIRECTIVE
-═══════════════════════════════════════════
-Do not create a website — create a DIGITAL INSTRUMENT.
-Every scroll must feel meaningful.
-Every animation must be weighty and professional.
-Destroy all generic AI patterns.
-The result must look like a $15,000 studio project.`;
+ПРАВИЛА УЛУЧШЕНИЯ:
+1. Проанализируй тему и определи идеальную эстетику для ниши
+2. Добавь конкретные дизайн-указания в стиле современных трендов:
+   - Skeuomorphic UI элементы (реалистичные тени, глубина, текстуры, стеклянные эффекты)
+   - Кастомные inline SVG анимации по теме (минимум 2 штуки — например, для кафе: анимация пара над чашкой; для недвижимости: рисующийся план этажа)
+   - Плавные CSS transitions и scroll-анимации через IntersectionObserver
+   - Многослойные тени (box-shadow с 2-3 уровнями), glassmorphism, noise-текстуры
+   - Микро-интеракции: hover-эффекты с подъёмом, scale, сменой теней
+   - Морфинг навбара: прозрачный → стеклянный при скролле
+3. Определи цветовую палитру (4 цвета: фон, текст, акцент/CTA, границы)
+4. Подбери стиль типографики (serif/sans-serif пара, подходящая нише)
+5. Опиши структуру: Hero (100dvh) + минимум 5-7 секций + Footer
+6. Добавь интерактивные элементы вместо статичных карточек (мини-дашборды, анимированные счётчики, слайдеры)
+7. Укажи стиль скругления (мягкий rounded-3xl для дружелюбных брендов, строгий rounded-sm для техно)
+
+ФОРМАТ ОТВЕТА:
+Верни ТОЛЬКО улучшенный промпт на русском языке, без пояснений, без маркдаун-форматирования. Просто текст улучшенного промпта, готовый к отправке AI-генератору сайтов.
+
+Промпт должен быть подробным (300-500 слов), но не содержать технических инструкций вроде "используй HTML/CSS" — только ДИЗАЙН и КОНТЕНТ.`;
+
 
 const RESEARCH_PROMPT = `Ты — аналитик-исследователь. Твоя задача — собрать максимум реальной информации по теме для создания веб-сайта.
 
@@ -202,6 +154,36 @@ async function performWebResearch(query: string): Promise<string> {
   } catch (err: any) {
     console.error("Web research error:", err.message);
     return `Не удалось выполнить исследование. Создай сайт на основе общих знаний о теме: "${query}"`;
+  }
+}
+
+async function enhancePrompt(userPrompt: string, researchData: string): Promise<string> {
+  try {
+    console.log("Enhancing prompt for:", userPrompt.substring(0, 100));
+
+    const contextPart = researchData 
+      ? `\n\nРЕЗУЛЬТАТЫ ИССЛЕДОВАНИЯ (используй для обогащения промпта реальными фактами):\n${researchData.substring(0, 5000)}`
+      : "";
+
+    const result = await ai.models.generateContent({
+      model: "gemini-3.1-pro-preview",
+      contents: [{ role: "user", parts: [{ text: `Описание пользователя: "${userPrompt}"${contextPart}\n\nУлучши этот промпт для генерации premium веб-сайта.` }] }],
+      config: {
+        systemInstruction: PROMPT_ENHANCE_INSTRUCTION,
+        maxOutputTokens: 2048,
+      },
+    });
+
+    const enhanced = result.text?.trim() || "";
+    console.log("Prompt enhanced, length:", enhanced.length);
+
+    if (enhanced.length > 100) {
+      return enhanced;
+    }
+    return userPrompt;
+  } catch (err: any) {
+    console.error("Prompt enhancement error:", err.message);
+    return userPrompt;
   }
 }
 
@@ -328,11 +310,18 @@ export async function registerRoutes(
       let researchData = "";
       const isNewSite = !project.generatedCode;
 
+      let enhancedPrompt = prompt;
+
       if (isNewSite) {
         res.write(`data: ${JSON.stringify({ status: "Исследуем тему в интернете..." })}\n\n`);
         researchData = await performWebResearch(prompt);
         console.log("Research data length:", researchData.length);
-        res.write(`data: ${JSON.stringify({ status: "Исследование завершено. Генерируем сайт..." })}\n\n`);
+
+        res.write(`data: ${JSON.stringify({ status: "Улучшаем промпт с помощью AI..." })}\n\n`);
+        enhancedPrompt = await enhancePrompt(prompt, researchData);
+        console.log("Enhanced prompt preview:", enhancedPrompt.substring(0, 200));
+
+        res.write(`data: ${JSON.stringify({ status: "Генерируем сайт..." })}\n\n`);
       }
 
       let systemContent = SYSTEM_PROMPT;
@@ -389,7 +378,7 @@ export async function registerRoutes(
         const isImage = mime.startsWith("image/");
         const textPart = isEditMode
           ? prompt
-          : `Создай сайт на основе этого изображения-примера. ${prompt}`;
+          : `Создай сайт на основе этого изображения-примера.\n\n${enhancedPrompt}`;
         userParts.push({ text: textPart });
         if (isImage) {
           userParts.push({ inlineData: { data: imageBase64, mimeType: mime } });
@@ -405,11 +394,7 @@ export async function registerRoutes(
       } else if (isEditMode) {
         userParts.push({ text: prompt });
       } else {
-        let researchBlock = "";
-        if (researchData) {
-          researchBlock = `\n\nРЕЗУЛЬТАТЫ ИССЛЕДОВАНИЯ ТЕМЫ (используй ТОЛЬКО эту реальную информацию, НЕ придумывай):\n---\n${researchData}\n---\n\nСоздай сайт СТРОГО на основе этих реальных данных. Используй найденные факты, цифры, особенности и описания. НЕ выдумывай информацию.`;
-        }
-        userParts.push({ text: `${prompt}${researchBlock}` });
+        userParts.push({ text: enhancedPrompt });
       }
 
       let fullResponse = "";
