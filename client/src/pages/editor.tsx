@@ -75,6 +75,7 @@ export default function EditorPage() {
   const [showCode, setShowCode] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [imageMimeType, setImageMimeType] = useState<string>("image/png");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -162,7 +163,7 @@ export default function EditorPage() {
       const response = await fetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text, imageBase64, activeFile }),
+        body: JSON.stringify({ prompt: text, imageBase64, imageMimeType, activeFile }),
         credentials: "include",
       });
 
@@ -408,6 +409,7 @@ export default function EditorPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadedFileName(file.name);
+    setImageMimeType(file.type || "application/octet-stream");
     const reader = new FileReader();
     reader.onload = () => {
       const isImage = file.type.startsWith("image/");

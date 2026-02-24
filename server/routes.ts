@@ -380,7 +380,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Недостаточно кредитов" });
       }
 
-      const { prompt, imageBase64, activeFile } = req.body;
+      const { prompt, imageBase64, imageMimeType, activeFile } = req.body;
       if (!prompt) {
         return res.status(400).json({ message: "Запрос обязателен" });
       }
@@ -458,11 +458,17 @@ export async function registerRoutes(
       const userParts: any[] = [];
 
       if (imageBase64) {
+        const mime = imageMimeType || "image/png";
+        const isImage = mime.startsWith("image/");
         const textPart = isEditMode
           ? prompt
           : `Создай сайт на основе этого изображения-примера. ${prompt}`;
         userParts.push({ text: textPart });
-        userParts.push({ inlineData: { data: imageBase64, mimeType: "image/png" } });
+        if (isImage) {
+          userParts.push({ inlineData: { data: imageBase64, mimeType: mime } });
+        } else {
+          userParts.push({ text: `[Прикреплён файл: ${mime}. Учти его при генерации, но визуально обрабатывать его не нужно.]` });
+        }
       } else if (isEditMode) {
         userParts.push({ text: prompt });
       } else {
