@@ -330,6 +330,9 @@ export default function EditorPage() {
             setActiveFile(targetFile);
             queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
             queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+            if (data.newBalance !== undefined) {
+              queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
+            }
           }
           if (data.error) {
             toast({ title: "Ошибка генерации", description: data.error, variant: "destructive" });
@@ -578,6 +581,9 @@ export default function EditorPage() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.message);
+      if (data.newBalance !== undefined) {
+        queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
+      }
 
       const taskId = data.taskId;
       setImgStatus("waiting");

@@ -1,12 +1,13 @@
 import { db } from "./db";
-import { users, projects, projectMessages, projectImages, projectVersions, projectFiles, leads, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion, type ProjectFile, type InsertProjectFile, type Lead, type InsertLead } from "@shared/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { users, projects, projectMessages, projectImages, projectVersions, projectFiles, leads, creditTransactions, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion, type ProjectFile, type InsertProjectFile, type Lead, type InsertLead } from "@shared/schema";
+import { eq, desc, and, sql } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserCredits(id: number, credits: number): Promise<User | undefined>;
+  deductCredits(userId: number, amount: number, operation: string, idempotencyKey: string): Promise<{ success: boolean; newBalance: number; alreadyProcessed?: boolean }>;
 
   getProject(id: number): Promise<Project | undefined>;
   getProjectsByUser(userId: number): Promise<Project[]>;
@@ -56,6 +57,32 @@ export class DatabaseStorage implements IStorage {
   async updateUserCredits(id: number, credits: number): Promise<User | undefined> {
     const [user] = await db.update(users).set({ credits }).where(eq(users.id, id)).returning();
     return user;
+  }
+
+  async deductCredits(userId: number, amount: number, operation: string, idempotencyKey: string): Promise<{ success: boolean; newBalance: number; alreadyProcessed?: boolean }> {
+    const existing = await db.select().from(creditTransactions).where(eq(creditTransactions.idempotencyKey, idempotencyKey));
+    if (existing.length > 0) {
+      const user = await this.getUser(userId);
+      return { success: true, newBalance: user?.credits ?? 0, alreadyProcessed: true };
+    }
+
+    const result = await db.execute(
+      sql`UPDATE users SET credits = credits - ${amount} WHERE id = ${userId} AND credits >= ${amount} RETURNING credits`
+    );
+    const rows = result.rows as Array<{ credits: number }>;
+    if (!rows || rows.length === 0) {
+      const user = await this.getUser(userId);
+      return { success: false, newBalance: user?.credits ?? 0 };
+    }
+
+    await db.insert(creditTransactions).values({
+      userId,
+      amount,
+      operation,
+      idempotencyKey,
+    });
+
+    return { success: true, newBalance: rows[0].credits };
   }
 
   async getProject(id: number): Promise<Project | undefined> {

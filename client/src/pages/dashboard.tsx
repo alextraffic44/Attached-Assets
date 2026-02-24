@@ -459,6 +459,9 @@ export default function DashboardPage() {
                         try {
                           const res = await apiRequest("POST", "/api/enhance-prompt", { prompt: description });
                           const data = await res.json();
+                          if (data.newBalance !== undefined) {
+                            queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
+                          }
                           if (data.warning) {
                             toast({ title: "Внимание", description: data.warning });
                           } else if (data.enhancedPrompt) {
@@ -527,6 +530,9 @@ export default function DashboardPage() {
                         try {
                           const res = await apiRequest("POST", "/api/deep-research", { prompt: description });
                           const data = await res.json();
+                          if (data.newBalance !== undefined) {
+                            queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
+                          }
                           if (data.warning) {
                             toast({ title: "Внимание", description: data.warning });
                             setDeepResearchEnabled(false);

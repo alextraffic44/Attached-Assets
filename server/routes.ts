@@ -288,21 +288,22 @@ export async function registerRoutes(
 
   app.post("/api/enhance-prompt", bypassAuth, async (req, res) => {
     try {
-      const { prompt } = req.body;
+      const { prompt, idempotencyKey } = req.body;
       const user = req.user as any;
       if (!prompt || prompt.trim().length < 3) {
         return res.status(400).json({ message: "Введите описание для улучшения" });
       }
       const ENHANCE_COST = 5;
-      if (user.credits < ENHANCE_COST) {
-        return res.status(402).json({ message: `Недостаточно токенов. Нужно ${ENHANCE_COST}, у вас ${user.credits}.` });
+      const ikey = idempotencyKey || `enhance-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      const deduction = await storage.deductCredits(user.id, ENHANCE_COST, "enhance", ikey);
+      if (!deduction.success) {
+        return res.status(402).json({ message: `Недостаточно токенов. Нужно ${ENHANCE_COST}, у вас ${deduction.newBalance}.`, newBalance: deduction.newBalance });
       }
       const result = await enhancePromptOnly(prompt);
       if (result.success) {
-        await storage.updateUserCredits(user.id, user.credits - ENHANCE_COST);
-        res.json({ enhancedPrompt: result.enhancedPrompt, creditsUsed: ENHANCE_COST });
+        res.json({ enhancedPrompt: result.enhancedPrompt, creditsUsed: ENHANCE_COST, newBalance: deduction.newBalance });
       } else {
-        res.json({ enhancedPrompt: prompt, creditsUsed: 0, warning: "AI временно недоступен, использован оригинальный промпт" });
+        res.json({ enhancedPrompt: prompt, creditsUsed: 0, newBalance: deduction.newBalance, warning: "AI временно недоступен, использован оригинальный промпт" });
       }
     } catch (err: any) {
       console.error("Enhance prompt error:", err.message);
@@ -312,21 +313,22 @@ export async function registerRoutes(
 
   app.post("/api/deep-research", bypassAuth, async (req, res) => {
     try {
-      const { prompt } = req.body;
+      const { prompt, idempotencyKey } = req.body;
       const user = req.user as any;
       if (!prompt || prompt.trim().length < 3) {
         return res.status(400).json({ message: "Введите описание для исследования" });
       }
       const RESEARCH_COST = 10;
-      if (user.credits < RESEARCH_COST) {
-        return res.status(402).json({ message: `Недостаточно токенов. Нужно ${RESEARCH_COST}, у вас ${user.credits}.` });
+      const ikey = idempotencyKey || `research-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      const deduction = await storage.deductCredits(user.id, RESEARCH_COST, "deep-research", ikey);
+      if (!deduction.success) {
+        return res.status(402).json({ message: `Недостаточно токенов. Нужно ${RESEARCH_COST}, у вас ${deduction.newBalance}.`, newBalance: deduction.newBalance });
       }
       const result = await deepResearch(prompt);
       if (result.success) {
-        await storage.updateUserCredits(user.id, user.credits - RESEARCH_COST);
-        res.json({ research: result.research, creditsUsed: RESEARCH_COST });
+        res.json({ research: result.research, creditsUsed: RESEARCH_COST, newBalance: deduction.newBalance });
       } else {
-        res.json({ research: "", creditsUsed: 0, warning: "Deep Research временно недоступен" });
+        res.json({ research: "", creditsUsed: 0, newBalance: deduction.newBalance, warning: "Deep Research временно недоступен" });
       }
     } catch (err: any) {
       console.error("Deep research error:", err.message);
@@ -360,11 +362,8 @@ export async function registerRoutes(
       const user = req.user as any;
 
       const GENERATION_COST = 100;
-      if (user.credits < GENERATION_COST) {
-        return res.status(402).json({ message: "Не хватает токенов для выполнения, пожалуйста пополните баланс." });
-      }
 
-      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData } = req.body;
+      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey } = req.body;
       const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
         Array.isArray(images) && images.length > 0 ? images 
         : imageBase64 ? [{ base64: imageBase64, mimeType: imageMimeType || "image/png" }] 
@@ -378,6 +377,12 @@ export async function registerRoutes(
         role: "user",
         content: prompt,
       });
+
+      const genIkey = idempotencyKey || `gen-${project.id}-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      const genDeduction = await storage.deductCredits(user.id, GENERATION_COST, "generate", genIkey);
+      if (!genDeduction.success) {
+        return res.status(402).json({ message: `Не хватает токенов. Нужно ${GENERATION_COST}, у вас ${genDeduction.newBalance}.`, newBalance: genDeduction.newBalance });
+      }
 
       const projectImgs = await storage.getProjectImages(project.id);
 
@@ -639,11 +644,9 @@ export async function registerRoutes(
         content: aiTextReply || "Сайт обновлён",
       });
 
-      await storage.updateUserCredits(user.id, user.credits - GENERATION_COST);
-
       const allFiles = await storage.getProjectFiles(project.id);
       const editedFileCode = editingFile !== "index.html" ? allFiles.find(f => f.filename === editingFile)?.code : mainHtmlCode;
-      res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, editedFile: editingFile, editedCode: editedFileCode || mainHtmlCode, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })), creditsUsed: GENERATION_COST })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, editedFile: editingFile, editedCode: editedFileCode || mainHtmlCode, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })), creditsUsed: GENERATION_COST, newBalance: genDeduction.newBalance })}\n\n`);
       res.end();
     } catch (err: any) {
       console.error("Generation error:", err?.message || err);
@@ -669,13 +672,16 @@ export async function registerRoutes(
     try {
       const IMAGE_COST = 15;
       const user = req.user as any;
-      if (user.credits < IMAGE_COST) {
-        return res.status(403).json({ message: `Недостаточно токенов. Нужно ${IMAGE_COST}, у вас ${user.credits}` });
-      }
 
-      const { prompt, imageSize = "16:9", outputFormat = "png" } = req.body;
+      const { prompt, imageSize = "16:9", outputFormat = "png", idempotencyKey } = req.body;
       if (!prompt) {
         return res.status(400).json({ message: "Промпт обязателен" });
+      }
+
+      const imgIkey = idempotencyKey || `img-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      const deduction = await storage.deductCredits(user.id, IMAGE_COST, "image", imgIkey);
+      if (!deduction.success) {
+        return res.status(402).json({ message: `Недостаточно токенов. Нужно ${IMAGE_COST}, у вас ${deduction.newBalance}`, newBalance: deduction.newBalance });
       }
 
       const createResp = await fetch(NANO_BANANA_CREATE_URL, {
@@ -701,8 +707,7 @@ export async function registerRoutes(
         return res.status(500).json({ message: createBody.msg || "Ошибка создания задачи" });
       }
 
-      await storage.updateUserCredits(user.id, user.credits - IMAGE_COST);
-      res.json({ taskId: createBody.data.taskId });
+      res.json({ taskId: createBody.data.taskId, newBalance: deduction.newBalance });
     } catch (err: any) {
       console.error("Image generation error:", err);
       res.status(500).json({ message: "Ошибка генерации изображения" });

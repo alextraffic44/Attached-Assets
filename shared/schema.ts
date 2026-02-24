@@ -103,6 +103,17 @@ export const insertProjectFileSchema = createInsertSchema(projectFiles).omit({
 export type ProjectFile = typeof projectFiles.$inferSelect;
 export type InsertProjectFile = z.infer<typeof insertProjectFileSchema>;
 
+export const creditTransactions = pgTable("credit_transactions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  amount: integer("amount").notNull(),
+  operation: text("operation").notNull(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type CreditTransaction = typeof creditTransactions.$inferSelect;
+
 export const leads = pgTable("leads", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull(),
