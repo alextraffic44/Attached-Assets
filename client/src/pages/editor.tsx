@@ -118,6 +118,8 @@ export default function EditorPage() {
   });
 
   const [showVersions, setShowVersions] = useState(false);
+  const [addPageOpen, setAddPageOpen] = useState(false);
+  const [newPageName, setNewPageName] = useState("");
 
   const { data: projectFiles = [] } = useQuery<ProjectFile[]>({
     queryKey: ["/api/projects", projectId, "files"],
@@ -149,6 +151,36 @@ export default function EditorPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleAddPage = useCallback(async () => {
+    let name = newPageName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    if (!name) return;
+    if (!name.endsWith(".html")) name += ".html";
+    if (name === "index.html" || allFiles.some(f => f.filename === name)) {
+      toast({ title: "Ошибка", description: "Страница с таким именем уже существует", variant: "destructive" });
+      return;
+    }
+    try {
+      const baseCode = project?.generatedCode || "";
+      const styleMatch = baseCode.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+      const navMatch = baseCode.match(/<nav[^>]*>([\s\S]*?)<\/nav>/i);
+      const footerMatch = baseCode.match(/<footer[^>]*>([\s\S]*?)<\/footer>/i);
+      const template = `<!DOCTYPE html>\n<html lang="ru">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${name.replace(".html", "")}</title>\n${styleMatch ? `<style>${styleMatch[1]}</style>` : ""}\n</head>\n<body>\n${navMatch ? navMatch[0] : ""}\n\n<section style="min-height:80vh;display:flex;align-items:center;justify-content:center;padding:4rem 2rem">\n<div style="text-align:center;max-width:800px">\n<h1>${name.replace(".html", "").charAt(0).toUpperCase() + name.replace(".html", "").slice(1)}</h1>\n<p>Содержимое страницы. Опишите в чате, что здесь разместить.</p>\n</div>\n</section>\n\n${footerMatch ? footerMatch[0] : ""}\n</body>\n</html>`;
+      await fetch(`/api/projects/${projectId}/files/${name}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ code: template }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+      setActiveFile(name);
+      setAddPageOpen(false);
+      setNewPageName("");
+      toast({ title: "Готово", description: `Страница ${name} создана` });
+    } catch {
+      toast({ title: "Ошибка", description: "Не удалось создать страницу", variant: "destructive" });
+    }
+  }, [newPageName, projectId, allFiles, project, toast]);
 
   const handleGenerate = useCallback(async (customPrompt?: string) => {
     const text = customPrompt || prompt;
@@ -958,7 +990,6 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
         </button>
 
         <SkeuoPanel className="flex-1 relative bg-slate-100 dark:bg-black flex flex-col overflow-hidden">
-          {allFiles.length > 1 && (
             <div className="flex items-center gap-1 px-4 pt-3 pb-1 overflow-x-auto shrink-0">
               {allFiles.map(f => (
                 <button
@@ -972,8 +1003,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   {f.filename}
                 </button>
               ))}
+              <button
+                onClick={() => setAddPageOpen(true)}
+                className="flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-700 transition-all shrink-0"
+                title="Добавить страницу"
+                data-testid="button-add-page"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             </div>
-          )}
           <div className="flex-1 p-4 overflow-hidden">
             {showCode ? (
               <div className="w-full h-full p-6 bg-slate-900 rounded-[1.5rem] shadow-skeuo-inner overflow-auto">
@@ -1358,6 +1396,32 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 </Button>
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addPageOpen} onOpenChange={setAddPageOpen}>
+        <DialogContent className="sm:max-w-sm" aria-describedby="add-page-description">
+          <DialogHeader>
+            <DialogTitle>Новая страница</DialogTitle>
+            <DialogDescription id="add-page-description">Введите имя файла для новой страницы</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 pt-2">
+            <div className="flex items-center gap-2">
+              <Input
+                value={newPageName}
+                onChange={(e) => setNewPageName(e.target.value)}
+                placeholder="about"
+                className="flex-1"
+                data-testid="input-new-page-name"
+                onKeyDown={(e) => { if (e.key === "Enter") handleAddPage(); }}
+              />
+              <span className="text-sm text-muted-foreground">.html</span>
+            </div>
+            <Button onClick={handleAddPage} disabled={!newPageName.trim()} data-testid="button-confirm-add-page">
+              <Plus className="w-4 h-4 mr-2" />
+              Создать
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
