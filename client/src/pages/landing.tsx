@@ -1,700 +1,122 @@
-import { motion, useScroll, useTransform, useInView } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { useRef, useEffect, useState } from "react";
-import {
-  Sparkles,
-  Zap,
-  Code2,
-  Layers,
-  ArrowRight,
-  Check,
-  Globe,
-  Cpu,
-  MousePointer2,
-  MessageSquare,
-  Image,
-  Eye,
-  Wand2,
-  Download,
-  ChevronRight,
-} from "lucide-react";
 
-const fadeInUp = {
-  hidden: { opacity: 0, y: 30 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] } },
-};
+const LANDING_CSS: string = "        :root {\n            /* Premium Apple-style Minimalist Palette */\n            --bg-main: #FBFBFD;\n            --bg-card: #FFFFFF;\n            --text-main: #1D1D1F;\n            --text-muted: #86868B;\n            --border-light: rgba(0, 0, 0, 0.04);\n            --border-strong: rgba(0, 0, 0, 0.08);\n            \n            /* Rainbow Gradient */\n            --rainbow-grad: linear-gradient(90deg, #FF4242, #A5FF42, #42A5FF, #42E6FF, #B742FF, #FF4242);\n            \n            /* Typography */\n            --font-main: -apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"SF Pro Text\", \"Helvetica Neue\", Helvetica, Arial, sans-serif;\n            --font-mono: \"SF Mono\", \"Menlo\", \"Monaco\", \"Consolas\", monospace;\n        }\n\n        /* Reset & Base */\n        * {\n            margin: 0;\n            padding: 0;\n            box-sizing: border-box;\n        }\n\n        body {\n            font-family: var(--font-main);\n            background-color: var(--bg-main);\n            color: var(--text-main);\n            line-height: 1.47059;\n            font-weight: 400;\n            letter-spacing: -0.015em;\n            overflow-x: hidden;\n            -webkit-font-smoothing: antialiased;\n            -moz-osx-font-smoothing: grayscale;\n        }\n\n        /* Ambient Global Glow */\n        body::before {\n            content: \"\";\n            position: fixed;\n            top: -50%; left: -50%;\n            width: 200%; height: 200%;\n            background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.5), transparent 60%);\n            pointer-events: none;\n            z-index: 0;\n            animation: pulseAmbient 10s ease-in-out infinite alternate;\n        }\n\n        @keyframes pulseAmbient {\n            0% { transform: scale(1); opacity: 0.5; }\n            100% { transform: scale(1.2); opacity: 1; }\n        }\n\n        ::selection {\n            background-color: rgba(66, 165, 255, 0.2);\n            color: var(--text-main);\n        }\n\n        h1, h2, h3, h4 {\n            font-weight: 600;\n            letter-spacing: -0.03em;\n            line-height: 1.1;\n            color: var(--text-main);\n        }\n\n        .heading-xl {\n            font-size: clamp(3.5rem, 8vw, 6.5rem);\n            margin-bottom: 1.5rem;\n            letter-spacing: -0.06em;\n            font-weight: 700;\n        }\n\n        .heading-lg {\n            font-size: clamp(2.5rem, 5vw, 4rem);\n            margin-bottom: 1.2rem;\n            letter-spacing: -0.04em;\n        }\n\n        .text-gradient {\n            background: var(--rainbow-grad);\n            background-size: 200% auto;\n            animation: rainbow 4s linear infinite;\n            -webkit-background-clip: text;\n            -webkit-text-fill-color: transparent;\n            display: inline-block;\n        }\n\n        .subtitle {\n            font-size: clamp(1.2rem, 2.5vw, 1.5rem);\n            color: var(--text-muted);\n            margin-bottom: 3rem;\n            max-width: 700px;\n            font-weight: 400;\n            letter-spacing: -0.015em;\n            line-height: 1.5;\n        }\n\n        /* Layout */\n        .container {\n            width: 100%;\n            max-width: 1100px;\n            margin: 0 auto;\n            padding: 0 2rem;\n            position: relative;\n            z-index: 2;\n        }\n\n        section {\n            padding: 10rem 0;\n            position: relative;\n        }\n\n        /* Living Background Wrapper (Светло-жемчужный перламутр) */\n        .living-bg-wrapper {\n            position: relative;\n            background: linear-gradient(120deg, #ffffff 0%, #faf8ff 25%, #f0f4f8 50%, #fffaf5 75%, #ffffff 100%);\n            background-size: 400% 400%;\n            animation: pearlShine 20s ease infinite;\n            z-index: 1;\n            overflow: hidden;\n        }\n\n        @keyframes pearlShine {\n            0% { background-position: 0% 50%; }\n            50% { background-position: 100% 50%; }\n            100% { background-position: 0% 50%; }\n        }\n\n        /* Мерцающие мелкие искры (жемчужные, серебристые, легкие) */\n        .living-bg-wrapper::before,\n        .living-bg-wrapper::after {\n            content: '';\n            position: absolute;\n            inset: -100px;\n            z-index: 0;\n            pointer-events: none;\n            background-repeat: repeat;\n        }\n\n        .living-bg-wrapper::before {\n            background-image: url(\"data:image/svg+xml,%3Csvg width='150' height='150' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='30' cy='30' r='1.5' fill='%23e0c3fc' opacity='0.8'/%3E%3Ccircle cx='100' cy='60' r='1' fill='%238ec5fc' opacity='0.9'/%3E%3Ccircle cx='60' cy='120' r='1.8' fill='%23ffd1ff' opacity='0.7'/%3E%3Ccircle cx='130' cy='100' r='1.2' fill='%23d4fc79' opacity='0.8'/%3E%3C/svg%3E\");\n            animation: floatSparkles 12s ease-in-out infinite alternate;\n        }\n\n        .living-bg-wrapper::after {\n            background-image: url(\"data:image/svg+xml,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='100' cy='40' r='1' fill='%23a1c4fd' opacity='0.9'/%3E%3Ccircle cx='160' cy='150' r='1.5' fill='%23ffecd2' opacity='0.7'/%3E%3Ccircle cx='40' cy='180' r='1.8' fill='%23cfd9df' opacity='0.8'/%3E%3C/svg%3E\");\n            animation: floatSparklesAlt 15s ease-in-out infinite alternate-reverse;\n        }\n\n        @keyframes floatSparkles {\n            0% { transform: translateY(0) scale(0.8); opacity: 0.1; }\n            50% { transform: translateY(-50px) scale(1.2); opacity: 0.6; }\n            100% { transform: translateY(-100px) scale(0.8); opacity: 0.1; }\n        }\n\n        @keyframes floatSparklesAlt {\n            0% { transform: translateY(0) scale(0.8); opacity: 0.1; }\n            50% { transform: translateY(-70px) scale(1.3); opacity: 0.5; }\n            100% { transform: translateY(-140px) scale(0.8); opacity: 0.1; }\n        }\n\n        /* Glass Cards */\n        .glass-panel {\n            background: rgba(255, 255, 255, 0.65);\n            backdrop-filter: blur(24px);\n            -webkit-backdrop-filter: blur(24px);\n            border: 1px solid rgba(255, 255, 255, 0.8);\n            border-radius: 24px;\n            padding: 3rem;\n            transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);\n            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);\n            position: relative;\n            z-index: 1;\n        }\n\n        .glass-panel:hover {\n            transform: translateY(-4px) scale(1.005);\n            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.08);\n            background: rgba(255, 255, 255, 0.8);\n        }\n\n        /* Interactive Flashlight Effect */\n        .flashlight-card {\n            position: relative;\n            overflow: hidden;\n            isolation: isolate;\n        }\n\n        .flashlight-card::before {\n            content: \"\";\n            position: absolute;\n            inset: 0;\n            border-radius: inherit;\n            background: radial-gradient(\n                700px circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px),\n                rgba(240, 244, 248, 0.6),\n                transparent 40%\n            );\n            z-index: 0;\n            pointer-events: none;\n            opacity: 0;\n            transition: opacity 0.3s ease;\n        }\n\n        .flashlight-card::after {\n            content: \"\";\n            position: absolute;\n            inset: -1px;\n            border-radius: inherit;\n            background: radial-gradient(\n                500px circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px),\n                rgba(255, 255, 255, 0.6),\n                transparent 40%\n            );\n            z-index: -1;\n            pointer-events: none;\n            opacity: 0;\n            transition: opacity 0.3s;\n        }\n\n        #process-grid:hover .flashlight-card::before,\n        #process-grid:hover .flashlight-card::after {\n            opacity: 1;\n        }\n\n        .flashlight-card > * {\n            position: relative;\n            z-index: 2;\n        }\n\n        /* Buttons */\n        .magic-btn {\n            display: inline-flex;\n            align-items: center;\n            justify-content: center;\n            white-space: nowrap;\n            border-radius: 0.5rem;\n            font-size: 0.95rem;\n            font-weight: 500;\n            transition: transform 0.2s ease, opacity 0.2s ease;\n            cursor: pointer;\n            position: relative;\n            color: var(--text-main);\n            text-decoration: none;\n            height: 3rem;\n            padding: 0 1.25rem;\n            z-index: 1;\n            border: calc(0.08 * 1rem) solid transparent;\n            background: \n                linear-gradient(#fff, #fff) padding-box,\n                var(--rainbow-grad) border-box;\n            background-size: 200% auto;\n            animation: rainbow 3s linear infinite;\n        }\n\n        .magic-btn::before {\n            content: '';\n            position: absolute;\n            bottom: -20%;\n            left: 50%;\n            z-index: -1;\n            height: 20%;\n            width: 60%;\n            transform: translateX(-50%);\n            background: var(--rainbow-grad);\n            background-size: 200% auto;\n            animation: rainbow 3s linear infinite;\n            filter: blur(calc(0.8 * 1rem));\n        }\n\n        .magic-btn:hover { transform: scale(1.05); }\n        .magic-btn:active { transform: scale(0.95); }\n\n        @keyframes rainbow {\n            0% { background-position: 0% 50%; }\n            100% { background-position: 200% 50%; }\n        }\n\n        .btn-outline {\n            display: inline-flex;\n            align-items: center;\n            justify-content: center;\n            padding: 0.8rem 1.8rem;\n            border-radius: 100px;\n            font-weight: 500;\n            font-size: 0.95rem;\n            text-decoration: none;\n            cursor: pointer;\n            background: rgba(0, 0, 0, 0.03);\n            color: var(--text-main);\n            border: none;\n            transition: all 0.3s ease;\n        }\n\n        .btn-outline:hover { background: rgba(0, 0, 0, 0.08); }\n\n        /* Navbar */\n        header {\n            position: fixed;\n            top: 0; left: 0; right: 0;\n            z-index: 1000;\n            padding: 1rem 0;\n            background: rgba(251, 251, 253, 0.8);\n            backdrop-filter: saturate(180%) blur(20px);\n            -webkit-backdrop-filter: saturate(180%) blur(20px);\n            border-bottom: 1px solid var(--border-light);\n            transition: all 0.3s;\n        }\n\n        .nav-container {\n            display: flex;\n            justify-content: space-between;\n            align-items: center;\n        }\n\n        .logo {\n            font-size: 1.3rem;\n            font-weight: 600;\n            color: var(--text-main);\n            text-decoration: none;\n            display: flex;\n            align-items: center;\n            gap: 0.6rem;\n            letter-spacing: -0.02em;\n        }\n\n        .logo-svg { width: 32px; height: 32px; display: block; }\n        .logo-code { stroke-dasharray: 20; animation: dash-type 2.5s steps(4, end) infinite alternate; }\n        .logo-cursor { animation: blink-cursor 1s step-end infinite; }\n\n        @keyframes dash-type { 0% { stroke-dashoffset: 20; } 100% { stroke-dashoffset: 0; } }\n        @keyframes blink-cursor { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }\n\n        .nav-links { display: flex; gap: 2.5rem; }\n        \n        .nav-links a { \n            color: var(--text-muted); \n            text-decoration: none; \n            font-weight: 500; \n            font-size: 0.95rem; \n            transition: color 0.3s; \n        }\n        \n        /* Градиентный ховер для ссылок меню */\n        .nav-links a:hover { \n            background: var(--rainbow-grad);\n            background-size: 200% auto;\n            animation: rainbow 4s linear infinite;\n            -webkit-background-clip: text;\n            -webkit-text-fill-color: transparent;\n            color: transparent;\n        }\n\n        /* Градиентный ховер для кнопки Войти */\n        .nav-login span {\n            display: inline-block;\n            transition: all 0.3s;\n        }\n        .nav-login:hover span {\n            background: var(--rainbow-grad);\n            background-size: 200% auto;\n            animation: rainbow 4s linear infinite;\n            -webkit-background-clip: text;\n            -webkit-text-fill-color: transparent;\n            color: transparent;\n        }\n\n        /* Hero Section */\n        .hero {\n            min-height: 100vh;\n            display: flex;\n            align-items: center;\n            padding-top: 140px;\n            text-align: center;\n            overflow: hidden;\n            background: radial-gradient(circle at 50% -20%, #ffffff 0%, transparent 70%);\n            position: relative;\n            z-index: 2;\n        }\n\n        .hero-content {\n            position: relative;\n            z-index: 10;\n            display: flex;\n            flex-direction: column;\n            align-items: center;\n        }\n\n        /* Hero Animation Window (Dark Theme for Code) */\n        .hero-window {\n            margin-top: 5rem;\n            width: 100%;\n            max-width: 860px;\n            height: 420px; \n            background: #1D1D1F;\n            border: 1px solid var(--border-strong);\n            border-radius: 16px;\n            box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.2);\n            display: flex;\n            flex-direction: column;\n            text-align: left;\n            overflow: hidden;\n            position: relative;\n        }\n\n        .mac-header {\n            padding: 1rem 1.2rem;\n            display: flex;\n            gap: 8px;\n            background: #252528;\n            border-bottom: 1px solid #333333;\n            align-items: center;\n        }\n\n        .mac-dot { width: 12px; height: 12px; border-radius: 50%; }\n\n        /* Advanced Slider Section */\n        .slider-container {\n            position: relative;\n            width: 100%;\n            max-width: 1000px;\n            margin: 0 auto;\n            border-radius: 24px;\n            overflow: hidden;\n            box-shadow: 0 30px 60px rgba(0,0,0,0.1), 0 0 0 1px var(--border-light);\n            aspect-ratio: 16 / 10;\n            background: transparent;\n        }\n\n        @media (max-width: 768px) { .slider-container { aspect-ratio: 4 / 3; } }\n\n        .slide {\n            position: absolute;\n            top: 0; left: 0;\n            width: 100%; height: 100%;\n            opacity: 0;\n            transform: scale(1.15);\n            filter: blur(15px);\n            clip-path: inset(15% 15% 15% 15% round 24px);\n            transition: all 1.2s cubic-bezier(0.19, 1, 0.22, 1);\n            pointer-events: none;\n        }\n\n        .slide.active {\n            opacity: 1;\n            transform: scale(1);\n            filter: blur(0);\n            clip-path: inset(0% 0% 0% 0% round 0px);\n            pointer-events: auto;\n            z-index: 2;\n        }\n\n        .slide img {\n            width: 100%; height: 100%;\n            object-fit: cover; object-position: top;\n        }\n\n        .slider-nav {\n            position: absolute;\n            bottom: 24px; left: 50%;\n            transform: translateX(-50%);\n            display: flex; gap: 12px; z-index: 10;\n            background: rgba(0, 0, 0, 0.4);\n            padding: 8px 16px; border-radius: 100px;\n            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);\n        }\n\n        .slider-dot {\n            width: 8px; height: 8px; border-radius: 50%;\n            background: rgba(255, 255, 255, 0.4);\n            cursor: pointer; transition: all 0.3s;\n        }\n\n        .slider-dot:hover { background: rgba(255, 255, 255, 0.8); }\n        .slider-dot.active { background: #fff; transform: scale(1.5); }\n\n        .slider-btn {\n            position: absolute; top: 50%; transform: translateY(-50%);\n            width: 50px; height: 50px; border-radius: 50%;\n            background: rgba(255, 255, 255, 0.9); border: none;\n            box-shadow: 0 4px 20px rgba(0,0,0,0.1);\n            display: flex; align-items: center; justify-content: center;\n            cursor: pointer; z-index: 10; transition: all 0.3s;\n            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);\n        }\n\n        .slider-btn:hover { background: #fff; transform: translateY(-50%) scale(1.1); }\n        .slider-btn.prev { left: 24px; }\n        .slider-btn.next { right: 24px; }\n        .slider-btn svg { width: 24px; height: 24px; stroke: var(--text-main); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }\n\n        /* Bento Grid */\n        .bento-grid {\n            display: grid;\n            grid-template-columns: repeat(12, 1fr);\n            gap: 1.5rem;\n        }\n\n        .bento-item {\n            grid-column: span 12;\n            display: flex;\n            flex-direction: column;\n            gap: 1.5rem;\n        }\n\n        @media (min-width: 768px) {\n            .bento-item { grid-column: span 6; }\n            .bento-item.span-full { grid-column: span 12; flex-direction: row; align-items: center; }\n            .bento-item.span-8 { grid-column: span 8; }\n            .bento-item.span-6 { grid-column: span 6; }\n            .bento-item.span-4 { grid-column: span 4; }\n        }\n\n        .bento-icon {\n            width: 48px; height: 48px; border-radius: 12px;\n            background: rgba(255, 255, 255, 0.8); display: flex; align-items: center; justify-content: center;\n            margin-bottom: 0.5rem; transition: all 0.4s ease;\n            box-shadow: 0 2px 10px rgba(0,0,0,0.03);\n        }\n\n        .glass-panel:hover .bento-icon {\n            background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transform: scale(1.05);\n        }\n\n        .bento-icon svg { width: 24px; height: 24px; stroke: var(--text-main); transition: all 0.4s ease; }\n        .bento-item h3 { font-size: 1.5rem; }\n        .bento-item p { color: var(--text-muted); font-size: 1.05rem; line-height: 1.5; }\n\n        /* Footer */\n        footer { border-top: 1px solid rgba(0, 0, 0, 0.05); padding: 4rem 0 2rem; background: var(--bg-card); position: relative; z-index: 2; }\n        .footer-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 2rem; margin-bottom: 3rem; }\n        .socials { display: flex; gap: 1rem; }\n        .socials a { color: var(--text-muted); transition: color 0.3s; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-main); }\n        .socials a:hover { color: var(--text-main); background: var(--border-strong); }\n        .copyright { text-align: center; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border-light); padding-top: 2rem; }\n\n        /* Animations */\n        .reveal { opacity: 0; transform: translateY(30px); transition: all 1s cubic-bezier(0.2, 0.8, 0.2, 1); }\n        .reveal.active { opacity: 1; transform: translateY(0); }\n\n        /* Mobile Adjustments */\n        @media (max-width: 992px) { section { padding: 7rem 0; } }\n        @media (max-width: 768px) {\n            .nav-links { display: none; }\n            section { padding: 5rem 0; }\n            .bento-item.span-8, .bento-item.span-6, .bento-item.span-4 { grid-column: span 12; }\n            .hero { padding-top: 100px; }\n            .magic-badge { display: none; }\n            .heading-xl { font-size: 3rem; }\n            .hero-window { height: 350px; }";
 
-const staggerContainer = {
-  visible: { transition: { staggerChildren: 0.12 } },
-};
+const LANDING_HTML: string = "\n    <!-- Header -->\n    <header style=\"padding: 1rem 0px; box-shadow: none;\">\n        <div class=\"container nav-container\">\n            <a href=\"#\" class=\"logo\">\n                <svg viewBox=\"0 0 32 32\" class=\"logo-svg\" stroke=\"currentColor\" stroke-width=\"2\" fill=\"none\">\n                    <defs>\n                        <linearGradient id=\"logo-grad\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"100%\">\n                            <stop offset=\"0%\"><animate attributeName=\"stop-color\" values=\"#FF4242; #A5FF42; #42A5FF; #42E6FF; #B742FF; #FF4242\" dur=\"5s\" repeatCount=\"indefinite\"></animate></stop>\n                            <stop offset=\"100%\"><animate attributeName=\"stop-color\" values=\"#B742FF; #FF4242; #A5FF42; #42A5FF; #42E6FF; #B742FF\" dur=\"5s\" repeatCount=\"indefinite\"></animate></stop>\n                        </linearGradient>\n                    </defs>\n                    <rect x=\"4\" y=\"4\" width=\"24\" height=\"18\" rx=\"4\" stroke=\"url(#logo-grad)\"></rect>\n                    <circle cx=\"10\" cy=\"10\" r=\"1.5\" fill=\"url(#logo-grad)\" stroke=\"none\"></circle>\n                    <circle cx=\"22\" cy=\"10\" r=\"1.5\" fill=\"url(#logo-grad)\" stroke=\"none\"></circle>\n                    <path class=\"logo-code\" d=\"M12 16l-2 2 2 2 M20 16l2 2-2 2\" stroke=\"url(#logo-grad)\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path>\n                    <line class=\"logo-cursor\" x1=\"15\" y1=\"20\" x2=\"17\" y2=\"20\" stroke=\"url(#logo-grad)\" stroke-linecap=\"round\"></line>\n                    <path d=\"M8 26 h16 M10 28 h12\" stroke=\"url(#logo-grad)\" stroke-linecap=\"round\"></path>\n                </svg>\n                Craft AI\n            </a>\n            <nav class=\"nav-links\">\n                <a href=\"#examples\">Возможности</a>\n                <a href=\"#process\">Архитектура</a>\n                <a href=\"#features\">Интеллект</a>\n                <a href=\"#examples\">Экосистема</a>\n            </nav>\n            <a href=\"/auth\" class=\"btn-outline nav-login\" style=\"padding: 0.5rem 1.2rem; font-size: 0.85rem;\"><span>Войти</span></a>\n        </div>\n    </header>\n\n    <!-- Hero Section -->\n    <section class=\"hero\">\n        <div class=\"container hero-content\">\n            <!-- SEO H1: Оптимизирован под \"конструктор сайтов\" -->\n            <h1 class=\"heading-xl reveal active\">Конструктор сайтов<br><span class=\"text-gradient\">Craft AI</span></h1>\n            <p class=\"subtitle reveal active\" style=\"transition-delay: 0.1s;\">Просто опишите идею. Интеллектуальная система спроектирует, создаст анимацию и напишет SEO текст за считанные минуты. Никакого кода.</p>\n            \n            <div class=\"reveal active\" style=\"transition-delay: 0.2s; display: flex; gap: 1rem; align-items: center; justify-content: center; flex-wrap: wrap;\">\n                <a href=\"#examples\" class=\"magic-btn group\">\n                    <div style=\"display: flex; align-items: center;\">\n                        <svg style=\"width: 16px; height: 16px;\" viewBox=\"0 0 438.549 438.549\">\n                            <path d=\"M409.132 114.573c-19.608-33.596-46.205-60.194-79.798-79.8-33.598-19.607-70.277-29.408-110.063-29.408-39.781 0-76.472 9.804-110.063 29.408-33.596 19.605-60.192 46.204-79.8 79.8C9.803 148.168 0 184.854 0 224.63c0 47.78 13.94 90.745 41.827 128.906 27.884 38.164 63.906 64.572 108.063 79.227 5.14.954 8.945.283 11.419-1.996 2.475-2.282 3.711-5.14 3.711-8.562 0-.571-.049-5.708-.144-15.417a2549.81 2549.81 0 01-.144-25.406l-6.567 1.136c-4.187.767-9.469 1.092-15.846 1-6.374-.089-12.991-.757-19.842-1.999-6.854-1.231-13.229-4.086-19.13-8.559-5.898-4.473-10.085-10.328-12.56-17.556l-2.855-6.57c-1.903-4.374-4.899-9.233-8.992-14.559-4.093-5.331-8.232-8.945-12.419-10.848l-1.999-1.431c-1.332-.951-2.568-2.098-3.711-3.429-1.142-1.331-1.997-2.663-2.568-3.997-.572-1.335-.098-2.43 1.427-3.289 1.525-.859 4.281-1.276 8.28-1.276l5.708.853c3.807.763 8.516 3.042 14.133 6.851 5.614 3.806 10.229 8.754 13.846 14.842 4.38 7.806 9.657 13.754 15.846 17.847 6.184 4.093 12.419 6.136 18.699 6.136 6.28 0 11.704-.476 16.274-1.423 4.565-.952 8.848-2.383 12.847-4.285 1.713-12.758 6.377-22.559 13.988-29.41-10.848-1.14-20.601-2.857-29.264-5.14-8.658-2.286-17.605-5.996-26.835-11.14-9.235-5.137-16.896-11.516-22.985-19.126-6.09-7.614-11.088-17.61-14.987-29.979-3.901-12.374-5.852-26.648-5.852-42.826 0-23.035 7.52-42.637 22.557-58.817-7.044-17.318-6.379-36.732 1.997-58.24 5.52-1.715 13.706-.428 24.554 3.853 10.85 4.283 18.794 7.952 23.84 10.994 5.046 3.041 9.089 5.618 12.135 7.708 17.705-4.947 35.976-7.421 54.818-7.421s37.117 2.474 54.823 7.421l10.849-6.849c7.419-4.57 16.18-8.758 26.262-12.565 10.088-3.805 17.802-4.853 23.134-3.138 8.562 21.509 9.325 40.922 2.279 58.24 15.036 16.18 22.559 35.787 22.559 58.817 0 16.178-1.958 30.497-5.853 42.966-3.9 12.471-8.941 22.457-15.125 29.979-6.191 7.521-13.901 13.85-23.131 18.986-9.232 5.14-18.182 8.85-26.84 11.136-8.662 2.286-18.415 4.004-29.263 5.146 9.894 8.562 14.842 22.077 14.842 40.539v60.237c0 3.422 1.19 6.279 3.572 8.562 2.379 2.279 6.136 2.95 11.276 1.995 44.163-14.653 80.185-41.062 108.068-79.226 27.88-38.161 41.825-81.126 41.825-128.906-.01-39.771-9.818-76.454-29.414-110.049z\" fill=\"var(--text-main)\"></path>\n                        </svg>\n                        <span style=\"margin-left: 0.5rem; color: var(--text-main);\">Начать Творить</span>\n                    </div>\n                    <div class=\"magic-badge\" style=\"margin-left: 0.75rem; display: flex; align-items: center; gap: 0.25rem;\">\n                        <svg style=\"width: 16px; height: 16px; color: var(--text-muted);\" viewBox=\"0 0 24 24\" fill=\"currentColor\">\n                            <path clip-rule=\"evenodd\" d=\"M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z\" fill-rule=\"evenodd\"></path>\n                        </svg>\n                        <span style=\"font-family: var(--font-mono); color: var(--text-main);\">AI</span>\n                    </div>\n                </a>\n                <a href=\"#examples\" class=\"btn-outline\">Узнать больше</a>\n            </div>\n            \n            <!-- Hero Animated Interface Window (Code Typing) -->\n            <div class=\"hero-window reveal active\" style=\"transition-delay: 0.3s;\">\n                <div class=\"mac-header\">\n                    <span class=\"mac-dot\" style=\"background: #FF5F56;\"></span>\n                    <span class=\"mac-dot\" style=\"background: #FFBD2E;\"></span>\n                    <span class=\"mac-dot\" style=\"background: #27C93F;\"></span>\n                    <span style=\"margin-left: auto; font-family: var(--font-mono); font-size: 0.8rem; color: #8b949e;\">index.html — Craft AI</span>\n                </div>\n                <div style=\"height: calc(100% - 45px); overflow: hidden; position: relative;\">\n                    <svg viewBox=\"0 0 800 375\" width=\"100%\" height=\"100%\" preserveAspectRatio=\"xMidYMid slice\" style=\"background: #1D1D1F;\">\n                        <!-- Line numbers -->\n                        <rect x=\"0\" y=\"0\" width=\"40\" height=\"400\" fill=\"#252528\"/>\n                        <g font-family=\"var(--font-mono)\" font-size=\"14\" fill=\"#6e7681\" text-anchor=\"end\">\n                            <text x=\"30\" y=\"30\">1</text>\n                            <text x=\"30\" y=\"55\">2</text>\n                            <text x=\"30\" y=\"80\">3</text>\n                            <text x=\"30\" y=\"105\">4</text>\n                            <text x=\"30\" y=\"130\">5</text>\n                            <text x=\"30\" y=\"155\">6</text>\n                            <text x=\"30\" y=\"180\">7</text>\n                            <text x=\"30\" y=\"205\">8</text>\n                            <text x=\"30\" y=\"230\">9</text>\n                            <text x=\"30\" y=\"255\">10</text>\n                            <text x=\"30\" y=\"280\">11</text>\n                            <text x=\"30\" y=\"305\">12</text>\n                            <text x=\"30\" y=\"330\">13</text>\n                            <text x=\"30\" y=\"355\">14</text>\n                        </g>\n\n                        <!-- Code Typing Animation -->\n                        <g font-family=\"var(--font-mono)\" font-size=\"14\">\n                            <!-- Line 1 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;1;1\" keyTimes=\"0;0.02;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"55\" y=\"30\"><tspan fill=\"#8b949e\">&lt;!</tspan><tspan fill=\"#42A5FF\">DOCTYPE</tspan> <tspan fill=\"#A5FF42\">html</tspan><tspan fill=\"#8b949e\">&gt;</tspan></text>\n                            </g>\n                            \n                            <!-- Line 2 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.05;0.07;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"55\" y=\"55\"><tspan fill=\"#8b949e\">&lt;</tspan><tspan fill=\"#27C93F\">html</tspan> <tspan fill=\"#B742FF\">lang</tspan><tspan fill=\"#8b949e\">=</tspan><tspan fill=\"#FFBD2E\">\"ru\"</tspan><tspan fill=\"#8b949e\">&gt;</tspan></text>\n                            </g>\n\n                            <!-- Line 3 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.08;0.1;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"80\" y=\"80\"><tspan fill=\"#8b949e\">&lt;</tspan><tspan fill=\"#27C93F\">head</tspan><tspan fill=\"#8b949e\">&gt;</tspan></text>\n                            </g>\n\n                            <!-- Line 4 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.12;0.15;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"105\" y=\"105\"><tspan fill=\"#8b949e\">&lt;</tspan><tspan fill=\"#27C93F\">title</tspan><tspan fill=\"#8b949e\">&gt;</tspan><tspan fill=\"#e6edf3\">Конструктор сайтов Craft AI</tspan><tspan fill=\"#8b949e\">&lt;/</tspan><tspan fill=\"#27C93F\">title</tspan><tspan fill=\"#8b949e\">&gt;</tspan></text>\n                            </g>\n\n                            <!-- Line 5 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.17;0.19;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"105\" y=\"130\"><tspan fill=\"#8b949e\">&lt;</tspan><tspan fill=\"#27C93F\">style</tspan><tspan fill=\"#8b949e\">&gt;</tspan></text>\n                            </g>\n\n                            <!-- Line 6 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.22;0.25;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"130\" y=\"155\"><tspan fill=\"#FF4242\">.hero</tspan> <tspan fill=\"#8b949e\">{</tspan></text>\n                            </g>\n\n                            <!-- Line 7 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.28;0.32;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"155\" y=\"180\"><tspan fill=\"#42A5FF\">display</tspan><tspan fill=\"#8b949e\">:</tspan> <tspan fill=\"#FFBD2E\">flex</tspan><tspan fill=\"#8b949e\">;</tspan></text>\n                            </g>\n\n                            <!-- Line 8 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.35;0.4;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"155\" y=\"205\"><tspan fill=\"#42A5FF\">background</tspan><tspan fill=\"#8b949e\">:</tspan> <tspan fill=\"#FFBD2E\">linear-gradient</tspan><tspan fill=\"#8b949e\">(90deg, #FF4242, #42A5FF);</tspan></text>\n                            </g>\n\n                            <!-- Line 9 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.42;0.45;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"130\" y=\"230\"><tspan fill=\"#8b949e\">}</tspan></text>\n                            </g>\n\n                            <!-- Line 10 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.47;0.49;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"105\" y=\"255\"><tspan fill=\"#8b949e\">&lt;/</tspan><tspan fill=\"#27C93F\">style</tspan><tspan fill=\"#8b949e\">&gt;</tspan></text>\n                            </g>\n\n                            <!-- Line 11 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.51;0.53;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"80\" y=\"280\"><tspan fill=\"#8b949e\">&lt;/</tspan><tspan fill=\"#27C93F\">head</tspan><tspan fill=\"#8b949e\">&gt;</tspan></text>\n                            </g>\n\n                            <!-- Line 12 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.56;0.58;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"80\" y=\"305\"><tspan fill=\"#8b949e\">&lt;</tspan><tspan fill=\"#27C93F\">body</tspan><tspan fill=\"#8b949e\">&gt;</tspan></text>\n                            </g>\n\n                            <!-- Line 13 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.62;0.68;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"105\" y=\"330\"><tspan fill=\"#8b949e\">&lt;</tspan><tspan fill=\"#27C93F\">h1</tspan> <tspan fill=\"#B742FF\">class</tspan><tspan fill=\"#8b949e\">=</tspan><tspan fill=\"#FFBD2E\">\"text-gradient\"</tspan><tspan fill=\"#8b949e\">&gt;</tspan><tspan fill=\"#e6edf3\">Craft AI</tspan><tspan fill=\"#8b949e\">&lt;/</tspan><tspan fill=\"#27C93F\">h1</tspan><tspan fill=\"#8b949e\">&gt;</tspan></text>\n                            </g>\n                            \n                            <!-- Line 14 -->\n                            <g opacity=\"0\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.7;0.75;1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <text x=\"105\" y=\"355\"><tspan fill=\"#8b949e\">&lt;</tspan><tspan fill=\"#27C93F\">p</tspan><tspan fill=\"#8b949e\">&gt;</tspan><tspan fill=\"#e6edf3\">Генерация завершена...</tspan><tspan fill=\"#8b949e\">&lt;/</tspan><tspan fill=\"#27C93F\">p</tspan><tspan fill=\"#8b949e\">&gt;</tspan></text>\n                            </g>\n\n                            <!-- Blinking & Jumping Cursor -->\n                            <rect x=\"0\" y=\"0\" width=\"8\" height=\"15\" fill=\"#42A5FF\">\n                                <animate attributeName=\"opacity\" values=\"1;0;1\" dur=\"0.8s\" repeatCount=\"indefinite\"/>\n                                <animate attributeName=\"x\" values=\"55; 170; 230; 110; 420; 110; 160; 220; 450; 110; 120; 80; 80; 320; 320; 320\" calcMode=\"discrete\" keyTimes=\"0; 0.05; 0.08; 0.12; 0.17; 0.22; 0.28; 0.35; 0.42; 0.47; 0.51; 0.56; 0.62; 0.7; 0.75; 1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                                <animate attributeName=\"y\" values=\"18; 43; 68; 93; 118; 143; 168; 193; 218; 243; 268; 293; 318; 343; 343; 343\" calcMode=\"discrete\" keyTimes=\"0; 0.05; 0.08; 0.12; 0.17; 0.22; 0.28; 0.35; 0.42; 0.47; 0.51; 0.56; 0.62; 0.7; 0.75; 1\" dur=\"10s\" repeatCount=\"indefinite\"/>\n                            </rect>\n                        </g>\n                    </svg>\n                </div>\n            </div>\n        </div>\n    </section>\n\n    <!-- Обертка для живого фона (Светло-жемчужный перламутр с мерцающими мелкими искорками) -->\n    <div class=\"living-bg-wrapper\">\n        \n        <!-- Examples Slider Section -->\n        <section id=\"examples\" style=\"padding: 5rem 0;\">\n            <div class=\"container\">\n                <div class=\"reveal active\" style=\"text-align: center; margin-bottom: 4rem;\">\n                    <h2 class=\"heading-lg\">Воплощенные идеи.</h2>\n                    <p class=\"subtitle\" style=\"margin: 0 auto;\">Сайты, созданные агентом Craft AI в реальном времени. Впечатляющий дизайн без единой строчки кода вручную.</p>\n                </div>\n                \n                <div class=\"slider-container reveal active\">\n                    <button class=\"slider-btn prev\" aria-label=\"Предыдущий слайд\">\n                        <svg viewBox=\"0 0 24 24\"><path d=\"M15 18l-6-6 6-6\"></path></svg>\n                    </button>\n                    <button class=\"slider-btn next\" aria-label=\"Следующий слайд\">\n                        <svg viewBox=\"0 0 24 24\"><path d=\"M9 18l6-6-6-6\"></path></svg>\n                    </button>\n                    \n                    <div class=\"slide\">\n                        <img src=\"images/start-ai.png\" alt=\"Craft AI Project Example 1\" style=\"cursor: pointer;\">\n                    </div>\n                    <div class=\"slide\">\n                        <img src=\"images/sync.png\" alt=\"Craft AI Project Example 2\" style=\"cursor: pointer;\">\n                    </div>\n                    <div class=\"slide active\">\n                        <img src=\"images/automation-ally.png\" alt=\"Craft AI Project Example 3\" style=\"cursor: pointer;\">\n                    </div>\n                    \n                    <div class=\"slider-nav\">\n                        <div class=\"slider-dot\" data-index=\"0\"></div>\n                        <div class=\"slider-dot\" data-index=\"1\"></div>\n                        <div class=\"slider-dot active\" data-index=\"2\"></div>\n                    </div>\n                </div>\n            </div>\n        </section>\n\n        <!-- Process Section with Flashlight Effect -->\n        <section id=\"process\">\n            <div class=\"container\">\n                <div class=\"reveal active\">\n                    <!-- SEO H2: Оптимизирован под \"Создать сайт конструктор\" -->\n                    <h2 class=\"heading-lg\">Создать сайт: конструктор без границ.</h2>\n                    <p class=\"subtitle\">Искусственный интеллект трансформирует ваши мысли в чистый код и совершенный дизайн, оставляя вам роль главного визионера.</p>\n                </div>\n\n                <div class=\"bento-grid\" id=\"process-grid\">\n                    <div class=\"glass-panel bento-item span-4 reveal active flashlight-card\">\n                        <div class=\"bento-icon\">\n                            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83\"></path></svg>\n                        </div>\n                        <h3>1. Идея</h3>\n                        <p>Опишите видение естественным языком. Система мгновенно улавливает контекст и эстетику.</p>\n                    </div>\n                    \n                    <div class=\"glass-panel bento-item span-4 reveal active flashlight-card\" style=\"transition-delay: 0.1s;\">\n                        <div class=\"bento-icon\">\n                            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"3\" width=\"20\" height=\"14\" rx=\"2\" ry=\"2\"></rect><line x1=\"8\" y1=\"21\" x2=\"16\" y2=\"21\"></line><line x1=\"12\" y1=\"17\" x2=\"12\" y2=\"21\"></line></svg>\n                        </div>\n                        <h3>2. Генерация</h3>\n                        <p>Ядро синтезирует уникальный интерфейс, пишет семантический код и создает контент.</p>\n                    </div>\n                    \n                    <div class=\"glass-panel bento-item span-4 reveal active flashlight-card\" style=\"transition-delay: 0.2s;\">\n                        <div class=\"bento-icon\">\n                            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 11.08V12a10 10 0 1 1-5.93-9.14\"></path><polyline points=\"22 4 12 14.01 9 11.01\"></polyline></svg>\n                        </div>\n                        <h3>3. Запуск</h3>\n                        <p>Идеальная адаптивность прямо из коробки. Одно касание — и сайт доступен всему миру.</p>\n                    </div>\n                </div>\n            </div>\n        </section>\n\n        <!-- Features Section -->\n        <section id=\"features\">\n            <div class=\"container\">\n                <div class=\"reveal active\">\n                    <h2 class=\"heading-lg\">Мощь внутри.</h2>\n                    <p class=\"subtitle\">Мощные технологии скрыты за невероятно простым и интуитивным интерфейсом.</p>\n                </div>\n\n                <div class=\"bento-grid\">\n                    <!-- Large Feature -->\n                    <div class=\"glass-panel bento-item span-8 reveal active\">\n                        <div style=\"flex: 1;\">\n                            <div style=\"display: inline-block; padding: 0.4rem 1rem; background: rgba(255,255,255,0.8); border-radius: 50px; font-size: 0.85rem; font-weight: 500; margin-bottom: 1.5rem; border: 1px solid var(--border-light);\">Нейросети</div>\n                            <h3 style=\"font-size: 2.2rem; margin-bottom: 1rem; font-weight: 600;\">Семантический копирайтер</h3>\n                            <p style=\"margin-bottom: 2rem; max-width: 500px;\">Генерация глубокого контента с идеальным Tone of Voice. Адаптация под все языки и встроенная SEO-семантика.</p>\n                        </div>\n                    </div>\n\n                    <!-- Small Feature 1 -->\n                    <div class=\"glass-panel bento-item span-4 reveal active\" style=\"transition-delay: 0.1s;\">\n                        <div class=\"bento-icon\">\n                            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"5\" y=\"2\" width=\"14\" height=\"20\" rx=\"2\" ry=\"2\"></rect><line x1=\"12\" y1=\"18\" x2=\"12.01\" y2=\"18\"></line></svg>\n                        </div>\n                        <h3>Идеальный адаптив</h3>\n                        <p>Математически выверенная сетка. Безупречное масштабирование на любых устройствах.</p>\n                    </div>\n\n                    <!-- Small Feature 2 -->\n                    <div class=\"glass-panel bento-item span-4 reveal active\" style=\"transition-delay: 0.2s;\">\n                        <div class=\"bento-icon\">\n                            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"></path><polyline points=\"14 2 14 8 20 8\"></polyline><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"></line><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"></line><polyline points=\"10 9 9 9 8 9\"></polyline></svg>\n                        </div>\n                        <h3>Интерактивные элементы</h3>\n                        <p>Создавайте интерактивные элементы такие как: калькулятор доходности, квиз, Слайдер «До и После», Дорожная карта.</p>\n                    </div>\n\n                    <!-- Large Feature (Анимация + SVG Roadmap) -->\n                    <div class=\"glass-panel bento-item span-8 reveal active\" style=\"transition-delay: 0.3s; overflow: hidden;\">\n                        <div style=\"position: relative; z-index: 2; margin-bottom: 1rem;\">\n                            <h3 style=\"font-size: 2.2rem; margin-bottom: 1rem; font-weight: 600;\">Анимация</h3>\n                            <p style=\"max-width: 500px;\">Создавайте любую SVG анимацию через промт запрос. Анимация дорожной карты по выпуску сайта:</p>\n                        </div>\n                        <div style=\"width: 100%; height: 120px; position: relative; margin-top: auto;\">\n                            <svg viewBox=\"0 0 600 120\" style=\"width: 100%; height: 100%; position: absolute; left: 0; top: 0;\" preserveAspectRatio=\"xMidYMid meet\">\n                                <defs>\n                                    <linearGradient id=\"roadmap-grad\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\">\n                                        <stop offset=\"0%\" stop-color=\"#FF4242\"></stop>\n                                        <stop offset=\"33%\" stop-color=\"#A5FF42\"></stop>\n                                        <stop offset=\"66%\" stop-color=\"#42A5FF\"></stop>\n                                        <stop offset=\"100%\" stop-color=\"#B742FF\"></stop>\n                                    </linearGradient>\n                                </defs>\n                                <line x1=\"50\" y1=\"40\" x2=\"550\" y2=\"40\" stroke=\"var(--border-strong)\" stroke-width=\"4\" stroke-linecap=\"round\"></line>\n                                <line x1=\"50\" y1=\"40\" x2=\"550\" y2=\"40\" stroke=\"url(#roadmap-grad)\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-dasharray=\"500\" stroke-dashoffset=\"500\">\n                                    <animate attributeName=\"stroke-dashoffset\" values=\"500;0\" dur=\"4s\" repeatCount=\"indefinite\"></animate>\n                                </line>\n                                \n                                <circle cx=\"50\" cy=\"40\" r=\"8\" fill=\"#fff\" stroke=\"var(--border-strong)\" stroke-width=\"3\"></circle>\n                                <circle cx=\"50\" cy=\"40\" r=\"8\" fill=\"#fff\" stroke=\"#FF4242\" stroke-width=\"3\"><animate attributeName=\"opacity\" values=\"0;1;1\" keyTimes=\"0;0.1;1\" dur=\"4s\" repeatCount=\"indefinite\"></animate></circle>\n                                <text x=\"50\" y=\"75\" text-anchor=\"middle\" font-size=\"14\" fill=\"var(--text-main)\" font-family=\"var(--font-main)\" font-weight=\"600\">Идея</text>\n                                \n                                <circle cx=\"216\" cy=\"40\" r=\"8\" fill=\"#fff\" stroke=\"var(--border-strong)\" stroke-width=\"3\"></circle>\n                                <circle cx=\"216\" cy=\"40\" r=\"8\" fill=\"#fff\" stroke=\"#A5FF42\" stroke-width=\"3\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.3;0.35;1\" dur=\"4s\" repeatCount=\"indefinite\"></animate></circle>\n                                <text x=\"216\" y=\"75\" text-anchor=\"middle\" font-size=\"14\" fill=\"var(--text-main)\" font-family=\"var(--font-main)\" font-weight=\"600\">Синтез</text>\n\n                                <circle cx=\"383\" cy=\"40\" r=\"8\" fill=\"#fff\" stroke=\"var(--border-strong)\" stroke-width=\"3\"></circle>\n                                <circle cx=\"383\" cy=\"40\" r=\"8\" fill=\"#fff\" stroke=\"#42A5FF\" stroke-width=\"3\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.6;0.65;1\" dur=\"4s\" repeatCount=\"indefinite\"></animate></circle>\n                                <text x=\"383\" y=\"75\" text-anchor=\"middle\" font-size=\"14\" fill=\"var(--text-main)\" font-family=\"var(--font-main)\" font-weight=\"600\">Оживление</text>\n\n                                <circle cx=\"550\" cy=\"40\" r=\"8\" fill=\"#fff\" stroke=\"var(--border-strong)\" stroke-width=\"3\"></circle>\n                                <circle cx=\"550\" cy=\"40\" r=\"8\" fill=\"#fff\" stroke=\"#B742FF\" stroke-width=\"3\"><animate attributeName=\"opacity\" values=\"0;0;1;1\" keyTimes=\"0;0.9;0.95;1\" dur=\"4s\" repeatCount=\"indefinite\"></animate></circle>\n                                <text x=\"550\" y=\"75\" text-anchor=\"middle\" font-size=\"14\" fill=\"var(--text-main)\" font-family=\"var(--font-main)\" font-weight=\"600\">Запуск</text>\n                            </svg>\n                        </div>\n                    </div>\n\n                    <!-- New Feature (Экспорт кода) -->\n                    <div class=\"glass-panel bento-item span-6 reveal active\">\n                        <div class=\"bento-icon\">\n                            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"16 18 22 12 16 6\"></polyline><polyline points=\"8 6 2 12 8 18\"></polyline></svg>\n                        </div>\n                        <h3>Экспорт кода</h3>\n                        <p>Забирайте чистый HTML/CSS/JS код в один клик. Никакой привязки к платформе, полная свобода.</p>\n                    </div>\n\n                    <!-- New Feature (Быстрое развертывание) -->\n                    <div class=\"glass-panel bento-item span-6 reveal active\" style=\"transition-delay: 0.1s;\">\n                        <div class=\"bento-icon\">\n                            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4\"></path></svg>\n                        </div>\n                        <h3>Быстрое развертывание</h3>\n                        <p>Мгновенная публикация вашего проекта. Разверните готовый сайт на любом удобном для вас хостинге без сложных настроек сервера.</p>\n                    </div>\n                </div>\n            </div>\n        </section>\n\n        <!-- SEO Content Section -->\n        <section id=\"seo-content\" style=\"padding: 5rem 0; margin-bottom: 3rem;\">\n            <div class=\"container\">\n                <div class=\"glass-panel reveal active\" style=\"padding: 4rem;\">\n                    <h2 class=\"heading-lg\" style=\"margin-bottom: 2rem; font-size: clamp(2rem, 4vw, 3rem);\">Как мы изменили подход к веб-разработке</h2>\n                    <div style=\"font-size: 1.1rem; line-height: 1.8; color: var(--text-muted);\">\n                        <p style=\"margin-bottom: 1.5rem;\">Раньше, чтобы запустить свой проект в интернете, приходилось либо тратить недели на изучение кода, либо нанимать целую команду специалистов. Мы поняли, что этот процесс безнадежно устарел. Сегодня идеальный <strong>конструктор сайтов</strong> должен работать так: вы просто формулируете свою мысль, а сложная математика под капотом превращает её в готовый, стильный и быстрый продукт, готовый к выходу в свет.</p>\n                        \n                        <p style=\"margin-bottom: 1.5rem;\">Мы создали Craft AI для того, чтобы каждый мог стать творцом своего цифрового пространства. Наша нейросеть берет на себя самую рутинную работу: она пишет семантически правильный HTML-код, выстраивает безупречную сетку стилей и даже анимирует элементы на лету. Вы не просто собираете блоки, как это было раньше. Вы общаетесь с интеллектуальной системой, которая понимает контекст вашего бизнеса и предлагает лучшие визуальные решения.</p>\n\n                        <h3 style=\"color: var(--text-main); font-size: 1.6rem; margin: 2.5rem 0 1rem;\">Как создать сайт: конструктор, который думает вместе с вами</h3>\n                        \n                        <p style=\"margin-bottom: 1.5rem;\">Если перед вами стоит задача быстро <strong>создать сайт, конструктор</strong> нового поколения — это ваш лучший и самый надежный союзник. В отличие от классических решений, где вы ограничены жесткими рамками шаблонов, Craft AI генерирует абсолютно уникальный дизайн под каждый ваш запрос. Нейронные алгоритмы анализируют миллионы успешных веб-интерфейсов, чтобы собрать для вас идеальную композицию, которая будет вызывать доверие пользователей и отлично смотреться на смартфонах, планшетах и широких мониторах.</p>\n                        \n                        <p>А главное — мы не замыкаем вас в своей экосистеме. Мы верим в свободу данных и открытый интернет. Поэтому вы всегда можете в один клик выгрузить чистый, профессиональный код своего проекта и разместить его на любом хостинге. Никаких скрытых платежей, никаких сложных настроек серверов или баз данных. Только чистое творчество, помноженное на невероятную мощь современных технологий искусственного интеллекта. Будущее веб-разработки уже здесь, и оно удивительно простое.</p>\n                    </div>\n                </div>\n            </div>\n        </section>\n\n    </div> <!-- End of Living Background Wrapper -->\n\n    <!-- Footer -->\n    <footer>\n        <div class=\"container\">\n            <div class=\"footer-content\">\n                <a href=\"#\" class=\"logo\" style=\"font-size: 1.2rem;\">\n                    <svg viewBox=\"0 0 32 32\" class=\"logo-svg\" stroke=\"currentColor\" stroke-width=\"2\" fill=\"none\">\n                        <rect x=\"4\" y=\"4\" width=\"24\" height=\"18\" rx=\"4\" stroke=\"url(#logo-grad)\"></rect>\n                        <circle cx=\"10\" cy=\"10\" r=\"1.5\" fill=\"url(#logo-grad)\" stroke=\"none\"></circle>\n                        <circle cx=\"22\" cy=\"10\" r=\"1.5\" fill=\"url(#logo-grad)\" stroke=\"none\"></circle>\n                        <path class=\"logo-code\" d=\"M12 16l-2 2 2 2 M20 16l2 2-2 2\" stroke=\"url(#logo-grad)\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path>\n                        <line class=\"logo-cursor\" x1=\"15\" y1=\"20\" x2=\"17\" y2=\"20\" stroke=\"url(#logo-grad)\" stroke-linecap=\"round\"></line>\n                        <path d=\"M8 26 h16 M10 28 h12\" stroke=\"url(#logo-grad)\" stroke-linecap=\"round\"></path>\n                    </svg>\n                    Craft AI\n                </a>\n                \n                <div class=\"socials\">\n                    <a href=\"#\" aria-label=\"Twitter\">\n                        <svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z\"></path></svg>\n                    </a>\n                    <a href=\"#\" aria-label=\"LinkedIn\">\n                        <svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z\"></path><rect x=\"2\" y=\"9\" width=\"4\" height=\"12\"></rect><circle cx=\"4\" cy=\"4\" r=\"2\"></circle></svg>\n                    </a>\n                </div>\n            </div>\n            <div class=\"copyright\">\n                © 2024 Craft AI. Дизайн имеет значение.\n            </div>\n        </div>\n    </footer>\n\n    <!-- Scripts -->\n    <script>\n        // Smooth Navbar Effect\n        const header = document.querySelector('header');\n        window.addEventListener('scroll', () => {\n            if (window.scrollY > 20) {\n                header.style.padding = '0.8rem 0';\n                header.style.boxShadow = '0 4px 20px rgba(0,0,0,0.03)';\n            } else {\n                header.style.padding = '1rem 0';\n                header.style.boxShadow = 'none';\n            }\n        });\n\n        // Scroll Reveal Animation\n        const revealElements = document.querySelectorAll('.reveal');\n        const revealObserver = new IntersectionObserver((entries, observer) => {\n            entries.forEach(entry => {\n                if (entry.isIntersecting) {\n                    entry.target.classList.add('active');\n                    observer.unobserve(entry.target);\n                }\n            });\n        }, { root: null, threshold: 0.1, rootMargin: \"0px 0px -30px 0px\" });\n        revealElements.forEach(el => revealObserver.observe(el));\n\n        // Flashlight Tracking Logic for Process Grid\n        const processGrid = document.getElementById('process-grid');\n        const flashlightCards = document.querySelectorAll('.flashlight-card');\n\n        if(processGrid) {\n            processGrid.addEventListener('mousemove', (e) => {\n                flashlightCards.forEach(card => {\n                    const rect = card.getBoundingClientRect();\n                    const x = e.clientX - rect.left;\n                    const y = e.clientY - rect.top;\n                    card.style.setProperty('--mouse-x', `${x}px`);\n                    card.style.setProperty('--mouse-y', `${y}px`);\n                });\n            });\n\n            processGrid.addEventListener('mouseleave', () => {\n                flashlightCards.forEach(card => {\n                    card.style.setProperty('--mouse-x', `-1000px`);\n                    card.style.setProperty('--mouse-y', `-1000px`);\n                });\n            });\n        }\n\n        // Advanced Slider Logic\n        const slides = document.querySelectorAll('.slide');\n        const dots = document.querySelectorAll('.slider-dot');\n        const prevBtn = document.querySelector('.slider-btn.prev');\n        const nextBtn = document.querySelector('.slider-btn.next');\n        let currentSlide = 0;\n        let slideInterval;\n\n        function showSlide(index) {\n            slides.forEach(s => s.classList.remove('active'));\n            dots.forEach(d => d.classList.remove('active'));\n            \n            if(index >= slides.length) currentSlide = 0;\n            else if(index < 0) currentSlide = slides.length - 1;\n            else currentSlide = index;\n            \n            slides[currentSlide].classList.add('active');\n            dots[currentSlide].classList.add('active');\n        }\n\n        function nextSlide() { showSlide(currentSlide + 1); }\n        function prevSlide() { showSlide(currentSlide - 1); }\n\n        if(slides.length > 0) {\n            nextBtn.addEventListener('click', () => { nextSlide(); resetInterval(); });\n            prevBtn.addEventListener('click', () => { prevSlide(); resetInterval(); });\n            dots.forEach(dot => {\n                dot.addEventListener('click', (e) => {\n                    showSlide(parseInt(e.target.dataset.index));\n                    resetInterval();\n                });\n            });\n            \n            function startInterval() { slideInterval = setInterval(nextSlide, 5000); }\n            function resetInterval() { clearInterval(slideInterval); startInterval(); }\n            startInterval();\n        }\n    </script>";
 
-function AnimatedCounter({ target, suffix = "" }: { target: number; suffix?: string }) {
-  const [count, setCount] = useState(0);
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true });
-
-  useEffect(() => {
-    if (!isInView) return;
-    let start = 0;
-    const duration = 2000;
-    const step = target / (duration / 16);
-    const timer = setInterval(() => {
-      start += step;
-      if (start >= target) { setCount(target); clearInterval(timer); }
-      else setCount(Math.floor(start));
-    }, 16);
-    return () => clearInterval(timer);
-  }, [isInView, target]);
-
-  return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
-}
-
-const plans = [
-  {
-    name: "Старт",
-    price: "0",
-    period: "навсегда",
-    credits: 10,
-    features: ["10 генераций", "Базовые шаблоны", "HTML/CSS/JS экспорт", "Адаптивный дизайн"],
-    cta: "Начать бесплатно",
-  },
-  {
-    name: "Про",
-    price: "490",
-    period: "/мес",
-    credits: 50,
-    features: ["50 генераций", "Все шаблоны", "AI изображения", "Правки через чат", "Приоритет генерации"],
-    cta: "Выбрать Про",
-  },
-  {
-    name: "Бизнес",
-    price: "990",
-    period: "/мес",
-    credits: 200,
-    popular: true,
-    features: ["200 генераций", "Генерация по фото", "Веб-исследование", "Visual Editor", "AI изображения без лимита"],
-    cta: "Выбрать Бизнес",
-  },
-  {
-    name: "Корпоративный",
-    price: "2 490",
-    period: "/мес",
-    credits: 1000,
-    features: ["1000 генераций", "API доступ", "Белый лейбл", "Выделенная поддержка", "Все функции"],
-    cta: "Связаться",
-  },
-];
-
-const features = [
-  {
-    icon: MessageSquare,
-    title: "Промт → Сайт",
-    desc: "Опишите идею текстом — ИИ создаст полноценный сайт с анимациями, адаптивностью и SEO за 30 секунд.",
-    gradient: "from-blue-500 to-cyan-400",
-  },
-  {
-    icon: Image,
-    title: "Фото → Код",
-    desc: "Загрузите скриншот, набросок или фото конкурента. Vision-движок воссоздаст дизайн в чистом коде.",
-    gradient: "from-purple-500 to-pink-400",
-  },
-  {
-    icon: Globe,
-    title: "Веб-исследование",
-    desc: "ИИ автоматически изучает тему в интернете и использует реальные факты, цифры и данные.",
-    gradient: "from-emerald-500 to-teal-400",
-  },
-  {
-    icon: Wand2,
-    title: "AI Изображения",
-    desc: "Встроенный генератор изображений. Создавайте уникальные фото и иллюстрации прямо в редакторе.",
-    gradient: "from-orange-500 to-amber-400",
-  },
-  {
-    icon: MousePointer2,
-    title: "Visual Editor",
-    desc: "Кликайте на текст — редактируйте. Кликайте на изображения — заменяйте. Всё прямо в превью.",
-    gradient: "from-rose-500 to-red-400",
-  },
-  {
-    icon: Code2,
-    title: "Чистый код",
-    desc: "HTML5 + CSS3 + JS без зависимостей. Скачивайте ZIP и размещайте где угодно. Код принадлежит вам.",
-    gradient: "from-indigo-500 to-violet-400",
-  },
-];
-
-const steps = [
-  { num: "01", title: "Опишите идею", desc: "Напишите промт или загрузите изображение-пример. ИИ поймёт контекст, стиль и задачу." },
-  { num: "02", title: "ИИ создаёт", desc: "Gemini 3.1 Pro генерирует уникальный дизайн с анимациями, после исследования темы в интернете." },
-  { num: "03", title: "Редактируйте", desc: "Правьте через чат или визуальный редактор. Добавляйте AI-изображения. Итерируйте до идеала." },
-  { num: "04", title: "Публикуйте", desc: "Скачайте ZIP или опубликуйте в один клик. Ваш сайт готов к работе." },
-];
-
-export default function LandingPage() {
+export default function Landing() {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [, setLocation] = useLocation();
-  const heroRef = useRef(null);
-  const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
-  const heroY = useTransform(scrollYProgress, [0, 1], [0, 150]);
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.6], [1, 0]);
-  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 50);
-    window.addEventListener("scroll", onScroll);
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    document.title = "Конструктор сайтов Craft AI | Создать сайт через ИИ конструктор";
+
+    const style = document.createElement("style");
+    style.id = "landing-page-styles";
+    style.textContent = LANDING_CSS;
+    document.head.appendChild(style);
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    const headerEl = container.querySelector("header") as HTMLElement | null;
+    const handleScroll = () => {
+      if (!headerEl) return;
+      if (window.scrollY > 20) {
+        headerEl.style.padding = "0.8rem 0";
+        headerEl.style.boxShadow = "0 4px 20px rgba(0,0,0,0.03)";
+      } else {
+        headerEl.style.padding = "1rem 0";
+        headerEl.style.boxShadow = "none";
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+
+    const revealEls = container.querySelectorAll(".reveal");
+    const revealObserver = new IntersectionObserver((entries, observer) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("active");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: "0px 0px -30px 0px" });
+    revealEls.forEach(el => revealObserver.observe(el));
+
+    const processGrid = container.querySelector("#process-grid");
+    const flashlightCards = container.querySelectorAll(".flashlight-card");
+    if (processGrid) {
+      const handleMouseMove = (e: MouseEvent) => {
+        flashlightCards.forEach(card => {
+          const rect = card.getBoundingClientRect();
+          const cx = e.clientX - rect.left;
+          const cy = e.clientY - rect.top;
+          (card as HTMLElement).style.setProperty("--mouse-x", cx + "px");
+          (card as HTMLElement).style.setProperty("--mouse-y", cy + "px");
+        });
+      };
+      const handleMouseLeave = () => {
+        flashlightCards.forEach(card => {
+          (card as HTMLElement).style.setProperty("--mouse-x", "-1000px");
+          (card as HTMLElement).style.setProperty("--mouse-y", "-1000px");
+        });
+      };
+      processGrid.addEventListener("mousemove", handleMouseMove as EventListener);
+      processGrid.addEventListener("mouseleave", handleMouseLeave);
+    }
+
+    const slides = container.querySelectorAll(".slide");
+    const dots = container.querySelectorAll(".slider-dot");
+    const prevBtn = container.querySelector(".slider-btn.prev");
+    const nextBtn = container.querySelector(".slider-btn.next");
+    let currentSlide = 0;
+    let slideInterval: ReturnType<typeof setInterval>;
+
+    function showSlide(index: number) {
+      slides.forEach(s => s.classList.remove("active"));
+      dots.forEach(d => d.classList.remove("active"));
+      if (index >= slides.length) currentSlide = 0;
+      else if (index < 0) currentSlide = slides.length - 1;
+      else currentSlide = index;
+      slides[currentSlide]?.classList.add("active");
+      (dots[currentSlide] as HTMLElement)?.classList.add("active");
+    }
+
+    function startInterval() { slideInterval = setInterval(() => showSlide(currentSlide + 1), 5000); }
+    function resetInterval() { clearInterval(slideInterval); startInterval(); }
+
+    if (slides.length > 0) {
+      nextBtn?.addEventListener("click", () => { showSlide(currentSlide + 1); resetInterval(); });
+      prevBtn?.addEventListener("click", () => { showSlide(currentSlide - 1); resetInterval(); });
+      dots.forEach(dot => {
+        dot.addEventListener("click", (e) => {
+          const idx = parseInt((e.target as HTMLElement).dataset.index || "0");
+          showSlide(idx);
+          resetInterval();
+        });
+      });
+      startInterval();
+    }
+
+    const navLoginEl = container.querySelector(".nav-login");
+    if (navLoginEl) {
+      navLoginEl.addEventListener("click", (e) => {
+        e.preventDefault();
+        setLocation("/auth");
+      });
+    }
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      revealObserver.disconnect();
+      clearInterval(slideInterval);
+      document.getElementById("landing-page-styles")?.remove();
+      document.title = "Craft AI";
+    };
+  }, [setLocation]);
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-white selection:bg-violet-500/30 overflow-x-hidden">
-      <svg className="fixed inset-0 w-full h-full pointer-events-none z-0" style={{ opacity: 0.04 }}>
-        <filter id="noise">
-          <feTurbulence baseFrequency="0.65" type="fractalNoise" numOctaves="3" />
-        </filter>
-        <rect width="100%" height="100%" filter="url(#noise)" />
-      </svg>
-
-      <header className={`fixed top-0 w-full z-50 transition-all duration-500 ${scrolled ? "py-3" : "py-5"}`}>
-        <nav className={`max-w-7xl mx-auto flex items-center justify-between px-6 py-3 rounded-2xl transition-all duration-500 mx-4 lg:mx-auto ${
-          scrolled
-            ? "bg-white/[0.07] backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
-            : "bg-transparent border border-transparent"
-        }`}>
-          <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setLocation("/")} data-testid="link-logo">
-            <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-violet-500/25 group-hover:shadow-violet-500/40 transition-shadow">
-              <Sparkles className="w-5 h-5 text-white" />
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/20 to-transparent" />
-            </div>
-            <span className="text-lg font-black tracking-tight hidden sm:block">
-              НЕЙРОЗОДЧИЙ
-            </span>
-          </div>
-
-          <div className="hidden md:flex items-center gap-1 text-sm font-medium text-white/60">
-            <a href="#features" className="px-4 py-2 rounded-xl hover:text-white hover:bg-white/[0.06] transition-all" data-testid="link-features">Возможности</a>
-            <a href="#how" className="px-4 py-2 rounded-xl hover:text-white hover:bg-white/[0.06] transition-all" data-testid="link-how">Как работает</a>
-            <a href="#pricing" className="px-4 py-2 rounded-xl hover:text-white hover:bg-white/[0.06] transition-all" data-testid="link-pricing">Тарифы</a>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              className="rounded-xl text-white/70 hover:text-white hover:bg-white/[0.06] hidden sm:flex"
-              onClick={() => setLocation("/auth")}
-              data-testid="button-login"
-            >
-              Войти
-            </Button>
-            <Button
-              className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 transition-all border-0 font-bold px-6"
-              onClick={() => setLocation("/dashboard")}
-              data-testid="button-start"
-            >
-              Создать сайт
-            </Button>
-          </div>
-        </nav>
-      </header>
-
-      <main>
-        <section ref={heroRef} className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
-          <div className="absolute inset-0 z-0">
-            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-violet-600/20 rounded-full blur-[150px]" />
-            <div className="absolute bottom-0 left-1/4 w-[500px] h-[500px] bg-fuchsia-600/10 rounded-full blur-[120px]" />
-            <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-[100px]" />
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#09090b]" />
-          </div>
-
-          <div className="absolute inset-0 z-0 opacity-[0.15]">
-            <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-                  <path d="M 60 0 L 0 0 0 60" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#grid)" />
-            </svg>
-            <div className="absolute inset-0 bg-gradient-to-b from-[#09090b] via-transparent to-[#09090b]" />
-          </div>
-
-          <motion.div style={{ y: heroY, opacity: heroOpacity }} className="relative z-10 max-w-5xl mx-auto text-center px-6">
-            <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="space-y-8">
-              <motion.div variants={fadeInUp}>
-                <Badge className="bg-violet-500/10 text-violet-300 border border-violet-500/20 px-5 py-2 rounded-full text-xs font-bold tracking-[0.2em] uppercase backdrop-blur-sm">
-                  <span className="w-2 h-2 bg-emerald-400 rounded-full inline-block mr-2 animate-pulse" />
-                  Gemini 3.1 Pro · Новое поколение
-                </Badge>
-              </motion.div>
-
-              <motion.h1
-                variants={fadeInUp}
-                className="text-5xl sm:text-7xl lg:text-8xl font-black leading-[0.95] tracking-tight"
-              >
-                <span className="block">Сайт из текста</span>
-                <span className="block bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">
-                  за секунды
-                </span>
-              </motion.h1>
-
-              <motion.p
-                variants={fadeInUp}
-                className="text-lg sm:text-xl text-white/50 max-w-2xl mx-auto leading-relaxed font-medium"
-              >
-                Опишите идею — получите готовый сайт с уникальным дизайном, анимациями
-                и реальным контентом. Без кода. Без дизайнера. Без компромиссов.
-              </motion.p>
-
-              <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-                <Button
-                  size="lg"
-                  className="h-16 px-10 rounded-2xl text-lg font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 shadow-2xl shadow-violet-600/30 hover:shadow-violet-500/40 transition-all border-0 hover:-translate-y-0.5 active:translate-y-0"
-                  onClick={() => setLocation("/dashboard")}
-                  data-testid="button-hero-start"
-                >
-                  Создать бесплатно
-                  <ArrowRight className="ml-2 w-5 h-5" />
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="h-16 px-10 rounded-2xl text-lg font-bold border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-white backdrop-blur-sm"
-                  onClick={() => {
-                    const el = document.getElementById("how");
-                    el?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                  data-testid="button-hero-demo"
-                >
-                  <Eye className="mr-2 w-5 h-5" />
-                  Как это работает
-                </Button>
-              </motion.div>
-
-              <motion.div variants={fadeInUp} className="flex items-center justify-center gap-6 pt-6 text-sm text-white/40">
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span>Бесплатный старт</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span>Без банковской карты</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span>Экспорт в ZIP</span>
-                </div>
-              </motion.div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 60 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8, duration: 1, ease: [0.22, 1, 0.36, 1] }}
-              className="mt-20 relative"
-            >
-              <div className="absolute -inset-4 bg-gradient-to-b from-violet-500/20 via-fuchsia-500/10 to-transparent rounded-[2rem] blur-xl" />
-              <div className="relative bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] rounded-[1.5rem] p-4 sm:p-6 shadow-2xl">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-green-500/80" />
-                  <span className="ml-3 text-xs text-white/30 font-mono">нейрозодчий — AI Конструктор</span>
-                </div>
-                <div className="grid grid-cols-12 gap-4 min-h-[300px] sm:min-h-[400px]">
-                  <div className="col-span-4 bg-white/[0.03] rounded-xl p-4 border border-white/[0.05] flex flex-col gap-3">
-                    <div className="bg-violet-500/10 rounded-xl p-3 border border-violet-500/20">
-                      <p className="text-xs text-violet-300 font-medium">Промт</p>
-                      <p className="text-[11px] text-white/40 mt-1">Лендинг для AI-стартапа с тёмной темой...</p>
-                    </div>
-                    <div className="flex-1 flex flex-col justify-end gap-2">
-                      <div className="bg-white/[0.03] rounded-lg p-2 border border-white/[0.05]">
-                        <p className="text-[10px] text-emerald-400 font-medium flex items-center gap-1"><Sparkles className="w-3 h-3" /> Сайт обновлён</p>
-                      </div>
-                      <div className="bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-lg p-2 text-center">
-                        <p className="text-[10px] font-bold">Отправить</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-span-8 bg-white/[0.02] rounded-xl border border-white/[0.05] overflow-hidden relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-violet-600/5 via-transparent to-fuchsia-600/5" />
-                    <div className="p-6 relative z-10">
-                      <div className="w-32 h-2 bg-white/10 rounded-full mb-6" />
-                      <div className="w-3/4 h-4 bg-white/[0.07] rounded-full mb-3" />
-                      <div className="w-1/2 h-4 bg-white/[0.05] rounded-full mb-8" />
-                      <div className="grid grid-cols-3 gap-3">
-                        {[1,2,3].map(i => (
-                          <div key={i} className="aspect-[4/3] rounded-xl bg-gradient-to-br from-white/[0.06] to-white/[0.02] border border-white/[0.05]" />
-                        ))}
-                      </div>
-                      <div className="mt-6 flex gap-3">
-                        <div className="w-28 h-8 rounded-lg bg-violet-500/20 border border-violet-500/20" />
-                        <div className="w-28 h-8 rounded-lg bg-white/[0.05] border border-white/[0.05]" />
-                      </div>
-                    </div>
-                    <div className="absolute bottom-3 right-3 bg-black/50 backdrop-blur-xl rounded-lg px-3 py-1.5 border border-white/[0.08] flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-[10px] font-mono text-white/50">Preview</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        </section>
-
-        <section className="py-24 px-6 relative z-10">
-          <div className="max-w-6xl mx-auto">
-            <motion.div
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              className="flex flex-wrap items-center justify-center gap-x-16 gap-y-8"
-            >
-              {[
-                { value: 10000, suffix: "+", label: "Сайтов создано" },
-                { value: 5000, suffix: "+", label: "Пользователей" },
-                { value: 30, suffix: "сек", label: "Среднее время" },
-                { value: 98, suffix: "%", label: "Довольных" },
-              ].map((stat, i) => (
-                <div key={i} className="text-center" data-testid={`stat-${i}`}>
-                  <p className="text-4xl sm:text-5xl font-black tracking-tight bg-gradient-to-b from-white to-white/50 bg-clip-text text-transparent">
-                    <AnimatedCounter target={stat.value} suffix={stat.suffix} />
-                  </p>
-                  <p className="text-sm text-white/30 font-medium mt-1 uppercase tracking-wider">{stat.label}</p>
-                </div>
-              ))}
-            </motion.div>
-          </div>
-        </section>
-
-        <section id="features" className="py-32 px-6 relative z-10">
-          <div className="max-w-7xl mx-auto">
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              variants={staggerContainer}
-              className="text-center mb-20"
-            >
-              <motion.div variants={fadeInUp}>
-                <Badge className="bg-white/[0.06] text-white/60 border border-white/[0.08] px-4 py-1.5 rounded-full text-xs font-bold tracking-[0.15em] uppercase mb-6">
-                  Возможности
-                </Badge>
-              </motion.div>
-              <motion.h2 variants={fadeInUp} className="text-4xl sm:text-6xl font-black tracking-tight mb-6">
-                Всё, что нужно для<br />
-                <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">идеального сайта</span>
-              </motion.h2>
-              <motion.p variants={fadeInUp} className="text-lg text-white/40 max-w-2xl mx-auto">
-                Инструменты, которые превращают идею в рабочий продукт за минуты, а не недели.
-              </motion.p>
-            </motion.div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {features.map((feat, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.08, duration: 0.5 }}
-                  data-testid={`feature-card-${i}`}
-                >
-                  <div className="group h-full bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-8 transition-all duration-500 hover:-translate-y-1">
-                    <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feat.gradient} flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                      <feat.icon className="w-7 h-7 text-white" />
-                    </div>
-                    <h3 className="text-xl font-bold mb-3 text-white/90">{feat.title}</h3>
-                    <p className="text-white/40 leading-relaxed text-[15px]">{feat.desc}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="py-32 px-6 relative z-10">
-          <div className="max-w-6xl mx-auto">
-            <div className="relative rounded-[2.5rem] overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-violet-600/30 via-fuchsia-600/20 to-blue-600/30" />
-              <div className="absolute inset-0 bg-[#09090b]/60 backdrop-blur-sm" />
-              <div className="relative z-10 grid lg:grid-cols-2 gap-12 p-10 sm:p-16 items-center">
-                <div className="space-y-8">
-                  <Badge className="bg-white/[0.08] text-violet-300 border border-violet-500/20 px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase">
-                    Технология
-                  </Badge>
-                  <h2 className="text-4xl sm:text-5xl font-black tracking-tight leading-[1.1]">
-                    Не шаблоны.<br />
-                    <span className="text-white/40">Уникальный дизайн</span><br />
-                    каждый раз.
-                  </h2>
-                  <p className="text-white/40 text-lg leading-relaxed max-w-md">
-                    Gemini 3.1 Pro анализирует тему, изучает конкурентов через интернет
-                    и создаёт дизайн уровня студии — с анимациями, микро-взаимодействиями
-                    и продуманной типографикой.
-                  </p>
-                  <div className="space-y-4">
-                    {[
-                      "Scroll-анимации и parallax эффекты",
-                      "Glassmorphism и noise-текстуры",
-                      "Кинематографичная типографика",
-                      "Адаптивность для всех устройств",
-                    ].map((item, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center shrink-0">
-                          <Check className="w-3.5 h-3.5 text-violet-400" />
-                        </div>
-                        <span className="text-white/60 text-sm font-medium">{item}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="relative">
-                  <div className="absolute -inset-8 bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 rounded-3xl blur-2xl" />
-                  <div className="relative bg-white/[0.04] border border-white/[0.08] rounded-2xl p-6 backdrop-blur-xl">
-                    <div className="space-y-3 font-mono text-sm">
-                      <div className="text-white/20">{"// Gemini 3.1 Pro Output"}</div>
-                      <div><span className="text-fuchsia-400">{"<section"}</span> <span className="text-violet-300">class</span>=<span className="text-emerald-400">"hero"</span><span className="text-fuchsia-400">{">"}</span></div>
-                      <div className="pl-4"><span className="text-fuchsia-400">{"<h1"}</span> <span className="text-violet-300">style</span>=<span className="text-emerald-400">"..."</span><span className="text-fuchsia-400">{">"}</span></div>
-                      <div className="pl-8 text-white/70">Ваш уникальный заголовок</div>
-                      <div className="pl-4"><span className="text-fuchsia-400">{"</h1>"}</span></div>
-                      <div className="pl-4 text-white/20">{"// Scroll-анимации"}</div>
-                      <div className="pl-4"><span className="text-violet-300">{"observer"}</span>.<span className="text-blue-300">observe</span>(el)</div>
-                      <div><span className="text-fuchsia-400">{"</section>"}</span></div>
-                    </div>
-                    <div className="mt-6 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                        <span className="text-xs text-white/30">65,536 tokens max</span>
-                      </div>
-                      <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/20 text-[10px]">Gemini 3.1</Badge>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="how" className="py-32 px-6 relative z-10">
-          <div className="max-w-5xl mx-auto">
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              variants={staggerContainer}
-              className="text-center mb-20"
-            >
-              <motion.div variants={fadeInUp}>
-                <Badge className="bg-white/[0.06] text-white/60 border border-white/[0.08] px-4 py-1.5 rounded-full text-xs font-bold tracking-[0.15em] uppercase mb-6">
-                  Процесс
-                </Badge>
-              </motion.div>
-              <motion.h2 variants={fadeInUp} className="text-4xl sm:text-6xl font-black tracking-tight">
-                Четыре шага к<br />
-                <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">готовому сайту</span>
-              </motion.h2>
-            </motion.div>
-
-            <div className="space-y-6">
-              {steps.map((step, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1, duration: 0.5 }}
-                  data-testid={`step-${i}`}
-                >
-                  <div className="group flex items-start gap-8 bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.05] hover:border-white/[0.1] rounded-2xl p-8 transition-all duration-500">
-                    <span className="text-5xl font-black text-white/[0.06] group-hover:text-violet-500/20 transition-colors shrink-0 leading-none">
-                      {step.num}
-                    </span>
-                    <div>
-                      <h3 className="text-2xl font-bold mb-2">{step.title}</h3>
-                      <p className="text-white/40 leading-relaxed">{step.desc}</p>
-                    </div>
-                    <ChevronRight className="w-6 h-6 text-white/10 group-hover:text-violet-400 transition-colors shrink-0 mt-1 ml-auto" />
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="pricing" className="py-32 px-6 relative z-10">
-          <div className="max-w-7xl mx-auto">
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              variants={staggerContainer}
-              className="text-center mb-20"
-            >
-              <motion.div variants={fadeInUp}>
-                <Badge className="bg-white/[0.06] text-white/60 border border-white/[0.08] px-4 py-1.5 rounded-full text-xs font-bold tracking-[0.15em] uppercase mb-6">
-                  Тарифы
-                </Badge>
-              </motion.div>
-              <motion.h2 variants={fadeInUp} className="text-4xl sm:text-6xl font-black tracking-tight mb-6">
-                Простое ценообразование
-              </motion.h2>
-              <motion.p variants={fadeInUp} className="text-lg text-white/40 max-w-xl mx-auto">
-                Начните бесплатно. Масштабируйтесь когда будете готовы.
-              </motion.p>
-            </motion.div>
-
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              {plans.map((plan, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.08 }}
-                  data-testid={`pricing-card-${i}`}
-                >
-                  <div className={`relative h-full flex flex-col rounded-2xl p-8 transition-all duration-500 ${
-                    plan.popular
-                      ? "bg-gradient-to-b from-violet-600/20 to-fuchsia-600/10 border-2 border-violet-500/30 shadow-[0_0_40px_rgba(139,92,246,0.15)]"
-                      : "bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12]"
-                  }`}>
-                    {plan.popular && (
-                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                        <Badge className="bg-gradient-to-r from-violet-500 to-fuchsia-500 border-0 px-4 py-1 text-[10px] font-bold tracking-widest shadow-lg shadow-violet-500/30">
-                          ПОПУЛЯРНЫЙ
-                        </Badge>
-                      </div>
-                    )}
-
-                    <div className="mb-8">
-                      <p className="text-sm font-bold text-white/40 uppercase tracking-widest mb-3">{plan.name}</p>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-5xl font-black tracking-tighter">{plan.price}</span>
-                        <span className="text-lg font-bold text-white/30">₽{plan.period}</span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 flex-1 mb-8">
-                      <div className="flex items-center gap-2 text-sm font-bold text-violet-400">
-                        <Sparkles className="w-4 h-4" />
-                        {plan.credits} кредитов
-                      </div>
-                      <div className="h-px bg-white/[0.06]" />
-                      {plan.features.map((f, j) => (
-                        <div key={j} className="flex items-center gap-3 text-sm text-white/50">
-                          <div className="w-5 h-5 rounded-full bg-white/[0.06] flex items-center justify-center shrink-0">
-                            <Check className="w-3 h-3 text-violet-400" />
-                          </div>
-                          {f}
-                        </div>
-                      ))}
-                    </div>
-
-                    <Button
-                      className={`w-full h-14 rounded-2xl font-bold text-base transition-all ${
-                        plan.popular
-                          ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 shadow-lg shadow-violet-500/20 border-0"
-                          : "bg-white/[0.06] hover:bg-white/[0.1] text-white border border-white/[0.08]"
-                      }`}
-                      onClick={() => setLocation("/dashboard")}
-                      data-testid={`button-plan-${i}`}
-                    >
-                      {plan.cta}
-                    </Button>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="py-32 px-6 relative z-10">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="max-w-5xl mx-auto"
-          >
-            <div className="relative rounded-[2.5rem] overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-violet-600/40 via-fuchsia-600/30 to-pink-600/20" />
-              <div className="absolute inset-0 bg-[#09090b]/30" />
-              <div className="relative z-10 text-center py-20 px-8 sm:px-16 space-y-8">
-                <h2 className="text-4xl sm:text-6xl font-black tracking-tight leading-[1.1]">
-                  Готовы создать<br />
-                  <span className="bg-gradient-to-r from-white via-violet-200 to-white bg-clip-text text-transparent">свой идеальный сайт?</span>
-                </h2>
-                <p className="text-lg text-white/50 max-w-xl mx-auto">
-                  Присоединяйтесь к тысячам пользователей, которые уже создают
-                  сайты будущего с помощью ИИ.
-                </p>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                  <Button
-                    size="lg"
-                    className="h-16 px-12 rounded-2xl text-xl font-black bg-white text-black hover:bg-white/90 shadow-2xl hover:-translate-y-0.5 transition-all border-0"
-                    onClick={() => setLocation("/dashboard")}
-                    data-testid="button-cta-final"
-                  >
-                    Начать сейчас
-                    <ArrowRight className="ml-2 w-5 h-5" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </section>
-      </main>
-
-      <footer className="relative z-10 border-t border-white/[0.06] bg-[#09090b]">
-        <div className="max-w-7xl mx-auto px-6 py-16">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-12 mb-16">
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-white" />
-                </div>
-                <span className="text-lg font-black tracking-tight">НЕЙРОЗОДЧИЙ</span>
-              </div>
-              <p className="text-sm text-white/30 leading-relaxed">
-                AI-конструктор сайтов нового поколения на базе Gemini 3.1 Pro.
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-white/50 uppercase tracking-widest mb-4">Продукт</p>
-              <div className="space-y-3">
-                <a href="#features" className="block text-sm text-white/30 hover:text-white transition-colors">Возможности</a>
-                <a href="#pricing" className="block text-sm text-white/30 hover:text-white transition-colors">Тарифы</a>
-                <a href="#how" className="block text-sm text-white/30 hover:text-white transition-colors">Как работает</a>
-              </div>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-white/50 uppercase tracking-widest mb-4">Ресурсы</p>
-              <div className="space-y-3">
-                <a href="#" className="block text-sm text-white/30 hover:text-white transition-colors">Документация</a>
-                <a href="#" className="block text-sm text-white/30 hover:text-white transition-colors">Шаблоны</a>
-                <a href="#" className="block text-sm text-white/30 hover:text-white transition-colors">Блог</a>
-              </div>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-white/50 uppercase tracking-widest mb-4">Соцсети</p>
-              <div className="space-y-3">
-                <a href="#" className="block text-sm text-white/30 hover:text-white transition-colors">Telegram</a>
-                <a href="#" className="block text-sm text-white/30 hover:text-white transition-colors">Twitter / X</a>
-                <a href="#" className="block text-sm text-white/30 hover:text-white transition-colors">GitHub</a>
-              </div>
-            </div>
-          </div>
-          <div className="border-t border-white/[0.06] pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-white/20 font-medium">© 2025 НейроЗодчий. Все права защищены.</p>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs text-white/30 font-medium">System Operational</span>
-            </div>
-          </div>
-        </div>
-      </footer>
-    </div>
+    <div ref={containerRef} dangerouslySetInnerHTML={{ __html: LANDING_HTML }} />
   );
 }

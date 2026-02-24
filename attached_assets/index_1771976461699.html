@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="ru"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Craft AI — конструктор сайтов. Создать сайт через конструктор на базе нейросетей теперь можно за считанные минуты без программирования.">
+    <meta property="og:title" content="Конструктор сайтов Craft AI | Создать сайт через ИИ">
+    <meta property="og:description" content="От идеи до запуска за минуты. Конструктор сайтов без кода на базе нейросетей.">
+    <meta property="og:type" content="website">
+    <title>Конструктор сайтов Craft AI | Создать сайт через ИИ конструктор</title>
+    
+    <style>
+        :root {
+            /* Premium Apple-style Minimalist Palette */
+            --bg-main: #FBFBFD;
+            --bg-card: #FFFFFF;
+            --text-main: #1D1D1F;
+            --text-muted: #86868B;
+            --border-light: rgba(0, 0, 0, 0.04);
+            --border-strong: rgba(0, 0, 0, 0.08);
+            
+            /* Rainbow Gradient */
+            --rainbow-grad: linear-gradient(90deg, #FF4242, #A5FF42, #42A5FF, #42E6FF, #B742FF, #FF4242);
+            
+            /* Typography */
+            --font-main: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            --font-mono: "SF Mono", "Menlo", "Monaco", "Consolas", monospace;
+        }
+
+        /* Reset & Base */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            line-height: 1.47059;
+            font-weight: 400;
+            letter-spacing: -0.015em;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Ambient Global Glow */
+        body::before {
+            content: "";
+            position: fixed;
+            top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.5), transparent 60%);
+            pointer-events: none;
+            z-index: 0;
+            animation: pulseAmbient 10s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulseAmbient {
+            0% { transform: scale(1); opacity: 0.5; }
+            100% { transform: scale(1.2); opacity: 1; }
+        }
+
+        ::selection {
+            background-color: rgba(66, 165, 255, 0.2);
+            color: var(--text-main);
+        }
+
+        h1, h2, h3, h4 {
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+            color: var(--text-main);
+        }
+
+        .heading-xl {
+            font-size: clamp(3.5rem, 8vw, 6.5rem);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.06em;
+            font-weight: 700;
+        }
+
+        .heading-lg {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            margin-bottom: 1.2rem;
+            letter-spacing: -0.04em;
+        }
+
+        .text-gradient {
+            background: var(--rainbow-grad);
+            background-size: 200% auto;
+            animation: rainbow 4s linear infinite;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
+        }
+
+        .subtitle {
+            font-size: clamp(1.2rem, 2.5vw, 1.5rem);
+            color: var(--text-muted);
+            margin-bottom: 3rem;
+            max-width: 700px;
+            font-weight: 400;
+            letter-spacing: -0.015em;
+            line-height: 1.5;
+        }
+
+        /* Layout */
+        .container {
+            width: 100%;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        section {
+            padding: 10rem 0;
+            position: relative;
+        }
+
+        /* Living Background Wrapper (Светло-жемчужный перламутр) */
+        .living-bg-wrapper {
+            position: relative;
+            background: linear-gradient(120deg, #ffffff 0%, #faf8ff 25%, #f0f4f8 50%, #fffaf5 75%, #ffffff 100%);
+            background-size: 400% 400%;
+            animation: pearlShine 20s ease infinite;
+            z-index: 1;
+            overflow: hidden;
+        }
+
+        @keyframes pearlShine {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* Мерцающие мелкие искры (жемчужные, серебристые, легкие) */
+        .living-bg-wrapper::before,
+        .living-bg-wrapper::after {
+            content: '';
+            position: absolute;
+            inset: -100px;
+            z-index: 0;
+            pointer-events: none;
+            background-repeat: repeat;
+        }
+
+        .living-bg-wrapper::before {
+            background-image: url("data:image/svg+xml,%3Csvg width='150' height='150' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='30' cy='30' r='1.5' fill='%23e0c3fc' opacity='0.8'/%3E%3Ccircle cx='100' cy='60' r='1' fill='%238ec5fc' opacity='0.9'/%3E%3Ccircle cx='60' cy='120' r='1.8' fill='%23ffd1ff' opacity='0.7'/%3E%3Ccircle cx='130' cy='100' r='1.2' fill='%23d4fc79' opacity='0.8'/%3E%3C/svg%3E");
+            animation: floatSparkles 12s ease-in-out infinite alternate;
+        }
+
+        .living-bg-wrapper::after {
+            background-image: url("data:image/svg+xml,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='100' cy='40' r='1' fill='%23a1c4fd' opacity='0.9'/%3E%3Ccircle cx='160' cy='150' r='1.5' fill='%23ffecd2' opacity='0.7'/%3E%3Ccircle cx='40' cy='180' r='1.8' fill='%23cfd9df' opacity='0.8'/%3E%3C/svg%3E");
+            animation: floatSparklesAlt 15s ease-in-out infinite alternate-reverse;
+        }
+
+        @keyframes floatSparkles {
+            0% { transform: translateY(0) scale(0.8); opacity: 0.1; }
+            50% { transform: translateY(-50px) scale(1.2); opacity: 0.6; }
+            100% { transform: translateY(-100px) scale(0.8); opacity: 0.1; }
+        }
+
+        @keyframes floatSparklesAlt {
+            0% { transform: translateY(0) scale(0.8); opacity: 0.1; }
+            50% { transform: translateY(-70px) scale(1.3); opacity: 0.5; }
+            100% { transform: translateY(-140px) scale(0.8); opacity: 0.1; }
+        }
+
+        /* Glass Cards */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 24px;
+            padding: 3rem;
+            transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
+            position: relative;
+            z-index: 1;
+        }
+
+        .glass-panel:hover {
+            transform: translateY(-4px) scale(1.005);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.08);
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Interactive Flashlight Effect */
+        .flashlight-card {
+            position: relative;
+            overflow: hidden;
+            isolation: isolate;
+        }
+
+        .flashlight-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: radial-gradient(
+                700px circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px),
+                rgba(240, 244, 248, 0.6),
+                transparent 40%
+            );
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .flashlight-card::after {
+            content: "";
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            background: radial-gradient(
+                500px circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px),
+                rgba(255, 255, 255, 0.6),
+                transparent 40%
+            );
+            z-index: -1;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #process-grid:hover .flashlight-card::before,
+        #process-grid:hover .flashlight-card::after {
+            opacity: 1;
+        }
+
+        .flashlight-card > * {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Buttons */
+        .magic-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            border-radius: 0.5rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+            cursor: pointer;
+            position: relative;
+            color: var(--text-main);
+            text-decoration: none;
+            height: 3rem;
+            padding: 0 1.25rem;
+            z-index: 1;
+            border: calc(0.08 * 1rem) solid transparent;
+            background: 
+                linear-gradient(#fff, #fff) padding-box,
+                var(--rainbow-grad) border-box;
+            background-size: 200% auto;
+            animation: rainbow 3s linear infinite;
+        }
+
+        .magic-btn::before {
+            content: '';
+            position: absolute;
+            bottom: -20%;
+            left: 50%;
+            z-index: -1;
+            height: 20%;
+            width: 60%;
+            transform: translateX(-50%);
+            background: var(--rainbow-grad);
+            background-size: 200% auto;
+            animation: rainbow 3s linear infinite;
+            filter: blur(calc(0.8 * 1rem));
+        }
+
+        .magic-btn:hover { transform: scale(1.05); }
+        .magic-btn:active { transform: scale(0.95); }
+
+        @keyframes rainbow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
+        }
+
+        .btn-outline {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.8rem 1.8rem;
+            border-radius: 100px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            text-decoration: none;
+            cursor: pointer;
+            background: rgba(0, 0, 0, 0.03);
+            color: var(--text-main);
+            border: none;
+            transition: all 0.3s ease;
+        }
+
+        .btn-outline:hover { background: rgba(0, 0, 0, 0.08); }
+
+        /* Navbar */
+        header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 1000;
+            padding: 1rem 0;
+            background: rgba(251, 251, 253, 0.8);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border-bottom: 1px solid var(--border-light);
+            transition: all 0.3s;
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--text-main);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            letter-spacing: -0.02em;
+        }
+
+        .logo-svg { width: 32px; height: 32px; display: block; }
+        .logo-code { stroke-dasharray: 20; animation: dash-type 2.5s steps(4, end) infinite alternate; }
+        .logo-cursor { animation: blink-cursor 1s step-end infinite; }
+
+        @keyframes dash-type { 0% { stroke-dashoffset: 20; } 100% { stroke-dashoffset: 0; } }
+        @keyframes blink-cursor { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        .nav-links { display: flex; gap: 2.5rem; }
+        
+        .nav-links a { 
+            color: var(--text-muted); 
+            text-decoration: none; 
+            font-weight: 500; 
+            font-size: 0.95rem; 
+            transition: color 0.3s; 
+        }
+        
+        /* Градиентный ховер для ссылок меню */
+        .nav-links a:hover { 
+            background: var(--rainbow-grad);
+            background-size: 200% auto;
+            animation: rainbow 4s linear infinite;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+        }
+
+        /* Градиентный ховер для кнопки Войти */
+        .nav-login span {
+            display: inline-block;
+            transition: all 0.3s;
+        }
+        .nav-login:hover span {
+            background: var(--rainbow-grad);
+            background-size: 200% auto;
+            animation: rainbow 4s linear infinite;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding-top: 140px;
+            text-align: center;
+            overflow: hidden;
+            background: radial-gradient(circle at 50% -20%, #ffffff 0%, transparent 70%);
+            position: relative;
+            z-index: 2;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Hero Animation Window (Dark Theme for Code) */
+        .hero-window {
+            margin-top: 5rem;
+            width: 100%;
+            max-width: 860px;
+            height: 420px; 
+            background: #1D1D1F;
+            border: 1px solid var(--border-strong);
+            border-radius: 16px;
+            box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .mac-header {
+            padding: 1rem 1.2rem;
+            display: flex;
+            gap: 8px;
+            background: #252528;
+            border-bottom: 1px solid #333333;
+            align-items: center;
+        }
+
+        .mac-dot { width: 12px; height: 12px; border-radius: 50%; }
+
+        /* Advanced Slider Section */
+        .slider-container {
+            position: relative;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.1), 0 0 0 1px var(--border-light);
+            aspect-ratio: 16 / 10;
+            background: transparent;
+        }
+
+        @media (max-width: 768px) { .slider-container { aspect-ratio: 4 / 3; } }
+
+        .slide {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            opacity: 0;
+            transform: scale(1.15);
+            filter: blur(15px);
+            clip-path: inset(15% 15% 15% 15% round 24px);
+            transition: all 1.2s cubic-bezier(0.19, 1, 0.22, 1);
+            pointer-events: none;
+        }
+
+        .slide.active {
+            opacity: 1;
+            transform: scale(1);
+            filter: blur(0);
+            clip-path: inset(0% 0% 0% 0% round 0px);
+            pointer-events: auto;
+            z-index: 2;
+        }
+
+        .slide img {
+            width: 100%; height: 100%;
+            object-fit: cover; object-position: top;
+        }
+
+        .slider-nav {
+            position: absolute;
+            bottom: 24px; left: 50%;
+            transform: translateX(-50%);
+            display: flex; gap: 12px; z-index: 10;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 8px 16px; border-radius: 100px;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        }
+
+        .slider-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: rgba(255, 255, 255, 0.4);
+            cursor: pointer; transition: all 0.3s;
+        }
+
+        .slider-dot:hover { background: rgba(255, 255, 255, 0.8); }
+        .slider-dot.active { background: #fff; transform: scale(1.5); }
+
+        .slider-btn {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            width: 50px; height: 50px; border-radius: 50%;
+            background: rgba(255, 255, 255, 0.9); border: none;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 10; transition: all 0.3s;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        }
+
+        .slider-btn:hover { background: #fff; transform: translateY(-50%) scale(1.1); }
+        .slider-btn.prev { left: 24px; }
+        .slider-btn.next { right: 24px; }
+        .slider-btn svg { width: 24px; height: 24px; stroke: var(--text-main); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+        /* Bento Grid */
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 1.5rem;
+        }
+
+        .bento-item {
+            grid-column: span 12;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        @media (min-width: 768px) {
+            .bento-item { grid-column: span 6; }
+            .bento-item.span-full { grid-column: span 12; flex-direction: row; align-items: center; }
+            .bento-item.span-8 { grid-column: span 8; }
+            .bento-item.span-6 { grid-column: span 6; }
+            .bento-item.span-4 { grid-column: span 4; }
+        }
+
+        .bento-icon {
+            width: 48px; height: 48px; border-radius: 12px;
+            background: rgba(255, 255, 255, 0.8); display: flex; align-items: center; justify-content: center;
+            margin-bottom: 0.5rem; transition: all 0.4s ease;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+        }
+
+        .glass-panel:hover .bento-icon {
+            background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,0.06); transform: scale(1.05);
+        }
+
+        .bento-icon svg { width: 24px; height: 24px; stroke: var(--text-main); transition: all 0.4s ease; }
+        .bento-item h3 { font-size: 1.5rem; }
+        .bento-item p { color: var(--text-muted); font-size: 1.05rem; line-height: 1.5; }
+
+        /* Footer */
+        footer { border-top: 1px solid rgba(0, 0, 0, 0.05); padding: 4rem 0 2rem; background: var(--bg-card); position: relative; z-index: 2; }
+        .footer-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 2rem; margin-bottom: 3rem; }
+        .socials { display: flex; gap: 1rem; }
+        .socials a { color: var(--text-muted); transition: color 0.3s; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-main); }
+        .socials a:hover { color: var(--text-main); background: var(--border-strong); }
+        .copyright { text-align: center; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border-light); padding-top: 2rem; }
+
+        /* Animations */
+        .reveal { opacity: 0; transform: translateY(30px); transition: all 1s cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .reveal.active { opacity: 1; transform: translateY(0); }
+
+        /* Mobile Adjustments */
+        @media (max-width: 992px) { section { padding: 7rem 0; } }
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            section { padding: 5rem 0; }
+            .bento-item.span-8, .bento-item.span-6, .bento-item.span-4 { grid-column: span 12; }
+            .hero { padding-top: 100px; }
+            .magic-badge { display: none; }
+            .heading-xl { font-size: 3rem; }
+            .hero-window { height: 350px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header style="padding: 1rem 0px; box-shadow: none;">
+        <div class="container nav-container">
+            <a href="#" class="logo">
+                <svg viewBox="0 0 32 32" class="logo-svg" stroke="currentColor" stroke-width="2" fill="none">
+                    <defs>
+                        <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%"><animate attributeName="stop-color" values="#FF4242; #A5FF42; #42A5FF; #42E6FF; #B742FF; #FF4242" dur="5s" repeatCount="indefinite"></animate></stop>
+                            <stop offset="100%"><animate attributeName="stop-color" values="#B742FF; #FF4242; #A5FF42; #42A5FF; #42E6FF; #B742FF" dur="5s" repeatCount="indefinite"></animate></stop>
+                        </linearGradient>
+                    </defs>
+                    <rect x="4" y="4" width="24" height="18" rx="4" stroke="url(#logo-grad)"></rect>
+                    <circle cx="10" cy="10" r="1.5" fill="url(#logo-grad)" stroke="none"></circle>
+                    <circle cx="22" cy="10" r="1.5" fill="url(#logo-grad)" stroke="none"></circle>
+                    <path class="logo-code" d="M12 16l-2 2 2 2 M20 16l2 2-2 2" stroke="url(#logo-grad)" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <line class="logo-cursor" x1="15" y1="20" x2="17" y2="20" stroke="url(#logo-grad)" stroke-linecap="round"></line>
+                    <path d="M8 26 h16 M10 28 h12" stroke="url(#logo-grad)" stroke-linecap="round"></path>
+                </svg>
+                Craft AI
+            </a>
+            <nav class="nav-links">
+                <a href="#examples">Возможности</a>
+                <a href="#process">Архитектура</a>
+                <a href="#features">Интеллект</a>
+                <a href="#examples">Экосистема</a>
+            </nav>
+            <a href="#" class="btn-outline nav-login" style="padding: 0.5rem 1.2rem; font-size: 0.85rem;"><span>Войти</span></a>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container hero-content">
+            <!-- SEO H1: Оптимизирован под "конструктор сайтов" -->
+            <h1 class="heading-xl reveal active">Конструктор сайтов<br><span class="text-gradient">Craft AI</span></h1>
+            <p class="subtitle reveal active" style="transition-delay: 0.1s;">Просто опишите идею. Интеллектуальная система спроектирует, создаст анимацию и напишет SEO текст за считанные минуты. Никакого кода.</p>
+            
+            <div class="reveal active" style="transition-delay: 0.2s; display: flex; gap: 1rem; align-items: center; justify-content: center; flex-wrap: wrap;">
+                <a href="#examples" class="magic-btn group">
+                    <div style="display: flex; align-items: center;">
+                        <svg style="width: 16px; height: 16px;" viewBox="0 0 438.549 438.549">
+                            <path d="M409.132 114.573c-19.608-33.596-46.205-60.194-79.798-79.8-33.598-19.607-70.277-29.408-110.063-29.408-39.781 0-76.472 9.804-110.063 29.408-33.596 19.605-60.192 46.204-79.8 79.8C9.803 148.168 0 184.854 0 224.63c0 47.78 13.94 90.745 41.827 128.906 27.884 38.164 63.906 64.572 108.063 79.227 5.14.954 8.945.283 11.419-1.996 2.475-2.282 3.711-5.14 3.711-8.562 0-.571-.049-5.708-.144-15.417a2549.81 2549.81 0 01-.144-25.406l-6.567 1.136c-4.187.767-9.469 1.092-15.846 1-6.374-.089-12.991-.757-19.842-1.999-6.854-1.231-13.229-4.086-19.13-8.559-5.898-4.473-10.085-10.328-12.56-17.556l-2.855-6.57c-1.903-4.374-4.899-9.233-8.992-14.559-4.093-5.331-8.232-8.945-12.419-10.848l-1.999-1.431c-1.332-.951-2.568-2.098-3.711-3.429-1.142-1.331-1.997-2.663-2.568-3.997-.572-1.335-.098-2.43 1.427-3.289 1.525-.859 4.281-1.276 8.28-1.276l5.708.853c3.807.763 8.516 3.042 14.133 6.851 5.614 3.806 10.229 8.754 13.846 14.842 4.38 7.806 9.657 13.754 15.846 17.847 6.184 4.093 12.419 6.136 18.699 6.136 6.28 0 11.704-.476 16.274-1.423 4.565-.952 8.848-2.383 12.847-4.285 1.713-12.758 6.377-22.559 13.988-29.41-10.848-1.14-20.601-2.857-29.264-5.14-8.658-2.286-17.605-5.996-26.835-11.14-9.235-5.137-16.896-11.516-22.985-19.126-6.09-7.614-11.088-17.61-14.987-29.979-3.901-12.374-5.852-26.648-5.852-42.826 0-23.035 7.52-42.637 22.557-58.817-7.044-17.318-6.379-36.732 1.997-58.24 5.52-1.715 13.706-.428 24.554 3.853 10.85 4.283 18.794 7.952 23.84 10.994 5.046 3.041 9.089 5.618 12.135 7.708 17.705-4.947 35.976-7.421 54.818-7.421s37.117 2.474 54.823 7.421l10.849-6.849c7.419-4.57 16.18-8.758 26.262-12.565 10.088-3.805 17.802-4.853 23.134-3.138 8.562 21.509 9.325 40.922 2.279 58.24 15.036 16.18 22.559 35.787 22.559 58.817 0 16.178-1.958 30.497-5.853 42.966-3.9 12.471-8.941 22.457-15.125 29.979-6.191 7.521-13.901 13.85-23.131 18.986-9.232 5.14-18.182 8.85-26.84 11.136-8.662 2.286-18.415 4.004-29.263 5.146 9.894 8.562 14.842 22.077 14.842 40.539v60.237c0 3.422 1.19 6.279 3.572 8.562 2.379 2.279 6.136 2.95 11.276 1.995 44.163-14.653 80.185-41.062 108.068-79.226 27.88-38.161 41.825-81.126 41.825-128.906-.01-39.771-9.818-76.454-29.414-110.049z" fill="var(--text-main)"></path>
+                        </svg>
+                        <span style="margin-left: 0.5rem; color: var(--text-main);">Начать Творить</span>
+                    </div>
+                    <div class="magic-badge" style="margin-left: 0.75rem; display: flex; align-items: center; gap: 0.25rem;">
+                        <svg style="width: 16px; height: 16px; color: var(--text-muted);" viewBox="0 0 24 24" fill="currentColor">
+                            <path clip-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" fill-rule="evenodd"></path>
+                        </svg>
+                        <span style="font-family: var(--font-mono); color: var(--text-main);">AI</span>
+                    </div>
+                </a>
+                <a href="#examples" class="btn-outline">Узнать больше</a>
+            </div>
+            
+            <!-- Hero Animated Interface Window (Code Typing) -->
+            <div class="hero-window reveal active" style="transition-delay: 0.3s;">
+                <div class="mac-header">
+                    <span class="mac-dot" style="background: #FF5F56;"></span>
+                    <span class="mac-dot" style="background: #FFBD2E;"></span>
+                    <span class="mac-dot" style="background: #27C93F;"></span>
+                    <span style="margin-left: auto; font-family: var(--font-mono); font-size: 0.8rem; color: #8b949e;">index.html — Craft AI</span>
+                </div>
+                <div style="height: calc(100% - 45px); overflow: hidden; position: relative;">
+                    <svg viewBox="0 0 800 375" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style="background: #1D1D1F;">
+                        <!-- Line numbers -->
+                        <rect x="0" y="0" width="40" height="400" fill="#252528"/>
+                        <g font-family="var(--font-mono)" font-size="14" fill="#6e7681" text-anchor="end">
+                            <text x="30" y="30">1</text>
+                            <text x="30" y="55">2</text>
+                            <text x="30" y="80">3</text>
+                            <text x="30" y="105">4</text>
+                            <text x="30" y="130">5</text>
+                            <text x="30" y="155">6</text>
+                            <text x="30" y="180">7</text>
+                            <text x="30" y="205">8</text>
+                            <text x="30" y="230">9</text>
+                            <text x="30" y="255">10</text>
+                            <text x="30" y="280">11</text>
+                            <text x="30" y="305">12</text>
+                            <text x="30" y="330">13</text>
+                            <text x="30" y="355">14</text>
+                        </g>
+
+                        <!-- Code Typing Animation -->
+                        <g font-family="var(--font-mono)" font-size="14">
+                            <!-- Line 1 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;1;1" keyTimes="0;0.02;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="55" y="30"><tspan fill="#8b949e">&lt;!</tspan><tspan fill="#42A5FF">DOCTYPE</tspan> <tspan fill="#A5FF42">html</tspan><tspan fill="#8b949e">&gt;</tspan></text>
+                            </g>
+                            
+                            <!-- Line 2 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.05;0.07;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="55" y="55"><tspan fill="#8b949e">&lt;</tspan><tspan fill="#27C93F">html</tspan> <tspan fill="#B742FF">lang</tspan><tspan fill="#8b949e">=</tspan><tspan fill="#FFBD2E">"ru"</tspan><tspan fill="#8b949e">&gt;</tspan></text>
+                            </g>
+
+                            <!-- Line 3 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.08;0.1;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="80" y="80"><tspan fill="#8b949e">&lt;</tspan><tspan fill="#27C93F">head</tspan><tspan fill="#8b949e">&gt;</tspan></text>
+                            </g>
+
+                            <!-- Line 4 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.12;0.15;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="105" y="105"><tspan fill="#8b949e">&lt;</tspan><tspan fill="#27C93F">title</tspan><tspan fill="#8b949e">&gt;</tspan><tspan fill="#e6edf3">Конструктор сайтов Craft AI</tspan><tspan fill="#8b949e">&lt;/</tspan><tspan fill="#27C93F">title</tspan><tspan fill="#8b949e">&gt;</tspan></text>
+                            </g>
+
+                            <!-- Line 5 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.17;0.19;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="105" y="130"><tspan fill="#8b949e">&lt;</tspan><tspan fill="#27C93F">style</tspan><tspan fill="#8b949e">&gt;</tspan></text>
+                            </g>
+
+                            <!-- Line 6 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.22;0.25;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="130" y="155"><tspan fill="#FF4242">.hero</tspan> <tspan fill="#8b949e">{</tspan></text>
+                            </g>
+
+                            <!-- Line 7 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.28;0.32;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="155" y="180"><tspan fill="#42A5FF">display</tspan><tspan fill="#8b949e">:</tspan> <tspan fill="#FFBD2E">flex</tspan><tspan fill="#8b949e">;</tspan></text>
+                            </g>
+
+                            <!-- Line 8 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.35;0.4;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="155" y="205"><tspan fill="#42A5FF">background</tspan><tspan fill="#8b949e">:</tspan> <tspan fill="#FFBD2E">linear-gradient</tspan><tspan fill="#8b949e">(90deg, #FF4242, #42A5FF);</tspan></text>
+                            </g>
+
+                            <!-- Line 9 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.42;0.45;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="130" y="230"><tspan fill="#8b949e">}</tspan></text>
+                            </g>
+
+                            <!-- Line 10 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.47;0.49;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="105" y="255"><tspan fill="#8b949e">&lt;/</tspan><tspan fill="#27C93F">style</tspan><tspan fill="#8b949e">&gt;</tspan></text>
+                            </g>
+
+                            <!-- Line 11 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.51;0.53;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="80" y="280"><tspan fill="#8b949e">&lt;/</tspan><tspan fill="#27C93F">head</tspan><tspan fill="#8b949e">&gt;</tspan></text>
+                            </g>
+
+                            <!-- Line 12 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.56;0.58;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="80" y="305"><tspan fill="#8b949e">&lt;</tspan><tspan fill="#27C93F">body</tspan><tspan fill="#8b949e">&gt;</tspan></text>
+                            </g>
+
+                            <!-- Line 13 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.62;0.68;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="105" y="330"><tspan fill="#8b949e">&lt;</tspan><tspan fill="#27C93F">h1</tspan> <tspan fill="#B742FF">class</tspan><tspan fill="#8b949e">=</tspan><tspan fill="#FFBD2E">"text-gradient"</tspan><tspan fill="#8b949e">&gt;</tspan><tspan fill="#e6edf3">Craft AI</tspan><tspan fill="#8b949e">&lt;/</tspan><tspan fill="#27C93F">h1</tspan><tspan fill="#8b949e">&gt;</tspan></text>
+                            </g>
+                            
+                            <!-- Line 14 -->
+                            <g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.7;0.75;1" dur="10s" repeatCount="indefinite"/>
+                                <text x="105" y="355"><tspan fill="#8b949e">&lt;</tspan><tspan fill="#27C93F">p</tspan><tspan fill="#8b949e">&gt;</tspan><tspan fill="#e6edf3">Генерация завершена...</tspan><tspan fill="#8b949e">&lt;/</tspan><tspan fill="#27C93F">p</tspan><tspan fill="#8b949e">&gt;</tspan></text>
+                            </g>
+
+                            <!-- Blinking & Jumping Cursor -->
+                            <rect x="0" y="0" width="8" height="15" fill="#42A5FF">
+                                <animate attributeName="opacity" values="1;0;1" dur="0.8s" repeatCount="indefinite"/>
+                                <animate attributeName="x" values="55; 170; 230; 110; 420; 110; 160; 220; 450; 110; 120; 80; 80; 320; 320; 320" calcMode="discrete" keyTimes="0; 0.05; 0.08; 0.12; 0.17; 0.22; 0.28; 0.35; 0.42; 0.47; 0.51; 0.56; 0.62; 0.7; 0.75; 1" dur="10s" repeatCount="indefinite"/>
+                                <animate attributeName="y" values="18; 43; 68; 93; 118; 143; 168; 193; 218; 243; 268; 293; 318; 343; 343; 343" calcMode="discrete" keyTimes="0; 0.05; 0.08; 0.12; 0.17; 0.22; 0.28; 0.35; 0.42; 0.47; 0.51; 0.56; 0.62; 0.7; 0.75; 1" dur="10s" repeatCount="indefinite"/>
+                            </rect>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Обертка для живого фона (Светло-жемчужный перламутр с мерцающими мелкими искорками) -->
+    <div class="living-bg-wrapper">
+        
+        <!-- Examples Slider Section -->
+        <section id="examples" style="padding: 5rem 0;">
+            <div class="container">
+                <div class="reveal active" style="text-align: center; margin-bottom: 4rem;">
+                    <h2 class="heading-lg">Воплощенные идеи.</h2>
+                    <p class="subtitle" style="margin: 0 auto;">Сайты, созданные агентом Craft AI в реальном времени. Впечатляющий дизайн без единой строчки кода вручную.</p>
+                </div>
+                
+                <div class="slider-container reveal active">
+                    <button class="slider-btn prev" aria-label="Предыдущий слайд">
+                        <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg>
+                    </button>
+                    <button class="slider-btn next" aria-label="Следующий слайд">
+                        <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"></path></svg>
+                    </button>
+                    
+                    <div class="slide">
+                        <img src="images/start-ai.png" alt="Craft AI Project Example 1" style="cursor: pointer;">
+                    </div>
+                    <div class="slide">
+                        <img src="images/sync.png" alt="Craft AI Project Example 2" style="cursor: pointer;">
+                    </div>
+                    <div class="slide active">
+                        <img src="images/automation-ally.png" alt="Craft AI Project Example 3" style="cursor: pointer;">
+                    </div>
+                    
+                    <div class="slider-nav">
+                        <div class="slider-dot" data-index="0"></div>
+                        <div class="slider-dot" data-index="1"></div>
+                        <div class="slider-dot active" data-index="2"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Process Section with Flashlight Effect -->
+        <section id="process">
+            <div class="container">
+                <div class="reveal active">
+                    <!-- SEO H2: Оптимизирован под "Создать сайт конструктор" -->
+                    <h2 class="heading-lg">Создать сайт: конструктор без границ.</h2>
+                    <p class="subtitle">Искусственный интеллект трансформирует ваши мысли в чистый код и совершенный дизайн, оставляя вам роль главного визионера.</p>
+                </div>
+
+                <div class="bento-grid" id="process-grid">
+                    <div class="glass-panel bento-item span-4 reveal active flashlight-card">
+                        <div class="bento-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
+                        </div>
+                        <h3>1. Идея</h3>
+                        <p>Опишите видение естественным языком. Система мгновенно улавливает контекст и эстетику.</p>
+                    </div>
+                    
+                    <div class="glass-panel bento-item span-4 reveal active flashlight-card" style="transition-delay: 0.1s;">
+                        <div class="bento-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                        </div>
+                        <h3>2. Генерация</h3>
+                        <p>Ядро синтезирует уникальный интерфейс, пишет семантический код и создает контент.</p>
+                    </div>
+                    
+                    <div class="glass-panel bento-item span-4 reveal active flashlight-card" style="transition-delay: 0.2s;">
+                        <div class="bento-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        </div>
+                        <h3>3. Запуск</h3>
+                        <p>Идеальная адаптивность прямо из коробки. Одно касание — и сайт доступен всему миру.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section id="features">
+            <div class="container">
+                <div class="reveal active">
+                    <h2 class="heading-lg">Мощь внутри.</h2>
+                    <p class="subtitle">Мощные технологии скрыты за невероятно простым и интуитивным интерфейсом.</p>
+                </div>
+
+                <div class="bento-grid">
+                    <!-- Large Feature -->
+                    <div class="glass-panel bento-item span-8 reveal active">
+                        <div style="flex: 1;">
+                            <div style="display: inline-block; padding: 0.4rem 1rem; background: rgba(255,255,255,0.8); border-radius: 50px; font-size: 0.85rem; font-weight: 500; margin-bottom: 1.5rem; border: 1px solid var(--border-light);">Нейросети</div>
+                            <h3 style="font-size: 2.2rem; margin-bottom: 1rem; font-weight: 600;">Семантический копирайтер</h3>
+                            <p style="margin-bottom: 2rem; max-width: 500px;">Генерация глубокого контента с идеальным Tone of Voice. Адаптация под все языки и встроенная SEO-семантика.</p>
+                        </div>
+                    </div>
+
+                    <!-- Small Feature 1 -->
+                    <div class="glass-panel bento-item span-4 reveal active" style="transition-delay: 0.1s;">
+                        <div class="bento-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                        </div>
+                        <h3>Идеальный адаптив</h3>
+                        <p>Математически выверенная сетка. Безупречное масштабирование на любых устройствах.</p>
+                    </div>
+
+                    <!-- Small Feature 2 -->
+                    <div class="glass-panel bento-item span-4 reveal active" style="transition-delay: 0.2s;">
+                        <div class="bento-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        </div>
+                        <h3>Интерактивные элементы</h3>
+                        <p>Создавайте интерактивные элементы такие как: калькулятор доходности, квиз, Слайдер «До и После», Дорожная карта.</p>
+                    </div>
+
+                    <!-- Large Feature (Анимация + SVG Roadmap) -->
+                    <div class="glass-panel bento-item span-8 reveal active" style="transition-delay: 0.3s; overflow: hidden;">
+                        <div style="position: relative; z-index: 2; margin-bottom: 1rem;">
+                            <h3 style="font-size: 2.2rem; margin-bottom: 1rem; font-weight: 600;">Анимация</h3>
+                            <p style="max-width: 500px;">Создавайте любую SVG анимацию через промт запрос. Анимация дорожной карты по выпуску сайта:</p>
+                        </div>
+                        <div style="width: 100%; height: 120px; position: relative; margin-top: auto;">
+                            <svg viewBox="0 0 600 120" style="width: 100%; height: 100%; position: absolute; left: 0; top: 0;" preserveAspectRatio="xMidYMid meet">
+                                <defs>
+                                    <linearGradient id="roadmap-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" stop-color="#FF4242"></stop>
+                                        <stop offset="33%" stop-color="#A5FF42"></stop>
+                                        <stop offset="66%" stop-color="#42A5FF"></stop>
+                                        <stop offset="100%" stop-color="#B742FF"></stop>
+                                    </linearGradient>
+                                </defs>
+                                <line x1="50" y1="40" x2="550" y2="40" stroke="var(--border-strong)" stroke-width="4" stroke-linecap="round"></line>
+                                <line x1="50" y1="40" x2="550" y2="40" stroke="url(#roadmap-grad)" stroke-width="4" stroke-linecap="round" stroke-dasharray="500" stroke-dashoffset="500">
+                                    <animate attributeName="stroke-dashoffset" values="500;0" dur="4s" repeatCount="indefinite"></animate>
+                                </line>
+                                
+                                <circle cx="50" cy="40" r="8" fill="#fff" stroke="var(--border-strong)" stroke-width="3"></circle>
+                                <circle cx="50" cy="40" r="8" fill="#fff" stroke="#FF4242" stroke-width="3"><animate attributeName="opacity" values="0;1;1" keyTimes="0;0.1;1" dur="4s" repeatCount="indefinite"></animate></circle>
+                                <text x="50" y="75" text-anchor="middle" font-size="14" fill="var(--text-main)" font-family="var(--font-main)" font-weight="600">Идея</text>
+                                
+                                <circle cx="216" cy="40" r="8" fill="#fff" stroke="var(--border-strong)" stroke-width="3"></circle>
+                                <circle cx="216" cy="40" r="8" fill="#fff" stroke="#A5FF42" stroke-width="3"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.3;0.35;1" dur="4s" repeatCount="indefinite"></animate></circle>
+                                <text x="216" y="75" text-anchor="middle" font-size="14" fill="var(--text-main)" font-family="var(--font-main)" font-weight="600">Синтез</text>
+
+                                <circle cx="383" cy="40" r="8" fill="#fff" stroke="var(--border-strong)" stroke-width="3"></circle>
+                                <circle cx="383" cy="40" r="8" fill="#fff" stroke="#42A5FF" stroke-width="3"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.6;0.65;1" dur="4s" repeatCount="indefinite"></animate></circle>
+                                <text x="383" y="75" text-anchor="middle" font-size="14" fill="var(--text-main)" font-family="var(--font-main)" font-weight="600">Оживление</text>
+
+                                <circle cx="550" cy="40" r="8" fill="#fff" stroke="var(--border-strong)" stroke-width="3"></circle>
+                                <circle cx="550" cy="40" r="8" fill="#fff" stroke="#B742FF" stroke-width="3"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.9;0.95;1" dur="4s" repeatCount="indefinite"></animate></circle>
+                                <text x="550" y="75" text-anchor="middle" font-size="14" fill="var(--text-main)" font-family="var(--font-main)" font-weight="600">Запуск</text>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- New Feature (Экспорт кода) -->
+                    <div class="glass-panel bento-item span-6 reveal active">
+                        <div class="bento-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                        </div>
+                        <h3>Экспорт кода</h3>
+                        <p>Забирайте чистый HTML/CSS/JS код в один клик. Никакой привязки к платформе, полная свобода.</p>
+                    </div>
+
+                    <!-- New Feature (Быстрое развертывание) -->
+                    <div class="glass-panel bento-item span-6 reveal active" style="transition-delay: 0.1s;">
+                        <div class="bento-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+                        </div>
+                        <h3>Быстрое развертывание</h3>
+                        <p>Мгновенная публикация вашего проекта. Разверните готовый сайт на любом удобном для вас хостинге без сложных настроек сервера.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SEO Content Section -->
+        <section id="seo-content" style="padding: 5rem 0; margin-bottom: 3rem;">
+            <div class="container">
+                <div class="glass-panel reveal active" style="padding: 4rem;">
+                    <h2 class="heading-lg" style="margin-bottom: 2rem; font-size: clamp(2rem, 4vw, 3rem);">Как мы изменили подход к веб-разработке</h2>
+                    <div style="font-size: 1.1rem; line-height: 1.8; color: var(--text-muted);">
+                        <p style="margin-bottom: 1.5rem;">Раньше, чтобы запустить свой проект в интернете, приходилось либо тратить недели на изучение кода, либо нанимать целую команду специалистов. Мы поняли, что этот процесс безнадежно устарел. Сегодня идеальный <strong>конструктор сайтов</strong> должен работать так: вы просто формулируете свою мысль, а сложная математика под капотом превращает её в готовый, стильный и быстрый продукт, готовый к выходу в свет.</p>
+                        
+                        <p style="margin-bottom: 1.5rem;">Мы создали Craft AI для того, чтобы каждый мог стать творцом своего цифрового пространства. Наша нейросеть берет на себя самую рутинную работу: она пишет семантически правильный HTML-код, выстраивает безупречную сетку стилей и даже анимирует элементы на лету. Вы не просто собираете блоки, как это было раньше. Вы общаетесь с интеллектуальной системой, которая понимает контекст вашего бизнеса и предлагает лучшие визуальные решения.</p>
+
+                        <h3 style="color: var(--text-main); font-size: 1.6rem; margin: 2.5rem 0 1rem;">Как создать сайт: конструктор, который думает вместе с вами</h3>
+                        
+                        <p style="margin-bottom: 1.5rem;">Если перед вами стоит задача быстро <strong>создать сайт, конструктор</strong> нового поколения — это ваш лучший и самый надежный союзник. В отличие от классических решений, где вы ограничены жесткими рамками шаблонов, Craft AI генерирует абсолютно уникальный дизайн под каждый ваш запрос. Нейронные алгоритмы анализируют миллионы успешных веб-интерфейсов, чтобы собрать для вас идеальную композицию, которая будет вызывать доверие пользователей и отлично смотреться на смартфонах, планшетах и широких мониторах.</p>
+                        
+                        <p>А главное — мы не замыкаем вас в своей экосистеме. Мы верим в свободу данных и открытый интернет. Поэтому вы всегда можете в один клик выгрузить чистый, профессиональный код своего проекта и разместить его на любом хостинге. Никаких скрытых платежей, никаких сложных настроек серверов или баз данных. Только чистое творчество, помноженное на невероятную мощь современных технологий искусственного интеллекта. Будущее веб-разработки уже здесь, и оно удивительно простое.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div> <!-- End of Living Background Wrapper -->
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <a href="#" class="logo" style="font-size: 1.2rem;">
+                    <svg viewBox="0 0 32 32" class="logo-svg" stroke="currentColor" stroke-width="2" fill="none">
+                        <rect x="4" y="4" width="24" height="18" rx="4" stroke="url(#logo-grad)"></rect>
+                        <circle cx="10" cy="10" r="1.5" fill="url(#logo-grad)" stroke="none"></circle>
+                        <circle cx="22" cy="10" r="1.5" fill="url(#logo-grad)" stroke="none"></circle>
+                        <path class="logo-code" d="M12 16l-2 2 2 2 M20 16l2 2-2 2" stroke="url(#logo-grad)" stroke-linecap="round" stroke-linejoin="round"></path>
+                        <line class="logo-cursor" x1="15" y1="20" x2="17" y2="20" stroke="url(#logo-grad)" stroke-linecap="round"></line>
+                        <path d="M8 26 h16 M10 28 h12" stroke="url(#logo-grad)" stroke-linecap="round"></path>
+                    </svg>
+                    Craft AI
+                </a>
+                
+                <div class="socials">
+                    <a href="#" aria-label="Twitter">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"></path></svg>
+                    </a>
+                    <a href="#" aria-label="LinkedIn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
+                    </a>
+                </div>
+            </div>
+            <div class="copyright">
+                © 2024 Craft AI. Дизайн имеет значение.
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        // Smooth Navbar Effect
+        const header = document.querySelector('header');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 20) {
+                header.style.padding = '0.8rem 0';
+                header.style.boxShadow = '0 4px 20px rgba(0,0,0,0.03)';
+            } else {
+                header.style.padding = '1rem 0';
+                header.style.boxShadow = 'none';
+            }
+        });
+
+        // Scroll Reveal Animation
+        const revealElements = document.querySelectorAll('.reveal');
+        const revealObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { root: null, threshold: 0.1, rootMargin: "0px 0px -30px 0px" });
+        revealElements.forEach(el => revealObserver.observe(el));
+
+        // Flashlight Tracking Logic for Process Grid
+        const processGrid = document.getElementById('process-grid');
+        const flashlightCards = document.querySelectorAll('.flashlight-card');
+
+        if(processGrid) {
+            processGrid.addEventListener('mousemove', (e) => {
+                flashlightCards.forEach(card => {
+                    const rect = card.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    card.style.setProperty('--mouse-x', `${x}px`);
+                    card.style.setProperty('--mouse-y', `${y}px`);
+                });
+            });
+
+            processGrid.addEventListener('mouseleave', () => {
+                flashlightCards.forEach(card => {
+                    card.style.setProperty('--mouse-x', `-1000px`);
+                    card.style.setProperty('--mouse-y', `-1000px`);
+                });
+            });
+        }
+
+        // Advanced Slider Logic
+        const slides = document.querySelectorAll('.slide');
+        const dots = document.querySelectorAll('.slider-dot');
+        const prevBtn = document.querySelector('.slider-btn.prev');
+        const nextBtn = document.querySelector('.slider-btn.next');
+        let currentSlide = 0;
+        let slideInterval;
+
+        function showSlide(index) {
+            slides.forEach(s => s.classList.remove('active'));
+            dots.forEach(d => d.classList.remove('active'));
+            
+            if(index >= slides.length) currentSlide = 0;
+            else if(index < 0) currentSlide = slides.length - 1;
+            else currentSlide = index;
+            
+            slides[currentSlide].classList.add('active');
+            dots[currentSlide].classList.add('active');
+        }
+
+        function nextSlide() { showSlide(currentSlide + 1); }
+        function prevSlide() { showSlide(currentSlide - 1); }
+
+        if(slides.length > 0) {
+            nextBtn.addEventListener('click', () => { nextSlide(); resetInterval(); });
+            prevBtn.addEventListener('click', () => { prevSlide(); resetInterval(); });
+            dots.forEach(dot => {
+                dot.addEventListener('click', (e) => {
+                    showSlide(parseInt(e.target.dataset.index));
+                    resetInterval();
+                });
+            });
+            
+            function startInterval() { slideInterval = setInterval(nextSlide, 5000); }
+            function resetInterval() { clearInterval(slideInterval); startInterval(); }
+            startInterval();
+        }
+    </script>
+
+<script>
+(function(){
+  var API='https://dcc1d230-66bb-418e-b8d2-a04f29befb93-00-2encwsvl9haus.janeway.replit.dev/api/leads/27';
+  function showToast(msg){
+    var t=document.createElement('div');
+    t.textContent=msg;
+    t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:12px 24px;border-radius:12px;font-weight:600;font-size:14px;z-index:99999;box-shadow:0 8px 32px rgba(0,0,0,0.3);transition:opacity 0.5s';
+    document.body.appendChild(t);
+    setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove()},500)},3000);
+  }
+  document.addEventListener('submit',function(e){
+    var form=e.target;
+    if(!form||form.tagName!=='FORM') return;
+    e.preventDefault();
+    var fd=new FormData(form);
+    var data={name:'',email:'',phone:'',message:'',source:form.dataset.leadForm||'form'};
+    fd.forEach(function(v,k){
+      var kl=k.toLowerCase();
+      if(kl.indexOf('name')>-1||kl.indexOf('имя')>-1||kl.indexOf('фио')>-1) data.name=v;
+      else if(kl.indexOf('email')>-1||kl.indexOf('почт')>-1||kl.indexOf('mail')>-1) data.email=v;
+      else if(kl.indexOf('phone')>-1||kl.indexOf('тел')>-1) data.phone=v;
+      else if(kl.indexOf('message')>-1||kl.indexOf('сооб')>-1||kl.indexOf('коммент')>-1||kl.indexOf('пожелан')>-1||kl.indexOf('текст')>-1) data.message=v;
+      else if(!data.message) data.message=v;
+    });
+    if(!data.name&&!data.email&&!data.phone&&!data.message) return;
+    fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+    .then(function(r){if(r.ok){showToast('Заявка отправлена!');form.reset();}})
+    .catch(function(){});
+  },true);
+})();
+</script>
+</body></html>
