@@ -19,6 +19,7 @@ export const projects = pgTable("projects", {
   title: text("title").notNull(),
   description: text("description"),
   generatedCode: text("generated_code").notNull().default(""),
+  geminiInteractionId: text("gemini_interaction_id"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
