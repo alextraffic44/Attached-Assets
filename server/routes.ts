@@ -173,7 +173,7 @@ async function researchAndEnhance(query: string): Promise<{ research: string; en
 function bypassAuth(req: any, res: any, next: any) {
   // Временно отключаем проверку авторизации
   if (!req.user) {
-    req.user = { id: 1, credits: 999, displayName: "Гость" };
+    req.user = { id: 1, credits: 9999, displayName: "Гость" };
   }
   next();
 }
@@ -282,8 +282,9 @@ export async function registerRoutes(
       }
       const user = req.user as any;
 
-      if (user.credits <= 0) {
-        return res.status(403).json({ message: "Недостаточно кредитов" });
+      const GENERATION_COST = 100;
+      if (user.credits < GENERATION_COST) {
+        return res.status(403).json({ message: `Недостаточно токенов. Нужно ${GENERATION_COST}, у вас ${user.credits}` });
       }
 
       const { prompt, imageBase64, imageMimeType, activeFile, skipEnhance } = req.body;
@@ -517,9 +518,11 @@ export async function registerRoutes(
         content: aiTextReply || "Сайт обновлён",
       });
 
+      await storage.updateUserCredits(user.id, user.credits - GENERATION_COST);
+
       const allFiles = await storage.getProjectFiles(project.id);
       const editedFileCode = editingFile !== "index.html" ? allFiles.find(f => f.filename === editingFile)?.code : mainHtmlCode;
-      res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, editedFile: editingFile, editedCode: editedFileCode || mainHtmlCode, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })) })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, editedFile: editingFile, editedCode: editedFileCode || mainHtmlCode, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })), creditsUsed: GENERATION_COST })}\n\n`);
       res.end();
     } catch (err: any) {
       console.error("Generation error:", err?.message || err);
