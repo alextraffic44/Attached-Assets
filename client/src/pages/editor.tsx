@@ -360,7 +360,7 @@ export default function EditorPage() {
 
     if (externalUrls.size > 0 && imgFolder) {
       let idx = 0;
-      for (const url of externalUrls) {
+      Array.from(externalUrls).forEach(async (url) => {
         const ext = url.match(/\.(png|jpg|jpeg|webp|gif|svg)(\?|$)/i)?.[1] || "png";
         const fileName = `image_${idx++}.${ext}`;
         const blob = await downloadImage(url);
@@ -368,10 +368,10 @@ export default function EditorPage() {
           imgFolder.file(fileName, blob);
           allImageUrls.set(url, `images/${fileName}`);
         }
-      }
+      });
     }
 
-    for (const [remoteUrl, localPath] of allImageUrls) {
+    for (const [remoteUrl, localPath] of Array.from(allImageUrls.entries())) {
       htmlCode = htmlCode.split(remoteUrl).join(localPath);
     }
 
@@ -430,9 +430,9 @@ export default function EditorPage() {
     for (const pf of projectFiles) {
       if (pf.filename !== "index.html") {
         let pfCode = pf.code;
-        for (const [remoteUrl, localPath] of allImageUrls) {
+        Array.from(allImageUrls.entries()).forEach(([remoteUrl, localPath]) => {
           pfCode = pfCode.split(remoteUrl).join(localPath);
-        }
+        });
         pfCode = pfCode.replace('</body>', leadExportScript + '\n</body>');
         zip.file(pf.filename, pfCode);
       }
