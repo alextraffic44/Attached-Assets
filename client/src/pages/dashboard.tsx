@@ -127,9 +127,10 @@ export default function DashboardPage() {
                 </span>
               )}
             </button>
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-full px-5 py-2 shadow-sm">
+            <div className="flex items-center gap-2 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 rounded-full px-5 py-2 shadow-sm">
               <Coins className="w-4 h-4 text-amber-500" />
-              <span className="text-xs font-bold text-slate-900">{user?.credits}</span>
+              <span className="text-sm font-black text-amber-700">{user?.credits ?? 0}</span>
+              <span className="text-[10px] font-bold text-amber-500/70 uppercase">токенов</span>
             </div>
             <Button
               data-testid="button-topup"
