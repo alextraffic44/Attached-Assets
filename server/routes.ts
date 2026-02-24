@@ -474,6 +474,9 @@ export async function registerRoutes(
         config: {
           systemInstruction: systemContent,
           maxOutputTokens: 65536,
+          thinkingConfig: {
+            thinkingLevel: isEditMode ? "low" : "high",
+          },
         },
       });
 
