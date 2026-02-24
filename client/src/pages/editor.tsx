@@ -936,18 +936,6 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           <div className="p-6 border-b flex items-center justify-between">
             <h2 className="text-lg font-black tracking-tight">AI Конструктор</h2>
             <div className="flex items-center gap-2">
-              {versions.length > 0 && (
-                <Button
-                  variant={showVersions ? "default" : "outline"}
-                  size="sm"
-                  className="h-7 rounded-lg text-xs gap-1.5"
-                  onClick={() => setShowVersions(!showVersions)}
-                  data-testid="button-toggle-versions"
-                >
-                  <History className="w-3.5 h-3.5" />
-                  {versions.length}
-                </Button>
-              )}
               <Badge className="bg-primary/10 text-primary border-primary/20 rounded-lg">Gemini 3.1</Badge>
             </div>
           </div>
@@ -987,25 +975,38 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 const isModel = msg.role === "model";
                 const isLatestModel = isModel && !messages.slice(idx + 1).some(m => m.role === "model");
                 return (
-                  <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[90%] rounded-2xl p-4 text-sm font-medium shadow-skeuo-md ${msg.role === "user" ? "bg-primary text-white" : "bg-white dark:bg-slate-800"}`}>
-                      {msg.role === "user" ? msg.content : (
-                        <div className="space-y-2 max-w-full overflow-hidden">
+                    <div className={`w-full max-w-[98%] rounded-2xl p-4 text-sm font-medium shadow-skeuo-md ${msg.role === "user" ? "bg-primary text-white ml-auto" : "bg-white dark:bg-slate-800 mr-auto"}`}>
+                      {msg.role === "user" ? (
+                        <div className="break-words whitespace-pre-wrap overflow-hidden w-full">
+                          {msg.content}
+                        </div>
+                      ) : (
+                        <div className="space-y-2 w-full overflow-hidden">
                           <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="secondary" className="bg-primary/10 text-primary border-none text-[10px] h-5 px-1.5 flex items-center gap-1">
-                              <History className="w-3 h-3" />
-                              <span>v{messages.filter((m, i) => (m.role === "assistant" || m.role === "model") && i <= idx).length}</span>
-                            </Badge>
+                            <button 
+                              onClick={() => {
+                                const v = versions.find(v => v.label.includes(`v${messages.filter((m, i) => (m.role === "assistant" || m.role === "model") && i <= idx).length}`));
+                                if (v) handleRestoreVersion(v.id);
+                                else toast({ title: "Инфо", description: "Используйте панель истории для точного отката" });
+                              }}
+                              className="hover:opacity-70 transition-opacity"
+                            >
+                              <Badge variant="secondary" className="bg-primary/10 text-primary border-none text-[10px] h-5 px-1.5 flex items-center gap-1 cursor-pointer">
+                                <History className="w-3 h-3" />
+                                <span>v{messages.filter((m, i) => (m.role === "assistant" || m.role === "model") && i <= idx).length}</span>
+                              </Badge>
+                            </button>
                             <span className="text-primary font-black text-[11px]">Gemini</span>
                             {isLatestModel && (
                               <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0 text-[10px] px-1.5 py-0 rounded-full">текущий</Badge>
                             )}
                           </div>
-                          <p className="text-slate-700 dark:text-slate-300 text-[13px] leading-relaxed break-words whitespace-pre-wrap overflow-hidden">{msg.content.startsWith("<!") || msg.content.startsWith("<html") ? "Сайт обновлён" : msg.content}</p>
+                          <div className="text-slate-700 dark:text-slate-300 text-[13px] leading-relaxed break-words whitespace-pre-wrap overflow-hidden w-full select-text">
+                            {msg.content.startsWith("<!") || msg.content.startsWith("<html") ? "Сайт обновлён" : msg.content}
+                          </div>
                         </div>
                       )}
                     </div>
-                  </div>
                 );
               })}
               {isGenerating && (
