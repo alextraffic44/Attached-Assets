@@ -116,7 +116,7 @@ async function researchAndEnhance(query: string): Promise<{ research: string; en
     console.log("Starting combined research + enhancement for:", query);
 
     const result = await ai.models.generateContent({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-2.5-flash",
       contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nИсследуй эту тему для создания premium-сайта. Найди реальную информацию из интернета, затем создай улучшенный промпт для генерации сайта.\n\nВАЖНО: Ответ ОБЯЗАТЕЛЬНО должен содержать ОБА маркера ===RESEARCH=== и ===PROMPT===. Секция PROMPT должна быть 300-500 слов.` }] }],
       config: {
         systemInstruction: RESEARCH_AND_ENHANCE_PROMPT,
@@ -152,7 +152,7 @@ async function researchAndEnhance(query: string): Promise<{ research: string; en
       console.log("Prompt section missing or too short, generating enhancement separately...");
       const researchText = researchMatch?.[1]?.trim() || fullText.replace(/===\s*RESEARCH\s*===/, "").trim();
       const enhanceResult = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+        model: "gemini-2.5-flash",
         contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nИсследование по теме:\n${researchText.substring(0, 3000)}\n\nНа основе этой информации создай детальный промпт (300-500 слов, на русском) для AI-генератора premium-сайта. Промпт должен включать: skeuomorphic UI, SVG анимации, цветовую палитру (4 цвета), типографику, hero-секцию, 5-7 секций сайта, микро-интеракции. Пиши ТОЛЬКО промпт, без маркеров и заголовков.` }] }],
         config: { maxOutputTokens: 4096 },
       });
