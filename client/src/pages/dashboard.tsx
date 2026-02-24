@@ -24,13 +24,9 @@ import {
   Code2,
   Trash2,
   Calendar,
-  MessageSquare,
-  Layers,
-  Image,
   Loader2,
   FolderOpen,
   Coins,
-  ChevronRight,
   Inbox,
 } from "lucide-react";
 
@@ -199,62 +195,122 @@ export default function DashboardPage() {
       </main>
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="sm:max-w-xl rounded-[3rem] p-0 overflow-hidden border-none shadow-2xl">
-          <div className="p-10 space-y-8">
+        <DialogContent className="sm:max-w-[540px] rounded-[32px] p-0 overflow-hidden border border-gray-100/50 shadow-2xl bg-white">
+          <div className="px-8 pt-10 pb-8">
             <DialogHeader>
-              <DialogTitle className="text-3xl font-black tracking-tighter">
+              <DialogTitle className="text-3xl font-extrabold text-gray-900 tracking-tight">
                 {createStep === "choose" ? "С чего начнём?" : "Оживите мечту"}
               </DialogTitle>
             </DialogHeader>
 
             <AnimatePresence mode="wait">
               {createStep === "choose" ? (
-                <motion.div key="c" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-4 mt-8">
                   {[
-                    { m: "prompt", t: "По описанию", d: "Просто напишите, что вам нужно", i: MessageSquare },
-                    { m: "template", t: "Промт + Шаблон", d: "Выберите структуру и детали", i: Layers },
-                    { m: "photo", t: "По фото", d: "Загрузите скриншот-пример", i: Image },
+                    {
+                      m: "prompt",
+                      t: "По описанию",
+                      d: "Просто напишите, что вам нужно",
+                      colorClass: "group-hover:border-blue-200 group-hover:shadow-blue-500/15 group-hover:bg-blue-50/30",
+                      iconBgClass: "bg-blue-100/50 group-hover:bg-blue-100",
+                      icon: (
+                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 relative z-10 overflow-visible">
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-105 group-hover:-translate-y-0.5">
+                            <path d="M21 11.5C21.0034 12.8199 20.6951 14.1219 20.1 15.3C19.3944 16.7118 18.3098 17.8992 16.9674 18.7293C15.6251 19.5594 14.0782 19.9994 12.5 20C11.1702 19.9991 9.854 19.6905 8.66 19.1L3 21L4.9 15.34C4.30948 14.146 4.00085 12.8298 4 11.5C4.00061 9.92179 4.44061 8.37488 5.27072 7.03258C6.10083 5.69028 7.28825 4.6056 8.7 3.90003C9.87806 3.30491 11.1801 2.99658 12.5 3.00003H13C15.0843 3.11502 17.053 3.99479 18.5291 5.47089C20.0052 6.94699 20.885 8.91568 21 11V11.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500" />
+                            <circle cx="8" cy="12" r="1.5" fill="currentColor" className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75" />
+                            <circle cx="12" cy="12" r="1.5" fill="currentColor" className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-150" />
+                            <circle cx="16" cy="12" r="1.5" fill="currentColor" className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-[300ms]" />
+                          </g>
+                        </svg>
+                      ),
+                    },
+                    {
+                      m: "template",
+                      t: "Промт + Шаблон",
+                      d: "Выберите структуру и детали",
+                      colorClass: "group-hover:border-indigo-200 group-hover:shadow-indigo-500/15 group-hover:bg-indigo-50/30",
+                      iconBgClass: "bg-indigo-100/50 group-hover:bg-indigo-100",
+                      icon: (
+                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 relative z-10 overflow-visible">
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-105">
+                            <path d="M12 22L2 17L12 12L22 17L12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-300 transition-transform duration-500 group-hover:translate-y-[3px]" />
+                            <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400 transition-transform duration-500" />
+                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-600 transition-all duration-500 group-hover:-translate-y-[3px] group-hover:fill-indigo-50" />
+                          </g>
+                        </svg>
+                      ),
+                    },
+                    {
+                      m: "photo",
+                      t: "По фото",
+                      d: "Загрузите скриншот-пример",
+                      colorClass: "group-hover:border-purple-200 group-hover:shadow-purple-500/15 group-hover:bg-purple-50/30",
+                      iconBgClass: "bg-purple-100/50 group-hover:bg-purple-100",
+                      icon: (
+                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 relative z-10 overflow-visible">
+                          <defs>
+                            <clipPath id="photo-mask">
+                              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                            </clipPath>
+                          </defs>
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-105">
+                            <g clipPath="url(#photo-mask)">
+                              <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" className="text-purple-400 transition-all duration-500 origin-center group-hover:scale-[2.5] group-hover:translate-x-1 group-hover:text-yellow-400" />
+                              <path d="M21 15L16 10L5 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-500/70 transition-transform duration-500 origin-bottom group-hover:translate-y-1 group-hover:scale-105" />
+                              <path d="M5 21L14 12L21 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-600 transition-transform duration-700 ease-out origin-bottom group-hover:scale-110" />
+                            </g>
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" stroke="currentColor" strokeWidth="2" className="text-purple-500" />
+                          </g>
+                        </svg>
+                      ),
+                    },
                   ].map(x => (
-                    <button 
+                    <button
                       key={x.m}
-                      className="w-full flex items-center gap-6 p-6 rounded-[2rem] bg-slate-50 dark:bg-slate-800/50 hover:bg-primary/5 dark:hover:bg-primary/5 hover:ring-2 ring-primary/20 transition-all text-left shadow-skeuo-inner"
+                      data-testid={`button-create-${x.m}`}
+                      className={`group relative flex items-center w-full p-4 rounded-2xl bg-gray-50/50 border border-transparent transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-gray-100 ${x.colorClass}`}
                       onClick={() => { setSelectedMode(x.m as any); setCreateStep("details"); }}
                     >
-                      <div className="w-14 h-14 rounded-2xl bg-white dark:bg-slate-900 shadow-skeuo-md flex items-center justify-center shrink-0">
-                        <x.i className="w-6 h-6 text-primary" />
+                      <div className={`flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center mr-5 transition-colors duration-300 relative overflow-hidden ${x.iconBgClass}`}>
+                        <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl blur-md" />
+                        {x.icon}
                       </div>
-                      <div className="flex-1">
-                        <h4 className="text-lg font-black">{x.t}</h4>
-                        <p className="text-sm text-slate-500 font-medium">{x.d}</p>
+                      <div className="flex-grow text-left">
+                        <h3 className="text-[19px] font-bold text-gray-900 mb-1 group-hover:text-black transition-colors">{x.t}</h3>
+                        <p className="text-[15px] text-gray-500 font-medium group-hover:text-gray-600 transition-colors">{x.d}</p>
                       </div>
-                      <ChevronRight className="w-5 h-5 text-slate-300" />
+                      <div className="flex-shrink-0 text-gray-300 group-hover:text-gray-900 transition-all duration-300 transform group-hover:translate-x-1">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                      </div>
                     </button>
                   ))}
                 </motion.div>
               ) : (
-                <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+                <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6 mt-8">
                   <div className="space-y-2">
-                    <Label className="text-xs font-black uppercase tracking-widest text-slate-400 px-2">Название</Label>
+                    <Label className="text-xs font-bold uppercase tracking-widest text-gray-400 px-2">Название</Label>
                     <Input 
                       placeholder="Например: Моё кафе"
                       value={title}
                       onChange={e => setTitle(e.target.value)}
-                      className="h-14 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none shadow-skeuo-inner font-bold"
+                      className="h-14 rounded-2xl bg-gray-50 border border-gray-200 font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs font-black uppercase tracking-widest text-slate-400 px-2">Описание</Label>
+                    <Label className="text-xs font-bold uppercase tracking-widest text-gray-400 px-2">Описание</Label>
                     <Textarea 
                       placeholder="Опишите структуру, цвета и контент..."
                       value={description}
                       onChange={e => setDescription(e.target.value)}
-                      className="min-h-[120px] rounded-2xl bg-slate-50 dark:bg-slate-800 border-none shadow-skeuo-inner font-medium"
+                      className="min-h-[120px] rounded-2xl bg-gray-50 border border-gray-200 font-medium text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
                     />
                   </div>
                   <div className="flex gap-4 pt-4">
-                    <Button variant="ghost" className="h-14 rounded-2xl font-bold flex-1" onClick={() => setCreateStep("choose")}>Назад</Button>
+                    <Button variant="ghost" className="h-14 rounded-2xl font-bold flex-1 text-gray-600 hover:bg-gray-100" onClick={() => setCreateStep("choose")}>Назад</Button>
                     <Button 
-                      className="h-14 rounded-2xl font-black text-lg flex-[2] shadow-xl shadow-primary/20"
+                      className="h-14 rounded-2xl font-extrabold text-lg flex-[2] shadow-xl shadow-primary/20"
                       onClick={() => createMutation.mutate()}
                       disabled={createMutation.isPending}
                     >
