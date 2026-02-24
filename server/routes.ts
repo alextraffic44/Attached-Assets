@@ -467,7 +467,7 @@ export async function registerRoutes(
       console.log("generateContentStream call. History messages:", conversationHistory.length, "Edit mode:", isEditMode);
 
       const streamResult = await gemini.models.generateContentStream({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.1-pro-preview",
         contents: conversationHistory,
         config: {
           systemInstruction: systemContent,
