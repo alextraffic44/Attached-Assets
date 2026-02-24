@@ -462,6 +462,30 @@ export default function EditorPage() {
     reader.readAsDataURL(file);
   };
 
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (!file) continue;
+
+        setUploadedFileName(file.name || "pasted-image.png");
+        setImageMimeType(file.type || "image/png");
+        const reader = new FileReader();
+        reader.onload = () => {
+          setImagePreview(reader.result as string);
+          setImageBase64((reader.result as string).split(",")[1]);
+        };
+        reader.readAsDataURL(file);
+        
+        toast({ title: "Изображение прикреплено", description: "Вы можете отправить его вместе с промтом" });
+        break;
+      }
+    }
+  }, [toast]);
+
   const handleGenerateImage = useCallback(async () => {
     if (!imgPrompt.trim() || !imgName.trim()) return;
     setImgGenerating(true);
@@ -965,6 +989,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   value={prompt}
                   onChange={e => setPrompt(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleGenerate())}
+                  onPaste={handlePaste}
                   className="min-h-[56px] max-h-[160px] resize-none rounded-2xl border-none bg-transparent font-medium pl-4 pr-20 py-4 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   disabled={isGenerating}
                   data-testid="input-prompt"
