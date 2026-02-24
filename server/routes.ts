@@ -351,9 +351,13 @@ export async function registerRoutes(
       if (projectImgs.length > 0) {
         systemContent += `\n\nДОСТУПНЫЕ ИЗОБРАЖЕНИЯ В БИБЛИОТЕКЕ ПОЛЬЗОВАТЕЛЯ:\n`;
         for (const img of projectImgs) {
-          systemContent += `- "${img.name}" (описание: ${img.prompt})\n`;
+          if (img.url.startsWith("/uploads/")) {
+            systemContent += `- "${img.name}" — ПРЯМОЙ URL: ${img.url} (описание: ${img.prompt})\n`;
+          } else {
+            systemContent += `- "${img.name}" — маркер: {{IMG:${img.name}}} (описание: ${img.prompt})\n`;
+          }
         }
-        systemContent += `\nИспользуй маркер {{IMG:имя}} для вставки этих изображений. Например: <img src="{{IMG:${projectImgs[0].name}}}" />`;
+        systemContent += `\nДля загруженных фото (с URL /uploads/...) — используй URL напрямую: <img src="/uploads/xxx.png" />\nДля AI-сгенерированных изображений — используй маркер {{IMG:имя}}: <img src="{{IMG:имя}}" />`;
       }
 
       const isEditMode = !!project.generatedCode;
@@ -395,17 +399,37 @@ export async function registerRoutes(
       }
 
       const userParts: any[] = [];
+      let attachedImageUrl = "";
 
       if (imageBase64) {
         const mime = imageMimeType || "image/png";
         const isImage = mime.startsWith("image/");
-        const textPart = isEditMode
-          ? prompt
-          : `Создай сайт на основе этого изображения-примера.\n\n${enhancedPrompt}`;
-        userParts.push({ text: textPart });
+
         if (isImage) {
+          const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
+          const filename = `${crypto.randomUUID()}.${ext}`;
+          const filePath = path.join(uploadsDir, filename);
+          const buffer = Buffer.from(imageBase64, "base64");
+          fs.writeFileSync(filePath, buffer);
+          attachedImageUrl = `/uploads/${filename}`;
+
+          const imgName = `photo_${Date.now()}`;
+          await storage.createProjectImage({
+            projectId: project.id,
+            name: imgName,
+            url: attachedImageUrl,
+            prompt: prompt.substring(0, 200),
+          });
+          projectImgs.push({ id: 0, projectId: project.id, name: imgName, url: attachedImageUrl, prompt: prompt.substring(0, 200), createdAt: new Date() } as any);
+
+          const textPart = isEditMode
+            ? `${prompt}\n\nПОЛЬЗОВАТЕЛЬ ПРИКРЕПИЛ ФОТО. URL фото: ${attachedImageUrl}\nОБЯЗАТЕЛЬНО используй этот URL напрямую в src изображений: <img src="${attachedImageUrl}" />. НЕ используй маркер {{IMG:...}} для этого фото — используй URL напрямую.`
+            : `Создай сайт на основе этого изображения-примера.\n\n${enhancedPrompt}\n\nURL прикреплённого фото: ${attachedImageUrl}\nМожешь вставить это фото в HTML через <img src="${attachedImageUrl}" />`;
+          userParts.push({ text: textPart });
           userParts.push({ inlineData: { data: imageBase64, mimeType: mime } });
         } else {
+          const textPart = isEditMode ? prompt : `Создай сайт на основе этого изображения-примера.\n\n${enhancedPrompt}`;
+          userParts.push({ text: textPart });
           const extractedText = await extractTextFromFile(imageBase64, mime);
           if (extractedText) {
             const truncated = extractedText.length > 15000 ? extractedText.substring(0, 15000) + "\n...[текст обрезан]" : extractedText;
