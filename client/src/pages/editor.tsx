@@ -201,13 +201,18 @@ export default function EditorPage() {
     setPrompt("");
 
     const images = attachedImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
+    const sentPreviews = attachedImages.filter(img => img.preview).map(img => ({ preview: img.preview!, fileName: img.fileName }));
 
-    // Оптимистичное добавление сообщения в UI
+    // Сразу очищаем прикреплённые файлы из поля ввода
+    setAttachedImages([]);
+
+    // Оптимистичное добавление сообщения в UI с превью картинок
+    const imageInfo = sentPreviews.length > 0 ? `\n__IMAGES__${JSON.stringify(sentPreviews)}` : "";
     const tempUserMessage: ProjectMessage = {
       id: Math.random(),
       projectId,
       role: "user",
-      content: text,
+      content: text + imageInfo,
       createdAt: new Date()
     };
     
@@ -976,11 +981,29 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 const isLatestModel = isModel && !messages.slice(idx + 1).some(m => m.role === "model");
                 return (
                     <div key={msg.id} className={`rounded-2xl p-4 text-sm font-medium shadow-skeuo-md min-w-0 ${msg.role === "user" ? "bg-primary text-white ml-auto max-w-[85%]" : "bg-white dark:bg-slate-800 mr-auto"}`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
-                      {msg.role === "user" ? (
-                        <div style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
-                          {msg.content}
-                        </div>
-                      ) : (
+                      {msg.role === "user" ? (() => {
+                        const hasImages = msg.content.includes("\n__IMAGES__");
+                        const textContent = hasImages ? msg.content.split("\n__IMAGES__")[0] : msg.content;
+                        let imgPreviews: Array<{preview: string, fileName: string}> = [];
+                        if (hasImages) {
+                          try { imgPreviews = JSON.parse(msg.content.split("\n__IMAGES__")[1]); } catch {}
+                        }
+                        return (
+                          <div style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                            {textContent}
+                            {imgPreviews.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                {imgPreviews.map((img, i) => (
+                                  <div key={i} className="flex items-center gap-2 bg-white/15 rounded-lg px-2 py-1.5">
+                                    <img src={img.preview} className="w-8 h-8 object-cover rounded" />
+                                    <span className="text-[11px] opacity-80 max-w-[100px] truncate">{img.fileName}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : (
                         <div className="space-y-2 min-w-0" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <button 
