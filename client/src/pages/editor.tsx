@@ -686,6 +686,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
         }
       }
       if (e.data.type === 'nz-navigate-file') {
+        if (isGenerating) return;
         const filename = e.data.filename;
         setActiveFile(filename);
         if (filename === "index.html") setStreamedCode("");
@@ -698,7 +699,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [projectId, activeFile, allFiles]);
+  }, [projectId, activeFile, allFiles, isGenerating]);
 
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
 
@@ -922,8 +923,9 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               {allFiles.map(f => (
                 <button
                   key={f.filename}
-                  onClick={() => { setActiveFile(f.filename); if (f.filename === "index.html") setStreamedCode(""); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeFile === f.filename ? "bg-primary text-white shadow-md" : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700"}`}
+                  onClick={() => { if (isGenerating) return; setActiveFile(f.filename); if (f.filename === "index.html") setStreamedCode(""); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeFile === f.filename ? "bg-primary text-white shadow-md" : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700"} ${isGenerating && activeFile !== f.filename ? "opacity-50 cursor-not-allowed" : ""}`}
+                  disabled={isGenerating && activeFile !== f.filename}
                   data-testid={`tab-file-${f.filename}`}
                 >
                   <FileText className="w-3 h-3" />
