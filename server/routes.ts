@@ -114,62 +114,43 @@ const RESEARCH_AND_ENHANCE_PROMPT = `Ты выполняешь ДВЕ задач
 
 Отвечай на русском языке.`;
 
-async function researchAndEnhance(query: string): Promise<{ research: string; enhancedPrompt: string }> {
+async function researchAndEnhance(query: string): Promise<{ research: string; enhancedPrompt: string; success: boolean }> {
   try {
-    console.log("Starting combined research + enhancement for:", query);
+    console.log("Starting prompt enhancement for:", query);
 
     const result = await gemini.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nИсследуй эту тему для создания premium-сайта. Найди реальную информацию из интернета, затем создай улучшенный промпт для генерации сайта.\n\nВАЖНО: Ответ ОБЯЗАТЕЛЬНО должен содержать ОБА маркера ===RESEARCH=== и ===PROMPT===. Секция PROMPT должна быть 300-500 слов.` }] }],
+      contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nСоздай улучшенный промпт для генерации premium-сайта на эту тему.\n\nВАЖНО: Ответ ОБЯЗАТЕЛЬНО должен содержать ОБА маркера ===RESEARCH=== и ===PROMPT===. Секция PROMPT должна быть 300-500 слов.` }] }],
       config: {
         systemInstruction: RESEARCH_AND_ENHANCE_PROMPT,
-        tools: [{ googleSearch: {} }],
         maxOutputTokens: 8192,
       },
     });
 
     const fullText = result.text || "";
-    console.log("Research+Enhancement completed, length:", fullText.length);
-
-    const groundingMeta = (result as any).candidates?.[0]?.groundingMetadata;
-    let sources = "";
-    if (groundingMeta?.groundingChunks) {
-      sources = "\n\nИСТОЧНИКИ:\n";
-      for (const chunk of groundingMeta.groundingChunks.slice(0, 10)) {
-        if (chunk.web) {
-          sources += `- ${chunk.web.title}: ${chunk.web.uri}\n`;
-        }
-      }
-    }
+    console.log("Enhancement completed, length:", fullText.length);
 
     const researchMatch = fullText.match(/===\s*RESEARCH\s*===([\s\S]*?)===\s*PROMPT\s*===/);
     const promptMatch = fullText.match(/===\s*PROMPT\s*===([\s\S]*?)$/);
 
-    console.log("Parse result - researchMatch found:", !!researchMatch, "promptMatch found:", !!promptMatch);
-    console.log("Full response preview (first 500):", fullText.substring(0, 500));
-
-    let research = (researchMatch?.[1]?.trim() || fullText) + sources;
+    let research = researchMatch?.[1]?.trim() || "";
     let enhancedPrompt = promptMatch?.[1]?.trim() || "";
 
     if (!enhancedPrompt || enhancedPrompt.length < 100) {
       console.log("Prompt section missing or too short, generating enhancement separately...");
-      const researchText = researchMatch?.[1]?.trim() || fullText.replace(/===\s*RESEARCH\s*===/, "").trim();
       const enhanceResult = await gemini.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nИсследование по теме:\n${researchText.substring(0, 3000)}\n\nНа основе этой информации создай детальный промпт (300-500 слов, на русском) для AI-генератора premium-сайта. Промпт должен включать: skeuomorphic UI, SVG анимации, цветовую палитру (4 цвета), типографику, hero-секцию, 5-7 секций сайта, микро-интеракции. Пиши ТОЛЬКО промпт, без маркеров и заголовков.` }] }],
+        contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nСоздай детальный промпт (300-500 слов, на русском) для AI-генератора premium-сайта. Промпт должен включать: skeuomorphic UI, SVG анимации, цветовую палитру (4 цвета), типографику, hero-секцию, 5-7 секций сайта, микро-интеракции. Пиши ТОЛЬКО промпт, без маркеров и заголовков.` }] }],
         config: { maxOutputTokens: 4096 },
       });
       enhancedPrompt = enhanceResult.text?.trim() || query;
-      console.log("Separate enhancement done, length:", enhancedPrompt.length);
     }
 
-    console.log("Research length:", research.length, "Enhanced prompt length:", enhancedPrompt.length);
-    console.log("Enhanced prompt preview:", enhancedPrompt.substring(0, 300));
-
-    return { research, enhancedPrompt: enhancedPrompt.length > 100 ? enhancedPrompt : query };
+    console.log("Enhanced prompt length:", enhancedPrompt.length);
+    return { research, enhancedPrompt: enhancedPrompt.length > 100 ? enhancedPrompt : query, success: true };
   } catch (err: any) {
-    console.error("Research+Enhancement error:", err.message);
-    return { research: "", enhancedPrompt: query };
+    console.error("Enhancement error:", err.message);
+    return { research: "", enhancedPrompt: query, success: false };
   }
 }
 
@@ -281,8 +262,12 @@ export async function registerRoutes(
         return res.status(402).json({ message: `Недостаточно токенов. Нужно ${ENHANCE_COST}, у вас ${user.credits}.` });
       }
       const result = await researchAndEnhance(prompt);
-      await storage.updateUserCredits(user.id, user.credits - ENHANCE_COST);
-      res.json({ enhancedPrompt: result.enhancedPrompt, research: result.research, creditsUsed: ENHANCE_COST });
+      if (result.success) {
+        await storage.updateUserCredits(user.id, user.credits - ENHANCE_COST);
+        res.json({ enhancedPrompt: result.enhancedPrompt, research: result.research, creditsUsed: ENHANCE_COST });
+      } else {
+        res.json({ enhancedPrompt: prompt, research: "", creditsUsed: 0, warning: "AI временно недоступен, использован оригинальный промпт" });
+      }
     } catch (err: any) {
       console.error("Enhance prompt error:", err.message);
       res.status(500).json({ message: "Ошибка улучшения промпта" });
@@ -456,54 +441,46 @@ export async function registerRoutes(
 
       let fullResponse = "";
 
-      let previousInteractionId = project.geminiInteractionId || undefined;
-      console.log("Interactions API call. Previous interaction:", previousInteractionId ? "yes" : "new", "Edit mode:", isEditMode);
+      const messages = await storage.getProjectMessages(project.id);
+      const conversationHistory: Array<{ role: string; parts: Array<{ text: string }> }> = [];
 
-      const createInteraction = async (prevId?: string) => {
-        return gemini.interactions.create({
-          model: "gemini-3.1-pro-preview",
-          input: inputContent,
-          stream: true,
-          previous_interaction_id: prevId,
-          system_instruction: systemContent,
-          generation_config: {
-            max_output_tokens: 65536,
-            thinking_level: (isEditMode ? "low" : "high") as any,
-          },
-        });
-      };
-
-      let streamResult;
-      try {
-        streamResult = await createInteraction(previousInteractionId);
-      } catch (retryErr: any) {
-        if (previousInteractionId && (retryErr?.message?.includes("not found") || retryErr?.message?.includes("invalid") || retryErr?.status === 404)) {
-          console.log("Previous interaction expired, creating new one");
-          previousInteractionId = undefined;
-          await storage.updateProject(project.id, { geminiInteractionId: null } as any);
-          streamResult = await createInteraction(undefined);
-        } else {
-          throw retryErr;
+      for (const msg of messages.slice(-10)) {
+        if (msg.role === "user") {
+          conversationHistory.push({ role: "user", parts: [{ text: msg.content }] });
+        } else if (msg.role === "assistant") {
+          const truncated = msg.content.length > 2000 ? msg.content.substring(0, 2000) + "...[обрезано]" : msg.content;
+          conversationHistory.push({ role: "model", parts: [{ text: truncated }] });
         }
       }
 
-      let newInteractionId: string | undefined;
-
-      for await (const event of streamResult) {
-        if (event.event_type === "content.delta") {
-          const delta = (event as any).delta;
-          if (delta?.type === "text" && delta?.text) {
-            fullResponse += delta.text;
-            res.write(`data: ${JSON.stringify({ content: delta.text })}\n\n`);
-          }
-        } else if (event.event_type === "interaction.complete") {
-          newInteractionId = (event as any).interaction?.id;
+      const userParts: any[] = [];
+      for (const item of inputContent) {
+        if ((item as any).type === "text") {
+          userParts.push({ text: (item as any).text });
+        } else if ((item as any).type === "image") {
+          userParts.push({ inlineData: { data: (item as any).data, mimeType: (item as any).mime_type } });
         }
       }
 
-      if (newInteractionId) {
-        await storage.updateProject(project.id, { geminiInteractionId: newInteractionId });
-        console.log("Saved interaction ID:", newInteractionId);
+      conversationHistory.push({ role: "user", parts: userParts });
+
+      console.log("generateContentStream call. History messages:", conversationHistory.length, "Edit mode:", isEditMode);
+
+      const streamResult = await gemini.models.generateContentStream({
+        model: "gemini-2.5-flash",
+        contents: conversationHistory,
+        config: {
+          systemInstruction: systemContent,
+          maxOutputTokens: 65536,
+        },
+      });
+
+      for await (const chunk of streamResult) {
+        const text = chunk.text || "";
+        if (text) {
+          fullResponse += text;
+          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+        }
       }
 
       console.log("Total response length:", fullResponse.length);

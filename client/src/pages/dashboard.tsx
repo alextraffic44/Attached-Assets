@@ -451,7 +451,9 @@ export default function DashboardPage() {
                       try {
                         const res = await apiRequest("POST", "/api/enhance-prompt", { prompt: description });
                         const data = await res.json();
-                        if (data.enhancedPrompt) {
+                        if (data.warning) {
+                          toast({ title: "Внимание", description: data.warning });
+                        } else if (data.enhancedPrompt) {
                           setDescription(data.enhancedPrompt);
                           setIsEnhanced(true);
                           toast({ title: "Промпт улучшен!", description: "Проверьте описание и нажмите «Создать проект»" });
@@ -464,8 +466,6 @@ export default function DashboardPage() {
                           if (jsonMatch) {
                             const parsed = JSON.parse(jsonMatch[0]);
                             if (parsed.message) msg = parsed.message;
-                          } else if (errText.includes("429")) {
-                            msg = "Превышен лимит запросов к ИИ. Подождите минуту и попробуйте снова.";
                           }
                         } catch {}
                         toast({ title: "Ошибка", description: msg, variant: "destructive" });
