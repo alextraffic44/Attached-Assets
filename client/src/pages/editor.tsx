@@ -576,7 +576,7 @@ window.__PROJECT_ID__=${projectId};
     if (!editMode || !code) return injectProjectId(code);
     const editorScript = `<!--NZ_EDITOR_START--><style data-nz-editor>
 [contenteditable]:hover{outline:2px dashed rgba(59,130,246,0.5);outline-offset:2px;cursor:text}
-[contenteditable]:focus{outline:2px solid rgba(59,130,246,0.8);outline-offset:2px;background:rgba(59,130,246,0.05)}
+[contenteditable]:focus{outline:2px solid rgba(59,130,246,0.8);outline-offset:2px}
 img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"]:not(input):hover{outline:2px dashed rgba(168,85,247,0.6);outline-offset:2px;cursor:pointer}
 .__nz-tooltip{position:fixed;background:#1e293b;color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;pointer-events:none;z-index:99999;white-space:nowrap}
 </style><script data-nz-editor>
@@ -613,9 +613,19 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
   document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,td,th,button,label,figcaption').forEach(function(el){
     if(el.children.length===0||el.childNodes.length===1){
       el.setAttribute('contenteditable','true');
+      var savedBg='';var savedClip='';var savedFill='';
       el.addEventListener('mouseenter',function(){showTip(el,'Клик для редактирования')});
       el.addEventListener('mouseleave',hideTip);
+      el.addEventListener('focus',function(){
+        var cs=window.getComputedStyle(el);
+        if(cs.webkitBackgroundClip==='text'||cs.backgroundClip==='text'){
+          savedBg=el.style.background||'';savedClip=el.style.webkitBackgroundClip||el.style.backgroundClip||'';savedFill=el.style.webkitTextFillColor||'';
+          el.style.webkitBackgroundClip='unset';el.style.backgroundClip='unset';
+          el.style.webkitTextFillColor=cs.color||'#fff';el.style.background='transparent';
+        }
+      });
       el.addEventListener('blur',function(){
+        if(savedClip){el.style.background=savedBg;el.style.webkitBackgroundClip=savedClip;el.style.backgroundClip=savedClip;el.style.webkitTextFillColor=savedFill;savedClip=''}
         window.parent.postMessage({type:'nz-text-edit',html:getCleanHtml()},'*');
       });
     }
