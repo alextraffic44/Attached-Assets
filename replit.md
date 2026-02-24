@@ -25,6 +25,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `project_messages` — id, projectId, role, content, createdAt
 - `project_images` — id, projectId, name, url, prompt, createdAt (named image library)
 - `project_versions` — id, projectId, code, label, createdAt (version history/rollback)
+- `project_files` — id, projectId, filename, code, createdAt (multi-page support: extra HTML files beyond index.html)
 - `leads` — id, projectId, name, email, phone, message, source, isRead, createdAt (form submissions from generated sites)
 - `session` — auto-managed by connect-pg-simple
 
@@ -39,8 +40,10 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - Visual WYSIWYG editor: inline text editing + image replacement via popup picker
 - Image picker dialog: choose from generated library or upload from PC
 - Live preview with responsive device switching
-- Chat-based iterative editing with inline rollback buttons
-- ZIP export with all images as local files (images/ folder)
+- Multi-page website support: separate HTML files per page with file tabs in editor
+- Inter-page navigation: links like `about.html` switch tabs, work in preview and export
+- Chat-based iterative editing with version history
+- ZIP export with all pages and images as local files (images/ folder)
 - Auto-save before each generation (version history)
 - Credit-based usage system
 

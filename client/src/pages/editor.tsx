@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { useLocation, useParams } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Project, ProjectMessage, ProjectImage, ProjectVersion } from "@shared/schema";
+import type { Project, ProjectMessage, ProjectImage, ProjectVersion, ProjectFile } from "@shared/schema";
 import JSZip from "jszip";
 import {
   ArrowLeft,
@@ -37,6 +37,8 @@ import {
   Type,
   History,
   Clock,
+  FileText,
+  Plus,
 } from "lucide-react";
 import {
   Dialog,
@@ -114,7 +116,22 @@ export default function EditorPage() {
 
   const [showVersions, setShowVersions] = useState(false);
 
-  const currentCode = streamedCode || project?.generatedCode || "";
+  const { data: projectFiles = [] } = useQuery<ProjectFile[]>({
+    queryKey: ["/api/projects", projectId, "files"],
+  });
+
+  const [activeFile, setActiveFile] = useState("index.html");
+
+  const allFiles = [
+    { filename: "index.html", code: project?.generatedCode || "" },
+    ...projectFiles.filter(f => f.filename !== "index.html"),
+  ];
+
+  const activeFileCode = activeFile === "index.html"
+    ? (streamedCode || project?.generatedCode || "")
+    : (projectFiles.find(f => f.filename === activeFile)?.code || "");
+
+  const currentCode = activeFileCode;
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -193,6 +210,7 @@ export default function EditorPage() {
             if (data.done && data.code) {
               setGenerationStatus(null);
               setStreamedCode(data.code);
+              setActiveFile("index.html");
             }
           }
         }
@@ -203,6 +221,7 @@ export default function EditorPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
@@ -326,6 +345,18 @@ export default function EditorPage() {
     htmlCode = htmlCode.replace('</body>', leadExportScript + '\n</body>');
 
     zip.file("index.html", htmlCode);
+
+    for (const pf of projectFiles) {
+      if (pf.filename !== "index.html") {
+        let pfCode = pf.code;
+        for (const [remoteUrl, localPath] of allImageUrls) {
+          pfCode = pfCode.split(remoteUrl).join(localPath);
+        }
+        pfCode = pfCode.replace('</body>', leadExportScript + '\n</body>');
+        zip.file(pf.filename, pfCode);
+      }
+    }
+
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -462,6 +493,11 @@ window.__PROJECT_ID__=${projectId};
     var href=a.getAttribute('href');
     if(!href||href==='#') return;
     if(href.startsWith('#')){e.preventDefault();var el=document.querySelector(href);if(el)el.scrollIntoView({behavior:'smooth'});return;}
+    if(href.match(/^[a-zA-Z0-9_-]+\.html$/)){
+      e.preventDefault();
+      window.parent.postMessage({type:'nz-navigate-file',filename:href},'*');
+      return;
+    }
     e.preventDefault();
   },true);
   function showToast(msg){
@@ -596,13 +632,32 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       if (!e.data || typeof e.data !== 'object') return;
       if (e.data.type === 'nz-text-edit') {
         const finalHtml = e.data.html;
-        setStreamedCode(finalHtml);
-        fetch(`/api/projects/${projectId}/code`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ generatedCode: finalHtml }),
-          credentials: "include",
-        });
+        if (activeFile === "index.html") {
+          setStreamedCode(finalHtml);
+          fetch(`/api/projects/${projectId}/code`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ generatedCode: finalHtml }),
+            credentials: "include",
+          });
+        } else {
+          fetch(`/api/projects/${projectId}/files/${activeFile}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: finalHtml }),
+            credentials: "include",
+          }).then(() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+          });
+        }
+      }
+      if (e.data.type === 'nz-navigate-file') {
+        const filename = e.data.filename;
+        const fileExists = allFiles.some(f => f.filename === filename);
+        if (fileExists) {
+          setActiveFile(filename);
+          if (filename === "index.html") setStreamedCode("");
+        }
       }
       if (e.data.type === 'nz-img-click' || e.data.type === 'nz-placeholder-click') {
         pendingImageTarget.current = e.data.path;
@@ -612,7 +667,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [projectId]);
+  }, [projectId, activeFile, allFiles]);
 
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
 
@@ -830,25 +885,42 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
 
-        <SkeuoPanel className="flex-1 relative bg-slate-100 dark:bg-black p-4">
-          {showCode ? (
-            <div className="w-full h-full p-6 bg-slate-900 rounded-[1.5rem] shadow-skeuo-inner overflow-auto">
-              <pre className="text-xs font-mono text-emerald-400 whitespace-pre-wrap">{currentCode || "// Тут будет код"}</pre>
-            </div>
-          ) : currentCode ? (
-            <div className="w-full h-full flex items-center justify-center overflow-hidden">
-               <div className="bg-white rounded-2xl shadow-2xl transition-all duration-500 overflow-hidden border border-white/20" style={{ width: deviceWidths[previewDevice], height: '100%' }}>
-                  <iframe ref={iframeRef} srcDoc={getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
-               </div>
-            </div>
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center space-y-4">
-              <div className="w-24 h-24 rounded-3xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center shadow-skeuo-inner">
-                <Maximize2 className="w-10 h-10 text-slate-400" />
-              </div>
-              <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Ожидание первого байта...</p>
+        <SkeuoPanel className="flex-1 relative bg-slate-100 dark:bg-black flex flex-col overflow-hidden">
+          {allFiles.length > 1 && (
+            <div className="flex items-center gap-1 px-4 pt-3 pb-1 overflow-x-auto shrink-0">
+              {allFiles.map(f => (
+                <button
+                  key={f.filename}
+                  onClick={() => { setActiveFile(f.filename); if (f.filename === "index.html") setStreamedCode(""); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeFile === f.filename ? "bg-primary text-white shadow-md" : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700"}`}
+                  data-testid={`tab-file-${f.filename}`}
+                >
+                  <FileText className="w-3 h-3" />
+                  {f.filename}
+                </button>
+              ))}
             </div>
           )}
+          <div className="flex-1 p-4 overflow-hidden">
+            {showCode ? (
+              <div className="w-full h-full p-6 bg-slate-900 rounded-[1.5rem] shadow-skeuo-inner overflow-auto">
+                <pre className="text-xs font-mono text-emerald-400 whitespace-pre-wrap">{currentCode || "// Тут будет код"}</pre>
+              </div>
+            ) : currentCode ? (
+              <div className="w-full h-full flex items-center justify-center overflow-hidden">
+                 <div className="bg-white rounded-2xl shadow-2xl transition-all duration-500 overflow-hidden border border-white/20" style={{ width: deviceWidths[previewDevice], height: '100%' }}>
+                    <iframe ref={iframeRef} srcDoc={getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
+                 </div>
+              </div>
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center space-y-4">
+                <div className="w-24 h-24 rounded-3xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center shadow-skeuo-inner">
+                  <Maximize2 className="w-10 h-10 text-slate-400" />
+                </div>
+                <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Ожидание первого байта...</p>
+              </div>
+            )}
+          </div>
         </SkeuoPanel>
       </div>
 

@@ -125,41 +125,33 @@ const SYSTEM_PROMPT = `Ты — элитный Creative Technologist и Lead Fro
 - Копирайт + "System Operational" статус с пульсирующей точкой
 
 ═══════════════════════════════════════════
-МНОГОСТРАНИЧНОСТЬ (SPA-РОУТИНГ)
+МНОГОСТРАНИЧНОСТЬ (ОТДЕЛЬНЫЕ ФАЙЛЫ)
 ═══════════════════════════════════════════
-Когда пользователь просит несколько страниц, добавь новую страницу или многостраничный сайт:
-- Используй SPA-подход: ВСЕ страницы в ОДНОМ HTML-файле
-- Каждая страница — это <section class="page" data-page="имя"> с display:none по умолчанию
-- Первая страница (главная) — data-page="home", видима по умолчанию
-- Навигация через ссылки с data-nav="имя_страницы" (НЕ используй href с #hash)
-- JS-роутер внизу файла переключает видимость страниц:
+Когда пользователь просит несколько страниц или добавить новую страницу:
+- Каждая страница — ОТДЕЛЬНЫЙ полный HTML-файл (свой <!DOCTYPE html>, <head>, <body>)
+- Главная страница ВСЕГДА называется index.html
+- Дополнительные страницы: about.html, services.html, contacts.html и т.д.
+- Навигация между страницами через обычные ссылки: <a href="about.html">О нас</a>
+- ВСЕ страницы должны иметь ОДИНАКОВЫЙ навбар и футер (копируй)
+- ВСЕ страницы должны использовать ОДИНАКОВЫЕ CSS Custom Properties и стили
+- Текущая страница в навбаре подсвечивается (класс active)
+- Каждая страница — полноценная: свой hero, контент, минимум 3-4 секции
 
-\`\`\`javascript
-function navigateTo(pageName) {
-  document.querySelectorAll('.page').forEach(p => {
-    p.style.display = 'none';
-    p.classList.remove('page-active');
-  });
-  const target = document.querySelector('[data-page="' + pageName + '"]');
-  if (target) {
-    target.style.display = 'block';
-    target.classList.add('page-active');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-}
-document.querySelectorAll('[data-nav]').forEach(link => {
-  link.addEventListener('click', (e) => {
-    e.preventDefault();
-    navigateTo(link.getAttribute('data-nav'));
-  });
-});
+ФОРМАТ ОТВЕТА при нескольких файлах:
+Используй маркеры для разделения файлов:
+--- FILE: index.html ---
+\`\`\`html
+<!DOCTYPE html>...
+\`\`\`
+--- FILE: about.html ---
+\`\`\`html
+<!DOCTYPE html>...
 \`\`\`
 
-- Навбар и футер — ОБЩИЕ, находятся ВНЕ секций .page (показываются всегда)
-- Ссылки в навбаре: <a href="#" data-nav="home">Главная</a>, <a href="#" data-nav="about">О нас</a>
-- Активная ссылка в навбаре подсвечивается (добавляй класс active при переключении)
-- Каждая новая страница должна быть полноценной: свой hero, контент, секции
-- При добавлении страницы к существующему сайту: добавь пункт в навбар + секцию .page
+ВАЖНО при редактировании многостраничного сайта:
+- Если пользователь просит изменить конкретную страницу — выведи ТОЛЬКО эту страницу
+- Если изменение затрагивает навбар/футер — выведи ВСЕ страницы с обновлённым навбаром
+- Если просят добавить новую страницу — выведи новую + обновлённый index.html (с новой ссылкой в навбаре)
 
 ═══════════════════════════════════════════
 РАБОТА С ИЗОБРАЖЕНИЯМИ
@@ -417,9 +409,19 @@ export async function registerRoutes(
       }
 
       const isEditMode = !!project.generatedCode;
+      const existingFiles = await storage.getProjectFiles(project.id);
 
       if (isEditMode) {
-        systemContent += `\n\n${"═".repeat(43)}\nРЕЖИМ РЕДАКТИРОВАНИЯ — ТЕКУЩИЙ КОД САЙТА\n${"═".repeat(43)}\nНиже приведён ТЕКУЩИЙ HTML-код сайта пользователя. Это твой РАБОЧИЙ ДОКУМЕНТ.\nТы ОБЯЗАН:\n1. Сохранить ВСЕ существующие секции, стили, контент, анимации и структуру\n2. Изменять/добавлять ТОЛЬКО то, что явно просит пользователь\n3. НЕ удалять, НЕ упрощать, НЕ сокращать существующий код\n4. Вернуть ПОЛНЫЙ документ целиком (от <!DOCTYPE html> до </html>)\n\nФОРМАТ ОТВЕТА при редактировании:\n- Сначала напиши 1-3 предложения о внесённых изменениях\n- Затем блок \`\`\`html с ПОЛНЫМ обновлённым кодом\n\nТЕКУЩИЙ КОД:\n\`\`\`html\n${project.generatedCode}\n\`\`\``;
+        systemContent += `\n\n${"═".repeat(43)}\nРЕЖИМ РЕДАКТИРОВАНИЯ — ТЕКУЩИЙ КОД САЙТА\n${"═".repeat(43)}\nНиже приведён ТЕКУЩИЙ HTML-код сайта пользователя. Это твой РАБОЧИЙ ДОКУМЕНТ.\nТы ОБЯЗАН:\n1. Сохранить ВСЕ существующие секции, стили, контент, анимации и структуру\n2. Изменять/добавлять ТОЛЬКО то, что явно просит пользователь\n3. НЕ удалять, НЕ упрощать, НЕ сокращать существующий код\n4. Вернуть ПОЛНЫЙ документ целиком (от <!DOCTYPE html> до </html>)\n\nФОРМАТ ОТВЕТА при редактировании:\n- Сначала напиши 1-3 предложения о внесённых изменениях\n- Если один файл — блок \`\`\`html с ПОЛНЫМ обновлённым кодом\n- Если несколько файлов — используй маркеры --- FILE: имя.html --- перед каждым блоком \`\`\`html\n\n`;
+
+        if (existingFiles.length > 0) {
+          systemContent += `ПРОЕКТ СОСТОИТ ИЗ ${existingFiles.length + 1} ФАЙЛОВ:\n\n--- FILE: index.html ---\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n`;
+          for (const f of existingFiles) {
+            systemContent += `\n--- FILE: ${f.filename} ---\n\`\`\`html\n${f.code}\n\`\`\`\n`;
+          }
+        } else {
+          systemContent += `ТЕКУЩИЙ КОД (index.html):\n\`\`\`html\n${project.generatedCode}\n\`\`\``;
+        }
       }
 
       const geminiHistory: any[] = [];
@@ -478,23 +480,55 @@ export async function registerRoutes(
       console.log("Total response length:", fullResponse.length);
       console.log("Response preview:", fullResponse.substring(0, 200));
 
-      let htmlCode = fullResponse;
+      const replaceImgMarkers = (code: string) => {
+        const imgMarkerRegex = /\{\{IMG:([^}]+)\}\}/g;
+        let m;
+        let result = code;
+        while ((m = imgMarkerRegex.exec(code)) !== null) {
+          const imgName = m[1].trim().toLowerCase();
+          const found = projectImgs.find(img => img.name.toLowerCase() === imgName);
+          if (found) result = result.replace(m[0], found.url);
+        }
+        return result;
+      };
+
       let aiTextReply = "";
-      const htmlMatch = fullResponse.match(/```html\n?([\s\S]*?)```/);
-      if (htmlMatch) {
-        htmlCode = htmlMatch[1].trim();
-        aiTextReply = fullResponse.substring(0, fullResponse.indexOf("```html")).trim();
-      } else if (fullResponse.includes("<!DOCTYPE") || fullResponse.includes("<html")) {
-        htmlCode = fullResponse.trim();
+      const firstHtmlIdx = fullResponse.indexOf("```html");
+      if (firstHtmlIdx > 0) {
+        const firstFileMarkerIdx = fullResponse.indexOf("--- FILE:");
+        const textEnd = firstFileMarkerIdx !== -1 && firstFileMarkerIdx < firstHtmlIdx ? firstFileMarkerIdx : firstHtmlIdx;
+        aiTextReply = fullResponse.substring(0, textEnd).trim();
       }
 
-      const imgMarkerRegex = /\{\{IMG:([^}]+)\}\}/g;
-      let markerMatch;
-      while ((markerMatch = imgMarkerRegex.exec(htmlCode)) !== null) {
-        const imgName = markerMatch[1].trim().toLowerCase();
-        const found = projectImgs.find(img => img.name.toLowerCase() === imgName);
-        if (found) {
-          htmlCode = htmlCode.replace(markerMatch[0], found.url);
+      const fileMarkerRegex = /---\s*FILE:\s*([^\s-]+\.html)\s*---\s*```html\n?([\s\S]*?)```/gi;
+      const parsedFiles: { filename: string; code: string }[] = [];
+      let fm;
+      while ((fm = fileMarkerRegex.exec(fullResponse)) !== null) {
+        parsedFiles.push({ filename: fm[1].trim().toLowerCase(), code: replaceImgMarkers(fm[2].trim()) });
+      }
+
+      let mainHtmlCode: string;
+
+      if (parsedFiles.length > 0) {
+        const indexFile = parsedFiles.find(f => f.filename === "index.html");
+        if (indexFile) {
+          mainHtmlCode = indexFile.code;
+        } else {
+          mainHtmlCode = parsedFiles[0].code;
+        }
+        for (const pf of parsedFiles) {
+          if (pf.filename !== "index.html") {
+            await storage.upsertProjectFile({ projectId: project.id, filename: pf.filename, code: pf.code });
+          }
+        }
+      } else {
+        const singleMatch = fullResponse.match(/```html\n?([\s\S]*?)```/);
+        if (singleMatch) {
+          mainHtmlCode = replaceImgMarkers(singleMatch[1].trim());
+        } else if (fullResponse.includes("<!DOCTYPE") || fullResponse.includes("<html")) {
+          mainHtmlCode = replaceImgMarkers(fullResponse.trim());
+        } else {
+          mainHtmlCode = project.generatedCode || "";
         }
       }
 
@@ -506,14 +540,18 @@ export async function registerRoutes(
         });
       }
 
-      await storage.updateProject(project.id, { generatedCode: htmlCode });
+      await storage.updateProject(project.id, { generatedCode: mainHtmlCode });
+      if (mainHtmlCode && mainHtmlCode !== project.generatedCode) {
+        await storage.upsertProjectFile({ projectId: project.id, filename: "index.html", code: mainHtmlCode });
+      }
       await storage.createProjectMessage({
         projectId: project.id,
         role: "model",
         content: aiTextReply || "Сайт обновлён",
       });
 
-      res.write(`data: ${JSON.stringify({ done: true, code: htmlCode, reply: aiTextReply })}\n\n`);
+      const allFiles = await storage.getProjectFiles(project.id);
+      res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })) })}\n\n`);
       res.end();
     } catch (err: any) {
       console.error("Generation error:", err);
@@ -705,6 +743,52 @@ export async function registerRoutes(
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Ошибка восстановления версии" });
+    }
+  });
+
+  // ═══ PROJECT FILES API ═══
+
+  app.get("/api/projects/:id/files", bypassAuth, async (req, res) => {
+    try {
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      const user = req.user as any;
+      if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
+      const files = await storage.getProjectFiles(project.id);
+      res.json(files);
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка загрузки файлов" });
+    }
+  });
+
+  app.put("/api/projects/:id/files/:filename", bypassAuth, async (req, res) => {
+    try {
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      const user = req.user as any;
+      if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
+      const { code } = req.body;
+      const file = await storage.upsertProjectFile({
+        projectId: project.id,
+        filename: req.params.filename,
+        code: code || "",
+      });
+      res.json(file);
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка сохранения файла" });
+    }
+  });
+
+  app.delete("/api/projects/:id/files/:fileId", bypassAuth, async (req, res) => {
+    try {
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      const user = req.user as any;
+      if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
+      await storage.deleteProjectFile(parseInt(req.params.fileId));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка удаления файла" });
     }
   });
 

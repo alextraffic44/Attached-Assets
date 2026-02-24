@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { users, projects, projectMessages, projectImages, projectVersions, leads, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion, type Lead, type InsertLead } from "@shared/schema";
+import { users, projects, projectMessages, projectImages, projectVersions, projectFiles, leads, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion, type ProjectFile, type InsertProjectFile, type Lead, type InsertLead } from "@shared/schema";
 import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
@@ -23,6 +23,11 @@ export interface IStorage {
 
   getProjectVersions(projectId: number): Promise<ProjectVersion[]>;
   createProjectVersion(version: InsertProjectVersion): Promise<ProjectVersion>;
+
+  getProjectFiles(projectId: number): Promise<ProjectFile[]>;
+  getProjectFile(projectId: number, filename: string): Promise<ProjectFile | undefined>;
+  upsertProjectFile(file: InsertProjectFile): Promise<ProjectFile>;
+  deleteProjectFile(id: number): Promise<void>;
 
   getLeadsByProject(projectId: number): Promise<Lead[]>;
   getLeadsByUser(userId: number): Promise<(Lead & { projectTitle: string })[]>;
@@ -106,6 +111,29 @@ export class DatabaseStorage implements IStorage {
   async createProjectVersion(version: InsertProjectVersion): Promise<ProjectVersion> {
     const [v] = await db.insert(projectVersions).values(version).returning();
     return v;
+  }
+
+  async getProjectFiles(projectId: number): Promise<ProjectFile[]> {
+    return db.select().from(projectFiles).where(eq(projectFiles.projectId, projectId)).orderBy(projectFiles.filename);
+  }
+
+  async getProjectFile(projectId: number, filename: string): Promise<ProjectFile | undefined> {
+    const [file] = await db.select().from(projectFiles).where(and(eq(projectFiles.projectId, projectId), eq(projectFiles.filename, filename)));
+    return file;
+  }
+
+  async upsertProjectFile(file: InsertProjectFile): Promise<ProjectFile> {
+    const existing = await this.getProjectFile(file.projectId, file.filename);
+    if (existing) {
+      const [updated] = await db.update(projectFiles).set({ code: file.code }).where(eq(projectFiles.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(projectFiles).values(file).returning();
+    return created;
+  }
+
+  async deleteProjectFile(id: number): Promise<void> {
+    await db.delete(projectFiles).where(eq(projectFiles.id, id));
   }
 
   async getLeadsByProject(projectId: number): Promise<Lead[]> {
