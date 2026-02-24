@@ -328,7 +328,6 @@ export async function registerRoutes(
         content: prompt,
       });
 
-      const previousMessages = await storage.getProjectMessages(project.id);
       const projectImgs = await storage.getProjectImages(project.id);
 
       res.setHeader("Content-Type", "text/event-stream");
@@ -391,19 +390,7 @@ export async function registerRoutes(
         }
       }
 
-      const geminiHistory: any[] = [];
-
-      const historyMessages = previousMessages.slice(0, -1);
-      const maxHistory = isEditMode ? 20 : historyMessages.length;
-      const recentHistory = historyMessages.slice(-maxHistory);
-      for (const msg of recentHistory) {
-        geminiHistory.push({
-          role: msg.role === "user" ? "user" : "model",
-          parts: [{ text: msg.content }],
-        });
-      }
-
-      const userParts: any[] = [];
+      const inputContent: any[] = [];
       const savedImageUrls: string[] = [];
 
       if (imageArray.length > 0) {
@@ -439,53 +426,78 @@ export async function registerRoutes(
           });
           textPart += `\nОБЯЗАТЕЛЬНО используй эти URL напрямую в src изображений: <img src="${savedImageUrls[0]}" />. НЕ используй маркер {{IMG:...}} для этих фото — используй URL напрямую. Размести фото по сайту согласно запросу пользователя.`;
         }
-        userParts.push({ text: textPart });
+        inputContent.push({ type: "text", text: textPart });
 
         for (const imgData of imageArray) {
           const mime = imgData.mimeType || "image/png";
           if (mime.startsWith("image/")) {
-            userParts.push({ inlineData: { data: imgData.base64, mimeType: mime } });
+            inputContent.push({ type: "image", data: imgData.base64, mime_type: mime });
           } else {
             const extractedText = await extractTextFromFile(imgData.base64, mime);
             if (extractedText) {
               const truncated = extractedText.length > 15000 ? extractedText.substring(0, 15000) + "\n...[текст обрезан]" : extractedText;
-              userParts.push({ text: `\n\nСОДЕРЖИМОЕ ПРИКРЕПЛЁННОГО ДОКУМЕНТА (${mime}):\n---\n${truncated}\n---\n\nИспользуй этот текст из документа при создании/редактировании сайта.` });
+              inputContent.push({ type: "text", text: `\n\nСОДЕРЖИМОЕ ПРИКРЕПЛЁННОГО ДОКУМЕНТА (${mime}):\n---\n${truncated}\n---\n\nИспользуй этот текст из документа при создании/редактировании сайта.` });
             } else {
-              userParts.push({ text: `[Прикреплён файл формата ${mime}, но его содержимое не удалось извлечь.]` });
+              inputContent.push({ type: "text", text: `[Прикреплён файл формата ${mime}, но его содержимое не удалось извлечь.]` });
             }
           }
         }
       } else if (isEditMode) {
-        userParts.push({ text: prompt });
+        inputContent.push({ type: "text", text: prompt });
       } else {
-        userParts.push({ text: enhancedPrompt });
+        inputContent.push({ type: "text", text: enhancedPrompt });
       }
 
       let fullResponse = "";
 
-      console.log("Gemini generation started, history length:", geminiHistory.length);
+      let previousInteractionId = project.geminiInteractionId || undefined;
+      console.log("Interactions API call. Previous interaction:", previousInteractionId ? "yes" : "new", "Edit mode:", isEditMode);
 
-      const streamResult = await gemini.models.generateContentStream({
-        model: "gemini-3.1-pro-preview",
-        contents: [
-          ...geminiHistory,
-          { role: "user", parts: userParts },
-        ],
-        config: {
-          systemInstruction: systemContent,
-          maxOutputTokens: 65536,
-          thinkingConfig: {
-            thinkingLevel: (isEditMode ? "low" : "high") as any,
+      const createInteraction = async (prevId?: string) => {
+        return gemini.interactions.create({
+          model: "gemini-3.1-pro-preview",
+          input: inputContent,
+          stream: true,
+          previous_interaction_id: prevId,
+          system_instruction: systemContent,
+          generation_config: {
+            max_output_tokens: 65536,
+            thinking_level: (isEditMode ? "low" : "high") as any,
           },
-        },
-      });
+        });
+      };
 
-      for await (const chunk of streamResult) {
-        const text = chunk.text || "";
-        if (text) {
-          fullResponse += text;
-          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+      let streamResult;
+      try {
+        streamResult = await createInteraction(previousInteractionId);
+      } catch (retryErr: any) {
+        if (previousInteractionId && (retryErr?.message?.includes("not found") || retryErr?.message?.includes("invalid") || retryErr?.status === 404)) {
+          console.log("Previous interaction expired, creating new one");
+          previousInteractionId = undefined;
+          await storage.updateProject(project.id, { geminiInteractionId: null } as any);
+          streamResult = await createInteraction(undefined);
+        } else {
+          throw retryErr;
         }
+      }
+
+      let newInteractionId: string | undefined;
+
+      for await (const event of streamResult) {
+        if (event.event_type === "content.delta") {
+          const delta = (event as any).delta;
+          if (delta?.type === "text" && delta?.text) {
+            fullResponse += delta.text;
+            res.write(`data: ${JSON.stringify({ content: delta.text })}\n\n`);
+          }
+        } else if (event.event_type === "interaction.complete") {
+          newInteractionId = (event as any).interaction?.id;
+        }
+      }
+
+      if (newInteractionId) {
+        await storage.updateProject(project.id, { geminiInteractionId: newInteractionId });
+        console.log("Saved interaction ID:", newInteractionId);
       }
 
       console.log("Total response length:", fullResponse.length);
