@@ -34,7 +34,7 @@ import {
 const SkeuoCard = ({ children, className = "", onClick = undefined }) => (
   <div 
     onClick={onClick}
-    className={`bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/20 dark:border-white/5 shadow-skeuo-md hover:shadow-skeuo-lg transition-all duration-300 rounded-[2rem] p-6 ${onClick ? 'cursor-pointer' : ''} ${className}`}
+    className={`bg-white border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)] transition-all duration-500 rounded-[2.5rem] p-6 ${onClick ? 'cursor-pointer hover:-translate-y-1' : ''} ${className}`}
   >
     {children}
   </div>
@@ -91,14 +91,16 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] pb-20">
+    <div className="min-h-screen bg-white pb-20 relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,rgba(120,119,198,0.05),transparent)] pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 h-96 bg-gradient-to-b from-slate-50/50 to-transparent pointer-events-none" />
       <header className="fixed top-0 w-full z-50 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between bg-white/40 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-2xl px-6 py-3 shadow-glass">
+        <div className="max-w-7xl mx-auto flex items-center justify-between bg-white/70 backdrop-blur-2xl border border-white/40 rounded-3xl px-6 py-3 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-chart-3 flex items-center justify-center shadow-lg">
-              <Sparkles className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+              <Sparkles className="w-5.5 h-5.5 text-white" />
             </div>
-            <span className="font-black tracking-tight uppercase text-sm">НЕЙРОЗОДЧИЙ</span>
+            <span className="font-extrabold tracking-tight text-xl bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600">NEURO</span>
           </div>
           <div className="flex items-center gap-3">
             <button
