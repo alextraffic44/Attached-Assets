@@ -175,47 +175,11 @@ export default function EditorPage() {
         body: JSON.stringify({ code: template }),
       });
 
-      const navLink = `<a href="${name}">${pageLabel}</a>`;
-      const addNavLink = (code: string) => {
-        if (!code) return code;
-        const navTagMatch = code.match(/<nav[^>]*>([\s\S]*?)<\/nav>/i);
-        if (!navTagMatch) return code;
-        const navContent = navTagMatch[0];
-        if (navContent.includes(`href="${name}"`)) return code;
-        const lastLinkMatch = navContent.match(/(.*)(<a\s[^>]*>[^<]*<\/a>)/i);
-        if (lastLinkMatch) {
-          const lastLink = navContent.lastIndexOf("</a>");
-          if (lastLink !== -1) {
-            const insertPos = lastLink + 4;
-            const newNav = navContent.substring(0, insertPos) + "\n                " + navLink + navContent.substring(insertPos);
-            return code.replace(navTagMatch[0], newNav);
-          }
-        }
-        return code;
-      };
-
-      const updatedIndex = addNavLink(baseCode);
-      if (updatedIndex !== baseCode) {
-        await fetch(`/api/projects/${projectId}/code`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ generatedCode: updatedIndex }),
-        });
-      }
-
-      for (const pf of projectFiles) {
-        if (pf.filename === name) continue;
-        const updated = addNavLink(pf.code);
-        if (updated !== pf.code) {
-          await fetch(`/api/projects/${projectId}/files/${pf.filename}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ code: updated }),
-          });
-        }
-      }
+      await fetch(`/api/projects/${projectId}/sync-nav`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
 
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });

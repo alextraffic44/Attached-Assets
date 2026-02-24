@@ -864,6 +864,81 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/projects/:id/sync-nav", bypassAuth, async (req, res) => {
+    try {
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      const user = req.user as any;
+      if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
+
+      const files = await storage.getProjectFiles(project.id);
+      const allPages = [
+        { filename: "index.html", code: project.generatedCode || "" },
+        ...files.filter(f => f.filename !== "index.html"),
+      ];
+
+      const indexCode = project.generatedCode || "";
+      const navMatch = indexCode.match(/<nav[^>]*>([\s\S]*?)<\/nav>/i);
+      if (!navMatch) return res.json({ success: true, message: "Nav not found" });
+
+      const existingNav = navMatch[0];
+
+      const existingLinks: { href: string; text: string; full: string }[] = [];
+      const linkRegex = /<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+      let m;
+      while ((m = linkRegex.exec(existingNav)) !== null) {
+        existingLinks.push({ href: m[1], text: m[2], full: m[0] });
+      }
+
+      const missingPages = allPages.filter(
+        p => !existingLinks.some(l => l.href === p.filename)
+      );
+
+      if (missingPages.length === 0) return res.json({ success: true, message: "Already synced" });
+
+      let newNavLinks = "";
+      for (const mp of missingPages) {
+        const label = mp.filename.replace(".html", "");
+        const displayName = label.charAt(0).toUpperCase() + label.slice(1);
+        if (existingLinks.length > 0) {
+          const sample = existingLinks[existingLinks.length - 1].full;
+          const newLink = sample.replace(/href="[^"]*"/, `href="${mp.filename}"`).replace(/>[\s\S]*?<\/a>/, `>${displayName}</a>`);
+          newNavLinks += "\n                " + newLink;
+        } else {
+          newNavLinks += `\n                <a href="${mp.filename}">${displayName}</a>`;
+        }
+      }
+
+      const lastLinkIdx = existingNav.lastIndexOf("</a>");
+      if (lastLinkIdx === -1) return res.json({ success: true, message: "No links found in nav" });
+
+      const insertPos = lastLinkIdx + 4;
+      const updatedNav = existingNav.substring(0, insertPos) + newNavLinks + existingNav.substring(insertPos);
+
+      for (const page of allPages) {
+        const pageNavMatch = page.code.match(/<nav[^>]*>([\s\S]*?)<\/nav>/i);
+        if (!pageNavMatch) continue;
+        const updatedCode = page.code.replace(pageNavMatch[0], updatedNav);
+        if (updatedCode === page.code) continue;
+
+        if (page.filename === "index.html") {
+          await storage.updateProject(project.id, { generatedCode: updatedCode });
+        } else {
+          await storage.upsertProjectFile({
+            projectId: project.id,
+            filename: page.filename,
+            code: updatedCode,
+          });
+        }
+      }
+
+      res.json({ success: true, updated: allPages.length });
+    } catch (err) {
+      console.error("Sync nav error:", err);
+      res.status(500).json({ message: "Ошибка синхронизации навигации" });
+    }
+  });
+
   app.delete("/api/projects/:id/files/:fileId", bypassAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
