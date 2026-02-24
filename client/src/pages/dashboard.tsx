@@ -34,7 +34,7 @@ import {
 const SkeuoCard = ({ children, className = "", onClick = undefined }) => (
   <div 
     onClick={onClick}
-    className={`bg-white border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)] transition-all duration-500 rounded-[2.5rem] p-6 ${onClick ? 'cursor-pointer hover:-translate-y-1' : ''} ${className}`}
+    className={`bg-white/40 backdrop-blur-md border border-white/20 shadow-glass hover:shadow-xl transition-all duration-500 rounded-[2rem] p-6 ${onClick ? 'cursor-pointer hover:-translate-y-1 active:scale-[0.98]' : ''} ${className}`}
   >
     {children}
   </div>
@@ -91,118 +91,128 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="min-h-screen bg-white pb-20 relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,rgba(120,119,198,0.05),transparent)] pointer-events-none" />
-      <div className="absolute top-0 left-0 right-0 h-96 bg-gradient-to-b from-slate-50/50 to-transparent pointer-events-none" />
-      <header className="fixed top-0 w-full z-50 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between bg-white/70 backdrop-blur-2xl border border-white/40 rounded-3xl px-6 py-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Sparkles className="w-5.5 h-5.5 text-white" />
+    <div className="min-h-screen bg-[#F8FAFC] pb-20 relative overflow-hidden">
+      {/* Decorative Orbs */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/5 rounded-full blur-[120px] pointer-events-none" />
+      
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(120,119,198,0.08),transparent_50%)] pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent opacity-50" />
+      
+      <header className="fixed top-6 w-full z-50 px-6">
+        <div className="max-w-7xl mx-auto flex items-center justify-between bg-white/60 backdrop-blur-xl border border-white/40 rounded-[2rem] px-8 py-3.5 shadow-glass">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg">
+              <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <span className="font-extrabold tracking-tight text-xl bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600">NEURO</span>
+            <span className="font-black tracking-tight text-xl text-slate-900">NEURO</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <button
               onClick={() => setLocation("/leads")}
-              className="relative flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-full px-4 py-1.5 shadow-skeuo-inner hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="group relative flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-full px-5 py-2 hover:bg-white hover:border-slate-200 transition-all shadow-sm"
               data-testid="button-leads"
             >
-              <Inbox className="w-4 h-4 text-emerald-500" />
-              <span className="text-xs font-black">Лиды</span>
+              <Inbox className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+              <span className="text-xs font-bold text-slate-600">Лиды</span>
               {(unreadData?.count ?? 0) > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center bg-emerald-500 text-white text-[10px] font-black rounded-full px-1 shadow-lg shadow-emerald-500/30">
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-emerald-500 text-white text-[10px] font-black rounded-full px-1 shadow-md">
                   {unreadData!.count}
                 </span>
               )}
             </button>
-            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-full px-4 py-1.5 shadow-skeuo-inner">
-              <Coins className="w-4 h-4 text-primary" />
-              <span className="text-xs font-black">{user?.credits}</span>
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-full px-5 py-2 shadow-sm">
+              <Coins className="w-4 h-4 text-amber-500" />
+              <span className="text-xs font-bold text-slate-900">{user?.credits}</span>
             </div>
             <Button
               data-testid="button-topup"
               variant="outline"
               size="sm"
-              className="rounded-full font-bold text-xs border-primary/30 text-primary"
+              className="rounded-full font-bold text-xs h-9 px-5 border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all shadow-sm"
               onClick={() => setShowTopUpModal(true)}
             >
               Пополнить
             </Button>
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={logout}>
+            <div className="w-px h-6 bg-slate-200 mx-1" />
+            <Button variant="ghost" size="icon" className="rounded-full w-9 h-9 text-slate-400 hover:text-slate-900" onClick={logout}>
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 pt-28 space-y-12">
-        <div className="flex items-end justify-between">
+      <main className="max-w-7xl mx-auto px-6 pt-36 space-y-12">
+        <div className="flex items-center justify-between">
           <div className="space-y-1">
-            <h1 className="text-4xl font-black tracking-tighter">Ваши проекты</h1>
-            <p className="text-slate-500 font-medium">Создайте что-то потрясающее сегодня</p>
+            <h1 className="text-5xl font-black tracking-tight text-slate-900 leading-none">Ваши проекты</h1>
+            <p className="text-slate-500 font-medium text-lg">Создайте что-то потрясающее сегодня</p>
           </div>
           <Button 
-            className="h-14 px-8 rounded-2xl font-black text-lg shadow-xl shadow-primary/20 hover-elevate"
+            className="h-14 px-10 rounded-2xl font-black text-lg bg-slate-900 text-white hover:bg-slate-800 shadow-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
             onClick={() => setShowCreateModal(true)}
           >
-            <Plus className="w-5 h-5 mr-2" />
+            <Plus className="w-6 h-6 mr-2" />
             Новый сайт
           </Button>
         </div>
 
         {isLoading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[1,2,3].map(i => <div key={i} className="h-64 rounded-[2rem] bg-slate-100 dark:bg-slate-800 animate-pulse" />)}
+            {[1,2,3].map(i => <div key={i} className="h-72 rounded-[2rem] bg-slate-100 animate-pulse" />)}
           </div>
         ) : userProjects.length === 0 ? (
-          <SkeuoCard className="flex flex-col items-center justify-center py-24 text-center space-y-6">
-            <div className="w-20 h-20 rounded-3xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-skeuo-inner">
-              <FolderOpen className="w-10 h-10 text-slate-300" />
+          <SkeuoCard className="flex flex-col items-center justify-center py-32 text-center space-y-8">
+            <div className="w-24 h-24 rounded-[2rem] bg-slate-50 border border-slate-100 flex items-center justify-center">
+              <FolderOpen className="w-12 h-12 text-slate-200" />
             </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-bold tracking-tight">Пока здесь пусто</h2>
-              <p className="text-slate-500 max-w-xs mx-auto">Создайте свой первый проект, используя возможности искусственного интеллекта.</p>
+            <div className="space-y-3">
+              <h2 className="text-3xl font-black text-slate-900">Пока здесь пусто</h2>
+              <p className="text-slate-400 max-w-sm mx-auto text-lg font-medium">Создайте свой первый проект, используя возможности искусственного интеллекта.</p>
             </div>
-            <Button onClick={() => setShowCreateModal(true)} className="rounded-xl h-12 px-6 font-bold">
+            <Button onClick={() => setShowCreateModal(true)} className="rounded-2xl h-14 px-8 font-black text-lg bg-slate-900 hover:bg-slate-800 shadow-lg">
               Создать первый сайт
             </Button>
           </SkeuoCard>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-10">
             {userProjects.map((project) => (
               <SkeuoCard 
                 key={project.id} 
-                className="group p-0 overflow-hidden"
+                className="group p-0 overflow-hidden relative"
                 onClick={() => setLocation(`/editor/${project.id}`)}
               >
-                <div className="h-48 bg-slate-50 dark:bg-slate-800/50 relative overflow-hidden flex items-center justify-center">
+                <div className="h-56 bg-white relative overflow-hidden flex items-center justify-center">
                   {project.generatedCode ? (
-                    <div className="w-full h-full scale-[0.3] origin-center opacity-40 group-hover:opacity-100 transition-opacity duration-500">
-                       <iframe srcDoc={project.generatedCode} className="w-[333%] h-[333%] border-none pointer-events-none" />
+                    <div className="w-full h-full scale-[0.4] origin-center opacity-60 group-hover:opacity-100 transition-all duration-700 blur-[2px] group-hover:blur-0">
+                       <iframe srcDoc={project.generatedCode} className="w-[250%] h-[250%] border-none pointer-events-none" />
                     </div>
                   ) : (
-                    <div className="w-16 h-16 rounded-2xl bg-white dark:bg-slate-900 shadow-skeuo-md flex items-center justify-center">
-                      <Code2 className="w-8 h-8 text-slate-200" />
+                    <div className="w-20 h-20 rounded-3xl bg-slate-50 border border-slate-100 flex items-center justify-center">
+                      <Code2 className="w-10 h-10 text-slate-200" />
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-white/90 dark:from-slate-900/90 to-transparent flex items-end p-6">
-                    <h3 className="text-xl font-black tracking-tight truncate">{project.title}</h3>
-                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/20 to-transparent transition-opacity duration-500 group-hover:opacity-40" />
                 </div>
-                <div className="p-6 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-                    <Calendar className="w-3.5 h-3.5" />
-                    {new Date(project.createdAt).toLocaleDateString()}
+                
+                <div className="absolute bottom-0 left-0 right-0 p-8 pt-12 bg-gradient-to-t from-white via-white to-transparent">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <h3 className="text-2xl font-black text-slate-900 truncate leading-tight mb-1">{project.title}</h3>
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        <Calendar className="w-3.5 h-3.5" />
+                        {new Date(project.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 text-slate-300 hover:text-destructive hover:bg-destructive/5 rounded-xl"
+                      onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(project.id); }}
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </Button>
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10"
-                    onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(project.id); }}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
                 </div>
               </SkeuoCard>
             ))}
@@ -227,8 +237,8 @@ export default function DashboardPage() {
                       m: "prompt",
                       t: "По описанию",
                       d: "Просто напишите, что вам нужно",
-                      colorClass: "group-hover:border-blue-200 group-hover:shadow-blue-500/15 group-hover:bg-blue-50/30",
-                      iconBgClass: "bg-blue-100/50 group-hover:bg-blue-100",
+                      colorClass: "hover:border-blue-200/50 hover:bg-blue-50/30",
+                      iconBgClass: "bg-blue-50 group-hover:bg-blue-100/50",
                       icon: (
                         <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 relative z-10 overflow-visible">
                           <g className="transition-transform duration-500 origin-center group-hover:scale-105 group-hover:-translate-y-0.5">
@@ -244,8 +254,8 @@ export default function DashboardPage() {
                       m: "template",
                       t: "Промт + Шаблон",
                       d: "Выберите структуру и детали",
-                      colorClass: "group-hover:border-indigo-200 group-hover:shadow-indigo-500/15 group-hover:bg-indigo-50/30",
-                      iconBgClass: "bg-indigo-100/50 group-hover:bg-indigo-100",
+                      colorClass: "hover:border-indigo-200/50 hover:bg-indigo-50/30",
+                      iconBgClass: "bg-indigo-50 group-hover:bg-indigo-100/50",
                       icon: (
                         <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 relative z-10 overflow-visible">
                           <g className="transition-transform duration-500 origin-center group-hover:scale-105">
@@ -260,8 +270,8 @@ export default function DashboardPage() {
                       m: "photo",
                       t: "По фото",
                       d: "Загрузите скриншот-пример",
-                      colorClass: "group-hover:border-purple-200 group-hover:shadow-purple-500/15 group-hover:bg-purple-50/30",
-                      iconBgClass: "bg-purple-100/50 group-hover:bg-purple-100",
+                      colorClass: "hover:border-purple-200/50 hover:bg-purple-50/30",
+                      iconBgClass: "bg-purple-50 group-hover:bg-purple-100/50",
                       icon: (
                         <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 relative z-10 overflow-visible">
                           <defs>
@@ -284,7 +294,7 @@ export default function DashboardPage() {
                     <button
                       key={x.m}
                       data-testid={`button-create-${x.m}`}
-                      className={`group relative flex items-center w-full p-4 rounded-2xl bg-gray-50/50 border border-transparent transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-gray-100 ${x.colorClass}`}
+                      className={`group relative flex items-center w-full p-4 rounded-2xl bg-slate-50/50 border border-slate-100/50 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-slate-100 ${x.colorClass}`}
                       onClick={() => { setSelectedMode(x.m as any); setCreateStep(x.m === "template" ? "templates" : "details"); }}
                     >
                       <div className={`flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center mr-5 transition-colors duration-300 relative overflow-hidden ${x.iconBgClass}`}>
@@ -292,11 +302,11 @@ export default function DashboardPage() {
                         {x.icon}
                       </div>
                       <div className="flex-grow text-left">
-                        <h3 className="text-[19px] font-bold text-gray-900 mb-1 group-hover:text-black transition-colors">{x.t}</h3>
-                        <p className="text-[15px] text-gray-500 font-medium group-hover:text-gray-600 transition-colors">{x.d}</p>
+                        <h3 className="text-[19px] font-bold text-slate-900 mb-1 group-hover:text-black transition-colors">{x.t}</h3>
+                        <p className="text-[15px] text-slate-500 font-medium group-hover:text-slate-600 transition-colors">{x.d}</p>
                       </div>
-                      <div className="flex-shrink-0 text-gray-300 group-hover:text-gray-900 transition-all duration-300 transform group-hover:translate-x-1">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <div className="flex-shrink-0 text-slate-300 group-hover:text-slate-900 transition-all duration-300 transform group-hover:translate-x-1">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="9 18 15 12 9 6"></polyline>
                         </svg>
                       </div>
