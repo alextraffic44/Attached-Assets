@@ -348,6 +348,27 @@ export default function EditorPage() {
     }
 
     const allCodeToScan = [htmlCode, ...projectFiles.filter(f => f.filename !== "index.html").map(f => f.code)].join("\n");
+
+    const uploadRegex = /(?:src\s*=\s*["']|url\s*\(\s*["']?)(\/uploads\/[^"'\s)]+)/gi;
+    let uploadMatch;
+    const uploadUrls = new Set<string>();
+    while ((uploadMatch = uploadRegex.exec(allCodeToScan)) !== null) {
+      const url = uploadMatch[1];
+      if (!allImageUrls.has(url)) uploadUrls.add(url);
+    }
+    if (uploadUrls.size > 0 && imgFolder) {
+      let upIdx = 0;
+      for (const url of Array.from(uploadUrls)) {
+        const ext = url.match(/\.(png|jpg|jpeg|webp|gif|svg)(\?|$)/i)?.[1] || "png";
+        const fileName = `upload_${upIdx++}.${ext}`;
+        const blob = await downloadImage(url);
+        if (blob) {
+          imgFolder.file(fileName, blob);
+          allImageUrls.set(url, `images/${fileName}`);
+        }
+      }
+    }
+
     const externalImgRegex = /(?:src\s*=\s*["']|url\s*\(\s*["']?)(https?:\/\/[^"'\s)]+(?:\.(?:png|jpg|jpeg|webp|gif|svg)|\/[^"'\s)]*))(?:\?[^"'\s)]*)?/gi;
     let match;
     const externalUrls = new Set<string>();
@@ -360,7 +381,7 @@ export default function EditorPage() {
 
     if (externalUrls.size > 0 && imgFolder) {
       let idx = 0;
-      Array.from(externalUrls).forEach(async (url) => {
+      for (const url of Array.from(externalUrls)) {
         const ext = url.match(/\.(png|jpg|jpeg|webp|gif|svg)(\?|$)/i)?.[1] || "png";
         const fileName = `image_${idx++}.${ext}`;
         const blob = await downloadImage(url);
@@ -368,7 +389,7 @@ export default function EditorPage() {
           imgFolder.file(fileName, blob);
           allImageUrls.set(url, `images/${fileName}`);
         }
-      });
+      }
     }
 
     for (const [remoteUrl, localPath] of Array.from(allImageUrls.entries())) {
