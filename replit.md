@@ -7,9 +7,10 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - **Frontend**: React with Tailwind CSS, Framer Motion, shadcn/ui components
 - **Backend**: Express.js with session-based authentication (Passport.js)
 - **Database**: PostgreSQL with Drizzle ORM
-- **AI Code**: Gemini 3.1 Pro via Interactions API (@google/genai SDK, GEMINI_API_KEY env var, stateful conversations with previous_interaction_id, thinkingConfig support)
+- **AI Code**: Gemini 3.1 Pro via direct API (@google/genai SDK, GEMINI_API_KEY env var, generateContentStream, manual conversation history)
+- **AI Enhance**: Gemini 2.5 Flash for prompt enhancement (5 tokens)
+- **Deep Research**: Gemini Interactions API with deep-research-pro-preview-12-2025 agent (10 tokens, optional toggle)
 - **AI Images**: Nano Banana via KIE API (KIE_API_KEY env var, async task-based)
-- **Web Research**: Gemini with Google Search grounding (auto-research before first generation)
 - **Routing**: wouter for client-side routing
 
 ## Pages

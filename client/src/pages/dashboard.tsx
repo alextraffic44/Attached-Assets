@@ -29,6 +29,8 @@ import {
   Coins,
   Inbox,
   Wand2,
+  Globe,
+  Search,
 } from "lucide-react";
 
 const SkeuoCard = ({ children, className = "", onClick = undefined }) => (
@@ -52,6 +54,9 @@ export default function DashboardPage() {
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [isEnhanced, setIsEnhanced] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
+  const [isResearching, setIsResearching] = useState(false);
+  const [researchData, setResearchData] = useState("");
   const [showTopUpModal, setShowTopUpModal] = useState(false);
 
   const { data: userProjects = [], isLoading } = useQuery<Project[]>({
@@ -76,7 +81,8 @@ export default function DashboardPage() {
       setShowCreateModal(false);
       const prompt = selectedMode === "template" ? `Создай сайт: ${selectedTemplate}. ${description}` : description || title;
       const enhancedParam = isEnhanced ? "&enhanced=1" : "";
-      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}`);
+      const researchParam = researchData ? `&research=${encodeURIComponent(researchData)}` : "";
+      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}${researchParam}`);
     },
   });
 
@@ -438,62 +444,144 @@ export default function DashboardPage() {
                       className={`min-h-[120px] rounded-2xl bg-gray-50 border font-medium text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all ${isEnhanced ? 'border-emerald-300 bg-emerald-50/30 min-h-[200px] text-sm' : 'border-gray-200'}`}
                     />
                   </div>
-                  <Button
-                    data-testid="button-enhance-prompt"
-                    type="button"
-                    variant="outline"
-                    onClick={async () => {
-                      if (!description.trim() || description.trim().length < 3) {
-                        toast({ title: "Введите описание", description: "Напишите хотя бы несколько слов для улучшения", variant: "destructive" });
-                        return;
-                      }
-                      setIsEnhancing(true);
-                      try {
-                        const res = await apiRequest("POST", "/api/enhance-prompt", { prompt: description });
-                        const data = await res.json();
-                        if (data.warning) {
-                          toast({ title: "Внимание", description: data.warning });
-                        } else if (data.enhancedPrompt) {
-                          setDescription(data.enhancedPrompt);
-                          setIsEnhanced(true);
-                          toast({ title: "Промпт улучшен!", description: "Проверьте описание и нажмите «Создать проект»" });
+                  <div className="flex gap-3">
+                    <button
+                      data-testid="button-enhance-prompt"
+                      type="button"
+                      onClick={async () => {
+                        if (isEnhancing || isResearching) return;
+                        if (!description.trim() || description.trim().length < 3) {
+                          toast({ title: "Введите описание", description: "Напишите хотя бы несколько слов для улучшения", variant: "destructive" });
+                          return;
                         }
-                      } catch (err: any) {
-                        let msg = "Не удалось улучшить промпт";
+                        setIsEnhancing(true);
                         try {
-                          const errText = err?.message || "";
-                          const jsonMatch = errText.match(/\{.*\}/);
-                          if (jsonMatch) {
-                            const parsed = JSON.parse(jsonMatch[0]);
-                            if (parsed.message) msg = parsed.message;
+                          const res = await apiRequest("POST", "/api/enhance-prompt", { prompt: description });
+                          const data = await res.json();
+                          if (data.warning) {
+                            toast({ title: "Внимание", description: data.warning });
+                          } else if (data.enhancedPrompt) {
+                            setDescription(data.enhancedPrompt);
+                            setIsEnhanced(true);
+                            toast({ title: "Промпт улучшен!", description: "Проверьте описание и нажмите «Создать проект»" });
                           }
-                        } catch {}
-                        toast({ title: "Ошибка", description: msg, variant: "destructive" });
-                      } finally {
-                        setIsEnhancing(false);
-                      }
-                    }}
-                    disabled={isEnhancing || !description.trim()}
-                    className="w-full h-12 rounded-2xl font-bold text-sm border-2 border-dashed border-violet-300 text-violet-600"
-                  >
-                    {isEnhancing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        AI улучшает промпт...
-                      </>
-                    ) : (
-                      <>
-                        <Wand2 className="w-4 h-4 mr-2" />
-                        AI улучшение промпта
-                      </>
-                    )}
-                  </Button>
+                        } catch (err: any) {
+                          let msg = "Не удалось улучшить промпт";
+                          try {
+                            const errText = err?.message || "";
+                            const jsonMatch = errText.match(/\{.*\}/);
+                            if (jsonMatch) {
+                              const parsed = JSON.parse(jsonMatch[0]);
+                              if (parsed.message) msg = parsed.message;
+                            }
+                          } catch {}
+                          toast({ title: "Ошибка", description: msg, variant: "destructive" });
+                        } finally {
+                          setIsEnhancing(false);
+                        }
+                      }}
+                      disabled={isEnhancing || isResearching || !description.trim()}
+                      className={`flex-1 flex items-center justify-center gap-2 h-11 rounded-2xl font-bold text-sm transition-all duration-300 border-2 ${
+                        isEnhanced
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                          : isEnhancing
+                          ? "border-violet-300 bg-violet-50 text-violet-600"
+                          : "border-dashed border-violet-200 text-violet-500 hover:border-violet-400 hover:bg-violet-50/50"
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {isEnhancing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Улучшаем...</span>
+                        </>
+                      ) : isEnhanced ? (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          <span>Улучшено</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-4 h-4" />
+                          <span>AI улучшение</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      data-testid="button-deep-research"
+                      type="button"
+                      onClick={async () => {
+                        if (isEnhancing || isResearching) return;
+                        if (researchData) {
+                          setDeepResearchEnabled(false);
+                          setResearchData("");
+                          toast({ title: "Deep Research отключён", description: "Исследование не будет использовано" });
+                          return;
+                        }
+                        if (!description.trim() || description.trim().length < 3) {
+                          toast({ title: "Введите описание", description: "Напишите хотя бы несколько слов для исследования", variant: "destructive" });
+                          return;
+                        }
+                        setIsResearching(true);
+                        setDeepResearchEnabled(true);
+                        try {
+                          const res = await apiRequest("POST", "/api/deep-research", { prompt: description });
+                          const data = await res.json();
+                          if (data.warning) {
+                            toast({ title: "Внимание", description: data.warning });
+                            setDeepResearchEnabled(false);
+                          } else if (data.research) {
+                            setResearchData(data.research);
+                            toast({ title: "Deep Research завершён!", description: "Реальные факты будут использованы при генерации сайта" });
+                          }
+                        } catch (err: any) {
+                          let msg = "Не удалось провести исследование";
+                          try {
+                            const errText = err?.message || "";
+                            const jsonMatch = errText.match(/\{.*\}/);
+                            if (jsonMatch) {
+                              const parsed = JSON.parse(jsonMatch[0]);
+                              if (parsed.message) msg = parsed.message;
+                            }
+                          } catch {}
+                          toast({ title: "Ошибка", description: msg, variant: "destructive" });
+                          setDeepResearchEnabled(false);
+                        } finally {
+                          setIsResearching(false);
+                        }
+                      }}
+                      disabled={isEnhancing || isResearching || !description.trim()}
+                      className={`flex-1 flex items-center justify-center gap-2 h-11 rounded-2xl font-bold text-sm transition-all duration-300 border-2 ${
+                        researchData
+                          ? "border-blue-300 bg-blue-50 text-blue-700"
+                          : isResearching
+                          ? "border-blue-300 bg-blue-50 text-blue-600"
+                          : "border-dashed border-blue-200 text-blue-500 hover:border-blue-400 hover:bg-blue-50/50"
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {isResearching ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Исследуем...</span>
+                        </>
+                      ) : researchData ? (
+                        <>
+                          <Globe className="w-4 h-4" />
+                          <span>Исследовано</span>
+                        </>
+                      ) : (
+                        <>
+                          <Search className="w-4 h-4" />
+                          <span>Deep Research</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                   <div className="flex gap-4 pt-2">
                     <Button variant="ghost" className="h-14 rounded-2xl font-bold flex-1 text-gray-600 hover:bg-gray-100" onClick={() => { setCreateStep(selectedMode === "template" ? "templates" : "choose"); setIsEnhanced(false); }}>Назад</Button>
                     <Button 
                       className="h-14 rounded-2xl font-extrabold text-lg flex-[2] shadow-xl shadow-primary/20"
                       onClick={() => createMutation.mutate()}
-                      disabled={createMutation.isPending}
+                      disabled={createMutation.isPending || isEnhancing || isResearching}
                     >
                       {createMutation.isPending ? <Loader2 className="w-6 h-6 animate-spin" /> : "Создать проект"}
                     </Button>

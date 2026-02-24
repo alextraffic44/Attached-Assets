@@ -139,9 +139,10 @@ export default function EditorPage() {
     const urlParams = new URLSearchParams(window.location.search);
     const initialPrompt = urlParams.get("prompt");
     const enhanced = urlParams.get("enhanced") === "1";
+    const initialResearch = urlParams.get("research") || "";
     if (initialPrompt && !project?.generatedCode && messages.length === 0) {
       setPrompt(initialPrompt);
-      setTimeout(() => handleGenerate(initialPrompt, enhanced), 500);
+      setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch), 500);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [project, messages.length]);
@@ -190,7 +191,7 @@ export default function EditorPage() {
     }
   }, [newPageName, projectId, allFiles, project, toast]);
 
-  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean) => {
+  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string) => {
     const text = customPrompt || prompt;
     if (!text.trim() && attachedImages.length === 0) return;
 
@@ -202,10 +203,14 @@ export default function EditorPage() {
     const images = attachedImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
 
     try {
+      const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance };
+      if (deepResearchData) {
+        bodyData.deepResearchData = deepResearchData;
+      }
       const response = await fetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text, images, activeFile, skipEnhance: !!skipEnhance }),
+        body: JSON.stringify(bodyData),
         credentials: "include",
       });
 

@@ -114,43 +114,59 @@ const RESEARCH_AND_ENHANCE_PROMPT = `Ты выполняешь ДВЕ задач
 
 Отвечай на русском языке.`;
 
-async function researchAndEnhance(query: string): Promise<{ research: string; enhancedPrompt: string; success: boolean }> {
+async function enhancePromptOnly(query: string): Promise<{ enhancedPrompt: string; success: boolean }> {
   try {
     console.log("Starting prompt enhancement for:", query);
 
     const result = await gemini.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nСоздай улучшенный промпт для генерации premium-сайта на эту тему.\n\nВАЖНО: Ответ ОБЯЗАТЕЛЬНО должен содержать ОБА маркера ===RESEARCH=== и ===PROMPT===. Секция PROMPT должна быть 300-500 слов.` }] }],
-      config: {
-        systemInstruction: RESEARCH_AND_ENHANCE_PROMPT,
-        maxOutputTokens: 8192,
-      },
+      contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nСоздай детальный промпт (300-500 слов, на русском) для AI-генератора premium-сайта. Промпт должен включать: skeuomorphic UI, SVG анимации, цветовую палитру (4 цвета HEX), типографику, hero-секцию (100dvh), 5-7 секций сайта, микро-интеракции (hover с подъёмом, scale, сменой теней), морфинг навбара (прозрачный → стеклянный при скролле), scroll-анимации через IntersectionObserver, glassmorphism, noise-текстуры, многослойные тени.\n\nПиши ТОЛЬКО промпт, без маркеров и заголовков. Не добавляй технические инструкции типа "используй HTML/CSS".` }] }],
+      config: { maxOutputTokens: 4096 },
     });
 
-    const fullText = result.text || "";
-    console.log("Enhancement completed, length:", fullText.length);
-
-    const researchMatch = fullText.match(/===\s*RESEARCH\s*===([\s\S]*?)===\s*PROMPT\s*===/);
-    const promptMatch = fullText.match(/===\s*PROMPT\s*===([\s\S]*?)$/);
-
-    let research = researchMatch?.[1]?.trim() || "";
-    let enhancedPrompt = promptMatch?.[1]?.trim() || "";
-
-    if (!enhancedPrompt || enhancedPrompt.length < 100) {
-      console.log("Prompt section missing or too short, generating enhancement separately...");
-      const enhanceResult = await gemini.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: `Тема: "${query}"\n\nСоздай детальный промпт (300-500 слов, на русском) для AI-генератора premium-сайта. Промпт должен включать: skeuomorphic UI, SVG анимации, цветовую палитру (4 цвета), типографику, hero-секцию, 5-7 секций сайта, микро-интеракции. Пиши ТОЛЬКО промпт, без маркеров и заголовков.` }] }],
-        config: { maxOutputTokens: 4096 },
-      });
-      enhancedPrompt = enhanceResult.text?.trim() || query;
-    }
-
+    const enhancedPrompt = result.text?.trim() || query;
     console.log("Enhanced prompt length:", enhancedPrompt.length);
-    return { research, enhancedPrompt: enhancedPrompt.length > 100 ? enhancedPrompt : query, success: true };
+    return { enhancedPrompt: enhancedPrompt.length > 100 ? enhancedPrompt : query, success: true };
   } catch (err: any) {
     console.error("Enhancement error:", err.message);
-    return { research: "", enhancedPrompt: query, success: false };
+    return { enhancedPrompt: query, success: false };
+  }
+}
+
+async function deepResearch(query: string): Promise<{ research: string; success: boolean }> {
+  try {
+    console.log("Starting Deep Research for:", query);
+
+    const interaction = await gemini.interactions.create({
+      input: `Исследуй тему "${query}" для создания premium-веб-сайта. Собери:\n- Основная информация, ключевые особенности (5-7), преимущества\n- Технические детали, факты и цифры, цитаты/отзывы\n- Ценообразование, целевая аудитория\n- Конкуренты и рыночные тренды\nПиши ТОЛЬКО факты из источников на русском языке. НЕ придумывай.`,
+      agent: "deep-research-pro-preview-12-2025",
+      background: true,
+    } as any);
+
+    console.log("Deep Research started, interaction ID:", (interaction as any).id);
+
+    const maxAttempts = 60;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const result = await gemini.interactions.get((interaction as any).id) as any;
+      console.log(`Deep Research poll ${i + 1}/${maxAttempts}, status: ${result.status}`);
+
+      if (result.status === "completed") {
+        const text = result.outputs?.[result.outputs.length - 1]?.text || "";
+        console.log("Deep Research completed, length:", text.length);
+        return { research: text, success: true };
+      }
+      if (result.status === "failed") {
+        console.error("Deep Research failed:", result.error);
+        return { research: "", success: false };
+      }
+    }
+
+    console.error("Deep Research timed out after", maxAttempts * 5, "seconds");
+    return { research: "", success: false };
+  } catch (err: any) {
+    console.error("Deep Research error:", err.message);
+    return { research: "", success: false };
   }
 }
 
@@ -261,16 +277,40 @@ export async function registerRoutes(
       if (user.credits < ENHANCE_COST) {
         return res.status(402).json({ message: `Недостаточно токенов. Нужно ${ENHANCE_COST}, у вас ${user.credits}.` });
       }
-      const result = await researchAndEnhance(prompt);
+      const result = await enhancePromptOnly(prompt);
       if (result.success) {
         await storage.updateUserCredits(user.id, user.credits - ENHANCE_COST);
-        res.json({ enhancedPrompt: result.enhancedPrompt, research: result.research, creditsUsed: ENHANCE_COST });
+        res.json({ enhancedPrompt: result.enhancedPrompt, creditsUsed: ENHANCE_COST });
       } else {
-        res.json({ enhancedPrompt: prompt, research: "", creditsUsed: 0, warning: "AI временно недоступен, использован оригинальный промпт" });
+        res.json({ enhancedPrompt: prompt, creditsUsed: 0, warning: "AI временно недоступен, использован оригинальный промпт" });
       }
     } catch (err: any) {
       console.error("Enhance prompt error:", err.message);
       res.status(500).json({ message: "Ошибка улучшения промпта" });
+    }
+  });
+
+  app.post("/api/deep-research", bypassAuth, async (req, res) => {
+    try {
+      const { prompt } = req.body;
+      const user = req.user as any;
+      if (!prompt || prompt.trim().length < 3) {
+        return res.status(400).json({ message: "Введите описание для исследования" });
+      }
+      const RESEARCH_COST = 10;
+      if (user.credits < RESEARCH_COST) {
+        return res.status(402).json({ message: `Недостаточно токенов. Нужно ${RESEARCH_COST}, у вас ${user.credits}.` });
+      }
+      const result = await deepResearch(prompt);
+      if (result.success) {
+        await storage.updateUserCredits(user.id, user.credits - RESEARCH_COST);
+        res.json({ research: result.research, creditsUsed: RESEARCH_COST });
+      } else {
+        res.json({ research: "", creditsUsed: 0, warning: "Deep Research временно недоступен" });
+      }
+    } catch (err: any) {
+      console.error("Deep research error:", err.message);
+      res.status(500).json({ message: "Ошибка Deep Research" });
     }
   });
 
@@ -304,7 +344,7 @@ export async function registerRoutes(
         return res.status(402).json({ message: "Не хватает токенов для выполнения, пожалуйста пополните баланс." });
       }
 
-      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance } = req.body;
+      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData } = req.body;
       const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
         Array.isArray(images) && images.length > 0 ? images 
         : imageBase64 ? [{ base64: imageBase64, mimeType: imageMimeType || "image/png" }] 
@@ -325,23 +365,19 @@ export async function registerRoutes(
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
-      let researchData = "";
+      let researchData = deepResearchData || "";
       const isNewSite = !project.generatedCode;
 
       let enhancedPrompt = prompt;
 
-      if (isNewSite && !skipEnhance) {
-        res.write(`data: ${JSON.stringify({ status: "Исследуем тему и готовим дизайн-концепцию..." })}\n\n`);
-        const result = await researchAndEnhance(prompt);
-        researchData = result.research;
-        enhancedPrompt = result.enhancedPrompt;
-        console.log("Research+Enhancement done. Research:", researchData.length, "Prompt:", enhancedPrompt.substring(0, 200));
-        res.write(`data: ${JSON.stringify({ status: "Генерируем сайт..." })}\n\n`);
-      } else if (isNewSite && skipEnhance) {
+      if (isNewSite) {
         res.write(`data: ${JSON.stringify({ status: "Генерируем сайт..." })}\n\n`);
       }
 
       let systemContent = SYSTEM_PROMPT;
+      if (researchData) {
+        systemContent += `\n\n═══ РЕЗУЛЬТАТЫ DEEP RESEARCH ═══\nИспользуй следующие РЕАЛЬНЫЕ факты и данные из исследования при создании контента сайта:\n${researchData}\n═══ КОНЕЦ ИССЛЕДОВАНИЯ ═══\n`;
+      }
       if (projectImgs.length > 0) {
         systemContent += `\n\nДОСТУПНЫЕ ИЗОБРАЖЕНИЯ В БИБЛИОТЕКЕ ПОЛЬЗОВАТЕЛЯ:\n`;
         for (const img of projectImgs) {
