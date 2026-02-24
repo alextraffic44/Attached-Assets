@@ -3,6 +3,9 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { ai } from "./replit_integrations/image/client";
+import path from "path";
+import fs from "fs";
+import crypto from "crypto";
 async function extractTextFromFile(base64Data: string, mimeType: string): Promise<string | null> {
   try {
     const buffer = Buffer.from(base64Data, "base64");
@@ -183,6 +186,29 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   setupAuth(app);
+
+  const uploadsDir = path.join(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+  const express = (await import("express")).default;
+  app.use("/uploads", express.static(uploadsDir));
+
+  app.post("/api/upload-image", bypassAuth, async (req, res) => {
+    try {
+      const { base64, mimeType, name } = req.body;
+      if (!base64) return res.status(400).json({ message: "Нет данных изображения" });
+      const mime = mimeType || "image/png";
+      const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
+      const filename = `${crypto.randomUUID()}.${ext}`;
+      const filePath = path.join(uploadsDir, filename);
+      const buffer = Buffer.from(base64, "base64");
+      fs.writeFileSync(filePath, buffer);
+      const url = `/uploads/${filename}`;
+      res.json({ url, filename: name || filename });
+    } catch (err) {
+      console.error("Upload error:", err);
+      res.status(500).json({ message: "Ошибка загрузки изображения" });
+    }
+  });
 
   app.get("/api/projects", bypassAuth, async (req, res) => {
     try {
