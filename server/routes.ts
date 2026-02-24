@@ -544,6 +544,12 @@ export async function registerRoutes(
 
   app.post("/api/images/generate", bypassAuth, async (req, res) => {
     try {
+      const IMAGE_COST = 15;
+      const user = req.user as any;
+      if (user.credits < IMAGE_COST) {
+        return res.status(403).json({ message: `Недостаточно токенов. Нужно ${IMAGE_COST}, у вас ${user.credits}` });
+      }
+
       const { prompt, imageSize = "16:9", outputFormat = "png" } = req.body;
       if (!prompt) {
         return res.status(400).json({ message: "Промпт обязателен" });
@@ -572,6 +578,7 @@ export async function registerRoutes(
         return res.status(500).json({ message: createBody.msg || "Ошибка создания задачи" });
       }
 
+      await storage.updateUserCredits(user.id, user.credits - IMAGE_COST);
       res.json({ taskId: createBody.data.taskId });
     } catch (err: any) {
       console.error("Image generation error:", err);
