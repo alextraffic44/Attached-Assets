@@ -932,7 +932,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       </header>
 
       <div className="flex-1 flex gap-4 overflow-hidden relative">
-        <SkeuoPanel className={`transition-all duration-500 ease-in-out ${sidebarOpen ? 'w-full sm:w-[400px]' : 'w-0 opacity-0 -translate-x-full'}`}>
+        <SkeuoPanel className={`transition-all duration-500 ease-in-out min-w-0 ${sidebarOpen ? 'w-full sm:w-[400px] sm:min-w-[400px]' : 'w-0 opacity-0 -translate-x-full'}`}>
           <div className="p-6 border-b flex items-center justify-between">
             <h2 className="text-lg font-black tracking-tight">AI Конструктор</h2>
             <div className="flex items-center gap-2">
@@ -969,25 +969,26 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             </div>
           )}
-          <ScrollArea className="flex-1 px-6">
-            <div className="py-6 space-y-6">
+          <ScrollArea className="flex-1">
+            <div className="py-6 space-y-6 px-4 min-w-0">
               {messages.map((msg, idx) => {
                 const isModel = msg.role === "model";
                 const isLatestModel = isModel && !messages.slice(idx + 1).some(m => m.role === "model");
                 return (
-                    <div className={`w-full max-w-[98%] rounded-2xl p-4 text-sm font-medium shadow-skeuo-md ${msg.role === "user" ? "bg-primary text-white ml-auto" : "bg-white dark:bg-slate-800 mr-auto"}`}>
+                    <div key={msg.id} className={`rounded-2xl p-4 text-sm font-medium shadow-skeuo-md min-w-0 ${msg.role === "user" ? "bg-primary text-white ml-auto max-w-[85%]" : "bg-white dark:bg-slate-800 mr-auto"}`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                       {msg.role === "user" ? (
-                        <div className="break-words whitespace-pre-wrap overflow-hidden w-full">
+                        <div style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                           {msg.content}
                         </div>
                       ) : (
-                        <div className="space-y-2 w-full overflow-hidden">
-                          <div className="flex items-center gap-2 mb-1">
+                        <div className="space-y-2 min-w-0" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <button 
                               onClick={() => {
-                                const v = versions.find(v => v.label.includes(`v${messages.filter((m, i) => (m.role === "assistant" || m.role === "model") && i <= idx).length}`));
+                                const vNum = messages.filter((m, i) => (m.role === "assistant" || m.role === "model") && i <= idx).length;
+                                const v = versions[vNum - 1];
                                 if (v) handleRestoreVersion(v.id);
-                                else toast({ title: "Инфо", description: "Используйте панель истории для точного отката" });
+                                else toast({ title: "Инфо", description: "Чекпоинт для этой версии не найден" });
                               }}
                               className="hover:opacity-70 transition-opacity"
                             >
@@ -1001,7 +1002,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                               <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0 text-[10px] px-1.5 py-0 rounded-full">текущий</Badge>
                             )}
                           </div>
-                          <div className="text-slate-700 dark:text-slate-300 text-[13px] leading-relaxed break-words whitespace-pre-wrap overflow-hidden w-full select-text">
+                          <div className="text-slate-700 dark:text-slate-300 text-[13px] leading-relaxed select-text" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                             {msg.content.startsWith("<!") || msg.content.startsWith("<html") ? "Сайт обновлён" : msg.content}
                           </div>
                         </div>
