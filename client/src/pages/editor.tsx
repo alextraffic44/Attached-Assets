@@ -227,6 +227,11 @@ export default function EditorPage() {
               setGenerationStatus(null);
               setStreamedCode(data.code);
               setActiveFile("index.html");
+              queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+            }
+            if (data.error) {
+              toast({ title: "Ошибка генерации", description: data.error, variant: "destructive" });
             }
           }
         }
@@ -247,12 +252,13 @@ export default function EditorPage() {
   }, [prompt, projectId, imageBase64, toast]);
 
   const handleDownloadZip = async () => {
-    if (!currentCode) return;
+    const indexCode = project?.generatedCode || currentCode;
+    if (!indexCode) return;
     toast({ title: "Подготовка архива...", description: "Скачиваем изображения" });
 
     const zip = new JSZip();
     const imgFolder = zip.folder("images");
-    let htmlCode = currentCode;
+    let htmlCode = indexCode;
 
     const allImageUrls = new Map<string, string>();
 
@@ -283,10 +289,11 @@ export default function EditorPage() {
       }
     }
 
+    const allCodeToScan = [htmlCode, ...projectFiles.filter(f => f.filename !== "index.html").map(f => f.code)].join("\n");
     const externalImgRegex = /(?:src\s*=\s*["']|url\s*\(\s*["']?)(https?:\/\/[^"'\s)]+(?:\.(?:png|jpg|jpeg|webp|gif|svg)|\/[^"'\s)]*))(?:\?[^"'\s)]*)?/gi;
     let match;
     const externalUrls = new Set<string>();
-    while ((match = externalImgRegex.exec(htmlCode)) !== null) {
+    while ((match = externalImgRegex.exec(allCodeToScan)) !== null) {
       const url = match[1];
       if (!allImageUrls.has(url) && !url.includes("placehold.co")) {
         externalUrls.add(url);
@@ -669,11 +676,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       }
       if (e.data.type === 'nz-navigate-file') {
         const filename = e.data.filename;
-        const fileExists = allFiles.some(f => f.filename === filename);
-        if (fileExists) {
-          setActiveFile(filename);
-          if (filename === "index.html") setStreamedCode("");
-        }
+        setActiveFile(filename);
+        if (filename === "index.html") setStreamedCode("");
       }
       if (e.data.type === 'nz-img-click' || e.data.type === 'nz-placeholder-click') {
         pendingImageTarget.current = e.data.path;
