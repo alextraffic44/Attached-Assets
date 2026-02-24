@@ -717,13 +717,14 @@ window.__PROJECT_ID__=${projectId};
 
   const getEditableCode = useCallback((code: string) => {
     if (selectorMode && code) {
-      const selectorScript = `<!--NZ_SELECTOR_START--><style data-nz-selector>
+      const selectorStyle = `<style data-nz-selector>
 .__nz-sel-hover{outline:2px dashed rgba(59,130,246,0.7)!important;outline-offset:2px!important;cursor:crosshair!important}
 .__nz-sel-active{outline:3px solid rgba(59,130,246,1)!important;outline-offset:2px!important;background:rgba(59,130,246,0.05)!important}
 .__nz-sel-label{position:fixed;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:4px 12px;border-radius:8px;font-size:11px;font-weight:700;pointer-events:none;z-index:99999;white-space:nowrap;box-shadow:0 4px 12px rgba(59,130,246,0.3)}
 *{cursor:crosshair!important}
-</style><script data-nz-selector>
-(function(){
+</style>`;
+      const selectorJs = `<script data-nz-selector>
+document.addEventListener('DOMContentLoaded',function(){
   var hovered=null,selected=null,label=null;
   function getPath(el){var p=[];var n=el;while(n&&n!==document.body){var idx=0;var s=n;while(s.previousElementSibling){s=s.previousElementSibling;idx++}p.unshift(idx);n=n.parentElement}return p.join(',')}
   function getLbl(el){var t=el.tagName.toLowerCase();var c=el.className&&typeof el.className==='string'?'.'+el.className.trim().split(/\\s+/).slice(0,2).join('.'):'';return '<'+t+c+'>'}
@@ -751,9 +752,11 @@ window.__PROJECT_ID__=${projectId};
     var textContent=t.textContent||'';if(textContent.length>100)textContent=textContent.substring(0,100)+'...';
     window.parent.postMessage({type:'nz-element-selected',tag:t.tagName.toLowerCase(),text:textContent.trim(),classes:typeof t.className==='string'?t.className.replace(/__nz-sel-[a-z]+/g,'').trim():'',path:getPath(t),outerSnippet:snippet},'*');
   },true);
-})();
-<\\/script><!--NZ_SELECTOR_END-->`;
-      return injectProjectId(code.replace('</body>', selectorScript + '</body>'));
+});
+<\/script>`;
+      let injected = code.replace('</head>', selectorStyle + '</head>');
+      injected = injected.replace('</body>', selectorJs + '</body>');
+      return injectProjectId(injected);
     }
     if (!editMode || !code) return injectProjectId(code);
     const editorScript = `<!--NZ_EDITOR_START--><style data-nz-editor>
@@ -1228,7 +1231,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             ) : currentCode ? (
               <div className="w-full h-full flex items-center justify-center overflow-hidden">
                  <div className="bg-white rounded-2xl shadow-2xl transition-all duration-500 overflow-hidden border border-white/20" style={{ width: deviceWidths[previewDevice], height: '100%' }}>
-                    <iframe ref={iframeRef} srcDoc={getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
+                    <iframe key={selectorMode ? 'sel' : editMode ? 'edit' : 'view'} ref={iframeRef} srcDoc={getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
                  </div>
               </div>
             ) : (
