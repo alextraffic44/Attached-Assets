@@ -929,11 +929,163 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                  </div>
               </div>
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center space-y-4">
-                <div className="w-24 h-24 rounded-3xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center shadow-skeuo-inner">
-                  <Maximize2 className="w-10 h-10 text-slate-400" />
-                </div>
-                <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Ожидание первого байта...</p>
+              <div className="w-full h-full flex items-center justify-center bg-[#0b0f19] rounded-2xl overflow-hidden">
+                <style dangerouslySetInnerHTML={{ __html: `
+                  .nz-robot-float{animation:nzFloat 4s infinite ease-in-out;transform-origin:center}
+                  @keyframes nzFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+                  .nz-pupil{animation:nzScan 3s infinite ease-in-out}
+                  @keyframes nzScan{0%,100%{transform:translateX(-2px)}50%{transform:translateX(3px)}}
+                  .nz-eye-blink{animation:nzBlink 4s infinite;transform-origin:center}
+                  @keyframes nzBlink{0%,46%,48%,100%{transform:scaleY(1)}47%{transform:scaleY(.1)}}
+                  .nz-hand-left{animation:nzTapL .5s infinite linear}
+                  .nz-hand-right{animation:nzTapR .6s infinite linear}
+                  @keyframes nzTapL{0%,50%,100%{transform:translateY(0)}25%{transform:translateY(5px) rotate(-5deg)}}
+                  @keyframes nzTapR{0%,40%,100%{transform:translateY(0)}20%{transform:translateY(6px) rotate(5deg)}70%{transform:translateY(3px) rotate(2deg)}}
+                  .nz-kp1{animation:nzKP .4s infinite alternate}
+                  .nz-kp2{animation:nzKP .7s infinite alternate-reverse}
+                  .nz-kp3{animation:nzKP .5s infinite alternate}
+                  @keyframes nzKP{0%{opacity:0}100%{opacity:.8}}
+                  .nz-antenna-glow{animation:nzPulseG 2s infinite ease-in-out}
+                  @keyframes nzPulseG{0%,100%{fill:#38bdf8;filter:drop-shadow(0 0 2px #38bdf8)}50%{fill:#bae6fd;filter:drop-shadow(0 0 10px #38bdf8)}}
+                  .nz-data-stream{animation:nzStream .5s linear infinite}
+                  @keyframes nzStream{to{stroke-dashoffset:-12}}
+                  .nz-code-group{animation:nzCodeFade 6s infinite}
+                  @keyframes nzCodeFade{0%,85%{opacity:1}90%,98%{opacity:0}100%{opacity:1}}
+                  .nz-m1{animation:nzT1 6s infinite linear}
+                  @keyframes nzT1{0%{width:0}15%,90%{width:220px}95%,100%{width:0}}
+                  .nz-m2{animation:nzT2 6s infinite linear}
+                  @keyframes nzT2{0%,15%{width:0}35%,90%{width:200px}95%,100%{width:0}}
+                  .nz-m3{animation:nzT3 6s infinite linear}
+                  @keyframes nzT3{0%,35%{width:0}50%,90%{width:230px}95%,100%{width:0}}
+                  .nz-m4{animation:nzT4 6s infinite linear}
+                  @keyframes nzT4{0%,50%{width:0}60%,90%{width:170px}95%,100%{width:0}}
+                  .nz-m5{animation:nzT5 6s infinite linear}
+                  @keyframes nzT5{0%,60%{width:0}70%,90%{width:50px}95%,100%{width:0}}
+                  .nz-cursor{width:10px;height:20px;fill:#e2e8f0}
+                  .nz-c1{animation:nzC1 6s infinite linear}
+                  @keyframes nzC1{0%{transform:translate(310px,215px);opacity:1}15%{transform:translate(520px,215px);opacity:1}15.01%,100%{opacity:0}}
+                  .nz-c2{animation:nzC2 6s infinite linear}
+                  @keyframes nzC2{0%,14.99%{opacity:0}15%{transform:translate(310px,250px);opacity:1}35%{transform:translate(500px,250px);opacity:1}35.01%,100%{opacity:0}}
+                  .nz-c3{animation:nzC3 6s infinite linear}
+                  @keyframes nzC3{0%,34.99%{opacity:0}35%{transform:translate(350px,285px);opacity:1}50%{transform:translate(570px,285px);opacity:1}50.01%,100%{opacity:0}}
+                  .nz-c4{animation:nzC4 6s infinite linear}
+                  @keyframes nzC4{0%,49.99%{opacity:0}50%{transform:translate(350px,320px);opacity:1}60%{transform:translate(510px,320px);opacity:1}60.01%,100%{opacity:0}}
+                  .nz-c5{animation:nzC5 6s infinite linear}
+                  @keyframes nzC5{0%,59.99%{opacity:0}60%{transform:translate(310px,355px);opacity:1}70%{transform:translate(350px,355px);opacity:1}72%{transform:translate(350px,355px);opacity:0}74%{opacity:1}76%{opacity:0}78%{opacity:1}80%{opacity:0}82%{opacity:1}85%,100%{opacity:0}}
+                  .nz-dot1{animation:nzD1 1.5s infinite}
+                  .nz-dot2{animation:nzD2 1.5s infinite}
+                  .nz-dot3{animation:nzD3 1.5s infinite}
+                  @keyframes nzD1{0%,100%{opacity:0}20%,80%{opacity:1}}
+                  @keyframes nzD2{0%,100%{opacity:0}40%,80%{opacity:1}}
+                  @keyframes nzD3{0%,100%{opacity:0}60%,80%{opacity:1}}
+                  .nz-progress-bar{animation:nzProg 6s infinite ease-out}
+                  @keyframes nzProg{0%{width:0}80%,100%{width:300px}}
+                ` }} />
+                <svg viewBox="0 0 800 600" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" style={{ maxWidth: 600 }}>
+                  <defs>
+                    <filter id="nz-glow-bg" x="-20%" y="-20%" width="140%" height="140%">
+                      <feGaussianBlur stdDeviation="25" result="blur" />
+                      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                    </filter>
+                    <filter id="nz-terminal-shadow" x="-10%" y="-10%" width="120%" height="120%">
+                      <feDropShadow dx="0" dy="15" stdDeviation="15" floodColor="#000" floodOpacity="0.5" />
+                    </filter>
+                    <pattern id="nz-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" strokeWidth="0.5" opacity="0.5"/>
+                    </pattern>
+                    <mask id="nz-m1"><rect x="310" y="210" width="0" height="30" fill="white" className="nz-m1" /></mask>
+                    <mask id="nz-m2"><rect x="310" y="245" width="0" height="30" fill="white" className="nz-m2" /></mask>
+                    <mask id="nz-m3"><rect x="350" y="280" width="0" height="30" fill="white" className="nz-m3" /></mask>
+                    <mask id="nz-m4"><rect x="350" y="315" width="0" height="30" fill="white" className="nz-m4" /></mask>
+                    <mask id="nz-m5"><rect x="310" y="350" width="0" height="30" fill="white" className="nz-m5" /></mask>
+                  </defs>
+                  <rect width="800" height="600" fill="url(#nz-grid)" />
+                  <rect x="250" y="140" width="480" height="320" rx="15" fill="#38bdf8" opacity="0.1" filter="url(#nz-glow-bg)" />
+                  <g filter="url(#nz-terminal-shadow)">
+                    <rect x="250" y="140" width="480" height="320" rx="12" fill="#111827" stroke="#1f2937" strokeWidth="2" />
+                    <rect x="250" y="140" width="480" height="40" fill="#1f2937" />
+                    <path d="M 250 160 L 250 180 L 730 180 L 730 160 Z" fill="#1f2937" />
+                    <circle cx="275" cy="160" r="6" fill="#f43f5e" />
+                    <circle cx="295" cy="160" r="6" fill="#fbbf24" />
+                    <circle cx="315" cy="160" r="6" fill="#10b981" />
+                    <text x="490" y="165" fill="#9ca3af" fontSize="14" fontFamily="monospace" textAnchor="middle">ai_agent.ts</text>
+                    <g fontFamily="monospace" fontSize="14" fill="#4b5563" textAnchor="end">
+                      <text x="285" y="230">1</text>
+                      <text x="285" y="265">2</text>
+                      <text x="285" y="300">3</text>
+                      <text x="285" y="335">4</text>
+                      <text x="285" y="370">5</text>
+                    </g>
+                    <line x1="300" y1="180" x2="300" y2="460" stroke="#1f2937" strokeWidth="1" />
+                    <g className="nz-code-group">
+                      <g mask="url(#nz-m1)">
+                        <rect x="310" y="215" width="20" height="20" rx="4" fill="#34d399" />
+                        <rect x="340" y="215" width="100" height="20" rx="4" fill="#34d399" opacity="0.8"/>
+                        <rect x="450" y="215" width="60" height="20" rx="4" fill="#34d399" opacity="0.6"/>
+                      </g>
+                      <g mask="url(#nz-m2)">
+                        <rect x="310" y="250" width="70" height="20" rx="4" fill="#cba6f7" />
+                        <rect x="390" y="250" width="80" height="20" rx="4" fill="#60a5fa" />
+                        <rect x="480" y="250" width="20" height="20" rx="4" fill="#fbbf24" />
+                      </g>
+                      <g mask="url(#nz-m3)">
+                        <rect x="350" y="285" width="40" height="20" rx="4" fill="#cba6f7" />
+                        <rect x="400" y="285" width="40" height="20" rx="4" fill="#e2e8f0" />
+                        <rect x="450" y="290" width="10" height="10" fill="#f472b6" />
+                        <rect x="470" y="285" width="90" height="20" rx="4" fill="#34d399" />
+                      </g>
+                      <g mask="url(#nz-m4)">
+                        <rect x="350" y="320" width="50" height="20" rx="4" fill="#cba6f7" />
+                        <rect x="410" y="320" width="50" height="20" rx="4" fill="#60a5fa" />
+                        <rect x="470" y="320" width="40" height="20" rx="4" fill="#e2e8f0" />
+                      </g>
+                      <g mask="url(#nz-m5)">
+                        <rect x="310" y="355" width="20" height="20" rx="4" fill="#fbbf24" />
+                      </g>
+                    </g>
+                    <rect className="nz-cursor nz-c1" />
+                    <rect className="nz-cursor nz-c2" />
+                    <rect className="nz-cursor nz-c3" />
+                    <rect className="nz-cursor nz-c4" />
+                    <rect className="nz-cursor nz-c5" />
+                  </g>
+                  <path d="M 200 340 L 250 340" fill="none" stroke="#38bdf8" strokeWidth="2" strokeDasharray="6, 6" opacity="0.6" className="nz-data-stream" />
+                  <g className="nz-robot-float">
+                    <line x1="120" y1="200" x2="120" y2="150" stroke="#475569" strokeWidth="4" strokeLinecap="round"/>
+                    <circle cx="120" cy="150" r="8" fill="#38bdf8" className="nz-antenna-glow"/>
+                    <rect x="70" y="200" width="100" height="90" rx="20" fill="#64748b" />
+                    <rect x="80" y="215" width="80" height="50" rx="10" fill="#030712" />
+                    <g className="nz-eye-blink">
+                      <circle cx="100" cy="240" r="7" fill="#0ea5e9" />
+                      <circle cx="100" cy="240" r="3" fill="#e0f2fe" className="nz-pupil" style={{ transformOrigin: '100px 240px' }}/>
+                      <circle cx="140" cy="240" r="7" fill="#0ea5e9" />
+                      <circle cx="140" cy="240" r="3" fill="#e0f2fe" className="nz-pupil" style={{ transformOrigin: '140px 240px' }}/>
+                    </g>
+                    <g opacity="0.8">
+                      <polygon points="40,340 200,340 220,360 20,360" fill="#0f172a" stroke="#38bdf8" strokeWidth="1.5" />
+                      <line x1="60" y1="345" x2="200" y2="345" stroke="#38bdf8" strokeWidth="1" opacity="0.3" />
+                      <line x1="50" y1="350" x2="210" y2="350" stroke="#38bdf8" strokeWidth="1" opacity="0.3" />
+                      <line x1="40" y1="355" x2="220" y2="355" stroke="#38bdf8" strokeWidth="1" opacity="0.3" />
+                      <rect x="80" y="347" width="12" height="4" fill="#38bdf8" className="nz-kp1" />
+                      <rect x="130" y="352" width="15" height="4" fill="#38bdf8" className="nz-kp2" />
+                      <rect x="100" y="342" width="10" height="4" fill="#38bdf8" className="nz-kp3" />
+                    </g>
+                    <g className="nz-hand-left" style={{ transformOrigin: '90px 320px' }}>
+                      <rect x="80" y="315" width="25" height="12" rx="6" fill="#94a3b8" />
+                    </g>
+                    <g className="nz-hand-right" style={{ transformOrigin: '140px 320px' }}>
+                      <rect x="135" y="315" width="25" height="12" rx="6" fill="#94a3b8" />
+                    </g>
+                  </g>
+                  <text x="400" y="520" fill="#cbd5e1" fontSize="18" fontWeight="500" letterSpacing="1" textAnchor="middle">
+                    {generationStatus || "ИИ-агент пишет код"}
+                    <tspan className="nz-dot1">.</tspan>
+                    <tspan className="nz-dot2">.</tspan>
+                    <tspan className="nz-dot3">.</tspan>
+                  </text>
+                  <rect x="250" y="540" width="300" height="4" rx="2" fill="#1e293b" />
+                  <rect x="250" y="540" width="0" height="4" rx="2" fill="#38bdf8" className="nz-progress-bar" />
+                </svg>
               </div>
             )}
           </div>

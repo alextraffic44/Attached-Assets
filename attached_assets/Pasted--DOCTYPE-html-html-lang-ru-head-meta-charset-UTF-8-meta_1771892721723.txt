@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ИИ-агент пишет код</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0b0f19;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        .svg-container {
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 4 / 3;
+        }
+
+        /* --- Animations --- */
+
+        /* Robot Float */
+        .robot-float {
+            animation: float 4s infinite ease-in-out;
+            transform-origin: center;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-12px); }
+        }
+
+        /* Eyes Scan */
+        .pupil {
+            animation: scan 3s infinite ease-in-out;
+        }
+        @keyframes scan {
+            0%, 100% { transform: translateX(-2px); }
+            50% { transform: translateX(3px); }
+        }
+
+        /* Eye Blink */
+        .eye-blink {
+            animation: blink 4s infinite;
+            transform-origin: center;
+        }
+        @keyframes blink {
+            0%, 46%, 48%, 100% { transform: scaleY(1); }
+            47% { transform: scaleY(0.1); }
+        }
+
+        /* Hands Typing */
+        .hand-left {
+            animation: tapLeft 0.5s infinite linear;
+        }
+        .hand-right {
+            animation: tapRight 0.6s infinite linear;
+        }
+        @keyframes tapLeft {
+            0%, 50%, 100% { transform: translateY(0); }
+            25% { transform: translateY(5px) rotate(-5deg); }
+        }
+        @keyframes tapRight {
+            0%, 40%, 100% { transform: translateY(0); }
+            20% { transform: translateY(6px) rotate(5deg); }
+            70% { transform: translateY(3px) rotate(2deg); }
+        }
+
+        /* Keyboard Keys */
+        .key-press-1 { animation: keyPulse 0.4s infinite alternate; }
+        .key-press-2 { animation: keyPulse 0.7s infinite alternate-reverse; }
+        .key-press-3 { animation: keyPulse 0.5s infinite alternate; }
+        @keyframes keyPulse {
+            0% { opacity: 0; }
+            100% { opacity: 0.8; }
+        }
+
+        /* Antenna Pulse */
+        .antenna-glow {
+            animation: pulseGlow 2s infinite ease-in-out;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { fill: #38bdf8; filter: drop-shadow(0 0 2px #38bdf8); }
+            50% { fill: #bae6fd; filter: drop-shadow(0 0 10px #38bdf8); }
+        }
+
+        /* Data Stream */
+        .data-stream {
+            animation: streamMove 0.5s linear infinite;
+        }
+        @keyframes streamMove {
+            to { stroke-dashoffset: -12; }
+        }
+
+        /* --- Code Typing Animations --- */
+        
+        .code-group {
+            animation: codeFade 6s infinite;
+        }
+        @keyframes codeFade {
+            0%, 85% { opacity: 1; }
+            90%, 98% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+
+        /* Masks for each line */
+        .m1 { animation: type1 6s infinite linear; }
+        @keyframes type1 {
+            0% { width: 0; }
+            15%, 90% { width: 220px; }
+            95%, 100% { width: 0; }
+        }
+
+        .m2 { animation: type2 6s infinite linear; }
+        @keyframes type2 {
+            0%, 15% { width: 0; }
+            35%, 90% { width: 200px; }
+            95%, 100% { width: 0; }
+        }
+
+        .m3 { animation: type3 6s infinite linear; }
+        @keyframes type3 {
+            0%, 35% { width: 0; }
+            50%, 90% { width: 230px; }
+            95%, 100% { width: 0; }
+        }
+
+        .m4 { animation: type4 6s infinite linear; }
+        @keyframes type4 {
+            0%, 50% { width: 0; }
+            60%, 90% { width: 170px; }
+            95%, 100% { width: 0; }
+        }
+
+        .m5 { animation: type5 6s infinite linear; }
+        @keyframes type5 {
+            0%, 60% { width: 0; }
+            70%, 90% { width: 50px; }
+            95%, 100% { width: 0; }
+        }
+
+        /* Cursor Movement */
+        .cursor { width: 10px; height: 20px; fill: #e2e8f0; }
+        
+        .c1 { animation: c1-anim 6s infinite linear; }
+        @keyframes c1-anim {
+            0% { transform: translate(310px, 215px); opacity: 1; }
+            15% { transform: translate(520px, 215px); opacity: 1; }
+            15.01%, 100% { opacity: 0; }
+        }
+
+        .c2 { animation: c2-anim 6s infinite linear; }
+        @keyframes c2-anim {
+            0%, 14.99% { opacity: 0; }
+            15% { transform: translate(310px, 250px); opacity: 1; }
+            35% { transform: translate(500px, 250px); opacity: 1; }
+            35.01%, 100% { opacity: 0; }
+        }
+
+        .c3 { animation: c3-anim 6s infinite linear; }
+        @keyframes c3-anim {
+            0%, 34.99% { opacity: 0; }
+            35% { transform: translate(350px, 285px); opacity: 1; }
+            50% { transform: translate(570px, 285px); opacity: 1; }
+            50.01%, 100% { opacity: 0; }
+        }
+
+        .c4 { animation: c4-anim 6s infinite linear; }
+        @keyframes c4-anim {
+            0%, 49.99% { opacity: 0; }
+            50% { transform: translate(350px, 320px); opacity: 1; }
+            60% { transform: translate(510px, 320px); opacity: 1; }
+            60.01%, 100% { opacity: 0; }
+        }
+
+        .c5 { animation: c5-anim 6s infinite linear; }
+        @keyframes c5-anim {
+            0%, 59.99% { opacity: 0; }
+            60% { transform: translate(310px, 355px); opacity: 1; }
+            70% { transform: translate(350px, 355px); opacity: 1; }
+            /* Blink while waiting */
+            72% { transform: translate(350px, 355px); opacity: 0; }
+            74% { opacity: 1; }
+            76% { opacity: 0; }
+            78% { opacity: 1; }
+            80% { opacity: 0; }
+            82% { opacity: 1; }
+            85% { opacity: 0; }
+            100% { opacity: 0; }
+        }
+
+        /* Loading Text Dots */
+        .dot1 { animation: d1 1.5s infinite; }
+        .dot2 { animation: d2 1.5s infinite; }
+        .dot3 { animation: d3 1.5s infinite; }
+        @keyframes d1 { 0%, 100% { opacity: 0; } 20%, 80% { opacity: 1; } }
+        @keyframes d2 { 0%, 100% { opacity: 0; } 40%, 80% { opacity: 1; } }
+        @keyframes d3 { 0%, 100% { opacity: 0; } 60%, 80% { opacity: 1; } }
+
+        /* Progress Bar */
+        .progress-bar { animation: prog 6s infinite ease-out; }
+        @keyframes prog {
+            0% { width: 0; }
+            80%, 100% { width: 300px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="svg-container">
+    <svg viewBox="0 0 800 600" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+        
+        <defs>
+            <!-- Glow Filters -->
+            <filter id="glow-bg" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="25" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+            
+            <filter id="terminal-shadow" x="-10%" y="-10%" width="120%" height="120%">
+                <feDropShadow dx="0" dy="15" stdDeviation="15" flood-color="#000" flood-opacity="0.5" />
+            </filter>
+
+            <!-- Grid Pattern -->
+            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5" opacity="0.5"/>
+            </pattern>
+
+            <!-- Typing Masks -->
+            <mask id="m1"><rect x="310" y="210" width="0" height="30" fill="white" class="m1" /></mask>
+            <mask id="m2"><rect x="310" y="245" width="0" height="30" fill="white" class="m2" /></mask>
+            <mask id="m3"><rect x="350" y="280" width="0" height="30" fill="white" class="m3" /></mask>
+            <mask id="m4"><rect x="350" y="315" width="0" height="30" fill="white" class="m4" /></mask>
+            <mask id="m5"><rect x="310" y="350" width="0" height="30" fill="white" class="m5" /></mask>
+        </defs>
+
+        <!-- Background grid -->
+        <rect width="800" height="600" fill="url(#grid)" />
+
+        <!-- Terminal Back Glow -->
+        <rect x="250" y="140" width="480" height="320" rx="15" fill="#38bdf8" opacity="0.1" filter="url(#glow-bg)" />
+
+        <!-- Terminal Window -->
+        <g filter="url(#terminal-shadow)">
+            <!-- Main Body -->
+            <rect x="250" y="140" width="480" height="320" rx="12" fill="#111827" stroke="#1f2937" stroke-width="2" />
+            
+            <!-- Top Bar -->
+            <rect x="250" y="140" width="480" height="40" fill="#1f2937" style="border-top-left-radius: 12px; border-top-right-radius: 12px;" />
+            <path d="M 250 160 L 250 180 L 730 180 L 730 160 Z" fill="#1f2937" /> <!-- Cover bottom corners of top bar -->
+            
+            <!-- Window Buttons -->
+            <circle cx="275" cy="160" r="6" fill="#f43f5e" />
+            <circle cx="295" cy="160" r="6" fill="#fbbf24" />
+            <circle cx="315" cy="160" r="6" fill="#10b981" />
+            
+            <!-- Header Text -->
+            <text x="490" y="165" fill="#9ca3af" font-size="14" font-family="monospace" text-anchor="middle">ai_agent.ts</text>
+
+            <!-- Line Numbers -->
+            <g font-family="monospace" font-size="14" fill="#4b5563" text-anchor="end">
+                <text x="285" y="230">1</text>
+                <text x="285" y="265">2</text>
+                <text x="285" y="300">3</text>
+                <text x="285" y="335">4</text>
+                <text x="285" y="370">5</text>
+            </g>
+            <line x1="300" y1="180" x2="300" y2="460" stroke="#1f2937" stroke-width="1" />
+
+            <!-- Code Lines (Animated via Masks) -->
+            <g class="code-group">
+                <!-- L1: // Инициализация модуля ИИ -->
+                <g mask="url(#m1)">
+                    <rect x="310" y="215" width="20" height="20" rx="4" fill="#34d399" />
+                    <rect x="340" y="215" width="100" height="20" rx="4" fill="#34d399" opacity="0.8"/>
+                    <rect x="450" y="215" width="60" height="20" rx="4" fill="#34d399" opacity="0.6"/>
+                </g>
+
+                <!-- L2: function createMagic() { -->
+                <g mask="url(#m2)">
+                    <rect x="310" y="250" width="70" height="20" rx="4" fill="#cba6f7" />
+                    <rect x="390" y="250" width="80" height="20" rx="4" fill="#60a5fa" />
+                    <rect x="480" y="250" width="20" height="20" rx="4" fill="#fbbf24" />
+                </g>
+
+                <!-- L3: const logic = "optimal"; -->
+                <g mask="url(#m3)">
+                    <rect x="350" y="285" width="40" height="20" rx="4" fill="#cba6f7" />
+                    <rect x="400" y="285" width="40" height="20" rx="4" fill="#e2e8f0" />
+                    <rect x="450" y="285" width="10" height="10" y="290" fill="#f472b6" /> <!-- = sign -->
+                    <rect x="470" y="285" width="90" height="20" rx="4" fill="#34d399" /> <!-- string -->
+                </g>
+
+                <!-- L4: return build(logic); -->
+                <g mask="url(#m4)">
+                    <rect x="350" y="320" width="50" height="20" rx="4" fill="#cba6f7" />
+                    <rect x="410" y="320" width="50" height="20" rx="4" fill="#60a5fa" />
+                    <rect x="470" y="320" width="40" height="20" rx="4" fill="#e2e8f0" />
+                </g>
+
+                <!-- L5: } -->
+                <g mask="url(#m5)">
+                    <rect x="310" y="355" width="20" height="20" rx="4" fill="#fbbf24" />
+                </g>
+            </g>
+
+            <!-- Animated Cursors -->
+            <rect class="cursor c1" />
+            <rect class="cursor c2" />
+            <rect class="cursor c3" />
+            <rect class="cursor c4" />
+            <rect class="cursor c5" />
+        </g>
+
+        <!-- Data Stream from Robot to Terminal -->
+        <path d="M 200 340 L 250 340" fill="none" stroke="#38bdf8" stroke-width="2" stroke-dasharray="6, 6" opacity="0.6" class="data-stream" />
+
+        <!-- AI Robot -->
+        <g class="robot-float">
+            <!-- Antenna -->
+            <line x1="120" y1="200" x2="120" y2="150" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="120" cy="150" r="8" fill="#38bdf8" class="antenna-glow"/>
+            
+            <!-- Head Background -->
+            <rect x="70" y="200" width="100" height="90" rx="20" fill="#64748b" />
+            <!-- Face Screen -->
+            <rect x="80" y="215" width="80" height="50" rx="10" fill="#030712" />
+            
+            <!-- Eyes Group -->
+            <g class="eye-blink">
+                <!-- Left Eye -->
+                <circle cx="100" cy="240" r="7" fill="#0ea5e9" />
+                <circle cx="100" cy="240" r="3" fill="#e0f2fe" class="pupil" transform-origin="100 240"/>
+                
+                <!-- Right Eye -->
+                <circle cx="140" cy="240" r="7" fill="#0ea5e9" />
+                <circle cx="140" cy="240" r="3" fill="#e0f2fe" class="pupil" transform-origin="140 240"/>
+            </g>
+
+            <!-- Holographic Keyboard -->
+            <g opacity="0.8">
+                <polygon points="40,340 200,340 220,360 20,360" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5" />
+                <!-- Grid Lines -->
+                <line x1="60" y1="345" x2="200" y2="345" stroke="#38bdf8" stroke-width="1" opacity="0.3" />
+                <line x1="50" y1="350" x2="210" y2="350" stroke="#38bdf8" stroke-width="1" opacity="0.3" />
+                <line x1="40" y1="355" x2="220" y2="355" stroke="#38bdf8" stroke-width="1" opacity="0.3" />
+                
+                <!-- Pressed Keys visual -->
+                <rect x="80" y="347" width="12" height="4" fill="#38bdf8" class="key-press-1" />
+                <rect x="130" y="352" width="15" height="4" fill="#38bdf8" class="key-press-2" />
+                <rect x="100" y="342" width="10" height="4" fill="#38bdf8" class="key-press-3" />
+            </g>
+
+            <!-- Floating Hands -->
+            <g class="hand-left" transform-origin="90 320">
+                <rect x="80" y="315" width="25" height="12" rx="6" fill="#94a3b8" />
+            </g>
+            <g class="hand-right" transform-origin="140 320">
+                <rect x="135" y="315" width="25" height="12" rx="6" fill="#94a3b8" />
+            </g>
+        </g>
+
+        <!-- Loading Text & Bar -->
+        <text x="400" y="520" fill="#cbd5e1" font-size="18" font-weight="500" letter-spacing="1" text-anchor="middle">
+            ИИ-агент пишет код
+            <tspan class="dot1">.</tspan>
+            <tspan class="dot2">.</tspan>
+            <tspan class="dot3">.</tspan>
+        </text>
+
+        <!-- Progress Track -->
+        <rect x="250" y="540" width="300" height="4" rx="2" fill="#1e293b" />
+        <!-- Progress Fill -->
+        <rect x="250" y="540" width="0" height="4" rx="2" fill="#38bdf8" class="progress-bar">
+            <!-- Alternative to CSS gradient glow, direct fill color -->
+        </rect>
+
+    </svg>
+</div>
+
+</body>
+</html>
