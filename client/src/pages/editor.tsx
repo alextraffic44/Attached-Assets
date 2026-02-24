@@ -165,18 +165,64 @@ export default function EditorPage() {
       const styleMatch = baseCode.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
       const navMatch = baseCode.match(/<nav[^>]*>([\s\S]*?)<\/nav>/i);
       const footerMatch = baseCode.match(/<footer[^>]*>([\s\S]*?)<\/footer>/i);
-      const template = `<!DOCTYPE html>\n<html lang="ru">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${name.replace(".html", "")}</title>\n${styleMatch ? `<style>${styleMatch[1]}</style>` : ""}\n</head>\n<body>\n${navMatch ? navMatch[0] : ""}\n\n<section style="min-height:80vh;display:flex;align-items:center;justify-content:center;padding:4rem 2rem">\n<div style="text-align:center;max-width:800px">\n<h1>${name.replace(".html", "").charAt(0).toUpperCase() + name.replace(".html", "").slice(1)}</h1>\n<p>Содержимое страницы. Опишите в чате, что здесь разместить.</p>\n</div>\n</section>\n\n${footerMatch ? footerMatch[0] : ""}\n</body>\n</html>`;
+      const pageName = name.replace(".html", "");
+      const pageLabel = pageName.charAt(0).toUpperCase() + pageName.slice(1);
+      const template = `<!DOCTYPE html>\n<html lang="ru">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${pageLabel}</title>\n${styleMatch ? `<style>${styleMatch[1]}</style>` : ""}\n</head>\n<body>\n${navMatch ? navMatch[0] : ""}\n\n<section style="min-height:80vh;display:flex;align-items:center;justify-content:center;padding:4rem 2rem">\n<div style="text-align:center;max-width:800px">\n<h1>${pageLabel}</h1>\n<p>Содержимое страницы. Опишите в чате, что здесь разместить.</p>\n</div>\n</section>\n\n${footerMatch ? footerMatch[0] : ""}\n</body>\n</html>`;
       await fetch(`/api/projects/${projectId}/files/${name}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ code: template }),
       });
+
+      const navLink = `<a href="${name}">${pageLabel}</a>`;
+      const addNavLink = (code: string) => {
+        if (!code) return code;
+        const navTagMatch = code.match(/<nav[^>]*>([\s\S]*?)<\/nav>/i);
+        if (!navTagMatch) return code;
+        const navContent = navTagMatch[0];
+        if (navContent.includes(`href="${name}"`)) return code;
+        const lastLinkMatch = navContent.match(/(.*)(<a\s[^>]*>[^<]*<\/a>)/i);
+        if (lastLinkMatch) {
+          const lastLink = navContent.lastIndexOf("</a>");
+          if (lastLink !== -1) {
+            const insertPos = lastLink + 4;
+            const newNav = navContent.substring(0, insertPos) + "\n                " + navLink + navContent.substring(insertPos);
+            return code.replace(navTagMatch[0], newNav);
+          }
+        }
+        return code;
+      };
+
+      const updatedIndex = addNavLink(baseCode);
+      if (updatedIndex !== baseCode) {
+        await fetch(`/api/projects/${projectId}/code`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ generatedCode: updatedIndex }),
+        });
+      }
+
+      for (const pf of projectFiles) {
+        if (pf.filename === name) continue;
+        const updated = addNavLink(pf.code);
+        if (updated !== pf.code) {
+          await fetch(`/api/projects/${projectId}/files/${pf.filename}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ code: updated }),
+          });
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
       setActiveFile(name);
       setAddPageOpen(false);
       setNewPageName("");
-      toast({ title: "Готово", description: `Страница ${name} создана` });
+      toast({ title: "Готово", description: `Страница ${pageLabel} создана и добавлена в навигацию` });
     } catch {
       toast({ title: "Ошибка", description: "Не удалось создать страницу", variant: "destructive" });
     }
