@@ -202,6 +202,26 @@ export default function EditorPage() {
 
     const images = attachedImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
 
+    // Оптимистичное добавление сообщения в UI
+    const tempUserMessage: ProjectMessage = {
+      id: Math.random(),
+      projectId,
+      role: "user",
+      content: text,
+      createdAt: new Date()
+    };
+    
+    // Временно обновляем кэш сообщений для мгновенного отображения
+    queryClient.setQueryData(["/api/projects", projectId, "messages"], (old: ProjectMessage[] | undefined) => {
+      const messages = [...(old || []), tempUserMessage];
+      return messages;
+    });
+
+    // Прокрутка вниз после добавления сообщения
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+
     try {
       const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance };
       if (deepResearchData) {
