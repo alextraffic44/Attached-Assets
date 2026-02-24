@@ -176,10 +176,10 @@ async function researchAndEnhance(query: string): Promise<{ research: string; en
   }
 }
 
-function bypassAuth(req: any, res: any, next: any) {
-  // Временно отключаем проверку авторизации
+async function bypassAuth(req: any, res: any, next: any) {
   if (!req.user) {
-    req.user = { id: 1, credits: 9999, displayName: "Гость" };
+    const dbUser = await storage.getUser(1);
+    req.user = dbUser || { id: 1, credits: 9999, displayName: "Гость" };
   }
   next();
 }
@@ -620,7 +620,9 @@ export async function registerRoutes(
       res.end();
     } catch (err: any) {
       console.error("Generation error:", err?.message || err);
-      const errMsg = err?.message?.includes("RECITATION") 
+      const errMsg = (err?.message?.includes("RATE_LIMIT") || err?.message?.includes("429") || err?.message?.includes("RESOURCE_EXHAUSTED") || err?.message?.includes("quota"))
+        ? "Превышен лимит запросов к Gemini API. Подождите 1-2 минуты и попробуйте снова."
+        : err?.message?.includes("RECITATION") 
         ? "Ответ ИИ заблокирован из-за слишком похожего контента. Попробуйте переформулировать запрос."
         : err?.message?.includes("SAFETY") 
         ? "Ответ ИИ заблокирован фильтром безопасности. Попробуйте другой запрос."
