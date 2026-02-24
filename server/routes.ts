@@ -393,13 +393,14 @@ export async function registerRoutes(
 
       const geminiHistory: any[] = [];
 
-      if (!isEditMode) {
-        for (const msg of previousMessages.slice(0, -1)) {
-          geminiHistory.push({
-            role: msg.role === "user" ? "user" : "model",
-            parts: [{ text: msg.content }],
-          });
-        }
+      const historyMessages = previousMessages.slice(0, -1);
+      const maxHistory = isEditMode ? 20 : historyMessages.length;
+      const recentHistory = historyMessages.slice(-maxHistory);
+      for (const msg of recentHistory) {
+        geminiHistory.push({
+          role: msg.role === "user" ? "user" : "model",
+          parts: [{ text: msg.content }],
+        });
       }
 
       const userParts: any[] = [];
