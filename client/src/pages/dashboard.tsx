@@ -456,8 +456,19 @@ export default function DashboardPage() {
                           setIsEnhanced(true);
                           toast({ title: "Промпт улучшен!", description: "Проверьте описание и нажмите «Создать проект»" });
                         }
-                      } catch {
-                        toast({ title: "Ошибка", description: "Не удалось улучшить промпт", variant: "destructive" });
+                      } catch (err: any) {
+                        let msg = "Не удалось улучшить промпт";
+                        try {
+                          const errText = err?.message || "";
+                          const jsonMatch = errText.match(/\{.*\}/);
+                          if (jsonMatch) {
+                            const parsed = JSON.parse(jsonMatch[0]);
+                            if (parsed.message) msg = parsed.message;
+                          } else if (errText.includes("429")) {
+                            msg = "Превышен лимит запросов к ИИ. Подождите минуту и попробуйте снова.";
+                          }
+                        } catch {}
+                        toast({ title: "Ошибка", description: msg, variant: "destructive" });
                       } finally {
                         setIsEnhancing(false);
                       }

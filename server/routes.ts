@@ -169,6 +169,9 @@ async function researchAndEnhance(query: string): Promise<{ research: string; en
     return { research, enhancedPrompt: enhancedPrompt.length > 100 ? enhancedPrompt : query };
   } catch (err: any) {
     console.error("Research+Enhancement error:", err.message);
+    if (err?.message?.includes("429") || err?.message?.includes("RESOURCE_EXHAUSTED") || err?.message?.includes("quota")) {
+      throw new Error("RATE_LIMIT");
+    }
     return { research: "", enhancedPrompt: query };
   }
 }
@@ -279,6 +282,9 @@ export async function registerRoutes(
       res.json({ enhancedPrompt: result.enhancedPrompt, research: result.research });
     } catch (err: any) {
       console.error("Enhance prompt error:", err.message);
+      if (err.message === "RATE_LIMIT") {
+        return res.status(429).json({ message: "Превышен лимит запросов к ИИ. Подождите минуту и попробуйте снова." });
+      }
       res.status(500).json({ message: "Ошибка улучшения промпта" });
     }
   });
