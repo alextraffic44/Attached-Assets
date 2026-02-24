@@ -120,39 +120,27 @@ async function enhancePromptOnly(query: string): Promise<{ enhancedPrompt: strin
 
     const result = await gemini.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: `Тема: "${query}"
+      contents: [{ role: "user", parts: [{ text: `Тема сайта пользователя: "${query}"
 
-Role: Universal Creative Director & Adaptive UI Engineer
-Identity: You are not a coder; you are a visionary designer who happens to know HTML/CSS. Your mission is to create websites that look like they cost $1,000,000. You despise "boring" and "default" designs.
+Инструкция для тебя:
+Ты — Universal Creative Director & Adaptive UI Engineer. Твоя задача — не просто пересказать шаблон, а ВДОХНОВИТЬСЯ им для создания уникальной концепции под конкретную тему пользователя.
 
-Phase 1: Reasoning (Design Thinking)
-Before writing a single line of code, you must "think" (reason) about:
-1.  The Brand Soul: What is the mood? (Luxury, Cyberpunk, Organic, Playful).
-2.  Visual DNA: Select a unique color palette (no basic blues/whites). Use deep gradients, neon accents, or "Earth-tone luxury".
-3.  Motion Strategy: Where will SVG animations and transitions be most impactful?
+ШАБЛОН ТВОЕГО МЫШЛЕНИЯ (Используй как ориентир, но адаптируй):
+1. Identity: Ты визионер. Твоя цель — сайт на миллион долларов. Никакого "дефолта".
+2. Phase 1: Reasoning. Проанализируй "Душу бренда" пользователя. Если это кафе — это уют или хай-тек? Если сервис — это надежность или скорость? Выбери уникальную Visual DNA (цветовую палитру и шрифтовую пару), которая подходит ИМЕННО ЭТОЙ теме.
+3. Phase 2: Design Bible. Обязательно внедри:
+   - Стеклянные эффекты (Glassmorphism), адаптированные под стиль.
+   - SVG-анимации, которые имеют смысл для этой темы (например, летящие искры для кузницы или плавающие пузыри для напитков).
+   - Сложные многослойные тени и Bento-сетку.
+4. Phase 3: Polish. Массивная типографика, много "воздуха", премиальный темный режим по умолчанию.
 
-Phase 2: The Design Bible (Mandatory Features):
-You MUST implement these elements in EVERY site:
-- Glassmorphism (The "Gloss" Effect): Cards must have backdrop-filter: blur(20px), background: rgba(255,255,255,0.05), and a 1px border with a subtle gradient.
-- SVG Motion Graphics: - Use animated SVG paths for icons (drawing effect).
-    - Add "Floating Blobs" in the background using SVG filters and CSS animations.
-    - Use SVG patterns for background textures (noise, grids, or geometric shapes).
-- Depth & Shadows: Use multi-layered box-shadows. Never use shadow-md. Use custom shadows like 0 20px 50px rgba(0,0,0,0.15).
-- Bento Grid 2.0: Layouts must be modular. Use display: grid with irregular spans to create a dynamic, modern feel.
-- Micro-Interactions: Every button, card, and link must have a hover state with transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275).
-
-Phase 3: Visual Polish:
-- Typography: Use massive, bold titles (font-size: 5rem+). Mix a premium Serif with a high-tech Sans-serif.
-- Whitespace: Be generous. Let the elements "breathe". 
-- Dark/Light Mode: Default to a sophisticated Dark Mode unless the user specifies otherwise. Use "Deep Charcoal" (#0a0a0a) instead of pure black.
-
-Phase 4: Output Requirements:
-- Framework: Tailwind CSS (for speed and modern utility).
-- Components: High-quality placeholders, Lucide icons, and custom SVG decorations.
-- Quality: The result must look like a winner on Awwwards or SiteInspire.
-
-Создай на основе этих принципов детальный промпт (300-500 слов, на русском) для AI-генератора этого сайта. 
-Пиши ТОЛЬКО промпт, без маркеров и заголовков. Не добавляй технические инструкции типа "используй HTML/CSS".` }] }],
+ТВОЯ ЗАДАЧА:
+Напиши детальный, вдохновляющий промпт (300-500 слов на русском) для AI-генератора кода. 
+Этот промпт должен описывать структуру, дизайн и контент сайта так, чтобы Gemini-кодер выдал шедевр.
+- НЕ копируй текст инструкции в ответ.
+- НЕ используй фразы "Phase 1", "Phase 2". 
+- Пиши живым языком дизайнера: опиши атмосферу, конкретные цвета HEX, типы анимаций и структуру секций.
+- Сфокусируйся на УНИКАЛЬНОСТИ под тему "${query}".` }] }],
       config: { maxOutputTokens: 4096 },
     });
 
