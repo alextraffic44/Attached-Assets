@@ -1049,9 +1049,6 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                     </button>
                   </div>
                 ))}
-                <button className="text-xs text-slate-400 hover:text-destructive transition-colors px-2" onClick={() => setAttachedImages([])}>
-                  Очистить все
-                </button>
               </div>
             )}
             <div className="relative flex items-end">
