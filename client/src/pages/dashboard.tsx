@@ -45,7 +45,7 @@ export default function DashboardPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createStep, setCreateStep] = useState<"choose" | "details">("choose");
+  const [createStep, setCreateStep] = useState<"choose" | "templates" | "details">("choose");
   const [selectedMode, setSelectedMode] = useState<"prompt" | "template" | "photo">("prompt");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -213,7 +213,7 @@ export default function DashboardPage() {
           <div className="px-8 pt-10 pb-8">
             <DialogHeader>
               <DialogTitle className="text-3xl font-extrabold text-gray-900 tracking-tight">
-                {createStep === "choose" ? "С чего начнём?" : "Оживите мечту"}
+                {createStep === "choose" ? "С чего начнём?" : createStep === "templates" ? "Выберите шаблон" : "Оживите мечту"}
               </DialogTitle>
             </DialogHeader>
 
@@ -283,7 +283,7 @@ export default function DashboardPage() {
                       key={x.m}
                       data-testid={`button-create-${x.m}`}
                       className={`group relative flex items-center w-full p-4 rounded-2xl bg-gray-50/50 border border-transparent transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-gray-100 ${x.colorClass}`}
-                      onClick={() => { setSelectedMode(x.m as any); setCreateStep("details"); }}
+                      onClick={() => { setSelectedMode(x.m as any); setCreateStep(x.m === "template" ? "templates" : "details"); }}
                     >
                       <div className={`flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center mr-5 transition-colors duration-300 relative overflow-hidden ${x.iconBgClass}`}>
                         <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl blur-md" />
@@ -300,6 +300,104 @@ export default function DashboardPage() {
                       </div>
                     </button>
                   ))}
+                </motion.div>
+              ) : createStep === "templates" ? (
+                <motion.div key="t" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-4 mt-8">
+                  {[
+                    {
+                      id: "hero-video",
+                      t: "Hero с видео",
+                      d: "Динамичный фон с видеоплеером",
+                      colorClass: "group-hover:border-rose-200 group-hover:shadow-rose-500/15 group-hover:bg-rose-50/30",
+                      iconBgClass: "bg-rose-100/50 group-hover:bg-rose-100",
+                      icon: (
+                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9 relative z-10 overflow-visible">
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-105">
+                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 transition-colors duration-500" />
+                            <path d="M2 7h20" stroke="currentColor" strokeWidth="1.5" className="text-gray-200" />
+                            <circle cx="5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-red-400 transition-colors duration-300" />
+                            <circle cx="7.5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-yellow-400 transition-colors duration-300 delay-75" />
+                            <circle cx="10" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-green-400 transition-colors duration-300 delay-150" />
+                            <rect x="6" y="9" width="12" height="10" rx="1" fill="currentColor" className="text-rose-100 group-hover:text-rose-50 transition-colors duration-500" />
+                            <polygon points="10.5 11.5, 14.5 14, 10.5 16.5" fill="currentColor" className="text-rose-500 transition-transform duration-300 origin-center group-hover:scale-110" />
+                            <rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-rose-400 transition-colors duration-500" />
+                          </g>
+                        </svg>
+                      ),
+                    },
+                    {
+                      id: "hero-photo",
+                      t: "Hero с фото",
+                      d: "Классический баннер с изображением",
+                      colorClass: "group-hover:border-sky-200 group-hover:shadow-sky-500/15 group-hover:bg-sky-50/30",
+                      iconBgClass: "bg-sky-100/50 group-hover:bg-sky-100",
+                      icon: (
+                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9 relative z-10 overflow-visible">
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-105">
+                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 transition-colors duration-500" />
+                            <path d="M2 7h20" stroke="currentColor" strokeWidth="1.5" className="text-gray-200" />
+                            <circle cx="5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-red-400 transition-colors duration-300" />
+                            <circle cx="7.5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-yellow-400 transition-colors duration-300 delay-75" />
+                            <circle cx="10" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-green-400 transition-colors duration-300 delay-150" />
+                            <circle cx="16" cy="10" r="2" fill="currentColor" className="text-sky-300 transition-transform duration-700 origin-center group-hover:scale-150 group-hover:-translate-y-1" />
+                            <path d="M-2 22 L 8 10 L 14 16 L 26 22 Z" fill="currentColor" className="text-sky-100 group-hover:text-sky-200 transition-all duration-500 group-hover:translate-y-1" />
+                            <path d="M6 22 L 14 13 L 24 22 Z" fill="currentColor" className="text-sky-400 transition-all duration-700 group-hover:-translate-x-1 group-hover:scale-105 origin-bottom" />
+                            <rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-sky-400 transition-colors duration-500" />
+                          </g>
+                        </svg>
+                      ),
+                    },
+                    {
+                      id: "hero-svg",
+                      t: "Hero с SVG анимацией",
+                      d: "Современная интерактивная графика",
+                      colorClass: "group-hover:border-emerald-200 group-hover:shadow-emerald-500/15 group-hover:bg-emerald-50/30",
+                      iconBgClass: "bg-emerald-100/50 group-hover:bg-emerald-100",
+                      icon: (
+                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9 relative z-10 overflow-visible">
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-105">
+                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 transition-colors duration-500" />
+                            <path d="M2 7h20" stroke="currentColor" strokeWidth="1.5" className="text-gray-200" />
+                            <circle cx="5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-red-400 transition-colors duration-300" />
+                            <circle cx="7.5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-yellow-400 transition-colors duration-300 delay-75" />
+                            <circle cx="10" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-green-400 transition-colors duration-300 delay-150" />
+                            <circle cx="7" cy="14" r="2.5" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-400 transition-all duration-700 origin-center group-hover:scale-125 group-hover:-translate-y-2 group-hover:translate-x-1" />
+                            <polygon points="12 9, 15 15, 9 15" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-500 transition-all duration-700 delay-75 origin-center group-hover:rotate-12 group-hover:-translate-y-1" />
+                            <rect x="15" y="11" width="4" height="4" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-300 transition-all duration-700 delay-150 origin-center group-hover:-rotate-12 group-hover:-translate-y-2 group-hover:-translate-x-1" />
+                            <rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-emerald-400 transition-colors duration-500" />
+                          </g>
+                        </svg>
+                      ),
+                    },
+                  ].map(x => (
+                    <button
+                      key={x.id}
+                      data-testid={`button-template-${x.id}`}
+                      className={`group relative flex items-center w-full p-4 rounded-2xl bg-gray-50/50 border border-transparent transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-gray-100 ${x.colorClass}`}
+                      onClick={() => { setSelectedTemplate(x.t); setCreateStep("details"); }}
+                    >
+                      <div className={`flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center mr-5 transition-colors duration-300 relative overflow-hidden ${x.iconBgClass}`}>
+                        <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl blur-md" />
+                        {x.icon}
+                      </div>
+                      <div className="flex-grow text-left">
+                        <h3 className="text-[19px] font-bold text-gray-900 mb-1 group-hover:text-black transition-colors">{x.t}</h3>
+                        <p className="text-[15px] text-gray-500 font-medium group-hover:text-gray-600 transition-colors">{x.d}</p>
+                      </div>
+                      <div className="flex-shrink-0 text-gray-300 group-hover:text-gray-900 transition-all duration-300 transform group-hover:translate-x-1">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                      </div>
+                    </button>
+                  ))}
+                  <button
+                    data-testid="button-templates-back"
+                    className="text-gray-500 font-bold hover:text-gray-900 transition-colors px-2 py-3 text-[15px] self-start mt-2"
+                    onClick={() => setCreateStep("choose")}
+                  >
+                    ← Назад
+                  </button>
                 </motion.div>
               ) : (
                 <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6 mt-8">
@@ -368,7 +466,7 @@ export default function DashboardPage() {
                     )}
                   </Button>
                   <div className="flex gap-4 pt-2">
-                    <Button variant="ghost" className="h-14 rounded-2xl font-bold flex-1 text-gray-600 hover:bg-gray-100" onClick={() => { setCreateStep("choose"); setIsEnhanced(false); }}>Назад</Button>
+                    <Button variant="ghost" className="h-14 rounded-2xl font-bold flex-1 text-gray-600 hover:bg-gray-100" onClick={() => { setCreateStep(selectedMode === "template" ? "templates" : "choose"); setIsEnhanced(false); }}>Назад</Button>
                     <Button 
                       className="h-14 rounded-2xl font-extrabold text-lg flex-[2] shadow-xl shadow-primary/20"
                       onClick={() => createMutation.mutate()}
