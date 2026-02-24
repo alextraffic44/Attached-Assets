@@ -24,6 +24,7 @@ import {
   Smartphone,
   Tablet,
   Image as ImageIcon,
+  Paperclip,
   ChevronLeft,
   ChevronRight,
   Maximize2,
@@ -881,30 +882,44 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </ScrollArea>
 
 
-          <div className="p-6 border-t bg-slate-50/50 dark:bg-slate-800/20">
+          <div className="p-4 border-t bg-slate-50/50 dark:bg-slate-800/20">
             {imagePreview && (
-              <div className="mb-4 relative w-20 h-20 group">
-                <img src={imagePreview} className="w-full h-full object-cover rounded-xl shadow-lg" />
-                <button className="absolute -top-2 -right-2 bg-destructive text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-lg" onClick={() => {setImagePreview(null); setImageBase64(null);}}>×</button>
+              <div className="mb-3 relative w-16 h-16 group">
+                <img src={imagePreview} className="w-full h-full object-cover rounded-lg shadow-md" />
+                <button className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-lg" onClick={() => {setImagePreview(null); setImageBase64(null);}}>×</button>
               </div>
             )}
-            <div className="flex items-end gap-3">
-              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-              <Button variant="outline" size="icon" className="h-12 w-12 rounded-xl shrink-0 bg-white dark:bg-slate-900" onClick={() => fileInputRef.current?.click()} disabled={isGenerating} data-testid="button-upload-image">
-                <ImageIcon className="w-5 h-5" />
-              </Button>
-              <Textarea 
-                placeholder={projectImages.length > 0 ? `Вставь "${projectImages[0].name}" в hero...` : "Что добавим?"}
-                value={prompt}
-                onChange={e => setPrompt(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleGenerate())}
-                className="min-h-[48px] h-12 rounded-xl border-none bg-white dark:bg-slate-900 shadow-skeuo-inner font-medium py-3"
-                disabled={isGenerating}
-                data-testid="input-prompt"
-              />
-              <Button className="h-12 w-12 rounded-xl shrink-0 shadow-lg shadow-primary/20" onClick={() => handleGenerate()} disabled={isGenerating || (!prompt.trim() && !imageBase64)} data-testid="button-send">
-                <Send className="w-5 h-5" />
-              </Button>
+            <div className="relative flex items-end">
+              <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx" onChange={handleImageUpload} className="hidden" />
+              <div className="flex-1 relative bg-white dark:bg-slate-900 rounded-2xl shadow-skeuo-inner border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
+                <Textarea 
+                  placeholder={projectImages.length > 0 ? `Вставь "${projectImages[0].name}" в hero...` : "Опишите, что хотите изменить..."}
+                  value={prompt}
+                  onChange={e => setPrompt(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleGenerate())}
+                  className="min-h-[56px] max-h-[160px] resize-none rounded-2xl border-none bg-transparent font-medium pl-4 pr-20 py-4 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                  disabled={isGenerating}
+                  data-testid="input-prompt"
+                />
+                <div className="absolute right-2 bottom-2 flex items-center gap-1">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isGenerating}
+                    className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all disabled:opacity-40"
+                    data-testid="button-upload-image"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleGenerate()}
+                    disabled={isGenerating || (!prompt.trim() && !imageBase64)}
+                    className="h-8 w-8 rounded-lg flex items-center justify-center bg-primary text-white shadow-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    data-testid="button-send"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </SkeuoPanel>
