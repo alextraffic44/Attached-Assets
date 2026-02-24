@@ -28,6 +28,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Maximize2,
+  Crosshair,
   Wand2,
   CheckCircle2,
   XCircle,
@@ -79,6 +80,8 @@ export default function EditorPage() {
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
   const [streamingReply, setStreamingReply] = useState("");
   const [editMode, setEditMode] = useState(false);
+  const [selectorMode, setSelectorMode] = useState(false);
+  const [selectedElement, setSelectedElement] = useState<{tag: string, text: string, classes: string, path: string, outerSnippet: string} | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingImageTarget = useRef<string | null>(null);
@@ -192,8 +195,15 @@ export default function EditorPage() {
   }, [newPageName, projectId, allFiles, project, toast]);
 
   const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string) => {
-    const text = customPrompt || prompt;
+    let text = customPrompt || prompt;
     if (!text.trim() && attachedImages.length === 0) return;
+
+    if (selectedElement && !customPrompt) {
+      const elRef = `[Выбранный элемент: <${selectedElement.tag}>${selectedElement.classes ? ` class="${selectedElement.classes}"` : ''} — "${selectedElement.text.substring(0, 80)}"\nHTML: ${selectedElement.outerSnippet}]\n\n`;
+      text = elRef + text;
+      setSelectedElement(null);
+      setSelectorMode(false);
+    }
 
     setIsGenerating(true);
     setStreamingReply("");
@@ -338,7 +348,7 @@ export default function EditorPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, projectId, attachedImages, activeFile, toast]);
+  }, [prompt, projectId, attachedImages, activeFile, toast, selectedElement]);
 
   const handleDownloadZip = async () => {
     const indexCode = project?.generatedCode || currentCode;
@@ -706,6 +716,45 @@ window.__PROJECT_ID__=${projectId};
   }, [projectId]);
 
   const getEditableCode = useCallback((code: string) => {
+    if (selectorMode && code) {
+      const selectorScript = `<!--NZ_SELECTOR_START--><style data-nz-selector>
+.__nz-sel-hover{outline:2px dashed rgba(59,130,246,0.7)!important;outline-offset:2px!important;cursor:crosshair!important}
+.__nz-sel-active{outline:3px solid rgba(59,130,246,1)!important;outline-offset:2px!important;background:rgba(59,130,246,0.05)!important}
+.__nz-sel-label{position:fixed;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:4px 12px;border-radius:8px;font-size:11px;font-weight:700;pointer-events:none;z-index:99999;white-space:nowrap;box-shadow:0 4px 12px rgba(59,130,246,0.3)}
+*{cursor:crosshair!important}
+</style><script data-nz-selector>
+(function(){
+  var hovered=null,selected=null,label=null;
+  function getPath(el){var p=[];var n=el;while(n&&n!==document.body){var idx=0;var s=n;while(s.previousElementSibling){s=s.previousElementSibling;idx++}p.unshift(idx);n=n.parentElement}return p.join(',')}
+  function getLbl(el){var t=el.tagName.toLowerCase();var c=el.className&&typeof el.className==='string'?'.'+el.className.trim().split(/\\s+/).slice(0,2).join('.'):'';return '<'+t+c+'>'}
+  function showLabel(el){
+    if(!label){label=document.createElement('div');label.className='__nz-sel-label';document.body.appendChild(label)}
+    label.textContent=getLbl(el);var r=el.getBoundingClientRect();
+    label.style.left=Math.max(0,r.left)+'px';label.style.top=Math.max(0,r.top-32)+'px';label.style.display='block';
+  }
+  function hideLabel(){if(label)label.style.display='none'}
+  document.addEventListener('mouseover',function(e){
+    var t=e.target;if(t===document.body||t===document.documentElement||t.hasAttribute('data-nz-selector'))return;
+    if(hovered&&hovered!==selected)hovered.classList.remove('__nz-sel-hover');
+    hovered=t;if(t!==selected)t.classList.add('__nz-sel-hover');
+    showLabel(t);
+  },true);
+  document.addEventListener('mouseout',function(e){
+    if(hovered&&hovered!==selected)hovered.classList.remove('__nz-sel-hover');hideLabel();
+  },true);
+  document.addEventListener('click',function(e){
+    e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+    var t=e.target;if(t===document.body||t===document.documentElement||t.hasAttribute('data-nz-selector'))return;
+    if(selected)selected.classList.remove('__nz-sel-active');
+    selected=t;t.classList.remove('__nz-sel-hover');t.classList.add('__nz-sel-active');
+    var snippet=t.outerHTML;if(snippet.length>300)snippet=snippet.substring(0,300)+'...';
+    var textContent=t.textContent||'';if(textContent.length>100)textContent=textContent.substring(0,100)+'...';
+    window.parent.postMessage({type:'nz-element-selected',tag:t.tagName.toLowerCase(),text:textContent.trim(),classes:typeof t.className==='string'?t.className.replace(/__nz-sel-[a-z]+/g,'').trim():'',path:getPath(t),outerSnippet:snippet},'*');
+  },true);
+})();
+<\\/script><!--NZ_SELECTOR_END-->`;
+      return injectProjectId(code.replace('</body>', selectorScript + '</body>'));
+    }
     if (!editMode || !code) return injectProjectId(code);
     const editorScript = `<!--NZ_EDITOR_START--><style data-nz-editor>
 [contenteditable]:hover{outline:2px dashed rgba(59,130,246,0.5);outline-offset:2px;cursor:text}
@@ -809,7 +858,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 })();
 <\/script><!--NZ_EDITOR_END-->`;
     return injectProjectId(code.replace('</body>', editorScript + '</body>'));
-  }, [editMode, injectProjectId]);
+  }, [editMode, selectorMode, injectProjectId]);
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -845,6 +894,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
         pendingImageTarget.current = e.data.path;
         setImagePickerTab("library");
         setImagePickerOpen(true);
+      }
+      if (e.data.type === 'nz-element-selected') {
+        setSelectedElement({
+          tag: e.data.tag,
+          text: e.data.text,
+          classes: e.data.classes,
+          path: e.data.path,
+          outerSnippet: e.data.outerSnippet,
+        });
       }
     };
     window.addEventListener('message', handler);
@@ -910,10 +968,16 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </Button>
 
           {!showCode && currentCode && (
-            <Button variant={editMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-4 ${editMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} onClick={() => setEditMode(!editMode)} data-testid="button-toggle-edit">
-              <MousePointer2 className="w-4 h-4 mr-2" />
-              {editMode ? "Редактор ВКЛ" : "Редактор"}
-            </Button>
+            <>
+              <Button variant={editMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-4 ${editMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }} data-testid="button-toggle-edit">
+                <MousePointer2 className="w-4 h-4 mr-2" />
+                {editMode ? "Редактор ВКЛ" : "Редактор"}
+              </Button>
+              <Button variant={selectorMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-4 ${selectorMode ? "bg-orange-500 hover:bg-orange-600 text-white" : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-500/30 dark:hover:bg-orange-500/10"}`} onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }} data-testid="button-toggle-selector">
+                <Crosshair className="w-4 h-4 mr-2" />
+                {selectorMode ? "Выбор ВКЛ" : "Выбрать"}
+              </Button>
+            </>
           )}
 
           <Button variant="outline" size="sm" className="rounded-xl font-bold px-4" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip">
@@ -1055,6 +1119,21 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
 
           <div className="p-4 border-t bg-slate-50/50 dark:bg-slate-800/20">
+            {selectedElement && (
+              <div className="mb-3 flex items-center gap-2 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-xl px-3 py-2.5">
+                <Crosshair className="w-4 h-4 text-orange-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-bold text-orange-600 dark:text-orange-400">Выбран элемент: </span>
+                  <code className="text-xs bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded font-mono">&lt;{selectedElement.tag}{selectedElement.classes ? `.${selectedElement.classes.split(' ')[0]}` : ''}&gt;</code>
+                  {selectedElement.text && (
+                    <span className="text-xs text-orange-500/70 ml-1.5 truncate block mt-0.5">«{selectedElement.text.substring(0, 60)}{selectedElement.text.length > 60 ? '...' : ''}»</span>
+                  )}
+                </div>
+                <button onClick={() => setSelectedElement(null)} className="text-orange-400 hover:text-orange-600 transition-colors shrink-0" data-testid="button-clear-selection">
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+            )}
             {attachedImages.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
                 {attachedImages.map((img, idx) => (
