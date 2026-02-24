@@ -353,7 +353,7 @@ export async function registerRoutes(
           ? project.generatedCode 
           : existingFiles.find(f => f.filename === editingFile)?.code || project.generatedCode;
 
-        systemContent += `\n\n${"═".repeat(43)}\nРЕЖИМ РЕДАКТИРОВАНИЯ — АКТИВНЫЙ ФАЙЛ: ${editingFile}\n${"═".repeat(43)}\nПользователь РЕДАКТИРУЕТ файл "${editingFile}". Все изменения должны применяться К ЭТОМУ ФАЙЛУ.\nТы ОБЯЗАН:\n1. Сохранить ВСЕ существующие секции, стили, контент, анимации и структуру\n2. Изменять/добавлять ТОЛЬКО то, что явно просит пользователь\n3. НЕ удалять, НЕ упрощать, НЕ сокращать существующий код\n4. Вернуть ПОЛНЫЙ документ целиком (от <!DOCTYPE html> до </html>)\n\nФОРМАТ ОТВЕТА:\n- Сначала напиши 1-3 предложения о внесённых изменениях\n- Затем ОДИН блок \`\`\`html с ПОЛНЫМ обновлённым кодом файла "${editingFile}"\n- Если пользователь просит изменить ВСЕ страницы — используй маркеры --- FILE: имя.html --- перед каждым блоком\n\n`;
+        systemContent += `\n\n${"═".repeat(43)}\nРЕЖИМ РЕДАКТИРОВАНИЯ — АКТИВНЫЙ ФАЙЛ: ${editingFile}\n${"═".repeat(43)}\nПользователь РЕДАКТИРУЕТ файл "${editingFile}". Все изменения должны применяться К ЭТОМУ ФАЙЛУ.\n\n⚠️ КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА РЕДАКТИРОВАНИЯ:\n1. ОБЯЗАТЕЛЬНО сохрани <nav> (навбар) со ВСЕМИ ссылками навигации — НИКОГДА не удаляй навигационное меню!\n2. ОБЯЗАТЕЛЬНО сохрани <footer> — НИКОГДА не удаляй подвал сайта!\n3. Сохранить ВСЕ существующие секции, стили, контент, анимации и структуру\n4. Изменять/добавлять ТОЛЬКО то, что явно просит пользователь\n5. НЕ удалять, НЕ упрощать, НЕ сокращать существующий код\n6. Вернуть ПОЛНЫЙ документ целиком (от <!DOCTYPE html> до </html>)\n7. НЕ заменяй весь дизайн — редактируй точечно то, что просит пользователь\n\nФОРМАТ ОТВЕТА:\n- Сначала напиши 1-3 предложения о внесённых изменениях\n- Затем ОДИН блок \`\`\`html с ПОЛНЫМ обновлённым кодом файла "${editingFile}"\n- Если пользователь просит изменить ВСЕ страницы — используй маркеры --- FILE: имя.html --- перед каждым блоком\n\n`;
 
         systemContent += `ТЕКУЩИЙ КОД РЕДАКТИРУЕМОГО ФАЙЛА (${editingFile}):\n\`\`\`html\n${editingFileCode}\n\`\`\`\n`;
 
@@ -541,12 +541,19 @@ export async function registerRoutes(
       res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, editedFile: editingFile, editedCode: editedFileCode || mainHtmlCode, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })) })}\n\n`);
       res.end();
     } catch (err: any) {
-      console.error("Generation error:", err);
+      console.error("Generation error:", err?.message || err);
+      const errMsg = err?.message?.includes("RECITATION") 
+        ? "Ответ ИИ заблокирован из-за слишком похожего контента. Попробуйте переформулировать запрос."
+        : err?.message?.includes("SAFETY") 
+        ? "Ответ ИИ заблокирован фильтром безопасности. Попробуйте другой запрос."
+        : err?.message?.includes("too long") || err?.message?.includes("token")
+        ? "Ответ ИИ слишком длинный. Попробуйте более конкретный запрос для одной страницы."
+        : `Ошибка генерации: ${err?.message?.substring(0, 150) || "неизвестная ошибка"}`;
       if (res.headersSent) {
-        res.write(`data: ${JSON.stringify({ error: "Ошибка генерации" })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
         res.end();
       } else {
-        res.status(500).json({ message: "Ошибка генерации" });
+        res.status(500).json({ message: errMsg });
       }
     }
   });
