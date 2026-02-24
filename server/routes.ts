@@ -380,7 +380,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Недостаточно кредитов" });
       }
 
-      const { prompt, imageBase64 } = req.body;
+      const { prompt, imageBase64, activeFile } = req.body;
       if (!prompt) {
         return res.status(400).json({ message: "Запрос обязателен" });
       }
@@ -421,15 +421,26 @@ export async function registerRoutes(
       const existingFiles = await storage.getProjectFiles(project.id);
 
       if (isEditMode) {
-        systemContent += `\n\n${"═".repeat(43)}\nРЕЖИМ РЕДАКТИРОВАНИЯ — ТЕКУЩИЙ КОД САЙТА\n${"═".repeat(43)}\nНиже приведён ТЕКУЩИЙ HTML-код сайта пользователя. Это твой РАБОЧИЙ ДОКУМЕНТ.\nТы ОБЯЗАН:\n1. Сохранить ВСЕ существующие секции, стили, контент, анимации и структуру\n2. Изменять/добавлять ТОЛЬКО то, что явно просит пользователь\n3. НЕ удалять, НЕ упрощать, НЕ сокращать существующий код\n4. Вернуть ПОЛНЫЙ документ целиком (от <!DOCTYPE html> до </html>)\n\nФОРМАТ ОТВЕТА при редактировании:\n- Сначала напиши 1-3 предложения о внесённых изменениях\n- Если один файл — блок \`\`\`html с ПОЛНЫМ обновлённым кодом\n- Если несколько файлов — используй маркеры --- FILE: имя.html --- перед каждым блоком \`\`\`html\n\n`;
+        const editingFile = activeFile || "index.html";
+        const editingFileCode = editingFile === "index.html" 
+          ? project.generatedCode 
+          : existingFiles.find(f => f.filename === editingFile)?.code || project.generatedCode;
+
+        systemContent += `\n\n${"═".repeat(43)}\nРЕЖИМ РЕДАКТИРОВАНИЯ — АКТИВНЫЙ ФАЙЛ: ${editingFile}\n${"═".repeat(43)}\nПользователь РЕДАКТИРУЕТ файл "${editingFile}". Все изменения должны применяться К ЭТОМУ ФАЙЛУ.\nТы ОБЯЗАН:\n1. Сохранить ВСЕ существующие секции, стили, контент, анимации и структуру\n2. Изменять/добавлять ТОЛЬКО то, что явно просит пользователь\n3. НЕ удалять, НЕ упрощать, НЕ сокращать существующий код\n4. Вернуть ПОЛНЫЙ документ целиком (от <!DOCTYPE html> до </html>)\n\nФОРМАТ ОТВЕТА:\n- Сначала напиши 1-3 предложения о внесённых изменениях\n- Затем ОДИН блок \`\`\`html с ПОЛНЫМ обновлённым кодом файла "${editingFile}"\n- Если пользователь просит изменить ВСЕ страницы — используй маркеры --- FILE: имя.html --- перед каждым блоком\n\n`;
+
+        systemContent += `ТЕКУЩИЙ КОД РЕДАКТИРУЕМОГО ФАЙЛА (${editingFile}):\n\`\`\`html\n${editingFileCode}\n\`\`\`\n`;
 
         if (existingFiles.length > 0) {
-          systemContent += `ПРОЕКТ СОСТОИТ ИЗ ${existingFiles.length + 1} ФАЙЛОВ:\n\n--- FILE: index.html ---\n\`\`\`html\n${project.generatedCode}\n\`\`\`\n`;
-          for (const f of existingFiles) {
-            systemContent += `\n--- FILE: ${f.filename} ---\n\`\`\`html\n${f.code}\n\`\`\`\n`;
+          const otherFiles = editingFile === "index.html" 
+            ? existingFiles 
+            : [{ filename: "index.html", code: project.generatedCode }, ...existingFiles.filter(f => f.filename !== editingFile)];
+          if (otherFiles.length > 0) {
+            systemContent += `\nДРУГИЕ ФАЙЛЫ ПРОЕКТА (для справки, НЕ редактируй их без запроса):\n`;
+            for (const f of otherFiles) {
+              const code = 'code' in f ? f.code : '';
+              systemContent += `- ${f.filename} (${(code || '').length} символов)\n`;
+            }
           }
-        } else {
-          systemContent += `ТЕКУЩИЙ КОД (index.html):\n\`\`\`html\n${project.generatedCode}\n\`\`\``;
         }
       }
 
@@ -532,12 +543,15 @@ export async function registerRoutes(
 
       console.log("Parsed files count:", parsedFiles.length, parsedFiles.map(f => f.filename));
 
+      const editingFile = activeFile || "index.html";
       let mainHtmlCode: string;
 
       if (parsedFiles.length > 0) {
         const indexFile = parsedFiles.find(f => f.filename === "index.html");
         if (indexFile) {
           mainHtmlCode = indexFile.code;
+        } else if (parsedFiles.find(f => f.filename === editingFile)) {
+          mainHtmlCode = project.generatedCode || parsedFiles[0].code;
         } else {
           mainHtmlCode = parsedFiles[0].code;
         }
@@ -548,10 +562,18 @@ export async function registerRoutes(
         }
       } else {
         const singleMatch = fullResponse.match(/```html\n?([\s\S]*?)```/);
+        let parsedCode: string | null = null;
         if (singleMatch) {
-          mainHtmlCode = replaceImgMarkers(singleMatch[1].trim());
+          parsedCode = replaceImgMarkers(singleMatch[1].trim());
         } else if (fullResponse.includes("<!DOCTYPE") || fullResponse.includes("<html")) {
-          mainHtmlCode = replaceImgMarkers(fullResponse.trim());
+          parsedCode = replaceImgMarkers(fullResponse.trim());
+        }
+
+        if (parsedCode && isEditMode && editingFile !== "index.html") {
+          await storage.upsertProjectFile({ projectId: project.id, filename: editingFile, code: parsedCode });
+          mainHtmlCode = project.generatedCode || "";
+        } else if (parsedCode) {
+          mainHtmlCode = parsedCode;
         } else {
           mainHtmlCode = project.generatedCode || "";
         }
@@ -576,7 +598,8 @@ export async function registerRoutes(
       });
 
       const allFiles = await storage.getProjectFiles(project.id);
-      res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })) })}\n\n`);
+      const editedFileCode = editingFile !== "index.html" ? allFiles.find(f => f.filename === editingFile)?.code : mainHtmlCode;
+      res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, editedFile: editingFile, editedCode: editedFileCode || mainHtmlCode, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })) })}\n\n`);
       res.end();
     } catch (err: any) {
       console.error("Generation error:", err);

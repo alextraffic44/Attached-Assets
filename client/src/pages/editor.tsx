@@ -160,7 +160,7 @@ export default function EditorPage() {
       const response = await fetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text, imageBase64 }),
+        body: JSON.stringify({ prompt: text, imageBase64, activeFile }),
         credentials: "include",
       });
 
@@ -171,68 +171,79 @@ export default function EditorPage() {
 
       const decoder = new TextDecoder();
       let fullText = "";
+      let sseBuffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
+        sseBuffer += chunk;
+        const messages = sseBuffer.split("\n\n");
+        sseBuffer = messages.pop() || "";
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = JSON.parse(line.slice(6));
-            if (data.status) {
-              setGenerationStatus(data.status);
+        for (const msg of messages) {
+          const dataLines = msg.split("\n").filter(l => l.startsWith("data: ")).map(l => l.slice(6));
+          if (dataLines.length === 0) continue;
+          const jsonStr = dataLines.join("\n");
+          let data: any;
+          try { data = JSON.parse(jsonStr); } catch (e) { continue; }
+          if (data.status) {
+            setGenerationStatus(data.status);
+          }
+          if (data.content) {
+            setGenerationStatus(null);
+            fullText += data.content;
+
+            const firstFileMarker = fullText.indexOf("--- FILE:");
+            const htmlBlockStart = fullText.indexOf("```html\n");
+            const targetFn = activeFile || "index.html";
+            const escapedFn = targetFn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            if (firstFileMarker > 0 && (htmlBlockStart === -1 || firstFileMarker < htmlBlockStart)) {
+              const textBefore = fullText.substring(0, firstFileMarker).trim();
+              if (textBefore) setStreamingReply(textBefore);
+            } else if (htmlBlockStart > 0) {
+              const textBefore = fullText.substring(0, htmlBlockStart).trim();
+              if (textBefore) setStreamingReply(textBefore);
             }
-            if (data.content) {
-              setGenerationStatus(null);
-              fullText += data.content;
 
-              const firstFileMarker = fullText.indexOf("--- FILE:");
-              const htmlBlockStart = fullText.indexOf("```html\n");
-
-              if (firstFileMarker > 0 && (htmlBlockStart === -1 || firstFileMarker < htmlBlockStart)) {
-                const textBefore = fullText.substring(0, firstFileMarker).trim();
-                if (textBefore) setStreamingReply(textBefore);
-              } else if (htmlBlockStart > 0) {
-                const textBefore = fullText.substring(0, htmlBlockStart).trim();
-                if (textBefore) setStreamingReply(textBefore);
+            const fileCompleteRe = new RegExp(`---\\s*FILE:\\s*${escapedFn}\\s*---\\s*\\n?\\s*\`\`\`html\\s*\\n?([\\s\\S]*?)\`\`\``, 'i');
+            const filePartialRe = new RegExp(`---\\s*FILE:\\s*${escapedFn}\\s*---\\s*\\n?\\s*\`\`\`html\\s*\\n?([\\s\\S]*)`, 'i');
+            const fileCompleteMatch = fullText.match(fileCompleteRe);
+            if (fileCompleteMatch) {
+              setStreamedCode(fileCompleteMatch[1].trim());
+            } else if (firstFileMarker !== -1) {
+              const filePartialMatch = fullText.match(filePartialRe);
+              if (filePartialMatch) {
+                const partialCode = filePartialMatch[1].trim();
+                if (partialCode) setStreamedCode(partialCode);
               }
-
-              const indexFileMatch = fullText.match(/---\s*FILE:\s*index\.html\s*---\s*\n?\s*```html\s*\n?([\s\S]*?)```/i);
-              if (indexFileMatch) {
-                setStreamedCode(indexFileMatch[1].trim());
-              } else if (firstFileMarker !== -1) {
-                const indexMarkerMatch = fullText.match(/---\s*FILE:\s*index\.html\s*---\s*\n?\s*```html\s*\n?([\s\S]*)/i);
-                if (indexMarkerMatch) {
-                  const partialCode = indexMarkerMatch[1].trim();
-                  if (partialCode) setStreamedCode(partialCode);
+            } else {
+              const htmlMatchComplete = fullText.match(/```html\n?([\s\S]*?)```/);
+              if (htmlMatchComplete) {
+                setStreamedCode(htmlMatchComplete[1].trim());
+              } else if (htmlBlockStart !== -1) {
+                const codeAfterMarker = fullText.substring(htmlBlockStart + 8);
+                if (codeAfterMarker.trim()) {
+                  setStreamedCode(codeAfterMarker);
                 }
-              } else {
-                const htmlMatchComplete = fullText.match(/```html\n?([\s\S]*?)```/);
-                if (htmlMatchComplete) {
-                  setStreamedCode(htmlMatchComplete[1].trim());
-                } else if (htmlBlockStart !== -1) {
-                  const codeAfterMarker = fullText.substring(htmlBlockStart + 8);
-                  if (codeAfterMarker.trim()) {
-                    setStreamedCode(codeAfterMarker);
-                  }
-                } else if (fullText.trimStart().startsWith("<!DOCTYPE") || fullText.trimStart().startsWith("<html")) {
-                  setStreamedCode(fullText.trim());
-                }
+              } else if (fullText.trimStart().startsWith("<!DOCTYPE") || fullText.trimStart().startsWith("<html")) {
+                setStreamedCode(fullText.trim());
               }
             }
-            if (data.done && data.code) {
-              setGenerationStatus(null);
-              setStreamedCode(data.code);
-              setActiveFile("index.html");
-              queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
-              queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
-            }
-            if (data.error) {
-              toast({ title: "Ошибка генерации", description: data.error, variant: "destructive" });
-            }
+          }
+          if (data.done) {
+            setGenerationStatus(null);
+            const targetFile = data.editedFile || activeFile || "index.html";
+            const targetCode = targetFile === "index.html" ? data.code : (data.editedCode || data.code);
+            if (targetCode) setStreamedCode(targetCode);
+            setActiveFile(targetFile);
+            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+          }
+          if (data.error) {
+            toast({ title: "Ошибка генерации", description: data.error, variant: "destructive" });
           }
         }
       }
@@ -249,7 +260,7 @@ export default function EditorPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, projectId, imageBase64, toast]);
+  }, [prompt, projectId, imageBase64, activeFile, toast]);
 
   const handleDownloadZip = async () => {
     const indexCode = project?.generatedCode || currentCode;
