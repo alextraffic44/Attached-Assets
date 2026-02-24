@@ -93,30 +93,30 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-20 relative overflow-hidden">
       {/* Decorative Orbs */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/5 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-[-5%] left-[-5%] w-[35%] h-[35%] bg-indigo-400/10 rounded-full blur-[100px] pointer-events-none animate-pulse" />
+      <div className="absolute bottom-[-5%] right-[-5%] w-[35%] h-[35%] bg-blue-400/10 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{ animationDelay: '1s' }} />
       
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(120,119,198,0.08),transparent_50%)] pointer-events-none" />
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent opacity-50" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(120,119,198,0.06),transparent_50%)] pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-200 to-transparent opacity-30" />
       
       <header className="fixed top-6 w-full z-50 px-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between bg-white/60 backdrop-blur-xl border border-white/40 rounded-[2rem] px-8 py-3.5 shadow-glass">
+        <div className="max-w-7xl mx-auto flex items-center justify-between bg-white/80 backdrop-blur-xl border border-white/20 rounded-[2.5rem] px-8 py-3 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <span className="font-black tracking-tight text-xl text-slate-900">NEURO</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => setLocation("/leads")}
-              className="group relative flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-full px-5 py-2 hover:bg-white hover:border-slate-200 transition-all shadow-sm"
+              className="group relative flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-full px-5 py-2 hover:bg-indigo-50 hover:border-indigo-100 transition-all shadow-sm"
               data-testid="button-leads"
             >
-              <Inbox className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 transition-colors" />
-              <span className="text-xs font-bold text-slate-600">Лиды</span>
+              <Inbox className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+              <span className="text-xs font-bold text-slate-600 group-hover:text-indigo-900">Лиды</span>
               {(unreadData?.count ?? 0) > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-emerald-500 text-white text-[10px] font-black rounded-full px-1 shadow-md">
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-indigo-600 text-white text-[10px] font-black rounded-full px-1 shadow-md">
                   {unreadData!.count}
                 </span>
               )}
@@ -129,13 +129,13 @@ export default function DashboardPage() {
               data-testid="button-topup"
               variant="outline"
               size="sm"
-              className="rounded-full font-bold text-xs h-9 px-5 border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all shadow-sm"
+              className="rounded-full font-bold text-xs h-9 px-5 border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm"
               onClick={() => setShowTopUpModal(true)}
             >
               Пополнить
             </Button>
             <div className="w-px h-6 bg-slate-200 mx-1" />
-            <Button variant="ghost" size="icon" className="rounded-full w-9 h-9 text-slate-400 hover:text-slate-900" onClick={logout}>
+            <Button variant="ghost" size="icon" className="rounded-full w-9 h-9 text-slate-400 hover:text-slate-900 hover:bg-slate-100" onClick={logout}>
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
@@ -149,7 +149,7 @@ export default function DashboardPage() {
             <p className="text-slate-500 font-medium text-lg">Создайте что-то потрясающее сегодня</p>
           </div>
           <Button 
-            className="h-14 px-10 rounded-2xl font-black text-lg bg-slate-900 text-white hover:bg-slate-800 shadow-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+            className="h-14 px-10 rounded-2xl font-black text-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-[0.98]"
             onClick={() => setShowCreateModal(true)}
           >
             <Plus className="w-6 h-6 mr-2" />
@@ -195,10 +195,10 @@ export default function DashboardPage() {
                   <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/20 to-transparent transition-opacity duration-500 group-hover:opacity-40" />
                 </div>
                 
-                <div className="absolute bottom-0 left-0 right-0 p-8 pt-12 bg-gradient-to-t from-white via-white to-transparent">
+                <div className="absolute bottom-0 left-0 right-0 p-8 pt-12 bg-gradient-to-t from-white via-white/90 to-transparent">
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <h3 className="text-2xl font-black text-slate-900 truncate leading-tight mb-1">{project.title}</h3>
+                      <h3 className="text-2xl font-black text-slate-900 truncate leading-tight mb-1 group-hover:text-indigo-600 transition-colors">{project.title}</h3>
                       <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
                         <Calendar className="w-3.5 h-3.5" />
                         {new Date(project.createdAt).toLocaleDateString()}
