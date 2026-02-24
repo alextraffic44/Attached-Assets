@@ -990,15 +990,18 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[90%] rounded-2xl p-4 text-sm font-medium shadow-skeuo-md ${msg.role === "user" ? "bg-primary text-white" : "bg-white dark:bg-slate-800"}`}>
                       {msg.role === "user" ? msg.content : (
-                        <div className="space-y-2">
+                        <div className="space-y-2 max-w-full overflow-hidden">
                           <div className="flex items-center gap-2 mb-1">
-                            <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+                            <Badge variant="secondary" className="bg-primary/10 text-primary border-none text-[10px] h-5 px-1.5 flex items-center gap-1">
+                              <History className="w-3 h-3" />
+                              <span>v{messages.filter((m, i) => (m.role === "assistant" || m.role === "model") && i <= idx).length}</span>
+                            </Badge>
                             <span className="text-primary font-black text-[11px]">Gemini</span>
                             {isLatestModel && (
                               <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0 text-[10px] px-1.5 py-0 rounded-full">текущий</Badge>
                             )}
                           </div>
-                          <p className="text-slate-700 dark:text-slate-300 text-[13px] leading-relaxed">{msg.content.startsWith("<!") || msg.content.startsWith("<html") ? "Сайт обновлён" : msg.content}</p>
+                          <p className="text-slate-700 dark:text-slate-300 text-[13px] leading-relaxed break-words whitespace-pre-wrap overflow-hidden">{msg.content.startsWith("<!") || msg.content.startsWith("<html") ? "Сайт обновлён" : msg.content}</p>
                         </div>
                       )}
                     </div>
