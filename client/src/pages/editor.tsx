@@ -189,22 +189,38 @@ export default function EditorPage() {
               setGenerationStatus(null);
               fullText += data.content;
 
+              const firstFileMarker = fullText.indexOf("--- FILE:");
               const htmlBlockStart = fullText.indexOf("```html\n");
-              if (htmlBlockStart > 0) {
+
+              if (firstFileMarker > 0 && (htmlBlockStart === -1 || firstFileMarker < htmlBlockStart)) {
+                const textBefore = fullText.substring(0, firstFileMarker).trim();
+                if (textBefore) setStreamingReply(textBefore);
+              } else if (htmlBlockStart > 0) {
                 const textBefore = fullText.substring(0, htmlBlockStart).trim();
                 if (textBefore) setStreamingReply(textBefore);
               }
 
-              const htmlMatchComplete = fullText.match(/```html\n?([\s\S]*?)```/);
-              if (htmlMatchComplete) {
-                setStreamedCode(htmlMatchComplete[1].trim());
-              } else if (htmlBlockStart !== -1) {
-                const codeAfterMarker = fullText.substring(htmlBlockStart + 8);
-                if (codeAfterMarker.trim()) {
-                  setStreamedCode(codeAfterMarker);
+              const indexFileMatch = fullText.match(/---\s*FILE:\s*index\.html\s*---\s*\n?\s*```html\s*\n?([\s\S]*?)```/i);
+              if (indexFileMatch) {
+                setStreamedCode(indexFileMatch[1].trim());
+              } else if (firstFileMarker !== -1) {
+                const indexMarkerMatch = fullText.match(/---\s*FILE:\s*index\.html\s*---\s*\n?\s*```html\s*\n?([\s\S]*)/i);
+                if (indexMarkerMatch) {
+                  const partialCode = indexMarkerMatch[1].trim();
+                  if (partialCode) setStreamedCode(partialCode);
                 }
-              } else if (fullText.trimStart().startsWith("<!DOCTYPE") || fullText.trimStart().startsWith("<html")) {
-                setStreamedCode(fullText.trim());
+              } else {
+                const htmlMatchComplete = fullText.match(/```html\n?([\s\S]*?)```/);
+                if (htmlMatchComplete) {
+                  setStreamedCode(htmlMatchComplete[1].trim());
+                } else if (htmlBlockStart !== -1) {
+                  const codeAfterMarker = fullText.substring(htmlBlockStart + 8);
+                  if (codeAfterMarker.trim()) {
+                    setStreamedCode(codeAfterMarker);
+                  }
+                } else if (fullText.trimStart().startsWith("<!DOCTYPE") || fullText.trimStart().startsWith("<html")) {
+                  setStreamedCode(fullText.trim());
+                }
               }
             }
             if (data.done && data.code) {

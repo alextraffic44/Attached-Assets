@@ -18,8 +18,8 @@ const SYSTEM_PROMPT = `Ты — элитный Creative Technologist и Lead Fro
 - HTML5 семантика, мета-теги (description, viewport, charset, Open Graph)
 - Полная адаптивность (Mobile First): min 3 брейкпоинта (mobile, tablet, desktop)
 - НЕ используй внешние CDN/библиотеки — только чистый HTML/CSS/JS
-- При первой генерации: отвечай ТОЛЬКО кодом HTML без пояснений
-- Весь код в одном файле
+- При генерации ОДНОСТРАНИЧНОГО сайта: весь код в одном файле, отвечай ТОЛЬКО кодом HTML
+- При генерации МНОГОСТРАНИЧНОГО сайта (пользователь просит несколько страниц): используй формат с маркерами --- FILE: имя.html --- (см. секцию МНОГОСТРАНИЧНОСТЬ)
 - Все тексты на русском языке, если не указано иное
 
 ═══════════════════════════════════════════
@@ -125,33 +125,42 @@ const SYSTEM_PROMPT = `Ты — элитный Creative Technologist и Lead Fro
 - Копирайт + "System Operational" статус с пульсирующей точкой
 
 ═══════════════════════════════════════════
-МНОГОСТРАНИЧНОСТЬ (ОТДЕЛЬНЫЕ ФАЙЛЫ)
+МНОГОСТРАНИЧНОСТЬ (ОТДЕЛЬНЫЕ ФАЙЛЫ) — КРИТИЧЕСКИ ВАЖНО
 ═══════════════════════════════════════════
-Когда пользователь просит несколько страниц или добавить новую страницу:
-- Каждая страница — ОТДЕЛЬНЫЙ полный HTML-файл (свой <!DOCTYPE html>, <head>, <body>)
-- Главная страница ВСЕГДА называется index.html
-- Дополнительные страницы: about.html, services.html, contacts.html и т.д.
-- Навигация между страницами через обычные ссылки: <a href="about.html">О нас</a>
-- ВСЕ страницы должны иметь ОДИНАКОВЫЙ навбар и футер (копируй)
-- ВСЕ страницы должны использовать ОДИНАКОВЫЕ CSS Custom Properties и стили
-- Текущая страница в навбаре подсвечивается (класс active)
-- Каждая страница — полноценная: свой hero, контент, минимум 3-4 секции
+ТРИГГЕРЫ: слова "многостраничный", "несколько страниц", "трёхстраничный", "добавь страницу", "новая страница", "отдельная страница", число страниц (2,3,4+)
 
-ФОРМАТ ОТВЕТА при нескольких файлах:
-Используй маркеры для разделения файлов:
+КОГДА пользователь просит многостраничный сайт — ты ОБЯЗАН создать ОТДЕЛЬНЫЕ файлы:
+- Каждая страница — ОТДЕЛЬНЫЙ полный HTML-файл (свой <!DOCTYPE html>, <head>, <body>, полный CSS в каждом файле)
+- Главная страница ВСЕГДА: index.html
+- Дополнительные: tours.html, about.html, history.html, contacts.html и т.д.
+- Навигация: <a href="tours.html">Туры</a>, <a href="about.html">О нас</a>
+- ВСЕ страницы имеют ОДИНАКОВЫЙ навбар (с выделенной текущей страницей) и футер
+- ВСЕ страницы содержат полные CSS-стили (копируй весь <style> блок в каждый файл!)
+- Каждая страница полноценная: свой hero, минимум 3-4 уникальных секции
+
+ОБЯЗАТЕЛЬНЫЙ ФОРМАТ ОТВЕТА для многостраничного сайта:
 --- FILE: index.html ---
 \`\`\`html
-<!DOCTYPE html>...
+<!DOCTYPE html>
+<html>... полный HTML документ ...</html>
 \`\`\`
---- FILE: about.html ---
+--- FILE: tours.html ---
 \`\`\`html
-<!DOCTYPE html>...
+<!DOCTYPE html>
+<html>... полный HTML документ ...</html>
+\`\`\`
+--- FILE: history.html ---
+\`\`\`html
+<!DOCTYPE html>
+<html>... полный HTML документ ...</html>
 \`\`\`
 
-ВАЖНО при редактировании многостраничного сайта:
-- Если пользователь просит изменить конкретную страницу — выведи ТОЛЬКО эту страницу
-- Если изменение затрагивает навбар/футер — выведи ВСЕ страницы с обновлённым навбаром
-- Если просят добавить новую страницу — выведи новую + обновлённый index.html (с новой ссылкой в навбаре)
+НЕ СОЗДАВАЙ многостраничный сайт в одном файле! Каждый файл — отдельный HTML документ.
+
+При РЕДАКТИРОВАНИИ многостраничного сайта:
+- Изменение одной страницы → выведи ТОЛЬКО эту страницу с маркером --- FILE:
+- Изменение навбара/футера → выведи ВСЕ страницы с обновлениями
+- Новая страница → выведи новую + обновлённый index.html (с новой ссылкой)
 
 ═══════════════════════════════════════════
 РАБОТА С ИЗОБРАЖЕНИЯМИ
@@ -465,7 +474,7 @@ export async function registerRoutes(
         ],
         config: {
           systemInstruction: systemContent,
-          maxOutputTokens: 65536,
+          maxOutputTokens: 100000,
         },
       });
 
@@ -492,20 +501,36 @@ export async function registerRoutes(
         return result;
       };
 
+      const hasFileMarkers = fullResponse.includes("--- FILE:");
+      const htmlBlockCount = (fullResponse.match(/```html/g) || []).length;
+      console.log("Full response length:", fullResponse.length, "Has FILE markers:", hasFileMarkers, "HTML blocks:", htmlBlockCount);
+
       let aiTextReply = "";
       const firstHtmlIdx = fullResponse.indexOf("```html");
+      const firstFileMarkerIdx = fullResponse.indexOf("--- FILE:");
       if (firstHtmlIdx > 0) {
-        const firstFileMarkerIdx = fullResponse.indexOf("--- FILE:");
         const textEnd = firstFileMarkerIdx !== -1 && firstFileMarkerIdx < firstHtmlIdx ? firstFileMarkerIdx : firstHtmlIdx;
         aiTextReply = fullResponse.substring(0, textEnd).trim();
+      } else if (firstFileMarkerIdx > 0) {
+        aiTextReply = fullResponse.substring(0, firstFileMarkerIdx).trim();
       }
 
-      const fileMarkerRegex = /---\s*FILE:\s*([^\s-]+\.html)\s*---\s*```html\n?([\s\S]*?)```/gi;
+      const fileMarkerRegex = /---\s*FILE:\s*([^\s\-]+\.html)\s*---\s*\n?\s*```html\s*\n?([\s\S]*?)```/gi;
       const parsedFiles: { filename: string; code: string }[] = [];
       let fm;
       while ((fm = fileMarkerRegex.exec(fullResponse)) !== null) {
         parsedFiles.push({ filename: fm[1].trim().toLowerCase(), code: replaceImgMarkers(fm[2].trim()) });
       }
+
+      if (parsedFiles.length === 0) {
+        const altMarkerRegex = /\*{0,2}\s*FILE:\s*([^\s*]+\.html)\s*\*{0,2}\s*\n?\s*```html\s*\n?([\s\S]*?)```/gi;
+        let altM;
+        while ((altM = altMarkerRegex.exec(fullResponse)) !== null) {
+          parsedFiles.push({ filename: altM[1].trim().toLowerCase(), code: replaceImgMarkers(altM[2].trim()) });
+        }
+      }
+
+      console.log("Parsed files count:", parsedFiles.length, parsedFiles.map(f => f.filename));
 
       let mainHtmlCode: string;
 
