@@ -474,7 +474,7 @@ export async function registerRoutes(
         ],
         config: {
           systemInstruction: systemContent,
-          maxOutputTokens: 100000,
+          maxOutputTokens: 65536,
         },
       });
 
