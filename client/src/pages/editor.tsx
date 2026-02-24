@@ -599,7 +599,7 @@ window.__PROJECT_ID__=${projectId};
     var a=e.target.closest('a');
     if(!a) return;
     var href=a.getAttribute('href');
-    if(!href||href==='#') return;
+    if(!href||href==='#'||href===''){e.preventDefault();return;}
     if(href.startsWith('#')){e.preventDefault();var el=document.querySelector(href);if(el)el.scrollIntoView({behavior:'smooth'});return;}
     if(href.match(/^[a-zA-Z0-9_-]+\.html$/)){
       e.preventDefault();
