@@ -313,7 +313,11 @@ export async function registerRoutes(
         return res.status(403).json({ message: `Недостаточно токенов. Нужно ${GENERATION_COST}, у вас ${user.credits}` });
       }
 
-      const { prompt, imageBase64, imageMimeType, activeFile, skipEnhance } = req.body;
+      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance } = req.body;
+      const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
+        Array.isArray(images) && images.length > 0 ? images 
+        : imageBase64 ? [{ base64: imageBase64, mimeType: imageMimeType || "image/png" }] 
+        : [];
       if (!prompt) {
         return res.status(400).json({ message: "Запрос обязателен" });
       }
@@ -399,43 +403,55 @@ export async function registerRoutes(
       }
 
       const userParts: any[] = [];
-      let attachedImageUrl = "";
+      const savedImageUrls: string[] = [];
 
-      if (imageBase64) {
-        const mime = imageMimeType || "image/png";
-        const isImage = mime.startsWith("image/");
+      if (imageArray.length > 0) {
+        for (const imgData of imageArray) {
+          const mime = imgData.mimeType || "image/png";
+          const isImage = mime.startsWith("image/");
+          if (isImage) {
+            const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
+            const filename = `${crypto.randomUUID()}.${ext}`;
+            const filePath = path.join(uploadsDir, filename);
+            const buffer = Buffer.from(imgData.base64, "base64");
+            fs.writeFileSync(filePath, buffer);
+            const imageUrl = `/uploads/${filename}`;
+            savedImageUrls.push(imageUrl);
 
-        if (isImage) {
-          const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
-          const filename = `${crypto.randomUUID()}.${ext}`;
-          const filePath = path.join(uploadsDir, filename);
-          const buffer = Buffer.from(imageBase64, "base64");
-          fs.writeFileSync(filePath, buffer);
-          attachedImageUrl = `/uploads/${filename}`;
+            const imgName = imgData.fileName?.replace(/\.[^.]+$/, '').replace(/[^a-zA-Zа-яА-Я0-9_-]/g, '_') || `photo_${Date.now()}`;
+            await storage.createProjectImage({
+              projectId: project.id,
+              name: imgName,
+              url: imageUrl,
+              prompt: prompt.substring(0, 200),
+            });
+            projectImgs.push({ id: 0, projectId: project.id, name: imgName, url: imageUrl, prompt: prompt.substring(0, 200), createdAt: new Date() } as any);
+          }
+        }
 
-          const imgName = `photo_${Date.now()}`;
-          await storage.createProjectImage({
-            projectId: project.id,
-            name: imgName,
-            url: attachedImageUrl,
-            prompt: prompt.substring(0, 200),
+        let textPart = isEditMode ? prompt : enhancedPrompt;
+        
+        if (savedImageUrls.length > 0) {
+          textPart += `\n\nПОЛЬЗОВАТЕЛЬ ПРИКРЕПИЛ ${savedImageUrls.length} ФОТО. URL фото:\n`;
+          savedImageUrls.forEach((url, i) => {
+            textPart += `${i + 1}. ${url}\n`;
           });
-          projectImgs.push({ id: 0, projectId: project.id, name: imgName, url: attachedImageUrl, prompt: prompt.substring(0, 200), createdAt: new Date() } as any);
+          textPart += `\nОБЯЗАТЕЛЬНО используй эти URL напрямую в src изображений: <img src="${savedImageUrls[0]}" />. НЕ используй маркер {{IMG:...}} для этих фото — используй URL напрямую. Размести фото по сайту согласно запросу пользователя.`;
+        }
+        userParts.push({ text: textPart });
 
-          const textPart = isEditMode
-            ? `${prompt}\n\nПОЛЬЗОВАТЕЛЬ ПРИКРЕПИЛ ФОТО. URL фото: ${attachedImageUrl}\nОБЯЗАТЕЛЬНО используй этот URL напрямую в src изображений: <img src="${attachedImageUrl}" />. НЕ используй маркер {{IMG:...}} для этого фото — используй URL напрямую.`
-            : `Создай сайт на основе этого изображения-примера.\n\n${enhancedPrompt}\n\nURL прикреплённого фото: ${attachedImageUrl}\nМожешь вставить это фото в HTML через <img src="${attachedImageUrl}" />`;
-          userParts.push({ text: textPart });
-          userParts.push({ inlineData: { data: imageBase64, mimeType: mime } });
-        } else {
-          const textPart = isEditMode ? prompt : `Создай сайт на основе этого изображения-примера.\n\n${enhancedPrompt}`;
-          userParts.push({ text: textPart });
-          const extractedText = await extractTextFromFile(imageBase64, mime);
-          if (extractedText) {
-            const truncated = extractedText.length > 15000 ? extractedText.substring(0, 15000) + "\n...[текст обрезан]" : extractedText;
-            userParts.push({ text: `\n\nСОДЕРЖИМОЕ ПРИКРЕПЛЁННОГО ДОКУМЕНТА (${mime}):\n---\n${truncated}\n---\n\nИспользуй этот текст из документа при создании/редактировании сайта.` });
+        for (const imgData of imageArray) {
+          const mime = imgData.mimeType || "image/png";
+          if (mime.startsWith("image/")) {
+            userParts.push({ inlineData: { data: imgData.base64, mimeType: mime } });
           } else {
-            userParts.push({ text: `[Прикреплён файл формата ${mime}, но его содержимое не удалось извлечь. Создай сайт на основе текстового запроса.]` });
+            const extractedText = await extractTextFromFile(imgData.base64, mime);
+            if (extractedText) {
+              const truncated = extractedText.length > 15000 ? extractedText.substring(0, 15000) + "\n...[текст обрезан]" : extractedText;
+              userParts.push({ text: `\n\nСОДЕРЖИМОЕ ПРИКРЕПЛЁННОГО ДОКУМЕНТА (${mime}):\n---\n${truncated}\n---\n\nИспользуй этот текст из документа при создании/редактировании сайта.` });
+            } else {
+              userParts.push({ text: `[Прикреплён файл формата ${mime}, но его содержимое не удалось извлечь.]` });
+            }
           }
         }
       } else if (isEditMode) {

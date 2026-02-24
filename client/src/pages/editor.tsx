@@ -74,10 +74,7 @@ export default function EditorPage() {
   const [streamedCode, setStreamedCode] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
-  const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const [imageMimeType, setImageMimeType] = useState<string>("image/png");
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [attachedImages, setAttachedImages] = useState<Array<{base64: string, mimeType: string, preview: string | null, fileName: string}>>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
   const [streamingReply, setStreamingReply] = useState("");
@@ -195,18 +192,20 @@ export default function EditorPage() {
 
   const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean) => {
     const text = customPrompt || prompt;
-    if (!text.trim() && !imageBase64) return;
+    if (!text.trim() && attachedImages.length === 0) return;
 
     setIsGenerating(true);
     setStreamingReply("");
     setStreamedCode("");
     setPrompt("");
 
+    const images = attachedImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
+
     try {
       const response = await fetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text, imageBase64, imageMimeType, activeFile, skipEnhance: !!skipEnhance }),
+        body: JSON.stringify({ prompt: text, images, activeFile, skipEnhance: !!skipEnhance }),
         credentials: "include",
       });
 
@@ -294,9 +293,7 @@ export default function EditorPage() {
         }
       }
 
-      setImageBase64(null);
-      setImagePreview(null);
-      setUploadedFileName(null);
+      setAttachedImages([]);
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
@@ -307,7 +304,7 @@ export default function EditorPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, projectId, imageBase64, activeFile, toast]);
+  }, [prompt, projectId, attachedImages, activeFile, toast]);
 
   const handleDownloadZip = async () => {
     const indexCode = project?.generatedCode || currentCode;
@@ -470,40 +467,54 @@ export default function EditorPage() {
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadedFileName(file.name);
-    setImageMimeType(file.type || "application/octet-stream");
-    const reader = new FileReader();
-    reader.onload = () => {
-      const isImage = file.type.startsWith("image/");
-      setImagePreview(isImage ? (reader.result as string) : null);
-      setImageBase64((reader.result as string).split(",")[1]);
-    };
-    reader.readAsDataURL(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const b64 = dataUrl.split(",")[1];
+        const isImage = file.type.startsWith("image/");
+        setAttachedImages(prev => [...prev, {
+          base64: b64,
+          mimeType: file.type || "application/octet-stream",
+          preview: isImage ? dataUrl : null,
+          fileName: file.name,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    }
+    if (e.target) e.target.value = "";
+    toast({ title: `${files.length > 1 ? files.length + " файлов" : "Файл"} прикреплён`, description: "Можно отправить вместе с промтом" });
   };
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
     if (!items) return;
 
+    let count = 0;
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf("image") !== -1) {
         const file = items[i].getAsFile();
         if (!file) continue;
-
-        setUploadedFileName(file.name || "pasted-image.png");
-        setImageMimeType(file.type || "image/png");
+        count++;
         const reader = new FileReader();
         reader.onload = () => {
-          setImagePreview(reader.result as string);
-          setImageBase64((reader.result as string).split(",")[1]);
+          const dataUrl = reader.result as string;
+          setAttachedImages(prev => [...prev, {
+            base64: dataUrl.split(",")[1],
+            mimeType: file.type || "image/png",
+            preview: dataUrl,
+            fileName: file.name || `pasted-image-${Date.now()}.png`,
+          }]);
         };
         reader.readAsDataURL(file);
-        
-        toast({ title: "Изображение прикреплено", description: "Вы можете отправить его вместе с промтом" });
-        break;
       }
+    }
+    if (count > 0) {
+      toast({ title: "Изображение прикреплено", description: "Можно отправить вместе с промтом" });
     }
   }, [toast]);
 
@@ -987,23 +998,30 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
 
           <div className="p-4 border-t bg-slate-50/50 dark:bg-slate-800/20">
-            {(imagePreview || (imageBase64 && uploadedFileName)) && (
-              <div className="mb-3 relative group inline-flex items-center gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 shadow-sm border border-slate-200/50 dark:border-slate-700/50">
-                {imagePreview ? (
-                  <img src={imagePreview} className="w-12 h-12 object-cover rounded-md" />
-                ) : (
-                  <div className="w-12 h-12 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-slate-400" />
+            {attachedImages.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {attachedImages.map((img, idx) => (
+                  <div key={idx} className="relative group inline-flex items-center gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 shadow-sm border border-slate-200/50 dark:border-slate-700/50">
+                    {img.preview ? (
+                      <img src={img.preview} className="w-12 h-12 object-cover rounded-md" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-slate-400" />
+                      </div>
+                    )}
+                    <span className="text-xs text-slate-500 dark:text-slate-400 max-w-[80px] truncate">{img.fileName}</span>
+                    <button className="ml-1 text-slate-400 hover:text-destructive transition-colors" onClick={() => setAttachedImages(prev => prev.filter((_, i) => i !== idx))}>
+                      <XCircle className="w-4 h-4" />
+                    </button>
                   </div>
-                )}
-                <span className="text-xs text-slate-500 dark:text-slate-400 max-w-[120px] truncate">{uploadedFileName}</span>
-                <button className="ml-1 text-slate-400 hover:text-destructive transition-colors" onClick={() => {setImagePreview(null); setImageBase64(null); setUploadedFileName(null);}}>
-                  <XCircle className="w-4 h-4" />
+                ))}
+                <button className="text-xs text-slate-400 hover:text-destructive transition-colors px-2" onClick={() => setAttachedImages([])}>
+                  Очистить все
                 </button>
               </div>
             )}
             <div className="relative flex items-end">
-              <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx" onChange={handleImageUpload} className="hidden" />
+              <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx" multiple onChange={handleImageUpload} className="hidden" />
               <div className="flex-1 relative bg-white dark:bg-slate-900 rounded-2xl shadow-skeuo-inner border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
                 <Textarea 
                   placeholder={projectImages.length > 0 ? `Вставь "${projectImages[0].name}" в hero...` : "Опишите, что хотите изменить..."}
@@ -1026,7 +1044,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   </button>
                   <button
                     onClick={() => handleGenerate()}
-                    disabled={isGenerating || (!prompt.trim() && !imageBase64)}
+                    disabled={isGenerating || (!prompt.trim() && attachedImages.length === 0)}
                     className="h-8 w-8 rounded-lg flex items-center justify-center bg-primary text-white shadow-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     data-testid="button-send"
                   >
