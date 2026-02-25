@@ -951,6 +951,8 @@ export async function registerRoutes(
         existingLinks.push({ href: m[1], text: m[2], full: m[0] });
       }
 
+      const pageTitles: Record<string, string> = req.body?.pageTitles || {};
+
       const missingPages = allPages.filter(
         p => !existingLinks.some(l => l.href === p.filename)
       );
@@ -960,7 +962,7 @@ export async function registerRoutes(
       let newNavLinks = "";
       for (const mp of missingPages) {
         const label = mp.filename.replace(".html", "");
-        const displayName = label.charAt(0).toUpperCase() + label.slice(1);
+        const displayName = pageTitles[mp.filename] || label.charAt(0).toUpperCase() + label.slice(1);
         if (existingLinks.length > 0) {
           const sample = existingLinks[existingLinks.length - 1].full;
           const newLink = sample.replace(/href="[^"]*"/, `href="${mp.filename}"`).replace(/>[\s\S]*?<\/a>/, `>${displayName}</a>`);

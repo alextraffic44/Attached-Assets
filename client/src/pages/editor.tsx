@@ -142,6 +142,7 @@ export default function EditorPage() {
   const [showVersions, setShowVersions] = useState(false);
   const [addPageOpen, setAddPageOpen] = useState(false);
   const [newPageName, setNewPageName] = useState("");
+  const [newPageTitle, setNewPageTitle] = useState("");
 
   const { data: projectFiles = [] } = useQuery<ProjectFile[]>({
     queryKey: ["/api/projects", projectId, "files"],
@@ -196,7 +197,8 @@ export default function EditorPage() {
       const topSection = headerMatch ? headerMatch[0] : (navMatch ? navMatch[0] : "");
       const headContent = headMatch ? headMatch[1].replace(/<title>[\s\S]*?<\/title>/i, "") : "";
       const pageName = name.replace(".html", "");
-      const pageLabel = pageName.charAt(0).toUpperCase() + pageName.slice(1);
+      const fallbackLabel = pageName.charAt(0).toUpperCase() + pageName.slice(1);
+      const pageLabel = newPageTitle.trim() || fallbackLabel;
       const template = `<!DOCTYPE html>\n<html lang="ru">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${pageLabel}</title>\n${headContent}\n</head>\n<body>\n${topSection}\n\n<section style="min-height:80vh;display:flex;align-items:center;justify-content:center;padding:4rem 2rem">\n<div style="text-align:center;max-width:800px">\n<h1>${pageLabel}</h1>\n<p>Содержимое страницы. Опишите в чате, что здесь разместить.</p>\n</div>\n</section>\n\n${footerMatch ? footerMatch[0] : ""}\n</body>\n</html>`;
       await fetch(`/api/projects/${projectId}/files/${name}`, {
         method: "PUT",
@@ -209,6 +211,7 @@ export default function EditorPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({ pageTitles: { [name]: pageLabel } }),
       });
 
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
@@ -216,11 +219,12 @@ export default function EditorPage() {
       setActiveFile(name);
       setAddPageOpen(false);
       setNewPageName("");
+      setNewPageTitle("");
       toast({ title: "Готово", description: `Страница ${pageLabel} создана и добавлена в навигацию` });
     } catch {
       toast({ title: "Ошибка", description: "Не удалось создать страницу", variant: "destructive" });
     }
-  }, [newPageName, projectId, allFiles, project, toast]);
+  }, [newPageName, newPageTitle, projectId, allFiles, project, toast]);
 
   const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string, multiPagesData?: string, seoH1Data?: string, seoH2sData?: string) => {
     let text = customPrompt || prompt;
@@ -1895,24 +1899,44 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       </Dialog>
 
       <Dialog open={addPageOpen} onOpenChange={setAddPageOpen}>
-        <DialogContent className="sm:max-w-sm" aria-describedby="add-page-description">
+        <DialogContent className="sm:max-w-md" aria-describedby="add-page-description">
           <DialogHeader>
             <DialogTitle>Новая страница</DialogTitle>
-            <DialogDescription id="add-page-description">Введите имя файла для новой страницы</DialogDescription>
+            <DialogDescription id="add-page-description">Укажите заголовок и имя файла</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-4 pt-2">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-3 pt-2">
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Заголовок страницы</label>
               <Input
-                value={newPageName}
-                onChange={(e) => setNewPageName(e.target.value)}
-                placeholder="about"
-                className="flex-1"
-                data-testid="input-new-page-name"
-                onKeyDown={(e) => { if (e.key === "Enter") handleAddPage(); }}
+                value={newPageTitle}
+                onChange={(e) => {
+                  setNewPageTitle(e.target.value);
+                  const auto = e.target.value.trim().toLowerCase()
+                    .replace(/[а-яё]/g, c => ({"а":"a","б":"b","в":"v","г":"g","д":"d","е":"e","ё":"yo","ж":"zh","з":"z","и":"i","й":"y","к":"k","л":"l","м":"m","н":"n","о":"o","п":"p","р":"r","с":"s","т":"t","у":"u","ф":"f","х":"h","ц":"ts","ч":"ch","ш":"sh","щ":"sch","ъ":"","ы":"y","ь":"","э":"e","ю":"yu","я":"ya"} as any)[c] || c)
+                    .replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/-+/g, "-").replace(/^-|-$/g, "");
+                  if (auto) setNewPageName(auto);
+                }}
+                placeholder='Например: О компании'
+                className="h-10 rounded-xl"
+                data-testid="input-new-page-title"
+                autoFocus
               />
-              <span className="text-sm text-muted-foreground">.html</span>
             </div>
-            <Button onClick={handleAddPage} disabled={!newPageName.trim()} data-testid="button-confirm-add-page">
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Имя файла</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newPageName}
+                  onChange={(e) => setNewPageName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+                  placeholder="about"
+                  className="flex-1 h-10 rounded-xl font-mono text-sm"
+                  data-testid="input-new-page-name"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddPage(); }}
+                />
+                <span className="text-sm text-muted-foreground font-mono">.html</span>
+              </div>
+            </div>
+            <Button onClick={handleAddPage} disabled={!newPageName.trim()} className="mt-1" data-testid="button-confirm-add-page">
               <Plus className="w-4 h-4 mr-2" />
               Создать
             </Button>
