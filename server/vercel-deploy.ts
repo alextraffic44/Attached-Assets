@@ -50,7 +50,6 @@ export async function deployToVercel(
 
   const payload = {
     name: projectName,
-    projectId: vercelProjectId,
     files: files.map((f) => ({
       file: f.filename,
       data: Buffer.from(f.content).toString("base64"),
