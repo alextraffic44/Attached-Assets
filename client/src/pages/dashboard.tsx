@@ -33,10 +33,11 @@ import {
   Search,
 } from "lucide-react";
 
-const SkeuoCard = ({ children, className = "", onClick = undefined }) => (
-  <div 
+const GlassCard = ({ children, className = "", onClick = undefined }: { children: any; className?: string; onClick?: any }) => (
+  <div
     onClick={onClick}
-    className={`bg-white/40 backdrop-blur-md border border-white/20 shadow-glass hover:shadow-xl transition-all duration-500 rounded-[2rem] p-6 ${onClick ? 'cursor-pointer hover:-translate-y-1 active:scale-[0.98]' : ''} ${className}`}
+    style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif' }}
+    className={`bg-white/60 backdrop-blur-xl border border-white/40 shadow-[0_8px_40px_rgba(0,0,0,0.06)] hover:shadow-[0_16px_60px_rgba(0,0,0,0.10)] transition-all duration-500 rounded-[2rem] p-6 ${onClick ? 'cursor-pointer hover:-translate-y-1 active:scale-[0.98]' : ''} ${className}`}
   >
     {children}
   </div>
@@ -96,142 +97,169 @@ export default function DashboardPage() {
     },
   });
 
+  const appleFont = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-20 relative overflow-hidden">
-      {/* Decorative Orbs */}
-      <div className="absolute top-[-5%] left-[-5%] w-[35%] h-[35%] bg-indigo-400/10 rounded-full blur-[100px] pointer-events-none animate-pulse" />
-      <div className="absolute bottom-[-5%] right-[-5%] w-[35%] h-[35%] bg-blue-400/10 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{ animationDelay: '1s' }} />
-      
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(120,119,198,0.06),transparent_50%)] pointer-events-none" />
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-200 to-transparent opacity-30" />
-      
-      <header className="fixed top-6 w-full z-50 px-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between bg-white/80 backdrop-blur-xl border border-white/20 rounded-[2.5rem] px-8 py-3 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-black tracking-tight text-xl text-slate-900">NEURO</span>
+    <div className="min-h-screen pb-20 relative overflow-hidden" style={{ background: '#FBFBFD', fontFamily: appleFont }}>
+      {/* Ambient glows matching landing page */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80%] h-[60%] pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(66,165,255,0.07) 0%, transparent 70%)' }} />
+      <div className="absolute top-0 left-0 right-0 h-px pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent, rgba(66,165,255,0.3), rgba(181,66,255,0.3), transparent)' }} />
+
+      {/* Header — matching landing page nav */}
+      <header className="fixed top-0 left-0 right-0 z-50" style={{ padding: '1rem 0', transition: 'all 0.3s', background: 'rgba(251,251,253,0.85)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+          {/* Logo identical to landing page */}
+          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setLocation("/")}>
+            <svg viewBox="0 0 32 32" stroke="currentColor" strokeWidth="2" fill="none" style={{ width: 32, height: 32 }}>
+              <defs>
+                <linearGradient id="db-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%"><animate attributeName="stop-color" values="#FF4242;#A5FF42;#42A5FF;#42E6FF;#B742FF;#FF4242" dur="5s" repeatCount="indefinite"/></stop>
+                  <stop offset="100%"><animate attributeName="stop-color" values="#B742FF;#FF4242;#A5FF42;#42A5FF;#42E6FF;#B742FF" dur="5s" repeatCount="indefinite"/></stop>
+                </linearGradient>
+              </defs>
+              <rect x="4" y="4" width="24" height="18" rx="4" stroke="url(#db-logo-grad)"/>
+              <circle cx="10" cy="10" r="1.5" fill="url(#db-logo-grad)" stroke="none"/>
+              <circle cx="22" cy="10" r="1.5" fill="url(#db-logo-grad)" stroke="none"/>
+              <path d="M12 16l-2 2 2 2 M20 16l2 2-2 2" stroke="url(#db-logo-grad)" strokeLinecap="round" strokeLinejoin="round"/>
+              <line x1="15" y1="20" x2="17" y2="20" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
+              <path d="M8 26 h16 M10 28 h12" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
+            </svg>
+            <span style={{ fontWeight: 700, fontSize: '1.1rem', letterSpacing: '-0.03em', color: '#1D1D1F' }}>Craft AI</span>
           </div>
+
+          {/* Right controls */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setLocation("/leads")}
-              className="group relative flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-full px-5 py-2 hover:bg-indigo-50 hover:border-indigo-100 transition-all shadow-sm"
               data-testid="button-leads"
+              className="relative flex items-center gap-2 transition-all"
+              style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: '0.45rem 1.1rem', fontSize: '0.82rem', fontWeight: 600, color: '#1D1D1F', cursor: 'pointer' }}
             >
-              <Inbox className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
-              <span className="text-xs font-bold text-slate-600 group-hover:text-indigo-900">Лиды</span>
+              <Inbox className="w-3.5 h-3.5" style={{ color: '#86868B' }} />
+              <span>Лиды</span>
               {(unreadData?.count ?? 0) > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-indigo-600 text-white text-[10px] font-black rounded-full px-1 shadow-md">
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center text-white text-[10px] font-black rounded-full px-1" style={{ background: 'linear-gradient(135deg,#FF4242,#B742FF)' }}>
                   {unreadData!.count}
                 </span>
               )}
             </button>
-            <div className="flex items-center gap-2 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 rounded-full px-5 py-2 shadow-sm">
-              <Coins className="w-4 h-4 text-amber-500" />
-              <span className="text-sm font-black text-amber-700">{user?.credits ?? 0}</span>
-              <span className="text-[10px] font-bold text-amber-500/70 uppercase">токенов</span>
+
+            <div className="flex items-center gap-1.5" style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: '0.45rem 1.1rem' }}>
+              <Coins className="w-3.5 h-3.5" style={{ color: '#86868B' }} />
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1D1D1F' }}>{user?.credits ?? 0}</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#86868B', textTransform: 'uppercase', letterSpacing: '0.08em' }}>токенов</span>
             </div>
-            <Button
+
+            <button
               data-testid="button-topup"
-              variant="outline"
-              size="sm"
-              className="rounded-full font-bold text-xs h-9 px-5 border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm"
               onClick={() => setShowTopUpModal(true)}
+              className="transition-all hover:opacity-80"
+              style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 100, padding: '0.45rem 1.2rem', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', letterSpacing: '-0.01em' }}
             >
               Пополнить
-            </Button>
-            <div className="w-px h-6 bg-slate-200 mx-1" />
-            <Button variant="ghost" size="icon" className="rounded-full w-9 h-9 text-slate-400 hover:text-slate-900 hover:bg-slate-100" onClick={logout}>
+            </button>
+
+            <button onClick={logout} className="transition-all hover:opacity-60" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.4rem', color: '#86868B' }}>
               <LogOut className="w-4 h-4" />
-            </Button>
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 pt-36 space-y-12">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <h1 className="text-5xl font-black tracking-tight text-slate-900 leading-none">Ваши проекты</h1>
-            <p className="text-slate-500 font-medium text-lg">Создайте что-то потрясающее сегодня</p>
+      <main className="max-w-7xl mx-auto px-6" style={{ paddingTop: '6.5rem' }}>
+        {/* Page header */}
+        <div className="flex items-end justify-between mb-12">
+          <div>
+            <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#86868B', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>
+              Добро пожаловать, {user?.displayName || user?.email?.split('@')[0]}
+            </p>
+            <h1 style={{ fontSize: 'clamp(2.5rem,5vw,3.5rem)', fontWeight: 700, letterSpacing: '-0.04em', color: '#1D1D1F', lineHeight: 1, margin: 0 }}>
+              Ваши проекты
+            </h1>
           </div>
-          <Button 
-            className="h-14 px-10 rounded-2xl font-black text-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-[0.98]"
+          <button
             onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+            style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.9rem 1.8rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
           >
-            <Plus className="w-6 h-6 mr-2" />
+            <Plus className="w-5 h-5" />
             Новый сайт
-          </Button>
+          </button>
         </div>
 
         {isLoading ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[1,2,3].map(i => <div key={i} className="h-72 rounded-[2rem] bg-slate-100 animate-pulse" />)}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1,2,3].map(i => <div key={i} className="h-72 rounded-[2rem] animate-pulse" style={{ background: 'rgba(0,0,0,0.04)' }} />)}
           </div>
         ) : userProjects.length === 0 ? (
-          <SkeuoCard className="flex flex-col items-center justify-center py-32 text-center space-y-8">
-            <div className="w-24 h-24 rounded-[2rem] bg-slate-50 border border-slate-100 flex items-center justify-center">
-              <FolderOpen className="w-12 h-12 text-slate-200" />
+          <GlassCard className="flex flex-col items-center justify-center py-32 text-center space-y-8">
+            <div className="w-24 h-24 rounded-[2rem] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>
+              <FolderOpen className="w-12 h-12" style={{ color: 'rgba(0,0,0,0.12)' }} />
             </div>
             <div className="space-y-3">
-              <h2 className="text-3xl font-black text-slate-900">Пока здесь пусто</h2>
-              <p className="text-slate-400 max-w-sm mx-auto text-lg font-medium">Создайте свой первый проект, используя возможности искусственного интеллекта.</p>
+              <h2 style={{ fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.03em', color: '#1D1D1F' }}>Пока здесь пусто</h2>
+              <p style={{ color: '#86868B', maxWidth: 360, margin: '0 auto', fontSize: '1rem', lineHeight: 1.6 }}>Создайте свой первый проект, используя возможности искусственного интеллекта.</p>
             </div>
-            <Button onClick={() => setShowCreateModal(true)} className="rounded-2xl h-14 px-8 font-black text-lg bg-slate-900 hover:bg-slate-800 shadow-lg">
+            <button onClick={() => setShowCreateModal(true)} className="transition-all hover:opacity-80" style={{ background: '#1D1D1F', color: '#fff', border: 'none', borderRadius: 14, padding: '0.85rem 2rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer' }}>
               Создать первый сайт
-            </Button>
-          </SkeuoCard>
+            </button>
+          </GlassCard>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-10">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {userProjects.map((project) => (
-              <SkeuoCard 
-                key={project.id} 
-                className="group p-0 overflow-hidden relative"
+              <div
+                key={project.id}
                 onClick={() => setLocation(`/editor/${project.id}`)}
+                className="group cursor-pointer transition-all duration-500 hover:-translate-y-1.5"
+                style={{ borderRadius: '2rem', overflow: 'hidden', background: '#fff', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 2px 20px rgba(0,0,0,0.04)', position: 'relative' }}
               >
-                <div className="h-56 bg-white relative overflow-hidden flex items-center justify-center">
+                {/* Preview */}
+                <div style={{ height: 220, position: 'relative', overflow: 'hidden', background: '#FBFBFD', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {project.generatedCode ? (
-                    <div className="w-full h-full scale-[0.4] origin-center opacity-60 group-hover:opacity-100 transition-all duration-700 blur-[2px] group-hover:blur-0">
-                       <iframe srcDoc={project.generatedCode} className="w-[250%] h-[250%] border-none pointer-events-none" />
+                    <div style={{ width: '100%', height: '100%', transform: 'scale(0.4)', transformOrigin: 'center', opacity: 0.7, transition: 'all 0.7s', filter: 'blur(1px)' }}
+                      className="group-hover:opacity-100 group-hover:blur-none">
+                      <iframe srcDoc={project.generatedCode} className="border-none pointer-events-none" style={{ width: '250%', height: '250%' }} />
                     </div>
                   ) : (
-                    <div className="w-20 h-20 rounded-3xl bg-slate-50 border border-slate-100 flex items-center justify-center">
-                      <Code2 className="w-10 h-10 text-slate-200" />
+                    <div style={{ width: 64, height: 64, borderRadius: 20, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Code2 style={{ width: 32, height: 32, color: 'rgba(0,0,0,0.12)' }} />
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/20 to-transparent transition-opacity duration-500 group-hover:opacity-40" />
+                  <div className="absolute inset-0 transition-opacity duration-500 group-hover:opacity-30" style={{ background: 'linear-gradient(to top, rgba(255,255,255,0.98) 0%, rgba(255,255,255,0.1) 100%)' }} />
                 </div>
-                
-                <div className="absolute bottom-0 left-0 right-0 p-8 pt-12 bg-gradient-to-t from-white via-white/90 to-transparent">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <h3 className="text-2xl font-black text-slate-900 truncate leading-tight mb-1 group-hover:text-indigo-600 transition-colors">{project.title}</h3>
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {new Date(project.createdAt).toLocaleDateString()}
+
+                {/* Info */}
+                <div style={{ padding: '1.25rem 1.5rem 1.5rem', position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(to top, #fff 70%, transparent)' }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div style={{ minWidth: 0 }}>
+                      <h3 className="truncate transition-colors group-hover:text-[#0071e3]" style={{ fontSize: '1.05rem', fontWeight: 700, letterSpacing: '-0.02em', color: '#1D1D1F', marginBottom: 4 }}>
+                        {project.title}
+                      </h3>
+                      <div className="flex items-center gap-1.5" style={{ fontSize: '0.72rem', fontWeight: 600, color: '#86868B', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        <Calendar style={{ width: 11, height: 11 }} />
+                        {new Date(project.createdAt).toLocaleDateString('ru-RU')}
                       </div>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 text-slate-300 hover:text-destructive hover:bg-destructive/5 rounded-xl"
+                    <button
+                      className="opacity-0 group-hover:opacity-100 transition-all duration-300"
                       onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(project.id); }}
+                      style={{ background: 'rgba(255,59,48,0.08)', border: 'none', borderRadius: 10, padding: '0.4rem', cursor: 'pointer', color: '#FF3B30', flexShrink: 0 }}
                     >
-                      <Trash2 className="w-5 h-5" />
-                    </Button>
+                      <Trash2 style={{ width: 16, height: 16 }} />
+                    </button>
                   </div>
                 </div>
-              </SkeuoCard>
+              </div>
             ))}
           </div>
         )}
       </main>
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="sm:max-w-[540px] rounded-[32px] p-0 overflow-hidden border border-gray-100/50 shadow-2xl bg-white">
+        <DialogContent className="sm:max-w-[540px] p-0 overflow-hidden" style={{ borderRadius: 28, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont }}>
           <div className="px-8 pt-10 pb-8">
             <DialogHeader>
-              <DialogTitle className="text-3xl font-extrabold text-gray-900 tracking-tight">
+              <DialogTitle style={{ fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F' }}>
                 {createStep === "choose" ? "С чего начнём?" : createStep === "templates" ? "Выберите шаблон" : "Оживите мечту"}
               </DialogTitle>
             </DialogHeader>
@@ -301,19 +329,21 @@ export default function DashboardPage() {
                     <button
                       key={x.m}
                       data-testid={`button-create-${x.m}`}
-                      className={`group relative flex items-center w-full p-4 rounded-2xl bg-slate-50/50 border border-slate-100/50 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-slate-100 ${x.colorClass}`}
+                      className="group relative flex items-center w-full transition-all duration-300 ease-out hover:-translate-y-0.5 focus:outline-none"
+                      style={{ padding: '1rem', borderRadius: 18, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'left' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(0,0,0,0.06)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
                       onClick={() => { setSelectedMode(x.m as any); setCreateStep(x.m === "template" ? "templates" : "details"); }}
                     >
-                      <div className={`flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center mr-5 transition-colors duration-300 relative overflow-hidden ${x.iconBgClass}`}>
-                        <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl blur-md" />
+                      <div className="flex-shrink-0 flex items-center justify-center mr-4" style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         {x.icon}
                       </div>
-                      <div className="flex-grow text-left">
-                        <h3 className="text-[19px] font-bold text-slate-900 mb-1 group-hover:text-black transition-colors">{x.t}</h3>
-                        <p className="text-[15px] text-slate-500 font-medium group-hover:text-slate-600 transition-colors">{x.d}</p>
+                      <div className="flex-grow">
+                        <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 2, letterSpacing: '-0.02em' }}>{x.t}</h3>
+                        <p style={{ fontSize: '0.85rem', color: '#86868B', fontWeight: 400 }}>{x.d}</p>
                       </div>
-                      <div className="flex-shrink-0 text-slate-300 group-hover:text-slate-900 transition-all duration-300 transform group-hover:translate-x-1">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <div className="flex-shrink-0 transition-all duration-300 group-hover:translate-x-0.5" style={{ color: 'rgba(0,0,0,0.2)' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="9 18 15 12 9 6"></polyline>
                         </svg>
                       </div>
@@ -392,19 +422,21 @@ export default function DashboardPage() {
                     <button
                       key={x.id}
                       data-testid={`button-template-${x.id}`}
-                      className={`group relative flex items-center w-full p-4 rounded-2xl bg-gray-50/50 border border-transparent transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-gray-100 ${x.colorClass}`}
+                      className="group relative flex items-center w-full transition-all duration-300 ease-out hover:-translate-y-0.5 focus:outline-none"
+                      style={{ padding: '1rem', borderRadius: 18, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'left' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(0,0,0,0.06)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
                       onClick={() => { setSelectedTemplate(x.t); setCreateStep("details"); }}
                     >
-                      <div className={`flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center mr-5 transition-colors duration-300 relative overflow-hidden ${x.iconBgClass}`}>
-                        <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl blur-md" />
+                      <div className="flex-shrink-0 flex items-center justify-center mr-4" style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         {x.icon}
                       </div>
-                      <div className="flex-grow text-left">
-                        <h3 className="text-[19px] font-bold text-gray-900 mb-1 group-hover:text-black transition-colors">{x.t}</h3>
-                        <p className="text-[15px] text-gray-500 font-medium group-hover:text-gray-600 transition-colors">{x.d}</p>
+                      <div className="flex-grow">
+                        <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 2, letterSpacing: '-0.02em' }}>{x.t}</h3>
+                        <p style={{ fontSize: '0.85rem', color: '#86868B' }}>{x.d}</p>
                       </div>
-                      <div className="flex-shrink-0 text-gray-300 group-hover:text-gray-900 transition-all duration-300 transform group-hover:translate-x-1">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <div className="flex-shrink-0 transition-all duration-300 group-hover:translate-x-0.5" style={{ color: 'rgba(0,0,0,0.2)' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="9 18 15 12 9 6"></polyline>
                         </svg>
                       </div>
@@ -412,7 +444,10 @@ export default function DashboardPage() {
                   ))}
                   <button
                     data-testid="button-templates-back"
-                    className="text-gray-500 font-bold hover:text-gray-900 transition-colors px-2 py-3 text-[15px] self-start mt-2"
+                    className="transition-colors self-start mt-2"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem 0', fontSize: '0.9rem', fontWeight: 600, color: '#86868B', letterSpacing: '-0.01em' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#1D1D1F'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#86868B'; }}
                     onClick={() => setCreateStep("choose")}
                   >
                     ← Назад
@@ -421,19 +456,20 @@ export default function DashboardPage() {
               ) : (
                 <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6 mt-8">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-gray-400 px-2">Название</Label>
+                    <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Название</Label>
                     <Input 
                       placeholder="Например: Моё кафе"
                       value={title}
                       onChange={e => setTitle(e.target.value)}
-                      className="h-14 rounded-2xl bg-gray-50 border border-gray-200 font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
+                      className="h-12 rounded-2xl font-medium text-gray-900 placeholder:text-gray-400"
+                      style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.08)' }}
                     />
                   </div>
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between px-2">
-                      <Label className="text-xs font-bold uppercase tracking-widest text-gray-400">Описание</Label>
+                    <div className="flex items-center justify-between px-1">
+                      <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B' }}>Описание</Label>
                       {isEnhanced && (
-                        <span data-testid="text-enhanced-status" className="text-xs font-semibold text-emerald-500 flex items-center gap-1">
+                        <span data-testid="text-enhanced-status" className="flex items-center gap-1" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#34C759' }}>
                           <Sparkles className="w-3 h-3" /> Улучшено AI
                         </span>
                       )}
@@ -442,7 +478,8 @@ export default function DashboardPage() {
                       placeholder="Опишите структуру, цвета и контент..."
                       value={description}
                       onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
-                      className={`min-h-[120px] rounded-2xl bg-gray-50 border font-medium text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all ${isEnhanced ? 'border-emerald-300 bg-emerald-50/30 min-h-[200px] text-sm' : 'border-gray-200'}`}
+                      className={`rounded-2xl font-medium text-gray-900 placeholder:text-gray-400 transition-all ${isEnhanced ? 'min-h-[200px] text-sm' : 'min-h-[120px]'}`}
+                      style={{ background: isEnhanced ? 'rgba(52,199,89,0.04)' : 'rgba(0,0,0,0.03)', border: isEnhanced ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(0,0,0,0.08)' }}
                     />
                   </div>
                   <div className="flex gap-3">
@@ -485,13 +522,8 @@ export default function DashboardPage() {
                         }
                       }}
                       disabled={isEnhancing || isResearching || !description.trim()}
-                      className={`flex-1 flex items-center justify-center gap-2 h-11 rounded-2xl font-bold text-sm transition-all duration-300 border-2 ${
-                        isEnhanced
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                          : isEnhancing
-                          ? "border-violet-300 bg-violet-50 text-violet-600"
-                          : "border-dashed border-violet-200 text-violet-500 hover:border-violet-400 hover:bg-violet-50/50"
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      className="flex-1 flex items-center justify-center gap-2 h-11 rounded-2xl font-semibold text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ border: isEnhanced ? '1px solid rgba(52,199,89,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: isEnhanced ? 'rgba(52,199,89,0.06)' : 'transparent', color: isEnhanced ? '#1D8348' : '#86868B', borderRadius: 14 }}
                     >
                       {isEnhancing ? (
                         <>
@@ -557,13 +589,8 @@ export default function DashboardPage() {
                         }
                       }}
                       disabled={isEnhancing || isResearching || !description.trim()}
-                      className={`flex-1 flex items-center justify-center gap-2 h-11 rounded-2xl font-bold text-sm transition-all duration-300 border-2 ${
-                        researchData
-                          ? "border-blue-300 bg-blue-50 text-blue-700"
-                          : isResearching
-                          ? "border-blue-300 bg-blue-50 text-blue-600"
-                          : "border-dashed border-blue-200 text-blue-500 hover:border-blue-400 hover:bg-blue-50/50"
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      className="flex-1 flex items-center justify-center gap-2 h-11 font-semibold text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ border: researchData ? '1px solid rgba(0,113,227,0.3)' : '1.5px dashed rgba(0,0,0,0.15)', background: researchData ? 'rgba(0,113,227,0.06)' : 'transparent', color: researchData ? '#0058b3' : '#86868B', borderRadius: 14 }}
                     >
                       {isResearching ? (
                         <>
@@ -583,15 +610,22 @@ export default function DashboardPage() {
                       )}
                     </button>
                   </div>
-                  <div className="flex gap-4 pt-2">
-                    <Button variant="ghost" className="h-14 rounded-2xl font-bold flex-1 text-gray-600 hover:bg-gray-100" onClick={() => { setCreateStep(selectedMode === "template" ? "templates" : "choose"); setIsEnhanced(false); }}>Назад</Button>
-                    <Button 
-                      className="h-14 rounded-2xl font-extrabold text-lg flex-[2] shadow-xl shadow-primary/20"
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      className="flex-1 h-12 font-semibold transition-all"
+                      style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 14, color: '#86868B', cursor: 'pointer', fontSize: '0.9rem' }}
+                      onClick={() => { setCreateStep(selectedMode === "template" ? "templates" : "choose"); setIsEnhanced(false); }}
+                    >
+                      Назад
+                    </button>
+                    <button
+                      className="flex-[2] h-12 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 14, cursor: 'pointer', fontSize: '0.95rem', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
                       onClick={() => createMutation.mutate()}
                       disabled={createMutation.isPending || isEnhancing || isResearching}
                     >
-                      {createMutation.isPending ? <Loader2 className="w-6 h-6 animate-spin" /> : "Создать проект"}
-                    </Button>
+                      {createMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Создать проект"}
+                    </button>
                   </div>
                 </motion.div>
               )}
@@ -601,43 +635,38 @@ export default function DashboardPage() {
       </Dialog>
 
       <Dialog open={showTopUpModal} onOpenChange={setShowTopUpModal}>
-        <DialogContent className="sm:max-w-[560px] rounded-[32px] p-0 overflow-hidden border border-gray-100/50 shadow-2xl bg-white">
+        <DialogContent className="sm:max-w-[560px] p-0 overflow-hidden" style={{ borderRadius: 28, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont }}>
           <div className="px-8 pt-10 pb-8">
             <DialogHeader>
-              <DialogTitle className="text-3xl font-extrabold text-gray-900 tracking-tight">
+              <DialogTitle style={{ fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F' }}>
                 Пополнить баланс
               </DialogTitle>
             </DialogHeader>
-            <p className="text-sm text-slate-500 mt-2 mb-6">Выберите подходящий тариф для пополнения токенов</p>
-            <div className="grid grid-cols-2 gap-4">
+            <p style={{ fontSize: '0.85rem', color: '#86868B', marginTop: '0.5rem', marginBottom: '1.5rem' }}>Выберите подходящий тариф для пополнения токенов</p>
+            <div className="grid grid-cols-2 gap-3">
               {[
-                { price: 990, tokens: 1000, popular: false },
-                { price: 1690, tokens: 1900, popular: true },
-                { price: 3990, tokens: 4500, popular: false },
-                { price: 5990, tokens: 6000, popular: false },
+                { price: 990, tokens: 1000, label: "Старт", popular: false },
+                { price: 1690, tokens: 1900, label: "Базовый", popular: false },
+                { price: 3990, tokens: 4500, label: "Профи", popular: false },
+                { price: 5990, tokens: 6500, label: "Ультра", popular: true },
               ].map((plan) => (
                 <button
                   key={plan.price}
                   data-testid={`button-plan-${plan.price}`}
-                  onClick={() => {
-                    toast({ title: "Скоро!", description: "Оплата будет доступна в ближайшее время" });
-                  }}
-                  className={`relative flex flex-col items-center p-6 rounded-2xl border-2 transition-all duration-200 text-center group ${
-                    plan.popular
-                      ? "border-primary bg-primary/5 shadow-lg shadow-primary/10"
-                      : "border-gray-200 hover:border-primary/40 hover:bg-gray-50"
-                  }`}
+                  onClick={() => { toast({ title: "Скоро!", description: "Оплата будет доступна в ближайшее время" }); }}
+                  className="relative flex flex-col items-center transition-all duration-300 hover:-translate-y-0.5"
+                  style={{ padding: '1.5rem 1rem', borderRadius: 20, background: plan.popular ? 'linear-gradient(135deg,#1e1e24,#050505)' : 'rgba(0,0,0,0.03)', border: plan.popular ? 'none' : '1px solid rgba(0,0,0,0.08)', cursor: 'pointer', position: 'relative', boxShadow: plan.popular ? '0 8px 30px rgba(0,0,0,0.2)' : 'none' }}
                 >
                   {plan.popular && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-white text-[10px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider">
-                      Выгодно
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-white text-[10px] font-bold px-3 py-1 rounded-full" style={{ background: 'linear-gradient(90deg,hsl(27deg 93% 60%),#00a6ff,#6500ff)', whiteSpace: 'nowrap' }}>
+                      Популярный
                     </span>
                   )}
-                  <span className="text-3xl font-black text-gray-900">{plan.tokens.toLocaleString("ru-RU")}</span>
-                  <span className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">токенов</span>
-                  <div className="mt-4 w-full pt-4 border-t border-gray-100">
-                    <span className="text-lg font-extrabold text-gray-800">{plan.price.toLocaleString("ru-RU")} ₽</span>
-                  </div>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: plan.popular ? '#00d2ff' : '#86868B', marginBottom: '0.4rem' }}>{plan.label}</span>
+                  <span style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1, color: plan.popular ? '#fff' : '#1D1D1F' }}>{plan.tokens.toLocaleString("ru-RU")}</span>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: plan.popular ? 'rgba(255,255,255,0.4)' : '#86868B', marginTop: '0.25rem', marginBottom: '1rem' }}>токенов</span>
+                  <div style={{ width: '100%', height: 1, background: plan.popular ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', marginBottom: '1rem' }} />
+                  <span style={{ fontSize: '1.1rem', fontWeight: 600, letterSpacing: '-0.02em', color: plan.popular ? '#00d2ff' : '#1D1D1F' }}>{plan.price.toLocaleString("ru-RU")} ₽</span>
                 </button>
               ))}
             </div>
