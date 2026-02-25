@@ -22,6 +22,9 @@ export const projects = pgTable("projects", {
   description: text("description"),
   generatedCode: text("generated_code").notNull().default(""),
   geminiInteractionId: text("gemini_interaction_id"),
+  publishedUrl: text("published_url"),
+  publishStatus: text("publish_status").notNull().default("draft"),
+  vercelProjectId: text("vercel_project_id"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
