@@ -1808,15 +1808,17 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                       <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
-                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 6 }}>Настройте DNS в reg.ru</div>
-                        <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.7 }}>
-                          <div>Перейдите в <b>reg.ru → Мои домены → {customDomain} → DNS</b></div>
-                          <div style={{ marginTop: 6 }}>Добавьте <b>CNAME</b> запись:</div>
-                          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", marginTop: 4, fontFamily: "monospace", fontSize: "0.76rem" }}>
-                            <div>Хост: <b>@</b> (или <b>www</b>)</div>
-                            <div>Значение: <b>cname.vercel-dns.com</b></div>
+                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 8 }}>Настройка в reg.ru — пошагово</div>
+                        <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.8 }}>
+                          <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → выберите <b>{customDomain}</b></div>
+                          <div><b>2.</b> Найдите раздел «<b>DNS-серверы и управление зоной</b>» → нажмите «<b>Изменить</b>»</div>
+                          <div><b>3.</b> В разделе «<b>Ресурсные записи</b>» удалите все существующие <b>A</b> записи (иконка корзины справа)</div>
+                          <div><b>4.</b> Нажмите «<b>+ Добавить запись</b>» и создайте:</div>
+                          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.6rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.74rem", display: "flex", flexDirection: "column", gap: 4 }}>
+                            <div>Тип: <b>A</b> &nbsp;|&nbsp; Хост: <b>@</b> &nbsp;|&nbsp; Значение: <b>76.76.21.21</b></div>
+                            <div>Тип: <b>CNAME</b> &nbsp;|&nbsp; Хост: <b>www</b> &nbsp;|&nbsp; Значение: <b>cname.vercel-dns.com</b></div>
                           </div>
-                          <div style={{ marginTop: 6, color: "#6b7280", fontSize: "0.72rem" }}>Для корневого домена (без www) используйте <b>A</b> запись: <b>76.76.21.21</b></div>
+                          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>DNS обновляется от 5 минут до 24 часов. Обычно — около 15 минут.</div>
                         </div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
