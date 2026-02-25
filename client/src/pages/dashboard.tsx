@@ -289,9 +289,16 @@ export default function DashboardPage() {
                 <div style={{ padding: '1.25rem 1.5rem 1.5rem', position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(to top, #fff 70%, transparent)' }}>
                   <div className="flex items-center justify-between gap-3">
                     <div style={{ minWidth: 0 }}>
-                      <h3 className="truncate transition-colors group-hover:text-[#0071e3]" style={{ fontSize: '1.05rem', fontWeight: 700, letterSpacing: '-0.02em', color: '#1D1D1F', marginBottom: 4 }}>
-                        {project.title}
-                      </h3>
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <h3 className="truncate transition-colors group-hover:text-[#0071e3]" style={{ fontSize: '1.05rem', fontWeight: 700, letterSpacing: '-0.02em', color: '#1D1D1F' }}>
+                          {project.title}
+                        </h3>
+                        {project.publishStatus === 'published' && (
+                          <span style={{ flexShrink: 0, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 100, padding: '0.15rem 0.5rem' }}>
+                            Live
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1.5" style={{ fontSize: '0.72rem', fontWeight: 600, color: '#86868B', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                         <Calendar style={{ width: 11, height: 11 }} />
                         {new Date(project.createdAt).toLocaleDateString('ru-RU')}

@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
+import { deployToVercel, addCustomDomain, checkDomainStatus } from "./vercel-deploy";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
@@ -977,6 +978,87 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Ошибка удаления файла" });
+    }
+  });
+
+  // ═══ PUBLISH API (Vercel) ═══
+
+  app.post("/api/projects/:id/publish", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
+    try {
+      const projectId = parseInt(req.params.id);
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
+      if (!project.generatedCode) return res.status(400).json({ message: "Сначала сгенерируйте сайт" });
+
+      await storage.updateProject(projectId, { publishStatus: "publishing" });
+
+      const extraFiles = await storage.getProjectFiles(projectId);
+      const projectImages = await storage.getProjectImages(projectId);
+
+      const files: { filename: string; content: string }[] = [];
+
+      let mainHtml = project.generatedCode;
+      for (const img of projectImages) {
+        mainHtml = mainHtml.replace(new RegExp(`\\{\\{IMG:${img.name}\\}\\}`, "g"), img.url);
+      }
+      mainHtml = mainHtml.replace(/__PROJECT_ID__\s*=\s*['"]?\d*['"]?/g, `__PROJECT_ID__ = '${projectId}'`);
+      files.push({ filename: "index.html", content: mainHtml });
+
+      for (const f of extraFiles) {
+        let code = f.code;
+        for (const img of projectImages) {
+          code = code.replace(new RegExp(`\\{\\{IMG:${img.name}\\}\\}`, "g"), img.url);
+        }
+        files.push({ filename: f.filename, content: code });
+      }
+
+      const slug = `craft-ai-${projectId}-${Date.now()}`;
+      const { url } = await deployToVercel(slug, files);
+
+      await storage.updateProject(projectId, {
+        publishStatus: "published",
+        publishedUrl: url,
+      });
+
+      res.json({ url });
+    } catch (err: any) {
+      await storage.updateProject(parseInt(req.params.id), { publishStatus: "error" });
+      res.status(500).json({ message: err.message || "Ошибка публикации" });
+    }
+  });
+
+  app.post("/api/projects/:id/domain", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
+    try {
+      const projectId = parseInt(req.params.id);
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
+      const { domain } = req.body;
+      if (!domain) return res.status(400).json({ message: "Домен обязателен" });
+      if (!project.vercelProjectId) return res.status(400).json({ message: "Сначала опубликуйте сайт" });
+
+      const result = await addCustomDomain(project.vercelProjectId, domain);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Ошибка добавления домена" });
+    }
+  });
+
+  app.get("/api/projects/:id/domain/status", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
+    try {
+      const projectId = parseInt(req.params.id);
+      const project = await storage.getProject(projectId);
+      if (!project || !project.vercelProjectId) return res.json({ verified: false });
+      const { domain } = req.query as { domain: string };
+      if (!domain) return res.status(400).json({ message: "Домен обязателен" });
+      const result = await checkDomainStatus(project.vercelProjectId, domain);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
     }
   });
 

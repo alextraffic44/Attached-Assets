@@ -99,6 +99,12 @@ export default function EditorPage() {
   const [imgResultUrls, setImgResultUrls] = useState<string[]>([]);
   const [imgError, setImgError] = useState("");
 
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishResult, setPublishResult] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: project, isLoading: projectLoading } = useQuery<Project>({
@@ -511,6 +517,30 @@ export default function EditorPage() {
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: "Архив готов!", description: `${allImageUrls.size} изображений включено` });
+  };
+
+  const handlePublish = async () => {
+    if (!project) return;
+    setIsPublishing(true);
+    setPublishError(null);
+    setPublishResult(null);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/publish`, { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Ошибка публикации");
+      setPublishResult(data.url);
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${project.id}`] });
+    } catch (e: any) {
+      setPublishError(e.message);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleCopyUrl = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1002,9 +1032,22 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             )}
           </Button>
 
-          <Button size="sm" className="rounded-xl font-black px-6 shadow-lg shadow-primary/20 hover-elevate" onClick={() => toast({ title: "Публикация", description: "Скоро!" })} data-testid="button-publish">
-            <ExternalLink className="w-4 h-4 mr-2" />
-            Live
+          <Button
+            size="sm"
+            className="rounded-xl font-black px-6 shadow-lg shadow-primary/20 hover-elevate"
+            onClick={() => {
+              setPublishResult(project?.publishedUrl ?? null);
+              setPublishError(null);
+              setShowPublishModal(true);
+            }}
+            data-testid="button-publish"
+          >
+            {project?.publishStatus === "published" ? (
+              <CheckCircle2 className="w-4 h-4 mr-2 text-green-400" />
+            ) : (
+              <ExternalLink className="w-4 h-4 mr-2" />
+            )}
+            {project?.publishStatus === "published" ? "Опубликован" : "Опубликовать"}
           </Button>
         </div>
       </header>
@@ -1639,6 +1682,98 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               <Plus className="w-4 h-4 mr-2" />
               Создать
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Publish Modal */}
+      <Dialog open={showPublishModal} onOpenChange={setShowPublishModal}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden" style={{ borderRadius: 24 }}>
+          <div style={{ background: "linear-gradient(135deg,#0f0c29,#302b63,#24243e)", padding: "2rem 2rem 1.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <ExternalLink className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.025em" }}>Публикация сайта</div>
+                <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)" }}>Vercel Global CDN</div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: "1.5rem 2rem 2rem" }}>
+            {!publishResult && !isPublishing && !publishError && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <p style={{ fontSize: "0.88rem", color: "#555", lineHeight: 1.6 }}>
+                  Сайт будет опубликован на глобальной CDN Vercel. Вы получите постоянную ссылку, которую можно сразу отправить клиентам.
+                </p>
+                {project?.publishedUrl && (
+                  <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 12, padding: "0.75rem 1rem" }}>
+                    <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#16a34a", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Текущая публикация</div>
+                    <a href={project.publishedUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.82rem", color: "#15803d", wordBreak: "break-all" }}>{project.publishedUrl}</a>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <Button variant="outline" onClick={() => setShowPublishModal(false)} style={{ flex: 1 }}>Отмена</Button>
+                  <Button onClick={handlePublish} style={{ flex: 2, background: "linear-gradient(135deg,#667eea,#764ba2)", border: "none" }} data-testid="button-confirm-publish">
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    {project?.publishedUrl ? "Переопубликовать" : "Опубликовать"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {isPublishing && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem", padding: "1rem 0" }}>
+                <Loader2 className="w-10 h-10 animate-spin" style={{ color: "#764ba2" }} />
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontWeight: 700, color: "#1D1D1F", marginBottom: 4 }}>Публикуем сайт…</div>
+                  <div style={{ fontSize: "0.82rem", color: "#86868B" }}>Загружаем файлы на Vercel CDN</div>
+                </div>
+              </div>
+            )}
+
+            {publishResult && !isPublishing && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#16a34a" }}>
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>Сайт опубликован!</span>
+                </div>
+                <div style={{ background: "#f8f8f8", borderRadius: 12, padding: "0.75rem 1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <a href={publishResult} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: "0.82rem", color: "#007AFF", wordBreak: "break-all" }}>{publishResult}</a>
+                  <button
+                    onClick={() => handleCopyUrl(publishResult)}
+                    style={{ flexShrink: 0, padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid #e5e7eb", background: copied ? "#f0fdf4" : "#fff", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, color: copied ? "#16a34a" : "#555", transition: "all 0.2s" }}
+                  >
+                    {copied ? "Скопировано!" : "Копировать"}
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <Button variant="outline" onClick={() => setShowPublishModal(false)} style={{ flex: 1 }}>Закрыть</Button>
+                  <Button
+                    onClick={() => window.open(publishResult, "_blank")}
+                    style={{ flex: 1, background: "linear-gradient(135deg,#667eea,#764ba2)", border: "none" }}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Открыть сайт
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {publishError && !isPublishing && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#dc2626" }}>
+                  <XCircle className="w-5 h-5" />
+                  <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>Ошибка публикации</span>
+                </div>
+                <div style={{ background: "#fef2f2", borderRadius: 12, padding: "0.75rem 1rem", fontSize: "0.82rem", color: "#dc2626" }}>{publishError}</div>
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <Button variant="outline" onClick={() => setShowPublishModal(false)} style={{ flex: 1 }}>Закрыть</Button>
+                  <Button onClick={handlePublish} style={{ flex: 1 }}>Повторить</Button>
+                </div>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

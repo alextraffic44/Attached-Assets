@@ -66,6 +66,17 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `window.__PROJECT_ID__` is injected into iframe via `injectProjectId()` in editor
 - Dashboard shows unread lead count badge, `/leads` page shows full lead management
 
+## Publishing (Vercel)
+- Button "Опубликовать" in editor header → publish modal
+- `POST /api/projects/:id/publish` — deploys to Vercel via API, uploads all pages + images
+- `POST /api/projects/:id/domain` — add custom domain to Vercel project
+- `GET /api/projects/:id/domain/status` — check domain verification status
+- `VERCEL_TOKEN` secret + `VERCEL_TEAM_ID` env var required
+- Published URL stored in `projects.published_url`, status in `projects.publish_status`
+- Dashboard cards show green "Live" badge when published
+- Editor button changes to "Опубликован" with green checkmark when published
+- Vercel helper: `server/vercel-deploy.ts`
+
 ## Tech Stack Details
 - Auth: express-session + passport-local + scrypt hashing
 - Session store: connect-pg-simple (PostgreSQL)
