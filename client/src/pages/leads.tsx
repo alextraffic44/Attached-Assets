@@ -71,37 +71,46 @@ export default function LeadsPage() {
     <div style={{ minHeight: "100vh", background: "#FBFBFD", fontFamily: appleFont }}>
 
       {/* Header */}
-      <header style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(251,251,253,0.85)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-        <div style={{ maxWidth: 860, margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", height: 64 }}>
+      <header style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(251,251,253,0.88)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+        <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 2rem", display: "flex", alignItems: "center", gap: "1.25rem", height: 72 }}>
+          <button
+            onClick={() => setLocation("/dashboard")}
+            data-testid="button-back-dashboard"
+            style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(0,0,0,0.04)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#86868B", flexShrink: 0, transition: "background 0.2s" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(0,0,0,0.08)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "rgba(0,0,0,0.04)")}
+          >
+            <ArrowLeft size={18} />
+          </button>
+
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <button
-              onClick={() => setLocation("/dashboard")}
-              data-testid="button-back-dashboard"
-              style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(0,0,0,0.04)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#86868B", transition: "background 0.2s" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(0,0,0,0.08)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "rgba(0,0,0,0.04)")}
-            >
-              <ArrowLeft size={16} />
-            </button>
+            <svg viewBox="0 0 40 40" width="40" height="40" fill="none">
+              <defs>
+                <linearGradient id="leads-icon-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="hsl(27deg 93% 60%)" />
+                  <stop offset="100%" stopColor="#00a6ff" />
+                </linearGradient>
+              </defs>
+              <rect width="40" height="40" rx="12" fill="url(#leads-icon-grad)" />
+              <path d="M10 14h20v14a2 2 0 01-2 2H12a2 2 0 01-2-2V14z" stroke="white" strokeWidth="1.5" fill="none"/>
+              <path d="M10 14l10 9 10-9" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            </svg>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                <div style={{ width: 32, height: 32, borderRadius: 10, background: "linear-gradient(135deg, hsl(27deg 93% 60%), #00a6ff)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,166,255,0.25)" }}>
-                  <Inbox size={15} color="#fff" />
-                </div>
-                <span style={{ fontSize: "1.05rem", fontWeight: 700, letterSpacing: "-0.025em", color: "#1D1D1F" }}>Лиды</span>
+                <span style={{ fontSize: "1.3rem", fontWeight: 700, letterSpacing: "-0.03em", color: "#1D1D1F" }}>Лиды</span>
                 {unreadCount > 0 && (
-                  <span data-testid="badge-unread-count" style={{ fontSize: "0.65rem", fontWeight: 700, background: "linear-gradient(90deg, hsl(27deg 93% 60%), #00a6ff)", color: "#fff", padding: "0.2rem 0.55rem", borderRadius: 100 }}>
-                    {unreadCount}
+                  <span data-testid="badge-unread-count" style={{ fontSize: "0.7rem", fontWeight: 700, background: "linear-gradient(90deg, hsl(27deg 93% 60%), #00a6ff)", color: "#fff", padding: "0.22rem 0.65rem", borderRadius: 100 }}>
+                    {unreadCount} новых
                   </span>
                 )}
               </div>
-              <p style={{ fontSize: "0.75rem", color: "#86868B", marginTop: 2 }}>Заявки с ваших сайтов</p>
+              <p style={{ fontSize: "0.82rem", color: "#86868B", margin: 0 }}>Заявки с ваших сайтов</p>
             </div>
           </div>
         </div>
       </header>
 
-      <main style={{ maxWidth: 860, margin: "0 auto", padding: "2rem 1.5rem" }}>
+      <main style={{ maxWidth: 960, margin: "0 auto", padding: "2.5rem 2rem" }}>
 
         {/* Filter tabs */}
         <div style={{ display: "flex", gap: "0.4rem", marginBottom: "1.75rem", background: "rgba(0,0,0,0.03)", borderRadius: 14, padding: "0.25rem", width: "fit-content" }}>
@@ -140,12 +149,15 @@ export default function LeadsPage() {
             ))}
           </div>
         ) : filteredLeads.length === 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "6rem 1rem", textAlign: "center" }}>
-            <div style={{ width: 72, height: 72, borderRadius: 20, background: "rgba(0,0,0,0.03)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.25rem" }}>
-              <Inbox size={32} color="rgba(0,0,0,0.12)" />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "8rem 1rem", textAlign: "center" }}>
+            <div style={{ width: 96, height: 96, borderRadius: 28, background: "linear-gradient(135deg, rgba(0,166,255,0.08), rgba(101,0,255,0.05))", border: "1px solid rgba(0,166,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.75rem" }}>
+              <svg viewBox="0 0 40 40" width="44" height="44" fill="none">
+                <path d="M6 12h28v18a3 3 0 01-3 3H9a3 3 0 01-3-3V12z" stroke="rgba(0,166,255,0.4)" strokeWidth="1.5" fill="none"/>
+                <path d="M6 12l14 11 14-11" stroke="rgba(0,166,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              </svg>
             </div>
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#86868B", margin: 0 }}>Заявок пока нет</h2>
-            <p style={{ fontSize: "0.85rem", color: "#AEAEB2", marginTop: "0.5rem", maxWidth: 280, lineHeight: 1.5 }}>
+            <h2 style={{ fontSize: "1.4rem", fontWeight: 700, letterSpacing: "-0.03em", color: "#1D1D1F", margin: 0 }}>Заявок пока нет</h2>
+            <p style={{ fontSize: "0.9rem", color: "#86868B", marginTop: "0.6rem", maxWidth: 320, lineHeight: 1.6 }}>
               Когда посетители ваших сайтов заполнят формы, заявки появятся здесь
             </p>
           </div>
