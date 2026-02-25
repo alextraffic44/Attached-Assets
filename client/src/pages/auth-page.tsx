@@ -7,6 +7,19 @@ import { Loader2, Sparkles } from "lucide-react";
 const appleFont = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
 
 const SVG_CSS = `
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .craft-title {
+    background: linear-gradient(90deg, hsl(27deg 93% 60%), #00a6ff, #6500ff, hsl(27deg 93% 60%));
+    background-size: 300% 300%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradientShift 4s ease infinite;
+  }
   .glow-pulse { animation: pulseGlowBox 3s ease-in-out alternate infinite; transform-origin: center; }
   @keyframes pulseGlowBox { 0% { transform: scale(0.95); opacity: 0.7; } 100% { transform: scale(1.05); opacity: 1; filter: blur(35px); } }
   .robot-float { animation: float 4s infinite ease-in-out; transform-origin: center; }
@@ -253,7 +266,7 @@ export default function AuthPage() {
           style={{ width: "100%", maxWidth: 400, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", zIndex: 1 }}
         >
           {/* Heading */}
-          <h1 style={{ fontSize: "2.6rem", fontWeight: 800, letterSpacing: "-0.05em", margin: "0 0 0.4rem", textAlign: "center", background: "linear-gradient(90deg, hsl(27deg 93% 60%), #00a6ff, #6500ff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+          <h1 className="craft-title" style={{ fontSize: "2.6rem", fontWeight: 800, letterSpacing: "-0.05em", margin: "0 0 0.4rem", textAlign: "center" }}>
             Craft AI
           </h1>
           <p style={{ fontSize: "0.9rem", color: "#86868B", margin: "0 0 2.25rem", textAlign: "center" }}>
