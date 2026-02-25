@@ -52,8 +52,7 @@ export async function deployToVercel(
     name: projectName,
     files: files.map((f) => ({
       file: f.filename,
-      data: Buffer.from(f.content).toString("base64"),
-      encoding: "base64",
+      data: f.content,
     })),
     projectSettings: { framework: null },
     target: "production",
