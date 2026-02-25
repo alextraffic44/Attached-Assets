@@ -165,9 +165,12 @@ export default function EditorPage() {
     const initialPrompt = urlParams.get("prompt");
     const enhanced = urlParams.get("enhanced") === "1";
     const initialResearch = urlParams.get("research") || "";
+    const initialMultiPages = urlParams.get("multipages") || "";
+    const initialSeoH1 = urlParams.get("seoh1") || "";
+    const initialSeoH2s = urlParams.get("seoh2s") || "";
     if (initialPrompt && !project?.generatedCode && messages.length === 0) {
       setPrompt(initialPrompt);
-      setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch), 500);
+      setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch, initialMultiPages, initialSeoH1, initialSeoH2s), 500);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [project, messages.length]);
@@ -219,7 +222,7 @@ export default function EditorPage() {
     }
   }, [newPageName, projectId, allFiles, project, toast]);
 
-  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string) => {
+  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string, multiPagesData?: string, seoH1Data?: string, seoH2sData?: string) => {
     let text = customPrompt || prompt;
     if (!text.trim() && attachedImages.length === 0) return;
 
@@ -267,6 +270,13 @@ export default function EditorPage() {
       const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance };
       if (deepResearchData) {
         bodyData.deepResearchData = deepResearchData;
+      }
+      if (multiPagesData) {
+        bodyData.multiPagesData = multiPagesData;
+      }
+      if (seoH1Data) {
+        bodyData.seoH1 = seoH1Data;
+        bodyData.seoH2s = seoH2sData || "";
       }
       const response = await fetch(`/api/projects/${projectId}/generate`, {
         method: "POST",

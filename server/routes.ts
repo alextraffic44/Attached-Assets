@@ -364,7 +364,7 @@ export async function registerRoutes(
 
       const GENERATION_COST = 100;
 
-      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey } = req.body;
+      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s } = req.body;
       const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
         Array.isArray(images) && images.length > 0 ? images 
         : imageBase64 ? [{ base64: imageBase64, mimeType: imageMimeType || "image/png" }] 
@@ -403,6 +403,20 @@ export async function registerRoutes(
       let systemContent = SYSTEM_PROMPT;
       if (researchData) {
         systemContent += `\n\n═══ РЕЗУЛЬТАТЫ DEEP RESEARCH ═══\nИспользуй следующие РЕАЛЬНЫЕ факты и данные из исследования при создании контента сайта:\n${researchData}\n═══ КОНЕЦ ИССЛЕДОВАНИЯ ═══\n`;
+      }
+      if (multiPagesData && typeof multiPagesData === "string" && multiPagesData.trim()) {
+        const pageList = multiPagesData.split(",").map((p: string) => p.trim()).filter(Boolean);
+        const fileNames = pageList.map((p: string) => {
+          const slug = p.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+          return `${slug}.html (${p})`;
+        });
+        systemContent += `\n\n═══ СТРУКТУРА САЙТА ═══\nСоздай МНОГОСТРАНИЧНЫЙ сайт. ОБЯЗАТЕЛЬНО сгенерируй ВСЕ перечисленные страницы:\n- index.html (главная)\n- ${fileNames.join("\n- ")}\nКаждая страница — полный отдельный HTML-документ. В навигации всех страниц должны быть ссылки на ВСЕ страницы. Используй формат --- FILE: имя.html --- для каждого файла.\n═══ КОНЕЦ СТРУКТУРЫ ═══\n`;
+      }
+      if (seoH1 && typeof seoH1 === "string" && seoH1.trim()) {
+        const h2List = seoH2s && typeof seoH2s === "string"
+          ? seoH2s.split(",").map((h: string) => h.trim()).filter(Boolean)
+          : [];
+        systemContent += `\n\n═══ SEO ЗАГОЛОВКИ ═══\nИСПОЛЬЗУЙ ТОЧНО эти заголовки на главной странице:\n- H1: "${seoH1.trim()}"${h2List.length > 0 ? `\n- H2: ${h2List.map((h: string) => `"${h}"`).join(", ")}` : ""}\nЭти заголовки должны присутствовать в HTML текстом (не изображением), в тегах <h1> и <h2> соответственно.\n═══ КОНЕЦ SEO ═══\n`;
       }
       if (projectImgs.length > 0) {
         systemContent += `\n\nДОСТУПНЫЕ ИЗОБРАЖЕНИЯ В БИБЛИОТЕКЕ ПОЛЬЗОВАТЕЛЯ:\n`;

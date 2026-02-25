@@ -86,18 +86,16 @@ export default function DashboardPage() {
     onSuccess: (project: Project) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       setShowCreateModal(false);
-      let prompt = selectedMode === "template" ? `Создай сайт: ${selectedTemplate}. ${description}` : description || title;
-      if (multiPageEnabled && pageNames.filter(p => p.trim()).length > 0) {
-        const pages = pageNames.filter(p => p.trim()).join(", ");
-        prompt += `\n\nСделай многостраничный сайт. Страницы: index.html (главная), ${pages}. Для каждой страницы создай отдельный HTML-файл. В навигации добавь ссылки на все страницы.`;
-      }
-      if (seoEnabled && seoH1.trim()) {
-        const h2List = seoH2s.filter(h => h.trim()).map(h => `H2: "${h.trim()}"`).join(", ");
-        prompt += `\n\nSEO-структура заголовков для главной страницы: H1: "${seoH1.trim()}"${h2List ? `, ${h2List}` : ""}. Используй эти заголовки точно в тексте сайта.`;
-      }
+      const prompt = selectedMode === "template" ? `Создай сайт: ${selectedTemplate}. ${description}` : description || title;
       const enhancedParam = isEnhanced ? "&enhanced=1" : "";
       const researchParam = researchData ? `&research=${encodeURIComponent(researchData)}` : "";
-      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}${researchParam}`);
+      const multiPageParam = (multiPageEnabled && pageNames.filter(p => p.trim()).length > 0)
+        ? `&multipages=${encodeURIComponent(pageNames.filter(p => p.trim()).join(","))}`
+        : "";
+      const seoParam = (seoEnabled && seoH1.trim())
+        ? `&seoh1=${encodeURIComponent(seoH1.trim())}&seoh2s=${encodeURIComponent(seoH2s.filter(h => h.trim()).join(","))}`
+        : "";
+      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}${researchParam}${multiPageParam}${seoParam}`);
     },
   });
 
