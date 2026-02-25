@@ -25,6 +25,7 @@ export const projects = pgTable("projects", {
   publishedUrl: text("published_url"),
   publishStatus: text("publish_status").notNull().default("draft"),
   vercelProjectId: text("vercel_project_id"),
+  customDomain: text("custom_domain"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

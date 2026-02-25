@@ -1080,9 +1080,14 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             onClick={() => {
               setPublishResult(null);
               setPublishError(null);
-              setDomainResult(null);
               setDomainError(null);
               setDomainVerified(null);
+              if (project?.customDomain) {
+                setCustomDomain(project.customDomain);
+                setDomainResult({ added: true, instructions: true });
+              } else {
+                setDomainResult(null);
+              }
               setShowPublishModal(true);
             }}
             data-testid="button-publish"

@@ -1038,8 +1038,18 @@ export async function registerRoutes(
       if (!domain) return res.status(400).json({ message: "Домен обязателен" });
       if (!project.vercelProjectId) return res.status(400).json({ message: "Сначала опубликуйте сайт" });
 
-      const result = await addCustomDomain(project.vercelProjectId, domain);
-      res.json(result);
+      try {
+        const result = await addCustomDomain(project.vercelProjectId, domain);
+        await storage.updateProject(projectId, { customDomain: domain });
+        res.json(result);
+      } catch (domainErr: any) {
+        if (domainErr.message?.includes("already in use")) {
+          await storage.updateProject(projectId, { customDomain: domain });
+          res.json({ verified: false, cname: "cname.vercel-dns.com", alreadyAdded: true });
+        } else {
+          throw domainErr;
+        }
+      }
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Ошибка добавления домена" });
     }
