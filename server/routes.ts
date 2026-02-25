@@ -1007,6 +1007,7 @@ export async function registerRoutes(
       files.push({ filename: "index.html", content: mainHtml });
 
       for (const f of extraFiles) {
+        if (f.filename === "index.html") continue;
         let code = f.code;
         for (const img of projectImages) {
           code = code.replace(new RegExp(`\\{\\{IMG:${img.name}\\}\\}`, "g"), img.url);
