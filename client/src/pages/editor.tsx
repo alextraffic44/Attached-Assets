@@ -1436,7 +1436,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx" multiple onChange={handleImageUpload} className="hidden" />
               <div className="flex-1 relative bg-white dark:bg-slate-900 rounded-2xl shadow-skeuo-inner border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
                 <Textarea 
-                  placeholder="Редактируйте блоки, вставляйте изображения, видео, SVG анимацию, меняйте дизайн."
+                  placeholder={selectedElement ? "Напишите, что сделать с выбранным элементом..." : "Редактируйте блоки, вставляйте изображения, видео, SVG анимацию, меняйте дизайн."}
                   value={prompt}
                   onChange={e => setPrompt(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleGenerate())}
