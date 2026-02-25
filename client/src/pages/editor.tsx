@@ -1466,11 +1466,56 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               <div className="w-full h-full p-6 bg-slate-900 rounded-[1.5rem] shadow-skeuo-inner overflow-auto">
                 <pre className="text-xs font-mono text-emerald-400 whitespace-pre-wrap">{currentCode || "// Тут будет код"}</pre>
               </div>
-            ) : currentCode ? (
-              <div className="w-full h-full flex items-center justify-center overflow-hidden">
+            ) : currentCode || isGenerating ? (
+              <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
                  <div className="bg-white rounded-2xl shadow-2xl transition-all duration-500 overflow-hidden border border-white/20" style={{ width: deviceWidths[previewDevice], height: '100%' }}>
-                    <iframe key={selectorMode ? 'sel' : editMode ? 'edit' : 'view'} ref={iframeRef} srcDoc={getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
+                    <iframe key={selectorMode ? 'sel' : editMode ? 'edit' : 'view'} ref={iframeRef} srcDoc={isGenerating ? (getEditableCode(project?.generatedCode || "") || "") : getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
                  </div>
+                 {isGenerating && (
+                   <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style={{ background: 'rgba(11,15,25,0.92)', backdropFilter: 'blur(4px)' }}>
+                     <svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+                       <defs>
+                         <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
+                           <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3"/>
+                           <stop offset="100%" stopColor="#6366f1" stopOpacity="0"/>
+                         </radialGradient>
+                       </defs>
+                       <circle cx="80" cy="80" r="70" fill="url(#glowGrad)"/>
+                       <circle cx="80" cy="80" r="54" fill="none" stroke="#6366f1" strokeWidth="1" strokeOpacity="0.3"/>
+                       <circle cx="80" cy="80" r="54" fill="none" stroke="#6366f1" strokeWidth="2" strokeDasharray="30 310" strokeLinecap="round">
+                         <animateTransform attributeName="transform" type="rotate" from="0 80 80" to="360 80 80" dur="1.4s" repeatCount="indefinite"/>
+                       </circle>
+                       <circle cx="80" cy="80" r="40" fill="none" stroke="#818cf8" strokeWidth="1.5" strokeDasharray="15 220" strokeLinecap="round">
+                         <animateTransform attributeName="transform" type="rotate" from="360 80 80" to="0 80 80" dur="2s" repeatCount="indefinite"/>
+                       </circle>
+                       <g>
+                         <animateTransform attributeName="transform" type="translate" values="0,0;0,-5;0,0" dur="3s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.6 1;0.4 0 0.6 1"/>
+                         <rect x="58" y="56" width="44" height="36" rx="8" fill="#1e1b4b" stroke="#6366f1" strokeWidth="1.5"/>
+                         <rect x="64" y="63" width="10" height="8" rx="2" fill="#6366f1" opacity="0.7"/>
+                         <rect x="78" y="63" width="10" height="8" rx="2" fill="#818cf8" opacity="0.7"/>
+                         <rect x="64" y="75" width="24" height="3" rx="1.5" fill="#4f46e5" opacity="0.5"/>
+                         <rect x="64" y="80" width="16" height="3" rx="1.5" fill="#4f46e5" opacity="0.35"/>
+                         <rect x="73" y="44" width="14" height="14" rx="3" fill="#1e1b4b" stroke="#6366f1" strokeWidth="1.5"/>
+                         <circle cx="80" cy="51" r="3" fill="#6366f1">
+                           <animate attributeName="opacity" values="1;0.3;1" dur="1.8s" repeatCount="indefinite"/>
+                         </circle>
+                         <line x1="78" y1="56" x2="78" y2="56" stroke="#6366f1" strokeWidth="1.5"/>
+                         <line x1="82" y1="56" x2="82" y2="56" stroke="#6366f1" strokeWidth="1.5"/>
+                         <rect x="68" y="92" width="24" height="8" rx="4" fill="#1e1b4b" stroke="#6366f1" strokeWidth="1.5"/>
+                         <circle cx="74" cy="96" r="2" fill="#6366f1" opacity="0.8"/>
+                         <circle cx="80" cy="96" r="2" fill="#818cf8" opacity="0.6"/>
+                         <circle cx="86" cy="96" r="2" fill="#4f46e5" opacity="0.6"/>
+                       </g>
+                     </svg>
+                     <p className="mt-4 text-sm font-semibold tracking-wide" style={{ color: '#818cf8' }}>Генерируем сайт...</p>
+                     <div className="flex gap-1.5 mt-3">
+                       {[0,1,2].map(i => (
+                         <div key={i} className="w-1.5 h-1.5 rounded-full bg-indigo-400" style={{ animation: `bounce 1.2s ${i * 0.2}s infinite ease-in-out` }}/>
+                       ))}
+                     </div>
+                     <style dangerouslySetInnerHTML={{ __html: `@keyframes bounce{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1.1);opacity:1}}` }}/>
+                   </div>
+                 )}
               </div>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-[#0b0f19] rounded-2xl overflow-hidden">
