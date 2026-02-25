@@ -636,9 +636,6 @@ export async function registerRoutes(
       }
 
       await storage.updateProject(project.id, { generatedCode: mainHtmlCode });
-      if (mainHtmlCode && mainHtmlCode !== project.generatedCode) {
-        await storage.upsertProjectFile({ projectId: project.id, filename: "index.html", code: mainHtmlCode });
-      }
       await storage.createProjectMessage({
         projectId: project.id,
         role: "model",
