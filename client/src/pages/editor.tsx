@@ -1008,8 +1008,12 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
   }
   function hideTip(){if(tooltip)tooltip.style.display='none'}
 
-  document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,td,th,button,label,figcaption').forEach(function(el){
-    if(el.children.length===0||el.childNodes.length===1){
+  document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,td,th,button,label,figcaption,blockquote,strong,em,b,i,u,small,big,sub,sup,dt,dd,summary,caption,cite,q,abbr,mark,del,ins,dfn,var,samp,kbd,div').forEach(function(el){
+    var txt=(el.textContent||'').trim();
+    if(!txt)return;
+    var hasBlockChild=el.querySelector('h1,h2,h3,h4,h5,h6,p,ul,ol,table,section,article,aside,header,footer,nav,form,div>div');
+    if(el.tagName==='DIV'&&(hasBlockChild||el.children.length>3))return;
+    if(el.closest('[contenteditable="true"]'))return;
       el.setAttribute('contenteditable','true');
       var savedBg='';var savedClip='';var savedFill='';
       el.addEventListener('mouseenter',function(){showTip(el,'Клик для редактирования')});
