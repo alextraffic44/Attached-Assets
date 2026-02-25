@@ -111,63 +111,103 @@ export default function Landing() {
     // Insert pricing section after #features
     const featuresSection = container.querySelector("#features");
     if (featuresSection) {
-      const rainbow = "linear-gradient(90deg,#FF4242,#A5FF42,#42A5FF,#42E6FF,#B742FF,#FF4242)";
-      
-      const style = document.createElement("style");
-      style.textContent = `
-        @keyframes rbPricing{0%{background-position:0% 50%}100%{background-position:300% 50%}}
-        .pcw{transition:transform .4s cubic-bezier(.2,.8,.2,1),box-shadow .4s}
-        .pcw:hover{transform:translateY(-6px) scale(1.02);box-shadow:0 24px 60px rgba(0,0,0,.12)}
-        .pcb{border-radius:26px;padding:2px;background:${rainbow};background-size:300% auto;animation:rbPricing 4s linear infinite}
-        .pci{background:#fff;border-radius:24px;padding:2.5rem 2rem;display:flex;flex-direction:column;align-items:center}
+      const pricingStyle = document.createElement("style");
+      pricingStyle.id = "pricing-styles";
+      pricingStyle.textContent = `
+        @keyframes m2-gradient-shift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+        @keyframes m2-blur{to{filter:blur(3vmin);transform:scale(1.05)}}
+        .m2card{
+          position:relative;
+          background:linear-gradient(135deg,#1e1e24 10%,#050505 60%);
+          background-size:200% 200%;
+          animation:m2-gradient-shift 5s ease-in-out infinite;
+          display:flex;flex-direction:column;align-items:center;
+          padding:2.5rem 2rem;
+          text-decoration:none;
+          color:inherit;
+          transition:transform .4s cubic-bezier(.2,.8,.2,1);
+        }
+        .m2card:hover{transform:translateY(-6px) scale(1.02)}
+        .m2card::before,.m2card::after{
+          --size:5px;
+          content:"";
+          position:absolute;
+          top:calc(var(--size) / -2);
+          left:calc(var(--size) / -2);
+          width:calc(100% + var(--size));
+          height:calc(100% + var(--size));
+          background:
+            radial-gradient(circle at 0 0,hsl(27deg 93% 60%),transparent),
+            radial-gradient(circle at 100% 0,#00a6ff,transparent),
+            radial-gradient(circle at 0 100%,#ff0056,transparent),
+            radial-gradient(circle at 100% 100%,#6500ff,transparent);
+        }
+        .m2card::after{--size:2px;z-index:-1}
+        .m2card::before{
+          --size:10px;z-index:-2;
+          filter:blur(2vmin);
+          animation:m2-blur 3s ease-in-out alternate infinite;
+        }
       `;
-      document.head.appendChild(style);
+      document.head.appendChild(pricingStyle);
 
       function makeCard(tokens, price, badge, delay) {
         const wrap = document.createElement("a");
         wrap.href = "/auth";
-        wrap.className = "pcw";
-        wrap.style.cssText = "display:block;text-decoration:none;position:relative;border-radius:26px;cursor:pointer;" + (delay ? "transition-delay:" + delay + ";" : "");
-        
-        const border = document.createElement("div");
-        border.className = "pcb";
-        
-        const inner = document.createElement("div");
-        inner.className = "pci";
-        inner.innerHTML = `
-          ${badge ? '<div style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#FF4242,#A5FF42,#42A5FF,#B742FF);color:#fff;font-size:.75rem;font-weight:700;letter-spacing:.05em;padding:.3rem 1rem;border-radius:100px;white-space:nowrap;z-index:3;">Популярный</div>' : ""}
-          <div style="font-size:3.5rem;font-weight:700;letter-spacing:-.04em;line-height:1;margin-bottom:.4rem;color:#1D1D1F">${tokens}</div>
-          <div style="font-size:.75rem;font-weight:600;letter-spacing:.1em;color:#86868B;text-transform:uppercase;margin-bottom:1.5rem">ТОКЕНОВ</div>
-          <div style="width:100%;height:1px;background:rgba(0,0,0,.08);margin-bottom:1.5rem"></div>
-          <div style="font-size:1.4rem;font-weight:600;letter-spacing:-.02em;color:#1D1D1F">${price}</div>
-        `;
-        border.appendChild(inner);
-        wrap.appendChild(border);
+        wrap.className = "m2card";
+        wrap.style.cssText = "cursor:pointer;" + (delay ? "animation-delay:" + delay + ";" : "");
+
+        if (badge) {
+          const badgeEl = document.createElement("div");
+          badgeEl.style.cssText = "position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,hsl(27deg 93% 60%),#00a6ff,#6500ff);color:#fff;font-size:.72rem;font-weight:700;letter-spacing:.06em;padding:.3rem 1rem;border-radius:100px;white-space:nowrap;z-index:3;";
+          badgeEl.textContent = "Популярный";
+          wrap.appendChild(badgeEl);
+        }
+
+        const tokensEl = document.createElement("div");
+        tokensEl.style.cssText = "font-size:3.5rem;font-weight:700;letter-spacing:-.04em;line-height:1;margin-bottom:.4rem;color:#fff;";
+        tokensEl.textContent = tokens;
+
+        const label = document.createElement("div");
+        label.style.cssText = "font-size:.72rem;font-weight:600;letter-spacing:.12em;color:rgba(255,255,255,.4);text-transform:uppercase;margin-bottom:1.5rem;";
+        label.textContent = "ТОКЕНОВ";
+
+        const divider = document.createElement("div");
+        divider.style.cssText = "width:100%;height:1px;background:rgba(255,255,255,.08);margin-bottom:1.5rem;";
+
+        const priceEl = document.createElement("div");
+        priceEl.style.cssText = "font-size:1.4rem;font-weight:600;letter-spacing:-.02em;background:linear-gradient(to right,hsl(27deg 93% 60%),#00a6ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;";
+        priceEl.textContent = price;
+
+        wrap.appendChild(tokensEl);
+        wrap.appendChild(label);
+        wrap.appendChild(divider);
+        wrap.appendChild(priceEl);
         return wrap;
       }
 
       const pricing = document.createElement("section");
       pricing.id = "pricing";
-      pricing.style.cssText = "padding:10rem 0;position:relative;background:#FBFBFD;";
-      
+      pricing.style.cssText = "padding:10rem 0;position:relative;background:#111114;";
+
       const pContainer = document.createElement("div");
       pContainer.className = "container";
-      
+
       const pHeader = document.createElement("div");
       pHeader.style.cssText = "text-align:center;margin-bottom:4rem;";
       pHeader.innerHTML = `
-        <h2 style="font-size:clamp(2.5rem,5vw,4rem);font-weight:600;letter-spacing:-.04em;margin-bottom:1.2rem;color:#1D1D1F">Токены. Просто и прозрачно.</h2>
-        <p style="font-size:clamp(1.2rem,2.5vw,1.5rem);color:#86868B;margin:0 auto;max-width:600px">Пополните баланс одним из пакетов и создавайте сайты без ограничений.</p>
+        <h2 style="font-size:clamp(2.5rem,5vw,4rem);font-weight:600;letter-spacing:-.04em;margin-bottom:1.2rem;color:#fff">Токены. Просто и прозрачно.</h2>
+        <p style="font-size:clamp(1rem,2vw,1.25rem);color:rgba(255,255,255,.45);margin:0 auto;max-width:560px">Пополните баланс одним из пакетов и создавайте сайты без ограничений.</p>
       `;
-      
+
       const grid = document.createElement("div");
       grid.style.cssText = "display:grid;grid-template-columns:repeat(4,1fr);gap:1.5rem;";
-      
+
       grid.appendChild(makeCard("1 000", "990 ₽", false, ""));
       grid.appendChild(makeCard("1 900", "1 690 ₽", true, "0.1s"));
       grid.appendChild(makeCard("4 500", "3 990 ₽", false, "0.2s"));
       grid.appendChild(makeCard("6 000", "5 990 ₽", false, "0.3s"));
-      
+
       pContainer.appendChild(pHeader);
       pContainer.appendChild(grid);
       pricing.appendChild(pContainer);
@@ -179,6 +219,7 @@ export default function Landing() {
       revealObserver.disconnect();
       clearInterval(slideInterval);
       document.getElementById("landing-page-styles")?.remove();
+      document.getElementById("pricing-styles")?.remove();
       document.title = "Craft AI";
     };
   }, [setLocation]);
