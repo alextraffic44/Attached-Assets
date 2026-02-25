@@ -1008,12 +1008,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
   }
   function hideTip(){if(tooltip)tooltip.style.display='none'}
 
-  document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,td,th,button,label,figcaption,blockquote,strong,em,b,i,u,small,big,sub,sup,dt,dd,summary,caption,cite,q,abbr,mark,del,ins,dfn,var,samp,kbd,div').forEach(function(el){
-    var txt=(el.textContent||'').trim();
-    if(!txt)return;
-    var hasBlockChild=el.querySelector('h1,h2,h3,h4,h5,h6,p,ul,ol,table,section,article,aside,header,footer,nav,form,div>div');
-    if(el.tagName==='DIV'&&(hasBlockChild||el.children.length>3))return;
-    if(el.closest('[contenteditable="true"]'))return;
+  function makeEditable(el){
       el.setAttribute('contenteditable','true');
       var savedBg='';var savedClip='';var savedFill='';
       el.addEventListener('mouseenter',function(){showTip(el,'Клик для редактирования')});
@@ -1030,7 +1025,20 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
         if(savedClip){el.style.background=savedBg;el.style.webkitBackgroundClip=savedClip;el.style.backgroundClip=savedClip;el.style.webkitTextFillColor=savedFill;savedClip=''}
         window.parent.postMessage({type:'nz-text-edit',html:getCleanHtml()},'*');
       });
-    }
+  }
+  document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,td,th,button,label,figcaption,blockquote,strong,em,b,i,u,small').forEach(function(el){
+    var txt=(el.textContent||'').trim();
+    if(!txt)return;
+    if(el.closest('[contenteditable="true"]'))return;
+    makeEditable(el);
+  });
+  document.querySelectorAll('div').forEach(function(el){
+    var txt=(el.textContent||'').trim();
+    if(!txt)return;
+    if(el.closest('[contenteditable="true"]'))return;
+    if(el.querySelector('h1,h2,h3,h4,h5,h6,p,ul,ol,table,section,article,aside,header,footer,nav,form'))return;
+    if(el.children.length>2)return;
+    makeEditable(el);
   });
   document.querySelectorAll('img').forEach(function(img){
     img.style.cursor='pointer';
