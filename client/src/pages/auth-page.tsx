@@ -7,18 +7,18 @@ import { Loader2, Sparkles } from "lucide-react";
 const appleFont = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
 
 const SVG_CSS = `
-  @keyframes gradientShift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+  @keyframes rainbow {
+    0% { background-position: 0% center; }
+    100% { background-position: 200% center; }
   }
   .craft-title {
-    background: linear-gradient(90deg, hsl(27deg 93% 60%), #00a6ff, #6500ff, hsl(27deg 93% 60%));
-    background-size: 300% 300%;
+    background: linear-gradient(90deg, #FF4242, #A5FF42, #42A5FF, #42E6FF, #B742FF, #FF4242);
+    background-size: 200% auto;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    animation: gradientShift 4s ease infinite;
+    animation: rainbow 4s linear infinite;
+    display: inline-block;
   }
   .glow-pulse { animation: pulseGlowBox 3s ease-in-out alternate infinite; transform-origin: center; }
   @keyframes pulseGlowBox { 0% { transform: scale(0.95); opacity: 0.7; } 100% { transform: scale(1.05); opacity: 1; filter: blur(35px); } }
