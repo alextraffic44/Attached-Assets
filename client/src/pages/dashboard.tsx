@@ -635,39 +635,67 @@ export default function DashboardPage() {
       </Dialog>
 
       <Dialog open={showTopUpModal} onOpenChange={setShowTopUpModal}>
-        <DialogContent className="sm:max-w-[560px] p-0 overflow-hidden" style={{ borderRadius: 28, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont }}>
-          <div className="px-8 pt-10 pb-8">
+        <DialogContent className="p-0 overflow-visible" style={{ maxWidth: 900, borderRadius: 28, border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 40px 100px rgba(0,0,0,0.5)', background: 'linear-gradient(135deg,#1e1e24 10%,#050505 60%)', fontFamily: appleFont }}>
+          <style dangerouslySetInnerHTML={{ __html: `
+            @keyframes m2-gradient-shift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+            @keyframes m2-blur{to{filter:blur(3vmin);transform:scale(1.05)}}
+            .topup-m2card{
+              position:relative;border-radius:24px;
+              background:linear-gradient(135deg,#1e1e24 10%,#050505 60%);
+              background-size:200% 200%;
+              animation:m2-gradient-shift 5s ease-in-out infinite;
+              display:flex;flex-direction:column;align-items:center;
+              padding:2rem 1.25rem;cursor:pointer;color:inherit;
+              transition:transform .4s cubic-bezier(.2,.8,.2,1);
+              border:none;text-align:center;width:100%;
+            }
+            .topup-m2card:hover{transform:translateY(-6px) scale(1.02)}
+            .topup-m2card::before,.topup-m2card::after{
+              --size:5px;content:"";position:absolute;
+              top:calc(var(--size) / -2);left:calc(var(--size) / -2);
+              width:calc(100% + var(--size));height:calc(100% + var(--size));
+              border-radius:28px;
+              background:
+                radial-gradient(circle at 0 0,hsl(27deg 93% 60%),transparent),
+                radial-gradient(circle at 100% 0,#00a6ff,transparent),
+                radial-gradient(circle at 0 100%,#ff0056,transparent),
+                radial-gradient(circle at 100% 100%,#6500ff,transparent);
+            }
+            .topup-m2card::after{--size:2px;z-index:-1}
+            .topup-m2card::before{--size:10px;z-index:-2;filter:blur(2vmin);animation:m2-blur 3s ease-in-out alternate infinite;}
+          `}} />
+          <div style={{ padding: '2.5rem 2.5rem 2.5rem' }}>
             <DialogHeader>
-              <DialogTitle style={{ fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F' }}>
+              <DialogTitle style={{ fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#fff' }}>
                 Пополнить баланс
               </DialogTitle>
             </DialogHeader>
-            <p style={{ fontSize: '0.85rem', color: '#86868B', marginTop: '0.5rem', marginBottom: '1.5rem' }}>Выберите подходящий тариф для пополнения токенов</p>
-            <div className="grid grid-cols-2 gap-3">
+            <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)', marginTop: '0.4rem', marginBottom: '2rem' }}>Выберите подходящий тариф для пополнения токенов</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
               {[
-                { price: 990, tokens: 1000, label: "Старт", popular: false },
+                { price: 990,  tokens: 1000, label: "Старт",   popular: false },
                 { price: 1690, tokens: 1900, label: "Базовый", popular: false },
-                { price: 3990, tokens: 4500, label: "Профи", popular: false },
-                { price: 5990, tokens: 6500, label: "Ультра", popular: true },
+                { price: 3990, tokens: 4500, label: "Профи",   popular: false },
+                { price: 5990, tokens: 6500, label: "Ультра",  popular: true  },
               ].map((plan) => (
-                <button
-                  key={plan.price}
-                  data-testid={`button-plan-${plan.price}`}
-                  onClick={() => { toast({ title: "Скоро!", description: "Оплата будет доступна в ближайшее время" }); }}
-                  className="relative flex flex-col items-center transition-all duration-300 hover:-translate-y-0.5"
-                  style={{ padding: '1.5rem 1rem', borderRadius: 20, background: plan.popular ? 'linear-gradient(135deg,#1e1e24,#050505)' : 'rgba(0,0,0,0.03)', border: plan.popular ? 'none' : '1px solid rgba(0,0,0,0.08)', cursor: 'pointer', position: 'relative', boxShadow: plan.popular ? '0 8px 30px rgba(0,0,0,0.2)' : 'none' }}
-                >
+                <div key={plan.price} style={{ position: 'relative' }}>
                   {plan.popular && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-white text-[10px] font-bold px-3 py-1 rounded-full" style={{ background: 'linear-gradient(90deg,hsl(27deg 93% 60%),#00a6ff,#6500ff)', whiteSpace: 'nowrap' }}>
+                    <span style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(90deg,hsl(27deg 93% 60%),#00a6ff,#6500ff)', color: '#fff', fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', padding: '0.28rem 0.9rem', borderRadius: 100, whiteSpace: 'nowrap', zIndex: 3 }}>
                       Популярный
                     </span>
                   )}
-                  <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: plan.popular ? '#00d2ff' : '#86868B', marginBottom: '0.4rem' }}>{plan.label}</span>
-                  <span style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1, color: plan.popular ? '#fff' : '#1D1D1F' }}>{plan.tokens.toLocaleString("ru-RU")}</span>
-                  <span style={{ fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: plan.popular ? 'rgba(255,255,255,0.4)' : '#86868B', marginTop: '0.25rem', marginBottom: '1rem' }}>токенов</span>
-                  <div style={{ width: '100%', height: 1, background: plan.popular ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', marginBottom: '1rem' }} />
-                  <span style={{ fontSize: '1.1rem', fontWeight: 600, letterSpacing: '-0.02em', color: plan.popular ? '#00d2ff' : '#1D1D1F' }}>{plan.price.toLocaleString("ru-RU")} ₽</span>
-                </button>
+                  <button
+                    className="topup-m2card"
+                    data-testid={`button-plan-${plan.price}`}
+                    onClick={() => { toast({ title: "Скоро!", description: "Оплата будет доступна в ближайшее время" }); }}
+                  >
+                    <span style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: plan.popular ? '#00d2ff' : 'rgba(255,255,255,0.5)', marginBottom: '0.6rem' }}>{plan.label}</span>
+                    <span style={{ fontSize: '2.2rem', fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1, color: '#fff' }}>{plan.tokens.toLocaleString("ru-RU")}</span>
+                    <span style={{ fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginTop: '0.3rem', marginBottom: '1.25rem' }}>токенов</span>
+                    <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: '1.25rem' }} />
+                    <span style={{ fontSize: '1.15rem', fontWeight: 600, letterSpacing: '-0.02em', color: plan.popular ? '#00d2ff' : '#fff' }}>{plan.price.toLocaleString("ru-RU")} ₽</span>
+                  </button>
+                </div>
               ))}
             </div>
           </div>
