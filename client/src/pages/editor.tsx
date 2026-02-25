@@ -1085,6 +1085,14 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               if (project?.customDomain) {
                 setCustomDomain(project.customDomain);
                 setDomainResult({ added: true, instructions: true });
+                setDomainVerified(null);
+                setTimeout(async () => {
+                  try {
+                    const res = await fetch(`/api/projects/${project.id}/domain/status?domain=${encodeURIComponent(project.customDomain!)}`, { credentials: "include" });
+                    const data = await res.json();
+                    setDomainVerified(data.verified || false);
+                  } catch { setDomainVerified(false); }
+                }, 100);
               } else {
                 setDomainResult(null);
               }
@@ -1786,9 +1794,16 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "1rem" }}>
                   <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#333", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
                     Свой домен
-                    {domainVerified === true && (
-                      <span style={{ fontSize: "0.72rem", color: "#16a34a", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 3, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 20, padding: "2px 10px" }}>
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Подключён
+                    {domainResult && domainVerified === true && (
+                      <span style={{ fontSize: "0.72rem", color: "#16a34a", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#22c55e", display: "inline-block", boxShadow: "0 0 6px #22c55e" }} />
+                        Подключён
+                      </span>
+                    )}
+                    {domainResult && domainVerified !== true && (
+                      <span style={{ fontSize: "0.72rem", color: "#ef4444", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#ef4444", display: "inline-block", boxShadow: "0 0 6px #ef4444" }} />
+                        Добавлен
                       </span>
                     )}
                   </div>
@@ -1844,8 +1859,11 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                           {domainChecking ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
                           Проверить DNS
                         </Button>
-                        {domainVerified === false && (
-                          <span style={{ fontSize: "0.78rem", color: "#f59e0b", fontWeight: 600 }}>DNS ещё не обновился (до 24ч)</span>
+                        {domainChecking === false && domainVerified === false && (
+                          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>DNS ещё не обновился</span>
+                        )}
+                        {domainChecking === false && domainVerified === true && (
+                          <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 500 }}>Домен работает!</span>
                         )}
                       </div>
                     </div>

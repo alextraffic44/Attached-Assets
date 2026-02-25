@@ -138,5 +138,6 @@ export async function checkDomainStatus(
     { headers: headers() }
   );
   const data = (await res.json()) as any;
+  console.log("[Vercel] Domain status for", domain, ":", JSON.stringify(data));
   return { verified: data.verified ?? false };
 }
