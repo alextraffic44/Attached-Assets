@@ -910,6 +910,14 @@ window.__PROJECT_ID__=${projectId};
       const selectorJs = `<script data-nz-selector>
 document.addEventListener('DOMContentLoaded',function(){
   var hovered=null,selected=null,label=null;
+  var allLinks=document.querySelectorAll('a[href]');
+  for(var i=0;i<allLinks.length;i++){allLinks[i].setAttribute('data-nz-href',allLinks[i].getAttribute('href'));allLinks[i].removeAttribute('href')}
+  var allBtns=document.querySelectorAll('button[type="submit"],input[type="submit"]');
+  for(var i=0;i<allBtns.length;i++){allBtns[i].setAttribute('type','button')}
+  var allForms=document.querySelectorAll('form');
+  for(var i=0;i<allForms.length;i++){allForms[i].addEventListener('submit',function(ev){ev.preventDefault();ev.stopPropagation()},true)}
+  function blockEvent(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();return false}
+  ['mousedown','mouseup','touchstart','touchend','dblclick','contextmenu','auxclick','submit'].forEach(function(evt){document.addEventListener(evt,blockEvent,true)});
   function getPath(el){var p=[];var n=el;while(n&&n!==document.body){var idx=0;var s=n;while(s.previousElementSibling){s=s.previousElementSibling;idx++}p.unshift(idx);n=n.parentElement}return p.join(',')}
   function getLbl(el){var t=el.tagName.toLowerCase();var c=el.className&&typeof el.className==='string'?'.'+el.className.trim().split(/\\s+/).slice(0,2).join('.'):'';return '<'+t+c+'>'}
   function showLabel(el){
@@ -942,6 +950,8 @@ document.addEventListener('DOMContentLoaded',function(){
     for(var i=0;i<sels.length;i++) sels[i].parentNode.removeChild(sels[i]);
     var cls=clone.querySelectorAll('.__nz-sel-hover,.__nz-sel-active,.__nz-sel-label');
     for(var i=0;i<cls.length;i++){cls[i].classList.remove('__nz-sel-hover','__nz-sel-active','__nz-sel-label')}
+    var restoredLinks=clone.querySelectorAll('[data-nz-href]');
+    for(var i=0;i<restoredLinks.length;i++){restoredLinks[i].setAttribute('href',restoredLinks[i].getAttribute('data-nz-href'));restoredLinks[i].removeAttribute('data-nz-href')}
     return '<!DOCTYPE html>\\n'+clone.outerHTML;
   }
   window.addEventListener('message',function(e){
