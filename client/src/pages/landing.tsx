@@ -209,7 +209,7 @@ export default function Landing() {
       grid.appendChild(makeCard("1 000", "990 ₽", false, ""));
       grid.appendChild(makeCard("1 900", "1 690 ₽", true, "0.1s"));
       grid.appendChild(makeCard("4 500", "3 990 ₽", false, "0.2s"));
-      grid.appendChild(makeCard("6 000", "5 990 ₽", false, "0.3s"));
+      grid.appendChild(makeCard("6 500", "5 990 ₽", false, "0.3s"));
 
       pContainer.appendChild(pHeader);
       pContainer.appendChild(grid);
