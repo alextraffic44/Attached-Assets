@@ -429,15 +429,19 @@ export async function registerRoutes(
 
         systemContent += `ТЕКУЩИЙ КОД РЕДАКТИРУЕМОГО ФАЙЛА (${editingFile}):\n\`\`\`html\n${editingFileCode}\n\`\`\`\n`;
 
-        if (existingFiles.length > 0) {
+        if (existingFiles.length > 0 || editingFile !== "index.html") {
           const otherFiles = editingFile === "index.html" 
             ? existingFiles 
             : [{ filename: "index.html", code: project.generatedCode }, ...existingFiles.filter(f => f.filename !== editingFile)];
           if (otherFiles.length > 0) {
-            systemContent += `\nДРУГИЕ ФАЙЛЫ ПРОЕКТА (для справки, НЕ редактируй их без запроса):\n`;
+            systemContent += `\n${"═".repeat(43)}\nПОЛНЫЙ КОНТЕКСТ ПРОЕКТА — ВСЕ СТРАНИЦЫ\n${"═".repeat(43)}\nТы — агент проекта. Ты видишь ВСЕ страницы сайта целиком.\nИспользуй этот контекст для согласованных правок: стили, навигация, ссылки между страницами.\nРедактируй только то, что просит пользователь. Если нужно обновить несколько страниц — выведи каждую с маркером --- FILE: имя.html ---\n\n`;
             for (const f of otherFiles) {
               const code = 'code' in f ? f.code : '';
-              systemContent += `- ${f.filename} (${(code || '').length} символов)\n`;
+              if (code && code.length > 0) {
+                systemContent += `───── ${f.filename} ─────\n\`\`\`html\n${code}\n\`\`\`\n\n`;
+              } else {
+                systemContent += `───── ${f.filename} ───── (пустой файл)\n\n`;
+              }
             }
           }
         }
