@@ -1014,12 +1014,12 @@ export async function registerRoutes(
         files.push({ filename: f.filename, content: code });
       }
 
-      const slug = `craft-ai-${projectId}-${Date.now()}`;
-      const { url } = await deployToVercel(slug, files);
+      const { url, vercelProjectId } = await deployToVercel(projectId, files);
 
       await storage.updateProject(projectId, {
         publishStatus: "published",
         publishedUrl: url,
+        vercelProjectId,
       });
 
       res.json({ url });
