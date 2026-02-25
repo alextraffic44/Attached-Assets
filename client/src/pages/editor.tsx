@@ -41,6 +41,7 @@ import {
   Clock,
   FileText,
   Plus,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -1411,16 +1412,35 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
         <SkeuoPanel className="flex-1 relative bg-slate-100 dark:bg-black flex flex-col overflow-hidden">
             <div className="flex items-center gap-1 px-4 pt-3 pb-1 overflow-x-auto shrink-0">
               {allFiles.map(f => (
-                <button
-                  key={f.filename}
-                  onClick={() => { if (isGenerating) return; setActiveFile(f.filename); if (f.filename === "index.html") setStreamedCode(""); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeFile === f.filename ? "bg-primary text-white shadow-md" : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700"} ${isGenerating && activeFile !== f.filename ? "opacity-50 cursor-not-allowed" : ""}`}
-                  disabled={isGenerating && activeFile !== f.filename}
-                  data-testid={`tab-file-${f.filename}`}
-                >
-                  <FileText className="w-3 h-3" />
-                  {f.filename}
-                </button>
+                <div key={f.filename} className={`flex items-center gap-0.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeFile === f.filename ? "bg-primary text-white shadow-md" : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700"}`}>
+                  <button
+                    onClick={() => { if (isGenerating) return; setActiveFile(f.filename); if (f.filename === "index.html") setStreamedCode(""); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5"
+                    disabled={isGenerating && activeFile !== f.filename}
+                    data-testid={`tab-file-${f.filename}`}
+                  >
+                    <FileText className="w-3 h-3" />
+                    {f.filename}
+                  </button>
+                  {f.filename !== "index.html" && (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!confirm(`Удалить страницу ${f.filename}?`)) return;
+                        const fileId = projectFiles.find(pf => pf.filename === f.filename)?.id;
+                        if (!fileId) return;
+                        await fetch(`/api/projects/${projectId}/files/${fileId}`, { method: "DELETE", credentials: "include" });
+                        if (activeFile === f.filename) setActiveFile("index.html");
+                        queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+                      }}
+                      className={`pr-2 pl-0.5 py-1.5 opacity-60 hover:opacity-100 transition-opacity`}
+                      title={`Удалить ${f.filename}`}
+                      data-testid={`button-delete-file-${f.filename}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               ))}
               <button
                 onClick={() => setAddPageOpen(true)}
