@@ -1784,7 +1784,14 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 </div>
 
                 <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "1rem" }}>
-                  <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#333", marginBottom: 8 }}>Свой домен</div>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#333", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                    Свой домен
+                    {domainVerified === true && (
+                      <span style={{ fontSize: "0.72rem", color: "#16a34a", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 3, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 20, padding: "2px 10px" }}>
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Подключён
+                      </span>
+                    )}
+                  </div>
                   {!domainResult ? (
                     <>
                       <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -1815,7 +1822,6 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
                         <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 8 }}>Настройка DNS для {customDomain}</div>
                         <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.8 }}>
-                          <div style={{ fontWeight: 600, color: "#1d4ed8", marginBottom: 4 }}>Способ 1 — NS-серверы (рекомендуется)</div>
                           <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → выберите <b>{customDomain}</b></div>
                           <div><b>2.</b> Раздел «<b>DNS-серверы и управление зоной</b>» → «<b>Изменить</b>»</div>
                           <div><b>3.</b> Выберите «<b>Свой список DNS-серверов</b>» и укажите:</div>
@@ -1823,16 +1829,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                             <div><b>ns1.vercel-dns.com</b></div>
                             <div><b>ns2.vercel-dns.com</b></div>
                           </div>
-                          <div style={{ color: "#6b7280", fontSize: "0.72rem" }}>Vercel сам настроит все записи и SSL-сертификат.</div>
-
-                          <div style={{ borderTop: "1px solid #dbeafe", margin: "10px 0 6px", paddingTop: 8, fontWeight: 600, color: "#1d4ed8" }}>Способ 2 — A и CNAME записи</div>
-                          <div><b>1.</b> В разделе «<b>Ресурсные записи</b>» удалите старые <b>A</b> записи (иконка корзины)</div>
-                          <div><b>2.</b> Нажмите «<b>+ Добавить запись</b>» и создайте:</div>
-                          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.74rem", display: "flex", flexDirection: "column", gap: 4 }}>
-                            <div>Тип: <b>A</b> &nbsp;|&nbsp; Хост: <b>@</b> &nbsp;|&nbsp; Значение: <b>76.76.21.21</b></div>
-                            <div>Тип: <b>CNAME</b> &nbsp;|&nbsp; Хост: <b>www</b> &nbsp;|&nbsp; Значение: <b>cname.vercel-dns.com</b></div>
-                          </div>
-                          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>DNS обновляется от 5 минут до 24 часов. Обычно — около 15 минут.</div>
+                          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>Vercel сам настроит все записи и SSL-сертификат. DNS обновляется от 5 минут до 24 часов.</div>
                         </div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -1847,11 +1844,6 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                           {domainChecking ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
                           Проверить DNS
                         </Button>
-                        {domainVerified === true && (
-                          <span style={{ fontSize: "0.78rem", color: "#16a34a", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                            <CheckCircle2 className="w-4 h-4" /> Домен подключён!
-                          </span>
-                        )}
                         {domainVerified === false && (
                           <span style={{ fontSize: "0.78rem", color: "#f59e0b", fontWeight: 600 }}>DNS ещё не обновился (до 24ч)</span>
                         )}
