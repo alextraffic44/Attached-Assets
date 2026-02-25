@@ -47,3 +47,4 @@ integrations = ["javascript_gemini_ai_integrations:2.0.0"]
 KIE_API_KEY = "7fffdc464ea80b7a9b1bc6d55f234eda"
 VITE_TELEGRAM_BOT_USERNAME = "Craft_AI_RU_bot"
 VERCEL_TEAM_ID = "team_fCrQIv76IWyFW4VRtMnBAMl5"
+VERCEL_TOKEN = "vcp_4bMqxx6CUY5WTee7y93ZdwXPNfKuAW2a8gHGLpL8IAldonmtpx2JigD6"
