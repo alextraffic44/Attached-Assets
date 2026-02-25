@@ -270,11 +270,8 @@ export default function AuthPage() {
           </div>
 
           {/* Heading */}
-          <h1 style={{ fontSize: "2rem", fontWeight: 700, letterSpacing: "-0.04em", color: "#1D1D1F", margin: "0 0 0.4rem", textAlign: "center" }}>
-            Добро пожаловать в{" "}
-            <span style={{ background: "linear-gradient(90deg, #007AFF, #5856D6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-              Craft AI
-            </span>
+          <h1 style={{ fontSize: "2.4rem", fontWeight: 800, letterSpacing: "-0.05em", margin: "0 0 0.4rem", textAlign: "center", background: "linear-gradient(90deg, #007AFF, #5856D6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+            Craft AI
           </h1>
           <p style={{ fontSize: "0.9rem", color: "#86868B", margin: "0 0 2.25rem", textAlign: "center" }}>
             ИИ-конструктор сайтов нового поколения
