@@ -1801,8 +1801,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       </span>
                     )}
                     {domainResult && domainVerified !== true && (
-                      <span style={{ fontSize: "0.72rem", color: "#ef4444", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#ef4444", display: "inline-block", boxShadow: "0 0 6px #ef4444" }} />
+                      <span style={{ fontSize: "0.72rem", color: "#f59e0b", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#f59e0b", display: "inline-block", boxShadow: "0 0 6px #f59e0b" }} />
                         Добавлен
                       </span>
                     )}
