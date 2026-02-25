@@ -121,7 +121,6 @@ export default function Landing() {
         .m2card{
           position:relative;
           border-radius:24px;
-          overflow:hidden;
           background:linear-gradient(135deg,#1e1e24 10%,#050505 60%);
           background-size:200% 200%;
           animation:m2-gradient-shift 5s ease-in-out infinite;
@@ -140,7 +139,7 @@ export default function Landing() {
           left:calc(var(--size) / -2);
           width:calc(100% + var(--size));
           height:calc(100% + var(--size));
-          border-radius:24px;
+          border-radius:28px;
           background:
             radial-gradient(circle at 0 0,hsl(27deg 93% 60%),transparent),
             radial-gradient(circle at 100% 0,#00a6ff,transparent),
