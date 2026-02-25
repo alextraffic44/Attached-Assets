@@ -529,7 +529,7 @@ export default function EditorPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Ошибка публикации");
       setPublishResult(data.url);
-      queryClient.invalidateQueries({ queryKey: [`/api/projects/${project.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
     } catch (e: any) {
       setPublishError(e.message);
     } finally {
@@ -1037,7 +1037,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             size="sm"
             className="rounded-xl font-black px-6 shadow-lg shadow-primary/20 hover-elevate"
             onClick={() => {
-              setPublishResult(project?.publishedUrl ?? null);
+              setPublishResult(null);
               setPublishError(null);
               setShowPublishModal(true);
             }}
@@ -1703,22 +1703,43 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </div>
 
           <div style={{ padding: "1.5rem 2rem 2rem" }}>
-            {!publishResult && !isPublishing && !publishError && (
+            {!publishResult && !isPublishing && !publishError && !project?.publishedUrl && (
               <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                 <p style={{ fontSize: "0.88rem", color: "#555", lineHeight: 1.6 }}>
                   Сайт будет опубликован на глобальной CDN Vercel. Вы получите постоянную ссылку, которую можно сразу отправить клиентам.
                 </p>
-                {project?.publishedUrl && (
-                  <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 12, padding: "0.75rem 1rem" }}>
-                    <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#16a34a", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Текущая публикация</div>
-                    <a href={project.publishedUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.82rem", color: "#15803d", wordBreak: "break-all" }}>{project.publishedUrl}</a>
-                  </div>
-                )}
                 <div style={{ display: "flex", gap: "0.75rem" }}>
                   <Button variant="outline" onClick={() => setShowPublishModal(false)} style={{ flex: 1 }}>Отмена</Button>
                   <Button onClick={handlePublish} style={{ flex: 2, background: "linear-gradient(135deg,#667eea,#764ba2)", border: "none" }} data-testid="button-confirm-publish">
                     <ExternalLink className="w-4 h-4 mr-2" />
-                    {project?.publishedUrl ? "Переопубликовать" : "Опубликовать"}
+                    Опубликовать
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {!publishResult && !isPublishing && !publishError && project?.publishedUrl && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#16a34a" }}>
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>Сайт опубликован</span>
+                </div>
+                <div style={{ background: "#f8f8f8", borderRadius: 12, padding: "0.75rem 1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <a href={project.publishedUrl} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: "0.82rem", color: "#007AFF", wordBreak: "break-all" }}>{project.publishedUrl}</a>
+                  <button
+                    onClick={() => handleCopyUrl(project.publishedUrl!)}
+                    style={{ flexShrink: 0, padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid #e5e7eb", background: copied ? "#f0fdf4" : "#fff", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, color: copied ? "#16a34a" : "#555", transition: "all 0.2s" }}
+                  >
+                    {copied ? "Скопировано!" : "Копировать"}
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <Button variant="outline" onClick={() => window.open(project.publishedUrl!, "_blank")} style={{ flex: 1 }}>
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Открыть сайт
+                  </Button>
+                  <Button onClick={handlePublish} style={{ flex: 1, background: "linear-gradient(135deg,#667eea,#764ba2)", border: "none" }} data-testid="button-confirm-publish">
+                    Обновить сайт
                   </Button>
                 </div>
               </div>
