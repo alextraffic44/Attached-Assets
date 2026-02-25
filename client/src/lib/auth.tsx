@@ -30,7 +30,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     staleTime: 0,
     refetchOnWindowFocus: true,
-    refetchInterval: 15000,
     retry: false,
   });
 

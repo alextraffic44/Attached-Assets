@@ -215,6 +215,7 @@ export default function EditorPage() {
     setStreamingReply("");
     setStreamedCode("");
     setPrompt("");
+    queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 100) } : old);
 
     const images = attachedImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
     const sentPreviews = attachedImages.filter(img => img.preview).map(img => ({ preview: img.preview!, fileName: img.fileName }));
@@ -351,7 +352,6 @@ export default function EditorPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
     } finally {
@@ -601,6 +601,7 @@ export default function EditorPage() {
     setImgStatus("creating");
     setImgResultUrls([]);
     setImgError("");
+    queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 15) } : old);
 
     try {
       const resp = await fetch("/api/images/generate", {

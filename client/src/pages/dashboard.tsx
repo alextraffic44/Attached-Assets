@@ -557,6 +557,7 @@ export default function DashboardPage() {
                           return;
                         }
                         setIsEnhancing(true);
+                        queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 5) } : old);
                         try {
                           const res = await apiRequest("POST", "/api/enhance-prompt", { prompt: description });
                           const data = await res.json();
@@ -623,6 +624,7 @@ export default function DashboardPage() {
                         }
                         setIsResearching(true);
                         setDeepResearchEnabled(true);
+                        queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 10) } : old);
                         try {
                           const res = await apiRequest("POST", "/api/deep-research", { prompt: description });
                           const data = await res.json();
