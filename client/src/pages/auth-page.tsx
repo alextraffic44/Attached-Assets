@@ -238,15 +238,16 @@ export default function AuthPage() {
           <div style={{ position: "absolute", bottom: "10%", right: "5%", width: "16rem", height: "16rem", borderRadius: "50%", background: "radial-gradient(circle,rgba(101,0,255,0.05),transparent)", filter: "blur(50px)" }} />
         </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} style={{ width: "100%", maxWidth: 380, position: "relative", zIndex: 1 }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
+          style={{ width: "100%", maxWidth: 420, position: "relative", zIndex: 1, background: "rgba(255,255,255,0.65)", backdropFilter: "blur(28px)", WebkitBackdropFilter: "blur(28px)", borderRadius: 28, border: "1px solid rgba(255,255,255,0.8)", boxShadow: "0 20px 60px rgba(0,0,0,0.08), 0 1px 0 rgba(255,255,255,0.9) inset", padding: "2.5rem 2.5rem 2.5rem" }}>
 
-          <button onClick={() => setLocation("/")} style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "2.5rem", background: "none", border: "none", cursor: "pointer", color: "#86868B", fontSize: "0.88rem", fontWeight: 500, fontFamily: appleFont }}>
+          <button onClick={() => setLocation("/")} style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "2rem", background: "none", border: "none", cursor: "pointer", color: "#86868B", fontSize: "0.88rem", fontWeight: 500, fontFamily: appleFont }}>
             <ArrowLeft size={15} /> Назад
           </button>
 
           {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", marginBottom: "2.5rem" }}>
-            <svg viewBox="0 0 32 32" style={{ width: 34, height: 34 }} strokeWidth="2" fill="none">
+          <div style={{ display: "flex", alignItems: "center", gap: "0.8rem", marginBottom: "2rem" }}>
+            <svg viewBox="0 0 32 32" style={{ width: 42, height: 42, flexShrink: 0 }} strokeWidth="2" fill="none">
               <defs>
                 <linearGradient id="al" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#007AFF" /><stop offset="100%" stopColor="#5856D6" />
@@ -258,19 +259,19 @@ export default function AuthPage() {
               <path d="M12 16l-2 2 2 2 M20 16l2 2-2 2" stroke="url(#al)" strokeLinecap="round" strokeLinejoin="round" />
               <path d="M8 26 h16 M10 28 h12" stroke="url(#al)" strokeLinecap="round" />
             </svg>
-            <span style={{ fontSize: "1.15rem", fontWeight: 700, letterSpacing: "-0.02em", color: "#1D1D1F" }}>Craft AI</span>
+            <span style={{ fontSize: "1.7rem", fontWeight: 800, letterSpacing: "-0.04em", color: "#1D1D1F" }}>Craft AI</span>
           </div>
 
           {/* Heading */}
           <h1 style={{ fontSize: "2rem", fontWeight: 700, letterSpacing: "-0.04em", color: "#1D1D1F", marginBottom: "0.5rem" }}>
             Вход в аккаунт
           </h1>
-          <p style={{ fontSize: "0.9rem", color: "#86868B", marginBottom: "2.5rem", lineHeight: 1.5 }}>
+          <p style={{ fontSize: "0.9rem", color: "#86868B", marginBottom: "2rem", lineHeight: 1.6 }}>
             Авторизуйтесь через Telegram, чтобы начать создавать сайты
           </p>
 
           {/* Telegram widget */}
-          <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", boxShadow: "0 8px 30px rgba(0,0,0,0.06)", padding: "2rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
+          <div style={{ background: "rgba(255,255,255,0.7)", borderRadius: 18, border: "1px solid rgba(0,0,0,0.06)", padding: "1.5rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
             {isTelegramLoading ? (
               <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#86868B", fontSize: "0.9rem" }}>
                 <Loader2 size={18} className="animate-spin" />
@@ -278,7 +279,7 @@ export default function AuthPage() {
               </div>
             ) : botUsername ? (
               <>
-                <p style={{ fontSize: "0.8rem", color: "#86868B", margin: 0, textAlign: "center" }}>Нажмите кнопку ниже</p>
+                <p style={{ fontSize: "0.78rem", color: "#86868B", margin: 0, textAlign: "center" }}>Нажмите кнопку ниже</p>
                 <div id="telegram-widget-container" />
               </>
             ) : (
