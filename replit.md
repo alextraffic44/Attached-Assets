@@ -47,7 +47,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - ZIP export with all pages and images as local files (images/ folder)
 - Auto-save before each generation (version history)
 - Credit-based usage system
-- **Project Agent**: AI sees ALL pages in full context for consistent multi-page edits
+- **Project Agent**: Full agent mode — AI analyzes ALL pages, autonomously decides which files to edit, always uses FILE markers, creates missing pages when adding nav links
 - Favicon upload with built-in crop editor (auto-compress to 128x128 PNG)
 - Page delete via X button on tabs (except index.html)
 - Custom domain binding with real HTTP verification + DNS instructions for reg.ru

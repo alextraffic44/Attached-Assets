@@ -90,6 +90,8 @@ export default function EditorPage() {
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [imagePickerTab, setImagePickerTab] = useState<"library" | "upload">("library");
   const replaceFileInputRef = useRef<HTMLInputElement>(null);
+  const [recentlyEditedFiles, setRecentlyEditedFiles] = useState<Set<string>>(new Set());
+  const [lastEditedFiles, setLastEditedFiles] = useState<string[]>([]);
 
   const [imgGenOpen, setImgGenOpen] = useState(false);
   const [faviconUploading, setFaviconUploading] = useState(false);
@@ -233,6 +235,7 @@ export default function EditorPage() {
     setIsGenerating(true);
     setStreamingReply("");
     setStreamedCode("");
+    setLastEditedFiles([]);
     setPrompt("");
     queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 100) } : old);
 
@@ -312,8 +315,6 @@ export default function EditorPage() {
 
             const firstFileMarker = fullText.indexOf("--- FILE:");
             const htmlBlockStart = fullText.indexOf("```html\n");
-            const targetFn = activeFile || "index.html";
-            const escapedFn = targetFn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
             if (firstFileMarker > 0 && (htmlBlockStart === -1 || firstFileMarker < htmlBlockStart)) {
               const textBefore = fullText.substring(0, firstFileMarker).trim();
@@ -323,16 +324,16 @@ export default function EditorPage() {
               if (textBefore) setStreamingReply(textBefore);
             }
 
-            const fileCompleteRe = new RegExp(`---\\s*FILE:\\s*${escapedFn}\\s*---\\s*\\n?\\s*\`\`\`html\\s*\\n?([\\s\\S]*?)\`\`\``, 'i');
-            const filePartialRe = new RegExp(`---\\s*FILE:\\s*${escapedFn}\\s*---\\s*\\n?\\s*\`\`\`html\\s*\\n?([\\s\\S]*)`, 'i');
-            const fileCompleteMatch = fullText.match(fileCompleteRe);
-            if (fileCompleteMatch) {
-              setStreamedCode(fileCompleteMatch[1].trim());
-            } else if (firstFileMarker !== -1) {
-              const filePartialMatch = fullText.match(filePartialRe);
-              if (filePartialMatch) {
-                const partialCode = filePartialMatch[1].trim();
-                if (partialCode) setStreamedCode(partialCode);
+            if (firstFileMarker !== -1) {
+              const firstFileComplete = fullText.match(/---\s*FILE:\s*([^\s\-]+\.html)\s*---\s*\n?\s*```html\s*\n?([\s\S]*?)```/i);
+              if (firstFileComplete) {
+                setStreamedCode(firstFileComplete[2].trim());
+              } else {
+                const firstFilePartial = fullText.match(/---\s*FILE:\s*[^\s\-]+\.html\s*---\s*\n?\s*```html\s*\n?([\s\S]*)/i);
+                if (firstFilePartial) {
+                  const partialCode = firstFilePartial[1].trim();
+                  if (partialCode) setStreamedCode(partialCode);
+                }
               }
             } else {
               const htmlMatchComplete = fullText.match(/```html\n?([\s\S]*?)```/);
@@ -340,9 +341,7 @@ export default function EditorPage() {
                 setStreamedCode(htmlMatchComplete[1].trim());
               } else if (htmlBlockStart !== -1) {
                 const codeAfterMarker = fullText.substring(htmlBlockStart + 8);
-                if (codeAfterMarker.trim()) {
-                  setStreamedCode(codeAfterMarker);
-                }
+                if (codeAfterMarker.trim()) setStreamedCode(codeAfterMarker);
               } else if (fullText.trimStart().startsWith("<!DOCTYPE") || fullText.trimStart().startsWith("<html")) {
                 setStreamedCode(fullText.trim());
               }
@@ -350,10 +349,15 @@ export default function EditorPage() {
           }
           if (data.done) {
             setGenerationStatus(null);
-            const targetFile = data.editedFile || activeFile || "index.html";
+            const editedFiles: string[] = data.editedFiles || (data.editedFile ? [data.editedFile] : ["index.html"]);
+            const targetFile = editedFiles[0] || "index.html";
             const targetCode = targetFile === "index.html" ? data.code : (data.editedCode || data.code);
             if (targetCode) setStreamedCode(targetCode);
             setActiveFile(targetFile);
+            setLastEditedFiles(editedFiles);
+            const newSet = new Set(editedFiles);
+            setRecentlyEditedFiles(newSet);
+            setTimeout(() => setRecentlyEditedFiles(new Set()), 4000);
             queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
             queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
             if (data.newBalance !== undefined) {
@@ -1060,6 +1064,11 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       if (e.data.type === 'nz-navigate-file') {
         if (isGenerating) return;
         const filename = e.data.filename;
+        const fileExists = filename === "index.html" || allFiles.some(f => f.filename === filename);
+        if (!fileExists) {
+          toast({ title: `Страница не создана`, description: `Попросите AI создать страницу "${filename}"`, variant: "destructive" });
+          return;
+        }
         setActiveFile(filename);
         if (filename === "index.html") setStreamedCode("");
       }
@@ -1304,6 +1313,21 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                           <div className="text-slate-700 dark:text-slate-300 text-[13px] leading-relaxed select-text" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                             {msg.content.startsWith("<!") || msg.content.startsWith("<html") ? "Сайт обновлён" : msg.content}
                           </div>
+                          {isLatestModel && lastEditedFiles.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                              <span className="text-[11px] text-slate-400 font-medium">Изменено:</span>
+                              {lastEditedFiles.map(fn => (
+                                <button
+                                  key={fn}
+                                  onClick={() => { setActiveFile(fn); if (fn === "index.html") setStreamedCode(""); }}
+                                  className="flex items-center gap-1 text-[11px] font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full hover:bg-emerald-200 dark:hover:bg-emerald-800/40 transition-colors"
+                                >
+                                  <FileText className="w-2.5 h-2.5" />
+                                  {fn}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1412,7 +1436,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
         <SkeuoPanel className="flex-1 relative bg-slate-100 dark:bg-black flex flex-col overflow-hidden">
             <div className="flex items-center gap-1 px-4 pt-3 pb-1 overflow-x-auto shrink-0">
               {allFiles.map(f => (
-                <div key={f.filename} className={`flex items-center gap-0.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeFile === f.filename ? "bg-primary text-white shadow-md" : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700"}`}>
+                <div key={f.filename} className={`flex items-center gap-0.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeFile === f.filename ? "bg-primary text-white shadow-md" : recentlyEditedFiles.has(f.filename) && activeFile !== f.filename ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-400/60" : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700"}`}>
                   <button
                     onClick={() => { if (isGenerating) return; setActiveFile(f.filename); if (f.filename === "index.html") setStreamedCode(""); }}
                     className="flex items-center gap-1.5 px-3 py-1.5"
@@ -1421,6 +1445,9 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   >
                     <FileText className="w-3 h-3" />
                     {f.filename}
+                    {recentlyEditedFiles.has(f.filename) && activeFile !== f.filename && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    )}
                   </button>
                   {f.filename !== "index.html" && (
                     <button
