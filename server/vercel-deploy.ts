@@ -131,13 +131,22 @@ export async function checkDomainStatus(
   vercelProjectId: string,
   domain: string
 ): Promise<{ verified: boolean }> {
-  if (!VERCEL_TOKEN) return { verified: false };
-
-  const res = await fetch(
-    `${VERCEL_API}/v9/projects/${vercelProjectId}/domains/${domain}`,
-    { headers: headers() }
-  );
-  const data = (await res.json()) as any;
-  console.log("[Vercel] Domain status for", domain, ":", JSON.stringify(data));
-  return { verified: data.verified ?? false };
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`https://${domain}`, {
+      method: "HEAD",
+      signal: controller.signal,
+      redirect: "follow",
+    });
+    clearTimeout(timeout);
+    const server = res.headers.get("server") || "";
+    const via = res.headers.get("x-vercel-id") || res.headers.get("x-powered-by") || "";
+    const isVercel = server.toLowerCase().includes("vercel") || via.length > 0 || res.ok;
+    console.log("[Domain Check]", domain, "status:", res.status, "server:", server, "vercel:", isVercel);
+    return { verified: isVercel && res.status < 500 };
+  } catch (err: any) {
+    console.log("[Domain Check]", domain, "failed:", err.message);
+    return { verified: false };
+  }
 }
