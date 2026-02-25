@@ -155,7 +155,7 @@ export default function Landing() {
       `;
       document.head.appendChild(pricingStyle);
 
-      function makeCard(tokens, price, badge, delay) {
+      function makeCard(tokens, price, badge, delay, description) {
         const wrap = document.createElement("a");
         wrap.href = "/auth";
         wrap.className = "m2card";
@@ -179,6 +179,10 @@ export default function Landing() {
         const divider = document.createElement("div");
         divider.style.cssText = "width:100%;height:1px;background:rgba(255,255,255,.08);margin-bottom:1.5rem;";
 
+        const descEl = document.createElement("div");
+        descEl.style.cssText = "font-size:.85rem;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:1.5rem;text-align:center;min-height:4.5rem;display:flex;align-items:center;justify-content:center;";
+        descEl.innerHTML = description;
+
         const priceEl = document.createElement("div");
         priceEl.style.cssText = "font-size:1.4rem;font-weight:600;letter-spacing:-.02em;background:linear-gradient(to right,hsl(27deg 93% 60%),#00a6ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;";
         priceEl.textContent = price;
@@ -186,6 +190,7 @@ export default function Landing() {
         wrap.appendChild(tokensEl);
         wrap.appendChild(label);
         wrap.appendChild(divider);
+        wrap.appendChild(descEl);
         wrap.appendChild(priceEl);
         return wrap;
       }
@@ -208,10 +213,10 @@ export default function Landing() {
       const grid = document.createElement("div");
       grid.style.cssText = "display:grid;grid-template-columns:repeat(4,1fr);gap:1.5rem;";
 
-      grid.appendChild(makeCard("1 000", "990 ₽", false, ""));
-      grid.appendChild(makeCard("1 900", "1 690 ₽", false, "0.1s"));
-      grid.appendChild(makeCard("4 500", "3 990 ₽", false, "0.2s"));
-      grid.appendChild(makeCard("6 500", "5 990 ₽", true, "0.3s"));
+      grid.appendChild(makeCard("1 000", "990 ₽", false, "", "1 сайт,<br>10 итераций"));
+      grid.appendChild(makeCard("1 900", "1 690 ₽", false, "0.1s", "3 сайта,<br>19 итераций"));
+      grid.appendChild(makeCard("4 500", "3 990 ₽", false, "0.2s", "5 сайтов,<br>45 итераций, доступ к премиум шаблонам"));
+      grid.appendChild(makeCard("6 500", "5 990 ₽", true, "0.3s", "7 сайтов,<br>65 итераций, доступ к премиум шаблонам"));
 
       pContainer.appendChild(pHeader);
       pContainer.appendChild(grid);
