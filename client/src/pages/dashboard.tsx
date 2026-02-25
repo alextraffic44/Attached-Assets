@@ -60,6 +60,11 @@ export default function DashboardPage() {
   const [researchData, setResearchData] = useState("");
   const [showTopUpModal, setShowTopUpModal] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [multiPageEnabled, setMultiPageEnabled] = useState(false);
+  const [pageNames, setPageNames] = useState<string[]>(["О нас", "Услуги", "Контакты"]);
+  const [seoEnabled, setSeoEnabled] = useState(false);
+  const [seoH1, setSeoH1] = useState("");
+  const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
 
   const { data: userProjects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -81,7 +86,15 @@ export default function DashboardPage() {
     onSuccess: (project: Project) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       setShowCreateModal(false);
-      const prompt = selectedMode === "template" ? `Создай сайт: ${selectedTemplate}. ${description}` : description || title;
+      let prompt = selectedMode === "template" ? `Создай сайт: ${selectedTemplate}. ${description}` : description || title;
+      if (multiPageEnabled && pageNames.filter(p => p.trim()).length > 0) {
+        const pages = pageNames.filter(p => p.trim()).join(", ");
+        prompt += `\n\nСделай многостраничный сайт. Страницы: index.html (главная), ${pages}. Для каждой страницы создай отдельный HTML-файл. В навигации добавь ссылки на все страницы.`;
+      }
+      if (seoEnabled && seoH1.trim()) {
+        const h2List = seoH2s.filter(h => h.trim()).map(h => `H2: "${h.trim()}"`).join(", ");
+        prompt += `\n\nSEO-структура заголовков для главной страницы: H1: "${seoH1.trim()}"${h2List ? `, ${h2List}` : ""}. Используй эти заголовки точно в тексте сайта.`;
+      }
       const enhancedParam = isEnhanced ? "&enhanced=1" : "";
       const researchParam = researchData ? `&research=${encodeURIComponent(researchData)}` : "";
       setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}${researchParam}`);
@@ -235,7 +248,7 @@ export default function DashboardPage() {
             </h1>
           </div>
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setShowCreateModal(true); }}
             className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
             style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.9rem 1.8rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
           >
@@ -546,6 +559,89 @@ export default function DashboardPage() {
                       style={{ background: isEnhanced ? 'rgba(52,199,89,0.04)' : 'rgba(0,0,0,0.03)', border: isEnhanced ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(0,0,0,0.08)' }}
                     />
                   </div>
+                  {/* Multi-page + SEO toggles */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMultiPageEnabled(v => !v)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+                      style={{ border: multiPageEnabled ? '1px solid rgba(0,113,227,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: multiPageEnabled ? 'rgba(0,113,227,0.07)' : 'transparent', color: multiPageEnabled ? '#0058b3' : '#86868B', cursor: 'pointer' }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                      Многостраничный сайт
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSeoEnabled(v => !v)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+                      style={{ border: seoEnabled ? '1px solid rgba(52,199,89,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: seoEnabled ? 'rgba(52,199,89,0.07)' : 'transparent', color: seoEnabled ? '#1D8348' : '#86868B', cursor: 'pointer' }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                      SEO заголовки
+                    </button>
+                  </div>
+
+                  {multiPageEnabled && (
+                    <div className="rounded-2xl p-4 space-y-2" style={{ background: 'rgba(0,113,227,0.04)', border: '1px solid rgba(0,113,227,0.15)' }}>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#0058b3', marginBottom: 8 }}>Страницы сайта</div>
+                      {pageNames.map((name, i) => (
+                        <div key={i} className="flex gap-2 items-center">
+                          <Input
+                            placeholder={`Страница ${i + 1} (напр. "О нас")`}
+                            value={name}
+                            onChange={e => setPageNames(prev => prev.map((p, idx) => idx === i ? e.target.value : p))}
+                            className="h-9 rounded-xl text-sm"
+                            style={{ background: '#fff', border: '1px solid rgba(0,113,227,0.2)' }}
+                          />
+                          {pageNames.length > 1 && (
+                            <button type="button" onClick={() => setPageNames(prev => prev.filter((_, idx) => idx !== i))}
+                              style={{ color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>✕</button>
+                          )}
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setPageNames(prev => [...prev, ""])}
+                        className="text-xs font-semibold mt-1" style={{ color: '#0058b3', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}>
+                        + Добавить страницу
+                      </button>
+                    </div>
+                  )}
+
+                  {seoEnabled && (
+                    <div className="rounded-2xl p-4 space-y-2" style={{ background: 'rgba(52,199,89,0.04)', border: '1px solid rgba(52,199,89,0.2)' }}>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#1D8348', marginBottom: 8 }}>SEO заголовки главной страницы</div>
+                      <div className="flex gap-2 items-center">
+                        <span className="text-xs font-bold w-8 shrink-0" style={{ color: '#1D8348' }}>H1</span>
+                        <Input
+                          placeholder='Например: Карточка товара для маркетплейсов'
+                          value={seoH1}
+                          onChange={e => setSeoH1(e.target.value)}
+                          className="h-9 rounded-xl text-sm"
+                          style={{ background: '#fff', border: '1px solid rgba(52,199,89,0.25)' }}
+                        />
+                      </div>
+                      {seoH2s.map((h2, i) => (
+                        <div key={i} className="flex gap-2 items-center">
+                          <span className="text-xs font-bold w-8 shrink-0" style={{ color: '#1D8348' }}>H2</span>
+                          <Input
+                            placeholder={`Подзаголовок ${i + 1}`}
+                            value={h2}
+                            onChange={e => setSeoH2s(prev => prev.map((h, idx) => idx === i ? e.target.value : h))}
+                            className="h-9 rounded-xl text-sm"
+                            style={{ background: '#fff', border: '1px solid rgba(52,199,89,0.2)' }}
+                          />
+                          {seoH2s.length > 1 && (
+                            <button type="button" onClick={() => setSeoH2s(prev => prev.filter((_, idx) => idx !== i))}
+                              style={{ color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>✕</button>
+                          )}
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setSeoH2s(prev => [...prev, ""])}
+                        className="text-xs font-semibold mt-1" style={{ color: '#1D8348', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}>
+                        + Добавить H2
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex gap-3">
                     <button
                       data-testid="button-enhance-prompt"
