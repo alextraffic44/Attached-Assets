@@ -1813,13 +1813,22 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                       <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
-                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 8 }}>Настройка в reg.ru — пошагово</div>
+                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 8 }}>Настройка DNS для {customDomain}</div>
                         <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.8 }}>
+                          <div style={{ fontWeight: 600, color: "#1d4ed8", marginBottom: 4 }}>Способ 1 — NS-серверы (рекомендуется)</div>
                           <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → выберите <b>{customDomain}</b></div>
-                          <div><b>2.</b> Найдите раздел «<b>DNS-серверы и управление зоной</b>» → нажмите «<b>Изменить</b>»</div>
-                          <div><b>3.</b> В разделе «<b>Ресурсные записи</b>» удалите все существующие <b>A</b> записи (иконка корзины справа)</div>
-                          <div><b>4.</b> Нажмите «<b>+ Добавить запись</b>» и создайте:</div>
-                          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.6rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.74rem", display: "flex", flexDirection: "column", gap: 4 }}>
+                          <div><b>2.</b> Раздел «<b>DNS-серверы и управление зоной</b>» → «<b>Изменить</b>»</div>
+                          <div><b>3.</b> Выберите «<b>Свой список DNS-серверов</b>» и укажите:</div>
+                          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem" }}>
+                            <div><b>ns1.vercel-dns.com</b></div>
+                            <div><b>ns2.vercel-dns.com</b></div>
+                          </div>
+                          <div style={{ color: "#6b7280", fontSize: "0.72rem" }}>Vercel сам настроит все записи и SSL-сертификат.</div>
+
+                          <div style={{ borderTop: "1px solid #dbeafe", margin: "10px 0 6px", paddingTop: 8, fontWeight: 600, color: "#1d4ed8" }}>Способ 2 — A и CNAME записи</div>
+                          <div><b>1.</b> В разделе «<b>Ресурсные записи</b>» удалите старые <b>A</b> записи (иконка корзины)</div>
+                          <div><b>2.</b> Нажмите «<b>+ Добавить запись</b>» и создайте:</div>
+                          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.74rem", display: "flex", flexDirection: "column", gap: 4 }}>
                             <div>Тип: <b>A</b> &nbsp;|&nbsp; Хост: <b>@</b> &nbsp;|&nbsp; Значение: <b>76.76.21.21</b></div>
                             <div>Тип: <b>CNAME</b> &nbsp;|&nbsp; Хост: <b>www</b> &nbsp;|&nbsp; Значение: <b>cname.vercel-dns.com</b></div>
                           </div>
