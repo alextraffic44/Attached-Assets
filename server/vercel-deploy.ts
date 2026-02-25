@@ -1,16 +1,11 @@
 const VERCEL_API = "https://api.vercel.com";
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
-const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
 
 function headers() {
   return {
     Authorization: `Bearer ${VERCEL_TOKEN}`,
     "Content-Type": "application/json",
   };
-}
-
-function teamQuery() {
-  return VERCEL_TEAM_ID ? `?teamId=${VERCEL_TEAM_ID}` : "";
 }
 
 export interface DeployFile {
@@ -24,8 +19,10 @@ export async function deployToVercel(
 ): Promise<{ url: string; deploymentId: string }> {
   if (!VERCEL_TOKEN) throw new Error("VERCEL_TOKEN не настроен");
 
+  const safeName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 50);
+
   const payload = {
-    name: projectName,
+    name: safeName,
     files: files.map((f) => ({
       file: f.filename,
       data: Buffer.from(f.content).toString("base64"),
@@ -35,7 +32,7 @@ export async function deployToVercel(
     target: "production",
   };
 
-  const res = await fetch(`${VERCEL_API}/v13/deployments${teamQuery()}`, {
+  const res = await fetch(`${VERCEL_API}/v13/deployments`, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(payload),
@@ -60,7 +57,7 @@ export async function addCustomDomain(
   if (!VERCEL_TOKEN) throw new Error("VERCEL_TOKEN не настроен");
 
   const res = await fetch(
-    `${VERCEL_API}/v9/projects/${vercelProjectId}/domains${teamQuery()}`,
+    `${VERCEL_API}/v9/projects/${vercelProjectId}/domains`,
     {
       method: "POST",
       headers: headers(),
@@ -73,7 +70,7 @@ export async function addCustomDomain(
 
   return {
     verified: data.verified ?? false,
-    cname: data.apexName ? `cname.vercel-dns.com` : "cname.vercel-dns.com",
+    cname: "cname.vercel-dns.com",
   };
 }
 
@@ -84,7 +81,7 @@ export async function checkDomainStatus(
   if (!VERCEL_TOKEN) return { verified: false };
 
   const res = await fetch(
-    `${VERCEL_API}/v9/projects/${vercelProjectId}/domains/${domain}${teamQuery()}`,
+    `${VERCEL_API}/v9/projects/${vercelProjectId}/domains/${domain}`,
     { headers: headers() }
   );
 
