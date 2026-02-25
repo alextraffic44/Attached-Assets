@@ -1979,7 +1979,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                       <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
-                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 8 }}>Настройка DNS для {customDomain}</div>
+                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 8 }}>Настройка DNS для <a href={`https://${customDomain}`} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline", cursor: "pointer" }}>{customDomain}</a></div>
                         <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.8 }}>
                           <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → выберите <b>{customDomain}</b></div>
                           <div><b>2.</b> Раздел «<b>DNS-серверы и управление зоной</b>» → «<b>Изменить</b>»</div>
