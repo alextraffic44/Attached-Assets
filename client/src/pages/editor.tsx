@@ -936,6 +936,25 @@ document.addEventListener('DOMContentLoaded',function(){
     var textContent=t.textContent||'';if(textContent.length>100)textContent=textContent.substring(0,100)+'...';
     window.parent.postMessage({type:'nz-element-selected',tag:t.tagName.toLowerCase(),text:textContent.trim(),classes:typeof t.className==='string'?t.className.replace(/__nz-sel-[a-z]+/g,'').trim():'',path:getPath(t),outerSnippet:snippet},'*');
   },true);
+  function getCleanHtmlSel(){
+    var clone=document.documentElement.cloneNode(true);
+    var sels=clone.querySelectorAll('[data-nz-selector],[data-nz-leads]');
+    for(var i=0;i<sels.length;i++) sels[i].parentNode.removeChild(sels[i]);
+    var cls=clone.querySelectorAll('.__nz-sel-hover,.__nz-sel-active,.__nz-sel-label');
+    for(var i=0;i<cls.length;i++){cls[i].classList.remove('__nz-sel-hover','__nz-sel-active','__nz-sel-label')}
+    return '<!DOCTYPE html>\\n'+clone.outerHTML;
+  }
+  window.addEventListener('message',function(e){
+    if(e.data&&e.data.type==='nz-delete-element'){
+      var path=e.data.path.split(',').map(Number);var node=document.body;
+      for(var i=0;i<path.length;i++){if(node.children[path[i]])node=node.children[path[i]];else return}
+      if(node&&node!==document.body&&node!==document.documentElement){
+        node.parentNode.removeChild(node);
+        if(selected===node){selected=null;hideLabel()}
+        window.parent.postMessage({type:'nz-element-deleted',html:getCleanHtmlSel()},'*');
+      }
+    }
+  });
 });
 <\/script>`;
       let injected = code.replace('</head>', selectorStyle + '</head>');
@@ -1090,6 +1109,29 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           path: e.data.path,
           outerSnippet: e.data.outerSnippet,
         });
+      }
+      if (e.data.type === 'nz-element-deleted') {
+        const finalHtml = e.data.html;
+        setSelectedElement(null);
+        if (activeFile === "index.html") {
+          setStreamedCode(finalHtml);
+          fetch(`/api/projects/${projectId}/code`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ generatedCode: finalHtml }),
+            credentials: "include",
+          });
+        } else {
+          fetch(`/api/projects/${projectId}/files/${activeFile}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: finalHtml }),
+            credentials: "include",
+          }).then(() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+          });
+        }
+        toast({ title: "Элемент удалён", description: "Изменения сохранены" });
       }
     };
     window.addEventListener('message', handler);
@@ -1355,6 +1397,17 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                     <span className="text-xs text-orange-500/70 ml-1.5 truncate block mt-0.5">«{selectedElement.text.substring(0, 60)}{selectedElement.text.length > 60 ? '...' : ''}»</span>
                   )}
                 </div>
+                <button
+                  onClick={() => {
+                    if (!selectedElement?.path) return;
+                    iframeRef.current?.contentWindow?.postMessage({ type: 'nz-delete-element', path: selectedElement.path }, '*');
+                  }}
+                  className="text-red-400 hover:text-red-600 transition-colors shrink-0"
+                  title="Удалить элемент"
+                  data-testid="button-delete-element"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
                 <button onClick={() => setSelectedElement(null)} className="text-orange-400 hover:text-orange-600 transition-colors shrink-0" data-testid="button-clear-selection">
                   <XCircle className="w-4 h-4" />
                 </button>
