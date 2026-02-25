@@ -91,6 +91,8 @@ export default function EditorPage() {
   const replaceFileInputRef = useRef<HTMLInputElement>(null);
 
   const [imgGenOpen, setImgGenOpen] = useState(false);
+  const [faviconUploading, setFaviconUploading] = useState(false);
+  const faviconInputRef = useRef<HTMLInputElement>(null);
   const [imgName, setImgName] = useState("");
   const [imgPrompt, setImgPrompt] = useState("");
   const [imgSize, setImgSize] = useState("16:9");
@@ -571,6 +573,42 @@ export default function EditorPage() {
     } finally {
       setDomainAdding(false);
     }
+  };
+
+  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !project) return;
+    setFaviconUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const res = await fetch(`/api/projects/${project.id}/favicon`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ dataUrl: base64, mimeType: file.type }),
+        });
+        if (res.ok) {
+          await queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+          const fresh = await fetch(`/api/projects/${project.id}`, { credentials: "include" });
+          if (fresh.ok) {
+            const p = await fresh.json();
+            if (iframeRef.current && p.generatedCode) {
+              const blob = new Blob([p.generatedCode], { type: "text/html" });
+              iframeRef.current.src = URL.createObjectURL(blob);
+            }
+          }
+          setFaviconUploading(false);
+        } else {
+          setFaviconUploading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      setFaviconUploading(false);
+    }
+    if (faviconInputRef.current) faviconInputRef.current.value = "";
   };
 
   const handleCheckDomain = async () => {
@@ -1064,6 +1102,16 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           <Button variant="outline" size="sm" className="rounded-xl font-bold px-4" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip">
             <Download className="w-4 h-4 mr-2" />
             ZIP
+          </Button>
+
+          <input ref={faviconInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/x-icon,image/webp" className="hidden" onChange={handleFaviconUpload} data-testid="input-favicon-upload" />
+          <Button variant="outline" size="sm" className="rounded-xl font-bold px-3" onClick={() => faviconInputRef.current?.click()} disabled={faviconUploading || !currentCode} title="Загрузить фавикон" data-testid="button-favicon-upload">
+            {faviconUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+              project?.generatedCode?.includes('rel="icon"') || project?.generatedCode?.includes("rel='icon'")
+                ? <span style={{ fontSize: 16 }}>✅</span>
+                : <span style={{ fontSize: 16 }}>🔖</span>
+            )}
+            <span className="ml-1.5 hidden sm:inline">Фавикон</span>
           </Button>
 
           <Button variant="outline" size="sm" className="rounded-xl font-bold px-4 bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen">

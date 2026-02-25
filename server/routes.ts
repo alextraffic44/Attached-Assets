@@ -1027,6 +1027,39 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/projects/:id/favicon", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
+    try {
+      const projectId = parseInt(req.params.id);
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
+      const { dataUrl, mimeType } = req.body;
+      if (!dataUrl) return res.status(400).json({ message: "dataUrl обязателен" });
+
+      const faviconTag = `<link rel="icon" type="${mimeType || "image/png"}" href="${dataUrl}">`;
+      const injectFavicon = (html: string): string => {
+        const existing = /<link[^>]+rel=["']icon["'][^>]*>/i;
+        if (existing.test(html)) return html.replace(existing, faviconTag);
+        return html.replace(/<\/head>/i, `  ${faviconTag}\n</head>`);
+      };
+
+      const updatedCode = injectFavicon(project.generatedCode);
+      await storage.updateProject(projectId, { generatedCode: updatedCode });
+
+      const files = await storage.getProjectFiles(projectId);
+      for (const f of files) {
+        if (f.filename.endsWith(".html")) {
+          await storage.upsertProjectFile({ projectId, filename: f.filename, code: injectFavicon(f.code) });
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Ошибка загрузки фавикона" });
+    }
+  });
+
   app.post("/api/projects/:id/domain", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
     try {
