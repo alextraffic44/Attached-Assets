@@ -420,42 +420,25 @@ export async function registerRoutes(
       const existingFiles = await storage.getProjectFiles(project.id);
 
       if (isEditMode) {
-        const allProjectFiles = [
-          { filename: "index.html", code: project.generatedCode || "" },
-          ...existingFiles.filter(f => f.filename !== "index.html"),
-        ];
+        const editingFile = activeFile || "index.html";
+        const editingFileCode = editingFile === "index.html" 
+          ? project.generatedCode 
+          : existingFiles.find(f => f.filename === editingFile)?.code || project.generatedCode;
 
-        systemContent += `\n\n${"═".repeat(60)}\nРЕЖИМ АГЕНТА ПРОЕКТА\n${"═".repeat(60)}\n`;
-        systemContent += `Ты — AI-агент проекта. Ты видишь ВЕСЬ код сайта — все страницы целиком.\n`;
-        systemContent += `Твоя задача:\n`;
-        systemContent += `1. Проанализируй запрос пользователя\n`;
-        systemContent += `2. Определи, какие файлы нужно создать или изменить\n`;
-        systemContent += `3. Верни ТОЛЬКО изменённые или новые файлы\n\n`;
+        systemContent += `\n\n${"═".repeat(43)}\nРЕЖИМ РЕДАКТИРОВАНИЯ — АКТИВНЫЙ ФАЙЛ: ${editingFile}\n${"═".repeat(43)}\nПользователь РЕДАКТИРУЕТ файл "${editingFile}". Все изменения должны применяться К ЭТОМУ ФАЙЛУ.\n\n⚠️ КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА РЕДАКТИРОВАНИЯ:\n1. ОБЯЗАТЕЛЬНО сохрани <nav> (навбар) со ВСЕМИ ссылками навигации — НИКОГДА не удаляй навигационное меню!\n2. ОБЯЗАТЕЛЬНО сохрани <footer> — НИКОГДА не удаляй подвал сайта!\n3. Сохранить ВСЕ существующие секции, стили, контент, анимации и структуру\n4. Изменять/добавлять ТОЛЬКО то, что явно просит пользователь\n5. НЕ удалять, НЕ упрощать, НЕ сокращать существующий код\n6. Вернуть ПОЛНЫЙ документ целиком (от <!DOCTYPE html> до </html>)\n7. НЕ заменяй весь дизайн — редактируй точечно то, что просит пользователь\n\nФОРМАТ ОТВЕТА:\n- Сначала напиши 1-3 предложения о внесённых изменениях\n- Затем ОДИН блок \`\`\`html с ПОЛНЫМ обновлённым кодом файла "${editingFile}"\n- Если пользователь просит изменить ВСЕ страницы — используй маркеры --- FILE: имя.html --- перед каждым блоком\n\n`;
 
-        systemContent += `⚠️ КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА:\n`;
-        systemContent += `• ОБЯЗАТЕЛЬНО сохраняй <nav>, <header>, <footer> — никогда не удаляй их\n`;
-        systemContent += `• Изменяй ТОЛЬКО то, что просит пользователь — не переписывай весь сайт\n`;
-        systemContent += `• НЕ сокращай и НЕ упрощай существующий код\n`;
-        systemContent += `• Каждый файл должен быть ПОЛНЫМ документом от <!DOCTYPE html> до </html>\n`;
-        systemContent += `• 🚨 СОЗДАНИЕ НОВЫХ СТРАНИЦ: Если ты добавляешь ссылку на новую страницу (например, <a href="app.html">),\n`;
-        systemContent += `  ты ОБЯЗАН также создать этот файл (app.html) с полным HTML-кодом страницы.\n`;
-        systemContent += `  Без файла ссылка не будет работать — страница будет пустой!\n\n`;
+        systemContent += `ТЕКУЩИЙ КОД РЕДАКТИРУЕМОГО ФАЙЛА (${editingFile}):\n\`\`\`html\n${editingFileCode}\n\`\`\`\n`;
 
-        systemContent += `📋 ФОРМАТ ОТВЕТА:\n`;
-        systemContent += `1. Сначала напиши 1-3 предложения: что ты изменяешь и в каких файлах\n`;
-        systemContent += `2. Затем для КАЖДОГО изменённого файла используй маркер:\n`;
-        systemContent += `   --- FILE: имя-файла.html ---\n`;
-        systemContent += `   \`\`\`html\n`;
-        systemContent += `   [полный код файла]\n`;
-        systemContent += `   \`\`\`\n`;
-        systemContent += `3. Если изменён только один файл — всё равно используй маркер --- FILE: ---\n\n`;
-
-        systemContent += `${"═".repeat(60)}\nВСЕ ФАЙЛЫ ПРОЕКТА (полный код):\n${"═".repeat(60)}\n\n`;
-        for (const f of allProjectFiles) {
-          if (f.code && f.code.length > 0) {
-            systemContent += `--- ТЕКУЩИЙ КОД: ${f.filename} ---\n\`\`\`html\n${f.code}\n\`\`\`\n\n`;
-          } else {
-            systemContent += `--- ТЕКУЩИЙ КОД: ${f.filename} --- (пустой файл)\n\n`;
+        if (existingFiles.length > 0) {
+          const otherFiles = editingFile === "index.html" 
+            ? existingFiles 
+            : [{ filename: "index.html", code: project.generatedCode }, ...existingFiles.filter(f => f.filename !== editingFile)];
+          if (otherFiles.length > 0) {
+            systemContent += `\nДРУГИЕ ФАЙЛЫ ПРОЕКТА (для справки, НЕ редактируй их без запроса):\n`;
+            for (const f of otherFiles) {
+              const code = 'code' in f ? f.code : '';
+              systemContent += `- ${f.filename} (${(code || '').length} символов)\n`;
+            }
           }
         }
       }
@@ -609,19 +592,20 @@ export async function registerRoutes(
       console.log("Parsed files count:", parsedFiles.length, parsedFiles.map(f => f.filename));
 
       const editingFile = activeFile || "index.html";
-      let mainHtmlCode: string = project.generatedCode || "";
-      const editedFilenames: string[] = [];
+      let mainHtmlCode: string;
 
       if (parsedFiles.length > 0) {
         const indexFile = parsedFiles.find(f => f.filename === "index.html");
         if (indexFile) {
           mainHtmlCode = indexFile.code;
-          editedFilenames.push("index.html");
+        } else if (parsedFiles.find(f => f.filename === editingFile)) {
+          mainHtmlCode = project.generatedCode || parsedFiles[0].code;
+        } else {
+          mainHtmlCode = parsedFiles[0].code;
         }
         for (const pf of parsedFiles) {
           if (pf.filename !== "index.html") {
             await storage.upsertProjectFile({ projectId: project.id, filename: pf.filename, code: pf.code });
-            if (!editedFilenames.includes(pf.filename)) editedFilenames.push(pf.filename);
           }
         }
       } else {
@@ -635,10 +619,11 @@ export async function registerRoutes(
 
         if (parsedCode && isEditMode && editingFile !== "index.html") {
           await storage.upsertProjectFile({ projectId: project.id, filename: editingFile, code: parsedCode });
-          editedFilenames.push(editingFile);
+          mainHtmlCode = project.generatedCode || "";
         } else if (parsedCode) {
           mainHtmlCode = parsedCode;
-          editedFilenames.push("index.html");
+        } else {
+          mainHtmlCode = project.generatedCode || "";
         }
       }
 
@@ -658,9 +643,8 @@ export async function registerRoutes(
       });
 
       const allFiles = await storage.getProjectFiles(project.id);
-      const firstEditedFile = editedFilenames[0] || "index.html";
-      const firstEditedCode = firstEditedFile === "index.html" ? mainHtmlCode : allFiles.find(f => f.filename === firstEditedFile)?.code || mainHtmlCode;
-      res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, editedFile: firstEditedFile, editedCode: firstEditedCode, editedFiles: editedFilenames, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })), creditsUsed: GENERATION_COST, newBalance: genDeduction.newBalance })}\n\n`);
+      const editedFileCode = editingFile !== "index.html" ? allFiles.find(f => f.filename === editingFile)?.code : mainHtmlCode;
+      res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, editedFile: editingFile, editedCode: editedFileCode || mainHtmlCode, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })), creditsUsed: GENERATION_COST, newBalance: genDeduction.newBalance })}\n\n`);
       res.end();
     } catch (err: any) {
       console.error("Generation error:", err?.message || err);

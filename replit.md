@@ -22,7 +22,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 
 ## Database Schema
 - `users` — id, email, password, displayName, credits, plan, createdAt
-- `projects` — id, userId, title, description, generatedCode, geminiInteractionId, publishedUrl, publishStatus, vercelProjectId, customDomain, createdAt, updatedAt
+- `projects` — id, userId, title, description, generatedCode, geminiInteractionId, createdAt, updatedAt
 - `project_messages` — id, projectId, role, content, createdAt
 - `project_images` — id, projectId, name, url, prompt, createdAt (named image library)
 - `project_versions` — id, projectId, code, label, createdAt (version history/rollback)
@@ -47,10 +47,6 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - ZIP export with all pages and images as local files (images/ folder)
 - Auto-save before each generation (version history)
 - Credit-based usage system
-- **Project Agent**: Full agent mode — AI analyzes ALL pages, autonomously decides which files to edit, always uses FILE markers, creates missing pages when adding nav links
-- Favicon upload with built-in crop editor (auto-compress to 128x128 PNG)
-- Page delete via X button on tabs (except index.html)
-- Custom domain binding with real HTTP verification + DNS instructions for reg.ru
 
 ## API Endpoints (Images)
 - `POST /api/images/generate` — Create Nano Banana image task (prompt, imageSize, outputFormat)
