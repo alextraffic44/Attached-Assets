@@ -1088,6 +1088,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ generatedCode: finalHtml }),
             credentials: "include",
+          }).then(() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
           });
         } else {
           fetch(`/api/projects/${projectId}/files/${activeFile}`, {
@@ -1104,7 +1106,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
         if (isGenerating) return;
         const filename = e.data.filename;
         setActiveFile(filename);
-        if (filename === "index.html") setStreamedCode("");
+        setStreamedCode("");
       }
       if (e.data.type === 'nz-img-click' || e.data.type === 'nz-placeholder-click') {
         pendingImageTarget.current = e.data.path;
@@ -1130,6 +1132,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ generatedCode: finalHtml }),
             credentials: "include",
+          }).then(() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
           });
         } else {
           fetch(`/api/projects/${projectId}/files/${activeFile}`, {
@@ -1491,7 +1495,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               {allFiles.map(f => (
                 <div key={f.filename} className={`flex items-center gap-0.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeFile === f.filename ? "bg-primary text-white shadow-md" : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700"}`}>
                   <button
-                    onClick={() => { if (isGenerating) return; setActiveFile(f.filename); if (f.filename === "index.html") setStreamedCode(""); }}
+                    onClick={() => { if (isGenerating) return; setActiveFile(f.filename); setStreamedCode(""); }}
                     className="flex items-center gap-1.5 px-3 py-1.5"
                     disabled={isGenerating && activeFile !== f.filename}
                     data-testid={`tab-file-${f.filename}`}
