@@ -3,7 +3,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { type Express } from "express";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
+import { scrypt, randomBytes, timingSafeEqual, createHash, createHmac } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { pool } from "./db";
@@ -16,11 +16,36 @@ async function hashPassword(password: string) {
   return `${buf.toString("hex")}.${salt}`;
 }
 
-async function comparePasswords(supplied: string, stored: string) {
+async function comparePasswords(supplied: string, stored: string | null) {
+  if (!stored) return false;
   const [hashedPassword, salt] = stored.split(".");
   const hashedPasswordBuf = Buffer.from(hashedPassword, "hex");
   const suppliedPasswordBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
   return timingSafeEqual(hashedPasswordBuf, suppliedPasswordBuf);
+}
+
+function verifyTelegramHash(data: Record<string, any>): boolean {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) return false;
+
+  const { hash, ...rest } = data;
+  if (!hash) return false;
+
+  const dataCheckString = Object.keys(rest)
+    .sort()
+    .filter(key => rest[key] !== undefined && rest[key] !== null)
+    .map(key => `${key}=${rest[key]}`)
+    .join("\n");
+
+  const secretKey = createHash("sha256").update(botToken).digest();
+  const hmac = createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+
+  if (hmac !== hash) return false;
+
+  const authDate = parseInt(rest.auth_date);
+  if (Date.now() / 1000 - authDate > 86400) return false;
+
+  return true;
 }
 
 export function setupAuth(app: Express) {
@@ -55,6 +80,9 @@ export function setupAuth(app: Express) {
           const user = await storage.getUserByEmail(email);
           if (!user) {
             return done(null, false, { message: "Пользователь не найден" });
+          }
+          if (!user.password) {
+            return done(null, false, { message: "Войдите через Telegram" });
           }
           const isValid = await comparePasswords(password, user.password);
           if (!isValid) {
@@ -122,6 +150,37 @@ export function setupAuth(app: Express) {
         return res.json(safeUser);
       });
     })(req, res, next);
+  });
+
+  app.post("/api/auth/telegram", async (req, res, next) => {
+    try {
+      const data = req.body;
+
+      if (!process.env.TELEGRAM_BOT_TOKEN) {
+        return res.status(503).json({ message: "Telegram авторизация не настроена" });
+      }
+
+      if (!verifyTelegramHash(data)) {
+        return res.status(401).json({ message: "Неверная подпись Telegram" });
+      }
+
+      const telegramId = String(data.id);
+      const displayName = [data.first_name, data.last_name].filter(Boolean).join(" ") || data.username || "Пользователь";
+      const avatarUrl = data.photo_url || null;
+
+      let user = await storage.getUserByTelegramId(telegramId);
+      if (!user) {
+        user = await storage.createTelegramUser({ telegramId, displayName, avatarUrl });
+      }
+
+      req.login(user, (err) => {
+        if (err) return next(err);
+        const { password: _, ...safeUser } = user!;
+        return res.json(safeUser);
+      });
+    } catch (err) {
+      next(err);
+    }
   });
 
   app.post("/api/auth/logout", (req, res) => {

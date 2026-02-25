@@ -5,7 +5,9 @@ import { eq, desc, and, sql } from "drizzle-orm";
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByTelegramId(telegramId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  createTelegramUser(data: { telegramId: string; displayName: string; avatarUrl?: string }): Promise<User>;
   updateUserCredits(id: number, credits: number): Promise<User | undefined>;
   deductCredits(userId: number, amount: number, operation: string, idempotencyKey: string): Promise<{ success: boolean; newBalance: number; alreadyProcessed?: boolean }>;
 
@@ -49,8 +51,22 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByTelegramId(telegramId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.telegramId, telegramId));
+    return user;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async createTelegramUser(data: { telegramId: string; displayName: string; avatarUrl?: string }): Promise<User> {
+    const [user] = await db.insert(users).values({
+      displayName: data.displayName,
+      telegramId: data.telegramId,
+      avatarUrl: data.avatarUrl ?? null,
+    }).returning();
     return user;
   }
 

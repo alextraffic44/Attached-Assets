@@ -5,11 +5,13 @@ import { z } from "zod";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  email: text("email").notNull().unique(),
-  password: text("password").notNull(),
+  email: text("email").unique(),
+  password: text("password"),
   displayName: text("display_name").notNull(),
   credits: integer("credits").notNull().default(100),
   plan: text("plan").notNull().default("bronze"),
+  telegramId: text("telegram_id").unique(),
+  avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -54,6 +56,8 @@ export const insertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
   credits: true,
   plan: true,
+  telegramId: true,
+  avatarUrl: true,
 });
 
 export const insertProjectSchema = createInsertSchema(projects).omit({
