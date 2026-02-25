@@ -108,7 +108,9 @@ export default function Landing() {
     }
 
 
-    // Insert pricing section after #features
+    // Insert pricing section after #features (remove existing first to avoid duplicates)
+    document.getElementById("pricing")?.remove();
+    document.getElementById("pricing-styles")?.remove();
     const featuresSection = container.querySelector("#features");
     if (featuresSection) {
       const pricingStyle = document.createElement("style");
