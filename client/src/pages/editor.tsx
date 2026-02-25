@@ -185,12 +185,15 @@ export default function EditorPage() {
     }
     try {
       const baseCode = project?.generatedCode || "";
-      const styleMatch = baseCode.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-      const navMatch = baseCode.match(/<nav[^>]*>([\s\S]*?)<\/nav>/i);
-      const footerMatch = baseCode.match(/<footer[^>]*>([\s\S]*?)<\/footer>/i);
+      const headMatch = baseCode.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+      const headerMatch = baseCode.match(/<header[^>]*>[\s\S]*?<\/header>/i);
+      const navMatch = baseCode.match(/<nav[^>]*>[\s\S]*?<\/nav>/i);
+      const footerMatch = baseCode.match(/<footer[^>]*>[\s\S]*?<\/footer>/i);
+      const topSection = headerMatch ? headerMatch[0] : (navMatch ? navMatch[0] : "");
+      const headContent = headMatch ? headMatch[1].replace(/<title>[\s\S]*?<\/title>/i, "") : "";
       const pageName = name.replace(".html", "");
       const pageLabel = pageName.charAt(0).toUpperCase() + pageName.slice(1);
-      const template = `<!DOCTYPE html>\n<html lang="ru">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${pageLabel}</title>\n${styleMatch ? `<style>${styleMatch[1]}</style>` : ""}\n</head>\n<body>\n${navMatch ? navMatch[0] : ""}\n\n<section style="min-height:80vh;display:flex;align-items:center;justify-content:center;padding:4rem 2rem">\n<div style="text-align:center;max-width:800px">\n<h1>${pageLabel}</h1>\n<p>Содержимое страницы. Опишите в чате, что здесь разместить.</p>\n</div>\n</section>\n\n${footerMatch ? footerMatch[0] : ""}\n</body>\n</html>`;
+      const template = `<!DOCTYPE html>\n<html lang="ru">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${pageLabel}</title>\n${headContent}\n</head>\n<body>\n${topSection}\n\n<section style="min-height:80vh;display:flex;align-items:center;justify-content:center;padding:4rem 2rem">\n<div style="text-align:center;max-width:800px">\n<h1>${pageLabel}</h1>\n<p>Содержимое страницы. Опишите в чате, что здесь разместить.</p>\n</div>\n</section>\n\n${footerMatch ? footerMatch[0] : ""}\n</body>\n</html>`;
       await fetch(`/api/projects/${projectId}/files/${name}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
