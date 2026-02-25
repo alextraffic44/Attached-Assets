@@ -108,8 +108,8 @@ export default function Landing() {
     }
 
 
-    // Insert pricing section after #features (remove existing first to avoid duplicates)
-    document.getElementById("pricing")?.remove();
+    // Remove any existing pricing sections (all duplicates) before inserting fresh one
+    document.querySelectorAll("#pricing, [data-pricing]").forEach(el => el.remove());
     document.getElementById("pricing-styles")?.remove();
     const featuresSection = container.querySelector("#features");
     if (featuresSection) {
@@ -190,6 +190,7 @@ export default function Landing() {
 
       const pricing = document.createElement("section");
       pricing.id = "pricing";
+      pricing.setAttribute("data-pricing", "1");
       pricing.style.cssText = "padding:10rem 0;position:relative;background:#111114;";
 
       const pContainer = document.createElement("div");
