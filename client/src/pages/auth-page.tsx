@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Lock, User, ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
 const appleFont = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
 
@@ -83,16 +81,13 @@ const AgentSVG = () => (
       <mask id="code-mask-5"><rect x="300" y="340" width="0" height="30" fill="white" className="mask-5" /></mask>
       <mask id="code-mask-6"><rect x="300" y="375" width="0" height="30" fill="white" className="mask-6" /></mask>
     </defs>
-
     <rect width="900" height="600" fill="url(#hex-grid)" />
-
     <g filter="url(#heavy-blur)" className="glow-pulse">
       <circle cx="350" cy="200" r="110" fill="hsl(27deg 93% 60%)" opacity="0.6" />
       <circle cx="680" cy="200" r="120" fill="#00a6ff" opacity="0.6" />
       <circle cx="350" cy="400" r="100" fill="#ff0056" opacity="0.6" />
       <circle cx="680" cy="400" r="130" fill="#6500ff" opacity="0.6" />
     </g>
-
     <g>
       <rect x="260" y="140" width="520" height="320" rx="16" fill="#050505" stroke="#1e1e24" strokeWidth="2" opacity="0.9" />
       <path d="M 260 156 A 16 16 0 0 1 276 140 L 764 140 A 16 16 0 0 1 780 156 L 780 170 L 260 170 Z" fill="#1e1e24" />
@@ -111,7 +106,6 @@ const AgentSVG = () => (
       </g>
       <line x1="292" y1="170" x2="292" y2="460" stroke="#1e1e24" strokeWidth="1" />
     </g>
-
     <g className="code-font code-group">
       <g mask="url(#code-mask-1)">
         <text x="300" y="220" fill="url(#metal-text)">// Initialize Agent Protocol</text>
@@ -140,7 +134,6 @@ const AgentSVG = () => (
         </text>
       </g>
     </g>
-
     <g className="code-group">
       <rect className="cursor c1" width="10" height="18" fill="#fff" />
       <rect className="cursor c2" width="10" height="18" fill="#fff" />
@@ -149,7 +142,6 @@ const AgentSVG = () => (
       <rect className="cursor c5" width="10" height="18" fill="#fff" />
       <rect className="cursor c6" width="10" height="18" fill="#fff" />
     </g>
-
     <g className="robot-float" style={{ transform: "translate(30px, 30px)" }}>
       <line x1="130" y1="155" x2="130" y2="185" stroke="#626262" strokeWidth="2"/>
       <circle cx="130" cy="148" r="7" className="antenna-glow"/>
@@ -171,7 +163,6 @@ const AgentSVG = () => (
         <rect x="145" y="300" width="30" height="15" rx="7" fill="#00a6ff" filter="url(#glow-light)"/>
       </g>
     </g>
-
     <text x="450" y="540" fontSize="20" fontWeight="bold" letterSpacing="2" textAnchor="middle">
       <tspan fill="#ff0056" filter="url(#glow-light)">SYS_READY: </tspan>
       <tspan fill="url(#metal-text)">Агент компилирует код</tspan>
@@ -189,13 +180,7 @@ declare global {
 }
 
 export default function AuthPage() {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTelegramLoading, setIsTelegramLoading] = useState(false);
-  const { login, register } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -243,37 +228,25 @@ export default function AuthPage() {
     return () => { document.getElementById("telegram-widget")?.remove(); delete window.onTelegramAuth; };
   }, [botUsername, setLocation, toast]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      if (isLogin) { await login(email, password); } else { await register(email, password, displayName); }
-      setLocation("/dashboard");
-    } catch (err: any) {
-      toast({ title: "Ошибка", description: err.message?.includes("401") ? "Неверный email или пароль" : "Произошла ошибка", variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
     <div style={{ fontFamily: appleFont, minHeight: "100vh", display: "flex", overflow: "hidden" }}>
 
-      {/* LEFT — Form */}
-      <div style={{ flex: "0 0 50%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#FBFBFD", padding: "3rem 4rem", position: "relative", overflowY: "auto" }}>
+      {/* LEFT — Auth */}
+      <div style={{ flex: "0 0 50%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#FBFBFD", padding: "3rem", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0 }}>
           <div style={{ position: "absolute", top: "10%", left: "10%", width: "20rem", height: "20rem", borderRadius: "50%", background: "radial-gradient(circle,rgba(0,113,227,0.06),transparent)", filter: "blur(50px)" }} />
           <div style={{ position: "absolute", bottom: "10%", right: "5%", width: "16rem", height: "16rem", borderRadius: "50%", background: "radial-gradient(circle,rgba(101,0,255,0.05),transparent)", filter: "blur(50px)" }} />
         </div>
 
-        <div style={{ width: "100%", maxWidth: 420, position: "relative", zIndex: 1 }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} style={{ width: "100%", maxWidth: 380, position: "relative", zIndex: 1 }}>
+
           <button onClick={() => setLocation("/")} style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "2.5rem", background: "none", border: "none", cursor: "pointer", color: "#86868B", fontSize: "0.88rem", fontWeight: 500, fontFamily: appleFont }}>
             <ArrowLeft size={15} /> Назад
           </button>
 
           {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", marginBottom: "2rem" }}>
-            <svg viewBox="0 0 32 32" style={{ width: 32, height: 32 }} strokeWidth="2" fill="none">
+          <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", marginBottom: "2.5rem" }}>
+            <svg viewBox="0 0 32 32" style={{ width: 34, height: 34 }} strokeWidth="2" fill="none">
               <defs>
                 <linearGradient id="al" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#007AFF" /><stop offset="100%" stopColor="#5856D6" />
@@ -285,82 +258,41 @@ export default function AuthPage() {
               <path d="M12 16l-2 2 2 2 M20 16l2 2-2 2" stroke="url(#al)" strokeLinecap="round" strokeLinejoin="round" />
               <path d="M8 26 h16 M10 28 h12" stroke="url(#al)" strokeLinecap="round" />
             </svg>
-            <span style={{ fontSize: "1.1rem", fontWeight: 700, letterSpacing: "-0.02em", color: "#1D1D1F" }}>Craft AI</span>
+            <span style={{ fontSize: "1.15rem", fontWeight: 700, letterSpacing: "-0.02em", color: "#1D1D1F" }}>Craft AI</span>
           </div>
 
-          <AnimatePresence mode="wait">
-            <motion.div key={isLogin ? "l" : "r"} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.22 }}>
-              <h1 style={{ fontSize: "1.8rem", fontWeight: 700, letterSpacing: "-0.035em", color: "#1D1D1F", marginBottom: "0.3rem" }}>
-                {isLogin ? "С возвращением" : "Создать аккаунт"}
-              </h1>
-              <p style={{ fontSize: "0.88rem", color: "#86868B", marginBottom: "1.75rem" }}>
-                {isLogin ? "Войдите в свой аккаунт Craft AI" : "Присоединяйтесь к Craft AI"}
-              </p>
+          {/* Heading */}
+          <h1 style={{ fontSize: "2rem", fontWeight: 700, letterSpacing: "-0.04em", color: "#1D1D1F", marginBottom: "0.5rem" }}>
+            Вход в аккаунт
+          </h1>
+          <p style={{ fontSize: "0.9rem", color: "#86868B", marginBottom: "2.5rem", lineHeight: 1.5 }}>
+            Авторизуйтесь через Telegram, чтобы начать создавать сайты
+          </p>
 
-              {/* Telegram */}
-              {botUsername && (
-                <div style={{ marginBottom: "1.5rem" }}>
-                  {isTelegramLoading ? (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", height: 46, borderRadius: 14, background: "#2AABEE", color: "#fff", fontSize: "0.9rem", fontWeight: 600 }}>
-                      <Loader2 size={16} className="animate-spin" /> Авторизация...
-                    </div>
-                  ) : (
-                    <div id="telegram-widget-container" style={{ display: "flex", justifyContent: "center" }} />
-                  )}
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", margin: "1.1rem 0" }}>
-                    <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.07)" }} />
-                    <span style={{ fontSize: "0.72rem", color: "#86868B", fontWeight: 500 }}>или через email</span>
-                    <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.07)" }} />
-                  </div>
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
-                {!isLogin && (
-                  <div>
-                    <Label style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#86868B", display: "block", marginBottom: "0.35rem" }}>Имя</Label>
-                    <div style={{ position: "relative" }}>
-                      <User size={15} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#86868B" }} />
-                      <Input placeholder="Ваше имя" value={displayName} onChange={e => setDisplayName(e.target.value)} required={!isLogin}
-                        className="h-11 pl-10 rounded-2xl font-medium" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.08)" }} />
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <Label style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#86868B", display: "block", marginBottom: "0.35rem" }}>Email</Label>
-                  <div style={{ position: "relative" }}>
-                    <Mail size={15} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#86868B" }} />
-                    <Input type="email" placeholder="name@example.com" value={email} onChange={e => setEmail(e.target.value)} required
-                      className="h-11 pl-10 rounded-2xl font-medium" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.08)" }} />
-                  </div>
-                </div>
-                <div>
-                  <Label style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#86868B", display: "block", marginBottom: "0.35rem" }}>Пароль</Label>
-                  <div style={{ position: "relative" }}>
-                    <Lock size={15} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#86868B" }} />
-                    <Input type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required
-                      className="h-11 pl-10 rounded-2xl font-medium" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.08)" }} />
-                  </div>
-                </div>
-                <button type="submit" disabled={isSubmitting}
-                  style={{ height: 46, borderRadius: 14, background: "linear-gradient(135deg,#1D1D1F,#3a3a3c)", color: "#fff", border: "none", cursor: isSubmitting ? "not-allowed" : "pointer", fontFamily: appleFont, fontSize: "0.92rem", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", opacity: isSubmitting ? 0.6 : 1, marginTop: "0.4rem", boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}>
-                  {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : (isLogin ? "Войти" : "Создать аккаунт")}
-                </button>
-              </form>
-
-              <div style={{ marginTop: "1.25rem", paddingTop: "1.25rem", borderTop: "1px solid rgba(0,0,0,0.06)", textAlign: "center" }}>
-                <button type="button" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.82rem", fontWeight: 500, color: "#86868B", fontFamily: appleFont }}
-                  onClick={() => setIsLogin(!isLogin)}>
-                  {isLogin ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
-                </button>
+          {/* Telegram widget */}
+          <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", boxShadow: "0 8px 30px rgba(0,0,0,0.06)", padding: "2rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
+            {isTelegramLoading ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#86868B", fontSize: "0.9rem" }}>
+                <Loader2 size={18} className="animate-spin" />
+                Авторизация через Telegram...
               </div>
-            </motion.div>
-          </AnimatePresence>
-        </div>
+            ) : botUsername ? (
+              <>
+                <p style={{ fontSize: "0.8rem", color: "#86868B", margin: 0, textAlign: "center" }}>Нажмите кнопку ниже</p>
+                <div id="telegram-widget-container" />
+              </>
+            ) : (
+              <p style={{ fontSize: "0.85rem", color: "#86868B", margin: 0, textAlign: "center" }}>
+                Telegram-авторизация не настроена
+              </p>
+            )}
+          </div>
+
+        </motion.div>
       </div>
 
       {/* RIGHT — SVG Animation */}
-      <div style={{ flex: "0 0 50%", background: "linear-gradient(135deg, #1e1e24 10%, #050505 60%)", backgroundSize: "200% 200%", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem", overflow: "hidden" }}>
+      <div style={{ flex: "0 0 50%", background: "linear-gradient(135deg, #1e1e24 10%, #050505 60%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem", overflow: "hidden" }}>
         <div style={{ width: "100%", maxWidth: 600, aspectRatio: "16/9" }}>
           <AgentSVG />
         </div>
