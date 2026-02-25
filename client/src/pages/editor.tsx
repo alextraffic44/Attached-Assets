@@ -93,6 +93,13 @@ export default function EditorPage() {
   const [imgGenOpen, setImgGenOpen] = useState(false);
   const [faviconUploading, setFaviconUploading] = useState(false);
   const faviconInputRef = useRef<HTMLInputElement>(null);
+  const [faviconCropOpen, setFaviconCropOpen] = useState(false);
+  const [faviconRawSrc, setFaviconRawSrc] = useState<string>("");
+  const [faviconRawMime, setFaviconRawMime] = useState<string>("image/png");
+  const [cropBox, setCropBox] = useState({ x: 0, y: 0, size: 100 });
+  const [cropDrag, setCropDrag] = useState<{ mode: "move" | "resize"; startX: number; startY: number; origBox: { x: number; y: number; size: number } } | null>(null);
+  const cropImgRef = useRef<HTMLImageElement>(null);
+  const cropContainerRef = useRef<HTMLDivElement>(null);
   const [imgName, setImgName] = useState("");
   const [imgPrompt, setImgPrompt] = useState("");
   const [imgSize, setImgSize] = useState("16:9");
@@ -575,40 +582,83 @@ export default function EditorPage() {
     }
   };
 
-  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFaviconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !project) return;
+    setFaviconRawMime(file.type || "image/png");
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFaviconRawSrc(reader.result as string);
+      setCropBox({ x: 0, y: 0, size: 200 });
+      setFaviconCropOpen(true);
+    };
+    reader.readAsDataURL(file);
+    if (faviconInputRef.current) faviconInputRef.current.value = "";
+  };
+
+  const applyFaviconCrop = async () => {
+    if (!project || !cropImgRef.current || !cropContainerRef.current) return;
+    const img = cropImgRef.current;
+    const containerRect = cropContainerRef.current.getBoundingClientRect();
+    const scaleX = img.naturalWidth / containerRect.width;
+    const scaleY = img.naturalHeight / containerRect.height;
+    const savedCropBox = { ...cropBox };
+    setFaviconCropOpen(false);
     setFaviconUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = reader.result as string;
-        const res = await fetch(`/api/projects/${project.id}/favicon`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ dataUrl: base64, mimeType: file.type }),
-        });
-        if (res.ok) {
-          await queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
-          const fresh = await fetch(`/api/projects/${project.id}`, { credentials: "include" });
-          if (fresh.ok) {
-            const p = await fresh.json();
-            if (iframeRef.current && p.generatedCode) {
-              const blob = new Blob([p.generatedCode], { type: "text/html" });
-              iframeRef.current.src = URL.createObjectURL(blob);
-            }
+      const sx = savedCropBox.x * scaleX;
+      const sy = savedCropBox.y * scaleY;
+      const sw = savedCropBox.size * scaleX;
+      const sh = savedCropBox.size * scaleY;
+      const canvas = document.createElement("canvas");
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, 128, 128);
+      const dataUrl = canvas.toDataURL("image/png", 0.9);
+      const res = await fetch(`/api/projects/${project.id}/favicon`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ dataUrl, mimeType: "image/png" }),
+      });
+      if (res.ok) {
+        await queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+        const fresh = await fetch(`/api/projects/${project.id}`, { credentials: "include" });
+        if (fresh.ok) {
+          const p = await fresh.json();
+          if (iframeRef.current && p.generatedCode) {
+            const blob = new Blob([p.generatedCode], { type: "text/html" });
+            iframeRef.current.src = URL.createObjectURL(blob);
           }
-          setFaviconUploading(false);
-        } else {
-          setFaviconUploading(false);
         }
-      };
-      reader.readAsDataURL(file);
-    } catch {
-      setFaviconUploading(false);
+      }
+    } catch {}
+    setFaviconUploading(false);
+  };
+
+  const onCropMouseDown = (e: React.MouseEvent, mode: "move" | "resize") => {
+    e.preventDefault();
+    setCropDrag({ mode, startX: e.clientX, startY: e.clientY, origBox: { ...cropBox } });
+  };
+
+  const onCropMouseMove = (e: React.MouseEvent) => {
+    if (!cropDrag || !cropContainerRef.current) return;
+    const containerRect = cropContainerRef.current.getBoundingClientRect();
+    const dx = e.clientX - cropDrag.startX;
+    const dy = e.clientY - cropDrag.startY;
+    if (cropDrag.mode === "move") {
+      const nx = Math.max(0, Math.min(containerRect.width - cropDrag.origBox.size, cropDrag.origBox.x + dx));
+      const ny = Math.max(0, Math.min(containerRect.height - cropDrag.origBox.size, cropDrag.origBox.y + dy));
+      setCropBox(b => ({ ...b, x: nx, y: ny }));
+    } else {
+      const maxSize = Math.min(
+        containerRect.width - cropDrag.origBox.x,
+        containerRect.height - cropDrag.origBox.y
+      );
+      const newSize = Math.max(40, Math.min(maxSize, cropDrag.origBox.size + dx));
+      setCropBox(b => ({ ...b, size: newSize }));
     }
-    if (faviconInputRef.current) faviconInputRef.current.value = "";
   };
 
   const handleCheckDomain = async () => {
@@ -1791,6 +1841,52 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Favicon Crop Modal */}
+      {faviconCropOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center" }}
+          onMouseMove={onCropMouseMove} onMouseUp={() => setCropDrag(null)} onMouseLeave={() => setCropDrag(null)}>
+          <div style={{ background: "#1a1a2e", borderRadius: 20, padding: 24, width: 520, maxWidth: "95vw", boxShadow: "0 25px 80px rgba(0,0,0,0.6)" }}>
+            <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#fff", marginBottom: 6 }}>Обрезать фавикон</div>
+            <div style={{ color: "#aaa", fontSize: "0.8rem", marginBottom: 16 }}>Перетащите квадрат в нужное место. Потяните за угол — изменить размер.</div>
+            <div ref={cropContainerRef} style={{ position: "relative", width: "100%", aspectRatio: "1/1", overflow: "hidden", borderRadius: 12, background: "#000", cursor: cropDrag?.mode === "move" ? "grabbing" : "default" }}>
+              <img ref={cropImgRef} src={faviconRawSrc} onLoad={() => {
+                if (cropContainerRef.current) {
+                  const r = cropContainerRef.current.getBoundingClientRect();
+                  const s = Math.min(r.width, r.height) * 0.8;
+                  setCropBox({ x: (r.width - s) / 2, y: (r.height - s) / 2, size: s });
+                }
+              }} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", userSelect: "none", pointerEvents: "none" }} alt="" />
+              <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", pointerEvents: "none" }} />
+              <div
+                onMouseDown={(e) => onCropMouseDown(e, "move")}
+                style={{
+                  position: "absolute",
+                  left: cropBox.x, top: cropBox.y,
+                  width: cropBox.size, height: cropBox.size,
+                  border: "2px solid #fff",
+                  boxShadow: "0 0 0 9999px rgba(0,0,0,0.5)",
+                  cursor: "grab",
+                  boxSizing: "border-box",
+                }}
+              >
+                <div style={{ position: "absolute", inset: 0, background: "transparent" }} />
+                <div onMouseDown={(e) => { e.stopPropagation(); onCropMouseDown(e, "resize"); }}
+                  style={{ position: "absolute", bottom: -6, right: -6, width: 16, height: 16, background: "#fff", borderRadius: 4, cursor: "se-resize", boxShadow: "0 2px 6px rgba(0,0,0,0.4)" }} />
+                <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", color: "rgba(255,255,255,0.6)", fontSize: "0.65rem", pointerEvents: "none", whiteSpace: "nowrap" }}>
+                  {Math.round(cropBox.size)} × {Math.round(cropBox.size)}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+              <Button variant="outline" onClick={() => setFaviconCropOpen(false)} style={{ borderRadius: 10 }}>Отмена</Button>
+              <Button onClick={applyFaviconCrop} style={{ borderRadius: 10, background: "linear-gradient(135deg,#667eea,#764ba2)", border: "none" }}>
+                Сохранить фавикон
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Publish Modal */}
       <Dialog open={showPublishModal} onOpenChange={setShowPublishModal}>
