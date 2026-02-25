@@ -173,7 +173,7 @@ export default function Landing() {
         titleEl.textContent = title;
 
         const tokensEl = document.createElement("div");
-        tokensEl.style.cssText = "font-size:3.5rem;font-weight:700;letter-spacing:-.04em;line-height:1;margin-bottom:.4rem;color:#00d2ff;";
+        tokensEl.style.cssText = "font-size:3.5rem;font-weight:700;letter-spacing:-.04em;line-height:1;margin-bottom:.4rem;color:#fff;";
         tokensEl.textContent = tokens;
 
         const label = document.createElement("div");
@@ -188,7 +188,7 @@ export default function Landing() {
         descEl.innerHTML = description;
 
         const priceEl = document.createElement("div");
-        priceEl.style.cssText = "font-size:1.4rem;font-weight:600;letter-spacing:-.02em;color:#00d2ff;";
+        priceEl.style.cssText = "font-size:1.4rem;font-weight:600;letter-spacing:-.02em;background:linear-gradient(to right,hsl(27deg 93% 60%),#00a6ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;";
         priceEl.textContent = price;
 
         wrap.appendChild(titleEl);
