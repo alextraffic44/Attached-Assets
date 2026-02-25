@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 
 const appleFont = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
 
@@ -22,8 +21,6 @@ const SVG_CSS = `
   @keyframes tapRight { 0%, 40%, 100% { transform: translateY(0) rotate(0); } 20% { transform: translateY(10px) rotate(8deg); } 70% { transform: translateY(4px) rotate(4deg); } }
   .antenna-glow { animation: pulseAntenna 2s infinite ease-in-out; }
   @keyframes pulseAntenna { 0%, 100% { fill: #ff0056; filter: drop-shadow(0 0 2px #ff0056); } 50% { fill: #ff4d8a; filter: drop-shadow(0 0 12px #ff0056); } }
-  .data-stream { animation: streamMove 0.5s linear infinite; }
-  @keyframes streamMove { to { stroke-dashoffset: -16; } }
   .code-group { animation: codeFade 10s infinite; }
   @keyframes codeFade { 0%, 90% { opacity: 1; } 95%, 100% { opacity: 0; } }
   .code-font { font-family: 'Consolas', 'Courier New', monospace; font-size: 16px; font-weight: bold; }
@@ -232,68 +229,126 @@ export default function AuthPage() {
     <div style={{ fontFamily: appleFont, minHeight: "100vh", display: "flex", overflow: "hidden" }}>
 
       {/* LEFT — Auth */}
-      <div style={{ flex: "0 0 50%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#FBFBFD", padding: "3rem", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0 }}>
-          <div style={{ position: "absolute", top: "10%", left: "10%", width: "20rem", height: "20rem", borderRadius: "50%", background: "radial-gradient(circle,rgba(0,113,227,0.06),transparent)", filter: "blur(50px)" }} />
-          <div style={{ position: "absolute", bottom: "10%", right: "5%", width: "16rem", height: "16rem", borderRadius: "50%", background: "radial-gradient(circle,rgba(101,0,255,0.05),transparent)", filter: "blur(50px)" }} />
+      <div style={{
+        flex: "0 0 50%",
+        background: "#ffffff",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "3rem",
+        position: "relative",
+        overflow: "hidden",
+      }}>
+        {/* Subtle background blobs */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          <div style={{ position: "absolute", top: "-5%", left: "-10%", width: "28rem", height: "28rem", borderRadius: "50%", background: "radial-gradient(circle, rgba(0,122,255,0.07) 0%, transparent 70%)", filter: "blur(40px)" }} />
+          <div style={{ position: "absolute", bottom: "-5%", right: "-5%", width: "22rem", height: "22rem", borderRadius: "50%", background: "radial-gradient(circle, rgba(88,86,214,0.07) 0%, transparent 70%)", filter: "blur(40px)" }} />
         </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
-          style={{ width: "100%", maxWidth: 420, position: "relative", zIndex: 1, background: "rgba(255,255,255,0.65)", backdropFilter: "blur(28px)", WebkitBackdropFilter: "blur(28px)", borderRadius: 28, border: "1px solid rgba(255,255,255,0.8)", boxShadow: "0 20px 60px rgba(0,0,0,0.08), 0 1px 0 rgba(255,255,255,0.9) inset", padding: "2.5rem 2.5rem 2.5rem" }}>
-
-          <button onClick={() => setLocation("/")} style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "2rem", background: "none", border: "none", cursor: "pointer", color: "#86868B", fontSize: "0.88rem", fontWeight: 500, fontFamily: appleFont }}>
-            <ArrowLeft size={15} /> Назад
-          </button>
-
-          {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.8rem", marginBottom: "2rem" }}>
-            <svg viewBox="0 0 32 32" style={{ width: 42, height: 42, flexShrink: 0 }} strokeWidth="2" fill="none">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45 }}
+          style={{ width: "100%", maxWidth: 400, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", zIndex: 1 }}
+        >
+          {/* Logo mark */}
+          <div style={{ marginBottom: "1.25rem" }}>
+            <svg viewBox="0 0 48 48" width="56" height="56" fill="none" strokeWidth="2.5">
               <defs>
-                <linearGradient id="al" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#007AFF" /><stop offset="100%" stopColor="#5856D6" />
+                <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#007AFF" />
+                  <stop offset="100%" stopColor="#5856D6" />
                 </linearGradient>
               </defs>
-              <rect x="4" y="4" width="24" height="18" rx="4" stroke="url(#al)" />
-              <circle cx="10" cy="10" r="1.5" fill="url(#al)" stroke="none" />
-              <circle cx="22" cy="10" r="1.5" fill="url(#al)" stroke="none" />
-              <path d="M12 16l-2 2 2 2 M20 16l2 2-2 2" stroke="url(#al)" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M8 26 h16 M10 28 h12" stroke="url(#al)" strokeLinecap="round" />
+              <rect x="6" y="6" width="36" height="27" rx="6" stroke="url(#logo-grad)" />
+              <circle cx="15" cy="15" r="2.5" fill="url(#logo-grad)" stroke="none" />
+              <circle cx="33" cy="15" r="2.5" fill="url(#logo-grad)" stroke="none" />
+              <path d="M18 24l-3 3 3 3 M30 24l3 3-3 3" stroke="url(#logo-grad)" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M12 39 h24 M15 43 h18" stroke="url(#logo-grad)" strokeLinecap="round" />
             </svg>
-            <span style={{ fontSize: "1.7rem", fontWeight: 800, letterSpacing: "-0.04em", color: "#1D1D1F" }}>Craft AI</span>
           </div>
 
           {/* Heading */}
-          <h1 style={{ fontSize: "2rem", fontWeight: 700, letterSpacing: "-0.04em", color: "#1D1D1F", marginBottom: "0.5rem" }}>
-            Вход в аккаунт
+          <h1 style={{ fontSize: "2rem", fontWeight: 700, letterSpacing: "-0.04em", color: "#1D1D1F", margin: "0 0 0.4rem", textAlign: "center" }}>
+            Добро пожаловать в{" "}
+            <span style={{ background: "linear-gradient(90deg, #007AFF, #5856D6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+              Craft AI
+            </span>
           </h1>
-          <p style={{ fontSize: "0.9rem", color: "#86868B", marginBottom: "2rem", lineHeight: 1.6 }}>
-            Авторизуйтесь через Telegram, чтобы начать создавать сайты
+          <p style={{ fontSize: "0.9rem", color: "#86868B", margin: "0 0 2.25rem", textAlign: "center" }}>
+            ИИ-конструктор сайтов нового поколения
           </p>
 
-          {/* Telegram widget */}
-          <div style={{ background: "rgba(255,255,255,0.7)", borderRadius: 18, border: "1px solid rgba(0,0,0,0.06)", padding: "1.5rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
+          {/* Auth card */}
+          <div style={{
+            width: "100%",
+            background: "#F5F5F7",
+            borderRadius: 24,
+            padding: "1.75rem",
+            border: "1px solid rgba(0,0,0,0.06)",
+          }}>
+            {/* Card header */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1.25rem" }}>
+              <Sparkles size={16} style={{ color: "#007AFF" }} />
+              <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#1D1D1F", letterSpacing: "-0.01em" }}>Авторизация</span>
+            </div>
+
+            {/* Telegram button area */}
             {isTelegramLoading ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#86868B", fontSize: "0.9rem" }}>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem",
+                height: 52, borderRadius: 14, background: "#2AABEE", color: "#fff",
+                fontSize: "0.95rem", fontWeight: 600,
+              }}>
                 <Loader2 size={18} className="animate-spin" />
-                Авторизация через Telegram...
+                Авторизация...
               </div>
             ) : botUsername ? (
-              <>
-                <p style={{ fontSize: "0.78rem", color: "#86868B", margin: 0, textAlign: "center" }}>Нажмите кнопку ниже</p>
-                <div id="telegram-widget-container" />
-              </>
+              <div id="telegram-widget-container" style={{
+                display: "flex", justifyContent: "center",
+                background: "#fff", borderRadius: 14, padding: "0.75rem",
+                border: "1px solid rgba(0,0,0,0.06)",
+              }} />
             ) : (
-              <p style={{ fontSize: "0.85rem", color: "#86868B", margin: 0, textAlign: "center" }}>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                height: 52, borderRadius: 14, background: "#e8e8ed",
+                fontSize: "0.85rem", color: "#86868B",
+              }}>
                 Telegram-авторизация не настроена
-              </p>
+              </div>
             )}
           </div>
 
+          {/* Legal */}
+          <p style={{ fontSize: "0.72rem", color: "#AEAEB2", marginTop: "1.5rem", textAlign: "center", lineHeight: 1.6, maxWidth: 320 }}>
+            Создавая аккаунт, вы соглашаетесь с{" "}
+            <a href="#" style={{ color: "#007AFF", textDecoration: "none" }}>пользовательским соглашением</a>
+            {" "}и{" "}
+            <a href="#" style={{ color: "#007AFF", textDecoration: "none" }}>политикой конфиденциальности</a>
+          </p>
+
+          {/* Back */}
+          <button
+            onClick={() => setLocation("/")}
+            style={{ marginTop: "1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.82rem", color: "#AEAEB2", fontFamily: appleFont }}
+          >
+            ← Вернуться на главную
+          </button>
         </motion.div>
       </div>
 
       {/* RIGHT — SVG Animation */}
-      <div style={{ flex: "0 0 50%", background: "linear-gradient(135deg, #1e1e24 10%, #050505 60%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem", overflow: "hidden" }}>
+      <div style={{
+        flex: "0 0 50%",
+        background: "linear-gradient(135deg, #1e1e24 10%, #050505 60%)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "2rem",
+        overflow: "hidden",
+      }}>
         <div style={{ width: "100%", maxWidth: 600, aspectRatio: "16/9" }}>
           <AgentSVG />
         </div>
