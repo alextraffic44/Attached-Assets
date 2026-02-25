@@ -20,6 +20,12 @@ const SVG_CSS = `
     animation: rainbow 4s linear infinite;
     display: inline-block;
   }
+  .auth-left { flex: 0 0 50% !important; }
+  .auth-right { flex: 0 0 50% !important; }
+  @media (max-width: 768px) {
+    .auth-left { flex: 0 0 100% !important; min-height: 100vh; padding: 2rem 1.5rem !important; }
+    .auth-right { display: none !important; }
+  }
   .glow-pulse { animation: pulseGlowBox 3s ease-in-out alternate infinite; transform-origin: center; }
   @keyframes pulseGlowBox { 0% { transform: scale(0.95); opacity: 0.7; } 100% { transform: scale(1.05); opacity: 1; filter: blur(35px); } }
   .robot-float { animation: float 4s infinite ease-in-out; transform-origin: center; }
@@ -242,8 +248,7 @@ export default function AuthPage() {
     <div style={{ fontFamily: appleFont, minHeight: "100vh", display: "flex", overflow: "hidden" }}>
 
       {/* LEFT — Auth */}
-      <div style={{
-        flex: "0 0 50%",
+      <div className="auth-left" style={{
         background: "#ffffff",
         display: "flex",
         flexDirection: "column",
@@ -333,8 +338,7 @@ export default function AuthPage() {
       </div>
 
       {/* RIGHT — SVG Animation */}
-      <div style={{
-        flex: "0 0 50%",
+      <div className="auth-right" style={{
         background: "linear-gradient(135deg, #1e1e24 10%, #050505 60%)",
         display: "flex",
         alignItems: "center",
