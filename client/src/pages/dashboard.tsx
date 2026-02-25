@@ -161,10 +161,14 @@ export default function DashboardPage() {
             </button>
 
             {/* Profile avatar button */}
-            <div style={{ position: 'relative' }}>
+            <div
+              style={{ position: 'relative' }}
+              onMouseEnter={() => setShowProfile(true)}
+              onMouseLeave={() => setShowProfile(false)}
+            >
               <button
                 data-testid="button-profile"
-                onClick={() => setShowProfile(p => !p)}
+                onClick={() => setLocation('/profile')}
                 style={{ width: 36, height: 36, borderRadius: '50%', border: '2px solid rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', background: 'linear-gradient(135deg,hsl(27deg 93% 60%),#00a6ff)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}
               >
                 {user?.avatarUrl ? (
@@ -178,62 +182,40 @@ export default function DashboardPage() {
 
               <AnimatePresence>
                 {showProfile && (
-                  <>
-                    <div style={{ position: 'fixed', inset: 0, zIndex: 98 }} onClick={() => setShowProfile(false)} />
-                    <motion.div
-                      initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                      transition={{ duration: 0.18 }}
-                      style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, zIndex: 99, width: 260, background: '#fff', borderRadius: 20, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 20px 60px rgba(0,0,0,0.12)', overflow: 'hidden' }}
+                  <motion.div
+                    initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                    transition={{ duration: 0.15 }}
+                    style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 99, width: 210, background: '#fff', borderRadius: 16, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 16px 48px rgba(0,0,0,0.12)', overflow: 'hidden', paddingTop: '0.35rem', paddingBottom: '0.35rem' }}
+                  >
+                    {[
+                      { label: 'Профиль', icon: '👤', onClick: () => setLocation('/profile') },
+                      { label: 'Реф программа', icon: '🎁', onClick: () => {} },
+                      { label: 'Поддержка', icon: '💬', onClick: () => {} },
+                    ].map((item, i) => (
+                      <button
+                        key={i}
+                        onClick={item.onClick}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.55rem 0.9rem', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 500, color: '#1D1D1F', textAlign: 'left', fontFamily: appleFont }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.04)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <span style={{ fontSize: '0.95rem' }}>{item.icon}</span>
+                        {item.label}
+                      </button>
+                    ))}
+                    <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', margin: '0.35rem 0' }} />
+                    <button
+                      onClick={logout}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.55rem 0.9rem', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 500, color: '#FF3B30', textAlign: 'left', fontFamily: appleFont }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,59,48,0.05)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
-                      {/* Profile header */}
-                      <div style={{ padding: '1.25rem 1.25rem 1rem', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                          <div style={{ width: 48, height: 48, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg,hsl(27deg 93% 60%),#00a6ff)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {user?.avatarUrl ? (
-                              <img src={user.avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff' }}>
-                                {(user?.displayName || user?.email || 'U')[0].toUpperCase()}
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1D1D1F', letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {user?.displayName || user?.email?.split('@')[0]}
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: '#86868B', marginTop: 2 }}>
-                              Пользователь ID:{' '}
-                              <span style={{ fontWeight: 700, color: '#1D1D1F', fontVariantNumeric: 'tabular-nums' }}>#{user?.id}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Plan + credits */}
-                      <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: '0.78rem', color: '#86868B' }}>Токены</span>
-                        <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1D1D1F', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                          <Coins size={13} style={{ color: '#86868B' }} />
-                          {user?.credits ?? 0}
-                        </span>
-                      </div>
-
-                      {/* Logout */}
-                      <div style={{ padding: '0.5rem' }}>
-                        <button
-                          onClick={() => { setShowProfile(false); logout(); }}
-                          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.65rem 0.75rem', borderRadius: 12, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500, color: '#FF3B30', transition: 'background 0.15s' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,59,48,0.06)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <LogOut size={15} />
-                          Выйти из аккаунта
-                        </button>
-                      </div>
-                    </motion.div>
-                  </>
+                      <LogOut size={14} />
+                      Выйти
+                    </button>
+                  </motion.div>
                 )}
               </AnimatePresence>
             </div>

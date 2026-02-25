@@ -10,6 +10,7 @@ import AuthPage from "@/pages/auth-page";
 import DashboardPage from "@/pages/dashboard";
 import EditorPage from "@/pages/editor";
 import LeadsPage from "@/pages/leads";
+import ProfilePage from "@/pages/profile";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -55,6 +56,7 @@ function Router() {
       <Route path="/auth" component={AuthRoute} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/leads" component={LeadsPage} />
+      <Route path="/profile" component={ProfilePage} />
       <Route path="/editor/:id" component={EditorPage} />
       <Route component={NotFound} />
     </Switch>
