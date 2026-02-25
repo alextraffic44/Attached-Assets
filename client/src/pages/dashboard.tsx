@@ -673,10 +673,10 @@ export default function DashboardPage() {
             <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)', marginTop: '0.4rem', marginBottom: '2rem' }}>Выберите подходящий тариф для пополнения токенов</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
               {[
-                { price: 990,  tokens: 1000, label: "Старт",   popular: false },
-                { price: 1690, tokens: 1900, label: "Базовый", popular: false },
-                { price: 3990, tokens: 4500, label: "Профи",   popular: false },
-                { price: 5990, tokens: 6500, label: "Ультра",  popular: true  },
+                { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["1 сайт", "10 итераций редактирования"] },
+                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["3 сайта", "19 итераций редактирования"] },
+                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["5 сайтов", "45 итераций редактирования", "Премиум шаблоны"] },
+                { price: 5990, tokens: 6500, label: "Ультра",  popular: true,  desc: ["7 сайтов", "65 итераций редактирования", "Премиум шаблоны"] },
               ].map((plan) => (
                 <div key={plan.price} style={{ position: 'relative' }}>
                   {plan.popular && (
@@ -691,8 +691,14 @@ export default function DashboardPage() {
                   >
                     <span style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: plan.popular ? '#00d2ff' : 'rgba(255,255,255,0.5)', marginBottom: '0.6rem' }}>{plan.label}</span>
                     <span style={{ fontSize: '2.2rem', fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1, color: '#fff' }}>{plan.tokens.toLocaleString("ru-RU")}</span>
-                    <span style={{ fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginTop: '0.3rem', marginBottom: '1.25rem' }}>токенов</span>
-                    <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: '1.25rem' }} />
+                    <span style={{ fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginTop: '0.3rem', marginBottom: '1rem' }}>токенов</span>
+                    <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: '1rem' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem', width: '100%' }}>
+                      {plan.desc.map((line, i) => (
+                        <span key={i} style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)', lineHeight: 1.4, textAlign: 'center' }}>{line}</span>
+                      ))}
+                    </div>
+                    <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: '1rem' }} />
                     <span style={{ fontSize: '1.15rem', fontWeight: 600, letterSpacing: '-0.02em', color: plan.popular ? '#00d2ff' : '#fff' }}>{plan.price.toLocaleString("ru-RU")} ₽</span>
                   </button>
                 </div>
