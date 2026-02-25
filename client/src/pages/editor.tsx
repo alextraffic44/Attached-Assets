@@ -104,6 +104,12 @@ export default function EditorPage() {
   const [publishResult, setPublishResult] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [customDomain, setCustomDomain] = useState("");
+  const [domainAdding, setDomainAdding] = useState(false);
+  const [domainResult, setDomainResult] = useState<{ added: boolean; instructions: boolean } | null>(null);
+  const [domainError, setDomainError] = useState<string | null>(null);
+  const [domainVerified, setDomainVerified] = useState<boolean | null>(null);
+  const [domainChecking, setDomainChecking] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -541,6 +547,41 @@ export default function EditorPage() {
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleAddDomain = async () => {
+    if (!project || !customDomain.trim()) return;
+    setDomainAdding(true);
+    setDomainError(null);
+    setDomainResult(null);
+    setDomainVerified(null);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/domain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ domain: customDomain.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Ошибка привязки домена");
+      setDomainResult({ added: true, instructions: true });
+      setDomainVerified(data.verified || false);
+    } catch (e: any) {
+      setDomainError(e.message);
+    } finally {
+      setDomainAdding(false);
+    }
+  };
+
+  const handleCheckDomain = async () => {
+    if (!project || !customDomain.trim()) return;
+    setDomainChecking(true);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/domain/status?domain=${encodeURIComponent(customDomain.trim())}`, { credentials: "include" });
+      const data = await res.json();
+      setDomainVerified(data.verified || false);
+    } catch { setDomainVerified(false); }
+    finally { setDomainChecking(false); }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1039,6 +1080,9 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             onClick={() => {
               setPublishResult(null);
               setPublishError(null);
+              setDomainResult(null);
+              setDomainError(null);
+              setDomainVerified(null);
               setShowPublishModal(true);
             }}
             data-testid="button-publish"
@@ -1733,6 +1777,73 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                     {copied ? "Скопировано!" : "Копировать"}
                   </button>
                 </div>
+
+                <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "1rem" }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#333", marginBottom: 8 }}>Свой домен</div>
+                  {!domainResult ? (
+                    <>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <input
+                          type="text"
+                          placeholder="example.ru"
+                          value={customDomain}
+                          onChange={(e) => setCustomDomain(e.target.value)}
+                          style={{ flex: 1, padding: "0.5rem 0.75rem", borderRadius: 10, border: "1px solid #e5e7eb", fontSize: "0.85rem", outline: "none" }}
+                          data-testid="input-custom-domain"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleAddDomain}
+                          disabled={domainAdding || !customDomain.trim()}
+                          style={{ borderRadius: 10, fontSize: "0.8rem" }}
+                          data-testid="button-add-domain"
+                        >
+                          {domainAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Привязать"}
+                        </Button>
+                      </div>
+                      {domainError && (
+                        <div style={{ marginTop: 8, fontSize: "0.78rem", color: "#dc2626" }}>{domainError}</div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                      <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
+                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 6 }}>Настройте DNS в reg.ru</div>
+                        <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.7 }}>
+                          <div>Перейдите в <b>reg.ru → Мои домены → {customDomain} → DNS</b></div>
+                          <div style={{ marginTop: 6 }}>Добавьте <b>CNAME</b> запись:</div>
+                          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", marginTop: 4, fontFamily: "monospace", fontSize: "0.76rem" }}>
+                            <div>Хост: <b>@</b> (или <b>www</b>)</div>
+                            <div>Значение: <b>cname.vercel-dns.com</b></div>
+                          </div>
+                          <div style={{ marginTop: 6, color: "#6b7280", fontSize: "0.72rem" }}>Для корневого домена (без www) используйте <b>A</b> запись: <b>76.76.21.21</b></div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCheckDomain}
+                          disabled={domainChecking}
+                          style={{ borderRadius: 10, fontSize: "0.78rem" }}
+                          data-testid="button-check-domain"
+                        >
+                          {domainChecking ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                          Проверить DNS
+                        </Button>
+                        {domainVerified === true && (
+                          <span style={{ fontSize: "0.78rem", color: "#16a34a", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                            <CheckCircle2 className="w-4 h-4" /> Домен подключён!
+                          </span>
+                        )}
+                        {domainVerified === false && (
+                          <span style={{ fontSize: "0.78rem", color: "#f59e0b", fontWeight: 600 }}>DNS ещё не обновился (до 24ч)</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ display: "flex", gap: "0.75rem" }}>
                   <Button variant="outline" onClick={() => window.open(project.publishedUrl!, "_blank")} style={{ flex: 1 }}>
                     <ExternalLink className="w-4 h-4 mr-2" />
