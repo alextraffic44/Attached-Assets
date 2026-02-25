@@ -45,3 +45,4 @@ integrations = ["javascript_gemini_ai_integrations:2.0.0"]
 
 [userenv.shared]
 KIE_API_KEY = "7fffdc464ea80b7a9b1bc6d55f234eda"
+VITE_TELEGRAM_BOT_USERNAME = "Craft_AI_RU_bot"
