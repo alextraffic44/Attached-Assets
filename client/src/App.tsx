@@ -12,6 +12,7 @@ import EditorPage from "@/pages/editor";
 import LeadsPage from "@/pages/leads";
 import ProfilePage from "@/pages/profile";
 import LegalPage from "@/pages/legal";
+import CookieConsent from "@/components/cookie-consent";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -73,6 +74,7 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <Toaster />
+          <CookieConsent />
           <Router />
         </AuthProvider>
       </TooltipProvider>
