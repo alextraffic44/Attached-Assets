@@ -549,7 +549,7 @@ export async function registerRoutes(
 
       conversationHistory.push({ role: "user", parts: userParts });
 
-      const modelName = isEditMode ? "gemini-2.5-flash" : "gemini-3.1-pro-preview";
+      const modelName = "gemini-3.1-pro-preview";
       console.log("generateContentStream call. Model:", modelName, "History messages:", conversationHistory.length, "Edit mode:", isEditMode);
 
       const streamResult = await gemini.models.generateContentStream({
