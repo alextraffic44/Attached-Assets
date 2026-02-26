@@ -218,7 +218,7 @@ export default function DashboardPage() {
                     ))}
                     <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', margin: '0.35rem 0' }} />
                     <button
-                      onClick={logout}
+                      onClick={async () => { await logout(); setLocation("/auth"); }}
                       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.55rem 0.9rem', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 500, color: '#FF3B30', textAlign: 'left', fontFamily: appleFont }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,59,48,0.05)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}

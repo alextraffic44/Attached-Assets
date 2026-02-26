@@ -110,7 +110,7 @@ export default function ProfilePage() {
         {/* Logout */}
         <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", overflow: "hidden" }}>
           <button
-            onClick={logout}
+            onClick={async () => { await logout(); setLocation("/auth"); }}
             style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.9rem 1.25rem", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
             onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,59,48,0.04)")}
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
