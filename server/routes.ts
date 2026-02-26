@@ -448,7 +448,7 @@ export async function registerRoutes(
           ? project.generatedCode 
           : existingFiles.find(f => f.filename === editingFile)?.code || project.generatedCode;
 
-        systemContent += `\n\n${"═".repeat(43)}\nРЕЖИМ РЕДАКТИРОВАНИЯ — АКТИВНЫЙ ФАЙЛ: ${editingFile}\n${"═".repeat(43)}\nПользователь РЕДАКТИРУЕТ файл "${editingFile}". Все изменения должны применяться К ЭТОМУ ФАЙЛУ.\n\n⚠️ КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА РЕДАКТИРОВАНИЯ:\n1. ОБЯЗАТЕЛЬНО сохрани <nav> (навбар) со ВСЕМИ ссылками навигации — НИКОГДА не удаляй навигационное меню!\n2. ОБЯЗАТЕЛЬНО сохрани <footer> — НИКОГДА не удаляй подвал сайта!\n3. Сохранить ВСЕ существующие секции, стили, контент, анимации и структуру\n4. Изменять/добавлять ТОЛЬКО то, что явно просит пользователь\n5. НЕ удалять, НЕ упрощать, НЕ сокращать существующий код\n6. Вернуть ПОЛНЫЙ документ целиком (от <!DOCTYPE html> до </html>)\n7. НЕ заменяй весь дизайн — редактируй точечно то, что просит пользователь\n\nФОРМАТ ОТВЕТА:\n- Сначала напиши 1-3 предложения о внесённых изменениях\n- Затем ОДИН блок \`\`\`html с ПОЛНЫМ обновлённым кодом файла "${editingFile}"\n- Если пользователь просит изменить ВСЕ страницы — используй маркеры --- FILE: имя.html --- перед каждым блоком\n\n`;
+        systemContent += `\n\n${"═".repeat(43)}\nРЕЖИМ РЕДАКТИРОВАНИЯ — АКТИВНЫЙ ФАЙЛ: ${editingFile}\n${"═".repeat(43)}\nПользователь РЕДАКТИРУЕТ файл "${editingFile}". Все изменения должны применяться К ЭТОМУ ФАЙЛУ.\n\n⚠️ КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА РЕДАКТИРОВАНИЯ:\n1. ОБЯЗАТЕЛЬНО сохрани <nav> (навбар) со ВСЕМИ ссылками навигации\n2. ОБЯЗАТЕЛЬНО сохрани <footer>\n3. Изменять ТОЛЬКО то, что явно просит пользователь\n4. НЕ удалять, НЕ упрощать существующий код\n\n🔧 ФОРМАТ ОТВЕТА — ИСПОЛЬЗУЙ DIFF-ПАТЧИ (НЕ полный код!):\n- Сначала 1-3 предложения о внесённых изменениях\n- Затем используй блоки SEARCH/REPLACE для каждого изменения:\n\n\`\`\`diff\n<<<<<<< SEARCH\nточный фрагмент существующего кода который нужно найти\n=======\nновый код на замену\n>>>>>>> REPLACE\n\`\`\`\n\nПравила SEARCH/REPLACE:\n- SEARCH блок должен ТОЧНО совпадать с фрагментом существующего кода (включая пробелы и отступы)\n- Включай достаточно контекста (5-15 строк) чтобы фрагмент был уникальным\n- Используй несколько блоков SEARCH/REPLACE для нескольких изменений\n- Для УДАЛЕНИЯ блока — оставь REPLACE пустым\n- Для ДОБАВЛЕНИЯ нового кода — в SEARCH укажи соседний существующий блок, в REPLACE — его же + новый код\n\n⚠️ ИСКЛЮЧЕНИЕ — используй ПОЛНЫЙ HTML (блок \`\`\`html) ТОЛЬКО если:\n- Пользователь просит переделать/переписать ВЕСЬ дизайн\n- Изменения затрагивают >50% файла\n- Пользователь просит изменить ВСЕ страницы (тогда используй маркеры --- FILE: имя.html ---)\n\n`;
 
         systemContent += `ТЕКУЩИЙ КОД РЕДАКТИРУЕМОГО ФАЙЛА (${editingFile}):\n\`\`\`html\n${editingFileCode}\n\`\`\`\n`;
 
@@ -584,82 +584,137 @@ export async function registerRoutes(
         return result;
       };
 
+      const hasDiffBlocks = fullResponse.includes("<<<<<<< SEARCH");
       const hasFileMarkers = fullResponse.includes("--- FILE:");
       const htmlBlockCount = (fullResponse.match(/```html/g) || []).length;
-      console.log("Full response length:", fullResponse.length, "Has FILE markers:", hasFileMarkers, "HTML blocks:", htmlBlockCount);
+      const diffBlockCount = (fullResponse.match(/```diff/g) || []).length;
+      console.log("Full response length:", fullResponse.length, "Has FILE markers:", hasFileMarkers, "HTML blocks:", htmlBlockCount, "Diff blocks:", diffBlockCount, "Has SEARCH/REPLACE:", hasDiffBlocks);
+
+      const applyDiffPatches = (originalCode: string, response: string): string => {
+        const diffRegex = /```diff\s*\n([\s\S]*?)```/g;
+        let patchedCode = originalCode;
+        let patchCount = 0;
+        let dm;
+        while ((dm = diffRegex.exec(response)) !== null) {
+          const diffContent = dm[1];
+          const searchReplaceRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
+          let sr;
+          while ((sr = searchReplaceRegex.exec(diffContent)) !== null) {
+            const searchBlock = sr[1];
+            const replaceBlock = sr[2];
+            if (patchedCode.includes(searchBlock)) {
+              patchedCode = patchedCode.replace(searchBlock, replaceBlock);
+              patchCount++;
+            } else {
+              const trimmedSearch = searchBlock.replace(/^\s+/gm, (m) => m.replace(/ /g, ' ')).trim();
+              const trimmedCode = patchedCode.replace(/^\s+/gm, (m) => m.replace(/ /g, ' '));
+              if (trimmedCode.includes(trimmedSearch)) {
+                const idx = trimmedCode.indexOf(trimmedSearch);
+                const before = patchedCode.substring(0, idx);
+                const after = patchedCode.substring(idx + trimmedSearch.length);
+                patchedCode = before + replaceBlock + after;
+                patchCount++;
+              } else {
+                console.warn("SEARCH block not found in code, skipping patch. First 80 chars:", searchBlock.substring(0, 80));
+              }
+            }
+          }
+        }
+        console.log(`Applied ${patchCount} diff patches`);
+        return patchedCode;
+      };
 
       let aiTextReply = "";
       const firstHtmlIdx = fullResponse.indexOf("```html");
+      const firstDiffIdx = fullResponse.indexOf("```diff");
       const firstFileMarkerIdx = fullResponse.indexOf("--- FILE:");
-      if (firstHtmlIdx > 0) {
-        const textEnd = firstFileMarkerIdx !== -1 && firstFileMarkerIdx < firstHtmlIdx ? firstFileMarkerIdx : firstHtmlIdx;
+      const firstCodeIdx = firstHtmlIdx !== -1 && firstDiffIdx !== -1 
+        ? Math.min(firstHtmlIdx, firstDiffIdx) 
+        : firstHtmlIdx !== -1 ? firstHtmlIdx : firstDiffIdx;
+      if (firstCodeIdx > 0) {
+        const textEnd = firstFileMarkerIdx !== -1 && firstFileMarkerIdx < firstCodeIdx ? firstFileMarkerIdx : firstCodeIdx;
         aiTextReply = fullResponse.substring(0, textEnd).trim();
       } else if (firstFileMarkerIdx > 0) {
         aiTextReply = fullResponse.substring(0, firstFileMarkerIdx).trim();
       }
 
-      const fileMarkerRegex = /---\s*FILE:\s*([^\s\-]+\.html)\s*---\s*\n?\s*```html\s*\n?([\s\S]*?)```/gi;
-      const parsedFiles: { filename: string; code: string }[] = [];
-      let fm;
-      while ((fm = fileMarkerRegex.exec(fullResponse)) !== null) {
-        parsedFiles.push({ filename: fm[1].trim().toLowerCase(), code: replaceImgMarkers(fm[2].trim()) });
-      }
-
-      if (parsedFiles.length === 0) {
-        const altMarkerRegex = /\*{0,2}\s*FILE:\s*([^\s*]+\.html)\s*\*{0,2}\s*\n?\s*```html\s*\n?([\s\S]*?)```/gi;
-        let altM;
-        while ((altM = altMarkerRegex.exec(fullResponse)) !== null) {
-          parsedFiles.push({ filename: altM[1].trim().toLowerCase(), code: replaceImgMarkers(altM[2].trim()) });
-        }
-      }
-
-      console.log("Parsed files count:", parsedFiles.length, parsedFiles.map(f => f.filename));
-
       const editingFile = activeFile || "index.html";
       let mainHtmlCode: string;
 
-      if (parsedFiles.length > 0) {
-        const indexFile = parsedFiles.find(f => f.filename === "index.html");
-        if (indexFile) {
-          mainHtmlCode = indexFile.code;
-        } else if (parsedFiles.find(f => f.filename === editingFile)) {
-          mainHtmlCode = project.generatedCode || parsedFiles[0].code;
-        } else {
-          mainHtmlCode = parsedFiles[0].code;
-        }
-        const indexCode = indexFile?.code || mainHtmlCode;
-        const headerMatch = indexCode.match(/<header[\s\S]*?<\/header>/i);
-        const footerMatch = indexCode.match(/<footer[\s\S]*?<\/footer>/i);
+      if (hasDiffBlocks && diffBlockCount > 0) {
+        const editingFileCode = editingFile === "index.html"
+          ? project.generatedCode || ""
+          : existingFiles.find(f => f.filename === editingFile)?.code || project.generatedCode || "";
 
-        for (const pf of parsedFiles) {
-          if (pf.filename !== "index.html") {
-            let code = pf.code;
-            if (headerMatch) {
-              code = code.replace(/<header[\s\S]*?<\/header>/i, headerMatch[0]);
-            }
-            if (footerMatch) {
-              code = code.replace(/<footer[\s\S]*?<\/footer>/i, footerMatch[0]);
-            }
-            pf.code = code;
-            await storage.upsertProjectFile({ projectId: project.id, filename: pf.filename, code });
-          }
+        const patchedCode = replaceImgMarkers(applyDiffPatches(editingFileCode, fullResponse));
+
+        if (editingFile !== "index.html") {
+          await storage.upsertProjectFile({ projectId: project.id, filename: editingFile, code: patchedCode });
+          mainHtmlCode = project.generatedCode || "";
+        } else {
+          mainHtmlCode = patchedCode;
         }
       } else {
-        const singleMatch = fullResponse.match(/```html\n?([\s\S]*?)```/);
-        let parsedCode: string | null = null;
-        if (singleMatch) {
-          parsedCode = replaceImgMarkers(singleMatch[1].trim());
-        } else if (fullResponse.includes("<!DOCTYPE") || fullResponse.includes("<html")) {
-          parsedCode = replaceImgMarkers(fullResponse.trim());
+        const fileMarkerRegex = /---\s*FILE:\s*([^\s\-]+\.html)\s*---\s*\n?\s*```html\s*\n?([\s\S]*?)```/gi;
+        const parsedFiles: { filename: string; code: string }[] = [];
+        let fm;
+        while ((fm = fileMarkerRegex.exec(fullResponse)) !== null) {
+          parsedFiles.push({ filename: fm[1].trim().toLowerCase(), code: replaceImgMarkers(fm[2].trim()) });
         }
 
-        if (parsedCode && isEditMode && editingFile !== "index.html") {
-          await storage.upsertProjectFile({ projectId: project.id, filename: editingFile, code: parsedCode });
-          mainHtmlCode = project.generatedCode || "";
-        } else if (parsedCode) {
-          mainHtmlCode = parsedCode;
+        if (parsedFiles.length === 0) {
+          const altMarkerRegex = /\*{0,2}\s*FILE:\s*([^\s*]+\.html)\s*\*{0,2}\s*\n?\s*```html\s*\n?([\s\S]*?)```/gi;
+          let altM;
+          while ((altM = altMarkerRegex.exec(fullResponse)) !== null) {
+            parsedFiles.push({ filename: altM[1].trim().toLowerCase(), code: replaceImgMarkers(altM[2].trim()) });
+          }
+        }
+
+        console.log("Parsed files count:", parsedFiles.length, parsedFiles.map(f => f.filename));
+
+        if (parsedFiles.length > 0) {
+          const indexFile = parsedFiles.find(f => f.filename === "index.html");
+          if (indexFile) {
+            mainHtmlCode = indexFile.code;
+          } else if (parsedFiles.find(f => f.filename === editingFile)) {
+            mainHtmlCode = project.generatedCode || parsedFiles[0].code;
+          } else {
+            mainHtmlCode = parsedFiles[0].code;
+          }
+          const indexCode = indexFile?.code || mainHtmlCode;
+          const headerMatch = indexCode.match(/<header[\s\S]*?<\/header>/i);
+          const footerMatch = indexCode.match(/<footer[\s\S]*?<\/footer>/i);
+
+          for (const pf of parsedFiles) {
+            if (pf.filename !== "index.html") {
+              let code = pf.code;
+              if (headerMatch) {
+                code = code.replace(/<header[\s\S]*?<\/header>/i, headerMatch[0]);
+              }
+              if (footerMatch) {
+                code = code.replace(/<footer[\s\S]*?<\/footer>/i, footerMatch[0]);
+              }
+              pf.code = code;
+              await storage.upsertProjectFile({ projectId: project.id, filename: pf.filename, code });
+            }
+          }
         } else {
-          mainHtmlCode = project.generatedCode || "";
+          const singleMatch = fullResponse.match(/```html\n?([\s\S]*?)```/);
+          let parsedCode: string | null = null;
+          if (singleMatch) {
+            parsedCode = replaceImgMarkers(singleMatch[1].trim());
+          } else if (fullResponse.includes("<!DOCTYPE") || fullResponse.includes("<html")) {
+            parsedCode = replaceImgMarkers(fullResponse.trim());
+          }
+
+          if (parsedCode && isEditMode && editingFile !== "index.html") {
+            await storage.upsertProjectFile({ projectId: project.id, filename: editingFile, code: parsedCode });
+            mainHtmlCode = project.generatedCode || "";
+          } else if (parsedCode) {
+            mainHtmlCode = parsedCode;
+          } else {
+            mainHtmlCode = project.generatedCode || "";
+          }
         }
       }
 
