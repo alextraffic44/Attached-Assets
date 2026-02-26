@@ -1205,11 +1205,11 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
         <div className="flex items-center gap-3 bg-white/40 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-2xl p-1.5 shadow-glass">
           <div className="flex items-center border rounded-xl p-0.5 gap-0.5 bg-slate-100/50 dark:bg-slate-800/50 shadow-skeuo-inner">
             {[
-              { d: "desktop" as const, i: Monitor },
-              { d: "tablet" as const, i: Tablet },
-              { d: "mobile" as const, i: Smartphone },
-            ].map(({ d, i: Icon }) => (
-              <Button key={d} variant={previewDevice === d ? "secondary" : "ghost"} size="icon" className="h-8 w-8 rounded-lg" onClick={() => setPreviewDevice(d)} data-testid={`button-device-${d}`}>
+              { d: "desktop" as const, i: Monitor, tip: "Десктоп — просмотр на большом экране" },
+              { d: "tablet" as const, i: Tablet, tip: "Планшет — просмотр на среднем экране" },
+              { d: "mobile" as const, i: Smartphone, tip: "Мобильный — просмотр на телефоне" },
+            ].map(({ d, i: Icon, tip }) => (
+              <Button key={d} variant={previewDevice === d ? "secondary" : "ghost"} size="icon" className="h-8 w-8 rounded-lg" onClick={() => setPreviewDevice(d)} data-testid={`button-device-${d}`} title={tip}>
                 <Icon className="w-3.5 h-3.5" />
               </Button>
             ))}
@@ -1217,25 +1217,25 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
-          <Button variant={showCode ? "secondary" : "ghost"} size="sm" className="rounded-xl font-bold px-4" onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }} data-testid="button-toggle-code">
+          <Button variant={showCode ? "secondary" : "ghost"} size="sm" className="rounded-xl font-bold px-4" onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }} data-testid="button-toggle-code" title={showCode ? "Переключить на визуальный просмотр сайта" : "Показать исходный HTML/CSS/JS код сайта"}>
             {showCode ? <Eye className="w-4 h-4 mr-2" /> : <Code2 className="w-4 h-4 mr-2" />}
             {showCode ? "Сайт" : "Код"}
           </Button>
 
           {!showCode && currentCode && (
             <>
-              <Button variant={editMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-4 ${editMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }} data-testid="button-toggle-edit">
+              <Button variant={editMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-4 ${editMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }} data-testid="button-toggle-edit" title="Визуальный редактор: кликните на текст или изображение в превью, чтобы отредактировать прямо на странице">
                 <MousePointer2 className="w-4 h-4 mr-2" />
                 {editMode ? "Редактор ВКЛ" : "Редактор"}
               </Button>
-              <Button variant={selectorMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-4 ${selectorMode ? "bg-orange-500 hover:bg-orange-600 text-white" : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-500/30 dark:hover:bg-orange-500/10"}`} onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }} data-testid="button-toggle-selector">
+              <Button variant={selectorMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-4 ${selectorMode ? "bg-orange-500 hover:bg-orange-600 text-white" : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-500/30 dark:hover:bg-orange-500/10"}`} onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }} data-testid="button-toggle-selector" title="Режим выбора: наведите на элемент и кликните, чтобы удалить, скопировать или переместить его">
                 <Crosshair className="w-4 h-4 mr-2" />
                 {selectorMode ? "Выбор ВКЛ" : "Выбрать"}
               </Button>
             </>
           )}
 
-          <Button variant="outline" size="sm" className="rounded-xl font-bold px-4" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip">
+          <Button variant="outline" size="sm" className="rounded-xl font-bold px-4" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip" title="Скачать весь сайт как ZIP-архив со всеми страницами и изображениями">
             <Download className="w-4 h-4 mr-2" />
             ZIP
           </Button>
@@ -1250,7 +1250,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             <span className="ml-1.5 hidden sm:inline">Фавикон</span>
           </Button>
 
-          <Button variant="outline" size="sm" className="rounded-xl font-bold px-4 bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen">
+          <Button variant="outline" size="sm" className="rounded-xl font-bold px-4 bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen" title="Сгенерировать изображение с помощью AI и вставить его на сайт">
             <Wand2 className="w-4 h-4 mr-2" />
             AI Фото
             {projectImages.length > 0 && (
@@ -1261,6 +1261,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           <Button
             size="sm"
             className="rounded-xl font-black px-6 shadow-lg shadow-primary/20 hover-elevate"
+            title="Опубликовать сайт в интернет и получить ссылку для доступа"
             onClick={() => {
               setPublishResult(null);
               setPublishError(null);
