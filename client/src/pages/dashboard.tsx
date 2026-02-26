@@ -331,7 +331,7 @@ export default function DashboardPage() {
       </main>
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="p-0 overflow-hidden" style={{ width: '90vw', maxWidth: 860, aspectRatio: createStep === 'details' ? 'auto' : 'auto', borderRadius: 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont }}>
+        <DialogContent className="p-0 overflow-hidden" style={{ width: '90vw', maxWidth: 520, borderRadius: 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont }}>
           <div className="px-7 pt-7 pb-6">
             <DialogHeader>
               <DialogTitle style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F' }}>
@@ -341,7 +341,7 @@ export default function DashboardPage() {
 
             <AnimatePresence mode="wait">
               {createStep === "choose" ? (
-                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="grid grid-cols-3 gap-3 mt-6">
+                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-3 mt-6">
                   {[
                     {
                       m: "prompt",
@@ -404,22 +404,27 @@ export default function DashboardPage() {
                     <button
                       key={x.m}
                       data-testid={`button-create-${x.m}`}
-                      className="group relative flex flex-col items-center w-full transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none"
-                      style={{ padding: '1.5rem 1rem', borderRadius: 18, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'center' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; }}
+                      className="group relative flex items-center w-full transition-all duration-300 ease-out hover:-translate-y-0.5 focus:outline-none"
+                      style={{ padding: '0.85rem 1rem', borderRadius: 16, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'left' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(0,0,0,0.06)'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
                       onClick={() => { setSelectedMode(x.m as any); setCreateStep(x.m === "template" ? "templates" : "details"); }}
                     >
-                      <div className="flex items-center justify-center mb-3" style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
+                      <div className="flex-shrink-0 flex items-center justify-center mr-3.5" style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         {x.icon}
                       </div>
-                      <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 3, letterSpacing: '-0.02em' }}>{x.t}</h3>
-                      <p style={{ fontSize: '0.8rem', color: '#86868B', fontWeight: 400, lineHeight: 1.4 }}>{x.d}</p>
+                      <div className="flex-grow min-w-0">
+                        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 1, letterSpacing: '-0.02em' }}>{x.t}</h3>
+                        <p style={{ fontSize: '0.8rem', color: '#86868B', fontWeight: 400 }}>{x.d}</p>
+                      </div>
+                      <div className="flex-shrink-0 transition-all duration-300 group-hover:translate-x-0.5" style={{ color: 'rgba(0,0,0,0.2)' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                      </div>
                     </button>
                   ))}
                 </motion.div>
               ) : createStep === "templates" ? (
-                <motion.div key="t" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="mt-6"><div className="grid grid-cols-3 gap-3">
+                <motion.div key="t" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-3 mt-6">
                   {[
                     {
                       id: "hero-video",
@@ -490,20 +495,24 @@ export default function DashboardPage() {
                     <button
                       key={x.id}
                       data-testid={`button-template-${x.id}`}
-                      className="group relative flex flex-col items-center w-full transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none"
-                      style={{ padding: '1.5rem 1rem', borderRadius: 18, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'center' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; }}
+                      className="group relative flex items-center w-full transition-all duration-300 ease-out hover:-translate-y-0.5 focus:outline-none"
+                      style={{ padding: '0.85rem 1rem', borderRadius: 16, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'left' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(0,0,0,0.06)'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
                       onClick={() => { setSelectedTemplate(x.t); setCreateStep("details"); }}
                     >
-                      <div className="flex items-center justify-center mb-3" style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
+                      <div className="flex-shrink-0 flex items-center justify-center mr-3.5" style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         {x.icon}
                       </div>
-                      <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 3, letterSpacing: '-0.02em' }}>{x.t}</h3>
-                      <p style={{ fontSize: '0.8rem', color: '#86868B', fontWeight: 400, lineHeight: 1.4 }}>{x.d}</p>
+                      <div className="flex-grow min-w-0">
+                        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 1, letterSpacing: '-0.02em' }}>{x.t}</h3>
+                        <p style={{ fontSize: '0.8rem', color: '#86868B', fontWeight: 400 }}>{x.d}</p>
+                      </div>
+                      <div className="flex-shrink-0 transition-all duration-300 group-hover:translate-x-0.5" style={{ color: 'rgba(0,0,0,0.2)' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                      </div>
                     </button>
                   ))}
-                  </div>
                   <button
                     data-testid="button-templates-back"
                     className="transition-colors mt-3"
@@ -516,121 +525,53 @@ export default function DashboardPage() {
                   </button>
                 </motion.div>
               ) : (
-                <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="mt-5">
-                  <div className="grid grid-cols-2 gap-5" style={{ gridTemplateColumns: '1fr 1fr' }}>
-                    <div className="space-y-4">
-                      <div className="space-y-1.5">
-                        <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Название</Label>
-                        <Input 
-                          placeholder="Например: Моё кафе"
-                          value={title}
-                          onChange={e => setTitle(e.target.value)}
-                          className="h-10 rounded-xl font-medium text-gray-900 placeholder:text-gray-400 text-sm"
-                          style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.08)' }}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between px-1">
-                          <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B' }}>Описание</Label>
-                          {isEnhanced && (
-                            <span data-testid="text-enhanced-status" className="flex items-center gap-1" style={{ fontSize: '0.7rem', fontWeight: 600, color: '#34C759' }}>
-                              <Sparkles className="w-3 h-3" /> Улучшено AI
-                            </span>
-                          )}
-                        </div>
-                        <Textarea 
-                          placeholder="Опишите структуру, цвета и контент..."
-                          value={description}
-                          onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
-                          className={`rounded-xl font-medium text-gray-900 placeholder:text-gray-400 transition-all text-sm ${isEnhanced ? 'min-h-[160px]' : 'min-h-[120px]'}`}
-                          style={{ background: isEnhanced ? 'rgba(52,199,89,0.04)' : 'rgba(0,0,0,0.03)', border: isEnhanced ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(0,0,0,0.08)' }}
-                        />
-                      </div>
+                <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 mt-5">
+                  <div className="space-y-1.5">
+                    <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Название</Label>
+                    <Input
+                      placeholder="Например: Моё кафе"
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      className="h-11 rounded-2xl font-medium text-gray-900 placeholder:text-gray-400"
+                      style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.08)' }}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between px-1">
+                      <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B' }}>Описание</Label>
+                      {isEnhanced && (
+                        <span data-testid="text-enhanced-status" className="flex items-center gap-1" style={{ fontSize: '0.7rem', fontWeight: 600, color: '#34C759' }}>
+                          <Sparkles className="w-3 h-3" /> Улучшено AI
+                        </span>
+                      )}
                     </div>
-                    <div className="space-y-4">
-                  <div className="flex gap-2">
+                    <Textarea
+                      placeholder="Опишите структуру, цвета и контент..."
+                      value={description}
+                      onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
+                      className={`rounded-2xl font-medium text-gray-900 placeholder:text-gray-400 transition-all ${isEnhanced ? 'min-h-[140px]' : 'min-h-[90px]'}`}
+                      style={{ background: isEnhanced ? 'rgba(52,199,89,0.04)' : 'rgba(0,0,0,0.03)', border: isEnhanced ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(0,0,0,0.08)', resize: 'vertical' }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => setMultiPageEnabled(v => !v)}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
                       style={{ border: multiPageEnabled ? '1px solid rgba(0,113,227,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: multiPageEnabled ? 'rgba(0,113,227,0.07)' : 'transparent', color: multiPageEnabled ? '#0058b3' : '#86868B', cursor: 'pointer' }}
                     >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-                      Многостраничный сайт
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                      Многостраничный
                     </button>
                     <button
                       type="button"
                       onClick={() => setSeoEnabled(v => !v)}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
                       style={{ border: seoEnabled ? '1px solid rgba(52,199,89,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: seoEnabled ? 'rgba(52,199,89,0.07)' : 'transparent', color: seoEnabled ? '#1D8348' : '#86868B', cursor: 'pointer' }}
                     >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                      SEO заголовки
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                      SEO
                     </button>
-                  </div>
-
-                  {multiPageEnabled && (
-                    <div className="rounded-2xl p-4 space-y-2" style={{ background: 'rgba(0,113,227,0.04)', border: '1px solid rgba(0,113,227,0.15)' }}>
-                      <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#0058b3', marginBottom: 8 }}>Страницы сайта</div>
-                      {pageNames.map((name, i) => (
-                        <div key={i} className="flex gap-2 items-center">
-                          <Input
-                            placeholder={`Страница ${i + 1} (напр. "О нас")`}
-                            value={name}
-                            onChange={e => setPageNames(prev => prev.map((p, idx) => idx === i ? e.target.value : p))}
-                            className="h-9 rounded-xl text-sm"
-                            style={{ background: '#fff', border: '1px solid rgba(0,113,227,0.2)' }}
-                          />
-                          {pageNames.length > 1 && (
-                            <button type="button" onClick={() => setPageNames(prev => prev.filter((_, idx) => idx !== i))}
-                              style={{ color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>✕</button>
-                          )}
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => setPageNames(prev => [...prev, ""])}
-                        className="text-xs font-semibold mt-1" style={{ color: '#0058b3', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}>
-                        + Добавить страницу
-                      </button>
-                    </div>
-                  )}
-
-                  {seoEnabled && (
-                    <div className="rounded-2xl p-4 space-y-2" style={{ background: 'rgba(52,199,89,0.04)', border: '1px solid rgba(52,199,89,0.2)' }}>
-                      <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#1D8348', marginBottom: 8 }}>SEO заголовки главной страницы</div>
-                      <div className="flex gap-2 items-center">
-                        <span className="text-xs font-bold w-8 shrink-0" style={{ color: '#1D8348' }}>H1</span>
-                        <Input
-                          placeholder='Например: Карточка товара для маркетплейсов'
-                          value={seoH1}
-                          onChange={e => setSeoH1(e.target.value)}
-                          className="h-9 rounded-xl text-sm"
-                          style={{ background: '#fff', border: '1px solid rgba(52,199,89,0.25)' }}
-                        />
-                      </div>
-                      {seoH2s.map((h2, i) => (
-                        <div key={i} className="flex gap-2 items-center">
-                          <span className="text-xs font-bold w-8 shrink-0" style={{ color: '#1D8348' }}>H2</span>
-                          <Input
-                            placeholder={`Подзаголовок ${i + 1}`}
-                            value={h2}
-                            onChange={e => setSeoH2s(prev => prev.map((h, idx) => idx === i ? e.target.value : h))}
-                            className="h-9 rounded-xl text-sm"
-                            style={{ background: '#fff', border: '1px solid rgba(52,199,89,0.2)' }}
-                          />
-                          {seoH2s.length > 1 && (
-                            <button type="button" onClick={() => setSeoH2s(prev => prev.filter((_, idx) => idx !== i))}
-                              style={{ color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>✕</button>
-                          )}
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => setSeoH2s(prev => [...prev, ""])}
-                        className="text-xs font-semibold mt-1" style={{ color: '#1D8348', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}>
-                        + Добавить H2
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="flex gap-3">
                     <button
                       data-testid="button-enhance-prompt"
                       type="button"
@@ -671,25 +612,11 @@ export default function DashboardPage() {
                         }
                       }}
                       disabled={isEnhancing || isResearching || !description.trim()}
-                      className="flex-1 flex items-center justify-center gap-2 h-11 rounded-2xl font-semibold text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ border: isEnhanced ? '1px solid rgba(52,199,89,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: isEnhanced ? 'rgba(52,199,89,0.06)' : 'transparent', color: isEnhanced ? '#1D8348' : '#86868B', borderRadius: 14 }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ border: isEnhanced ? '1px solid rgba(52,199,89,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: isEnhanced ? 'rgba(52,199,89,0.06)' : 'transparent', color: isEnhanced ? '#1D8348' : '#86868B', cursor: 'pointer' }}
                     >
-                      {isEnhancing ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Улучшаем...</span>
-                        </>
-                      ) : isEnhanced ? (
-                        <>
-                          <Sparkles className="w-4 h-4" />
-                          <span>Улучшено</span>
-                        </>
-                      ) : (
-                        <>
-                          <Wand2 className="w-4 h-4" />
-                          <span>AI улучшение</span>
-                        </>
-                      )}
+                      {isEnhancing ? <Loader2 className="w-3 h-3 animate-spin" /> : isEnhanced ? <Sparkles className="w-3 h-3" /> : <Wand2 className="w-3 h-3" />}
+                      {isEnhancing ? 'Улучшаем...' : isEnhanced ? 'Улучшено' : 'AI улучшение'}
                     </button>
                     <button
                       data-testid="button-deep-research"
@@ -739,40 +666,83 @@ export default function DashboardPage() {
                         }
                       }}
                       disabled={isEnhancing || isResearching || !description.trim()}
-                      className="flex-1 flex items-center justify-center gap-2 h-11 font-semibold text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ border: researchData ? '1px solid rgba(0,113,227,0.3)' : '1.5px dashed rgba(0,0,0,0.15)', background: researchData ? 'rgba(0,113,227,0.06)' : 'transparent', color: researchData ? '#0058b3' : '#86868B', borderRadius: 14 }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ border: researchData ? '1px solid rgba(0,113,227,0.3)' : '1.5px dashed rgba(0,0,0,0.15)', background: researchData ? 'rgba(0,113,227,0.06)' : 'transparent', color: researchData ? '#0058b3' : '#86868B', cursor: 'pointer' }}
                     >
-                      {isResearching ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Исследуем...</span>
-                        </>
-                      ) : researchData ? (
-                        <>
-                          <Globe className="w-4 h-4" />
-                          <span>Исследовано</span>
-                        </>
-                      ) : (
-                        <>
-                          <Search className="w-4 h-4" />
-                          <span>Deep Research</span>
-                        </>
-                      )}
+                      {isResearching ? <Loader2 className="w-3 h-3 animate-spin" /> : researchData ? <Globe className="w-3 h-3" /> : <Search className="w-3 h-3" />}
+                      {isResearching ? 'Исследуем...' : researchData ? 'Исследовано' : 'Deep Research'}
                     </button>
                   </div>
+                  {multiPageEnabled && (
+                    <div className="rounded-2xl p-3.5 space-y-2" style={{ background: 'rgba(0,113,227,0.04)', border: '1px solid rgba(0,113,227,0.15)' }}>
+                      <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#0058b3', marginBottom: 4 }}>Страницы сайта</div>
+                      {pageNames.map((name, i) => (
+                        <div key={i} className="flex gap-2 items-center">
+                          <Input
+                            placeholder={`Страница ${i + 1} (напр. "О нас")`}
+                            value={name}
+                            onChange={e => setPageNames(prev => prev.map((p, idx) => idx === i ? e.target.value : p))}
+                            className="h-8 rounded-lg text-sm"
+                            style={{ background: '#fff', border: '1px solid rgba(0,113,227,0.2)' }}
+                          />
+                          {pageNames.length > 1 && (
+                            <button type="button" onClick={() => setPageNames(prev => prev.filter((_, idx) => idx !== i))}
+                              style={{ color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', fontSize: '0.8rem' }}>✕</button>
+                          )}
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setPageNames(prev => [...prev, ""])}
+                        className="text-xs font-semibold" style={{ color: '#0058b3', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}>
+                        + Добавить страницу
+                      </button>
                     </div>
-                  </div>
-                  <div className="flex gap-3 pt-3">
+                  )}
+                  {seoEnabled && (
+                    <div className="rounded-2xl p-3.5 space-y-2" style={{ background: 'rgba(52,199,89,0.04)', border: '1px solid rgba(52,199,89,0.2)' }}>
+                      <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#1D8348', marginBottom: 4 }}>SEO заголовки</div>
+                      <div className="flex gap-2 items-center">
+                        <span className="text-xs font-bold w-7 shrink-0" style={{ color: '#1D8348' }}>H1</span>
+                        <Input
+                          placeholder='Например: Карточка товара для маркетплейсов'
+                          value={seoH1}
+                          onChange={e => setSeoH1(e.target.value)}
+                          className="h-8 rounded-lg text-sm"
+                          style={{ background: '#fff', border: '1px solid rgba(52,199,89,0.25)' }}
+                        />
+                      </div>
+                      {seoH2s.map((h2, i) => (
+                        <div key={i} className="flex gap-2 items-center">
+                          <span className="text-xs font-bold w-7 shrink-0" style={{ color: '#1D8348' }}>H2</span>
+                          <Input
+                            placeholder={`Подзаголовок ${i + 1}`}
+                            value={h2}
+                            onChange={e => setSeoH2s(prev => prev.map((h, idx) => idx === i ? e.target.value : h))}
+                            className="h-8 rounded-lg text-sm"
+                            style={{ background: '#fff', border: '1px solid rgba(52,199,89,0.2)' }}
+                          />
+                          {seoH2s.length > 1 && (
+                            <button type="button" onClick={() => setSeoH2s(prev => prev.filter((_, idx) => idx !== i))}
+                              style={{ color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', fontSize: '0.8rem' }}>✕</button>
+                          )}
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setSeoH2s(prev => [...prev, ""])}
+                        className="text-xs font-semibold" style={{ color: '#1D8348', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}>
+                        + Добавить H2
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex gap-3 pt-1">
                     <button
-                      className="flex-1 h-11 font-semibold transition-all text-sm"
-                      style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 14, color: '#86868B', cursor: 'pointer' }}
+                      className="flex-1 h-11 font-semibold transition-all"
+                      style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 14, color: '#86868B', cursor: 'pointer', fontSize: '0.9rem' }}
                       onClick={() => { setCreateStep(selectedMode === "template" ? "templates" : "choose"); setIsEnhanced(false); }}
                     >
                       Назад
                     </button>
                     <button
-                      className="flex-[2] h-11 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                      style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 14, cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
+                      className="flex-[2] h-11 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 14, cursor: 'pointer', fontSize: '0.95rem', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
                       onClick={() => createMutation.mutate()}
                       disabled={createMutation.isPending || isEnhancing || isResearching}
                     >
