@@ -11,6 +11,7 @@ import DashboardPage from "@/pages/dashboard";
 import EditorPage from "@/pages/editor";
 import LeadsPage from "@/pages/leads";
 import ProfilePage from "@/pages/profile";
+import LegalPage from "@/pages/legal";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -58,6 +59,9 @@ function Router() {
       <Route path="/leads" component={LeadsPage} />
       <Route path="/profile" component={ProfilePage} />
       <Route path="/editor/:id" component={EditorPage} />
+      <Route path="/oferta">{() => <LegalPage doc="oferta" />}</Route>
+      <Route path="/privacy">{() => <LegalPage doc="privacy" />}</Route>
+      <Route path="/terms">{() => <LegalPage doc="terms" />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

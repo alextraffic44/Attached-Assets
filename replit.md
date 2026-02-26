@@ -18,6 +18,9 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `/auth` — Login/Register with email + password
 - `/dashboard` — User's projects list with create modal + leads button with unread badge
 - `/leads` — Leads management page (all form submissions from generated sites)
+- `/oferta` — Договор публичной оферты (legal)
+- `/privacy` — Политика конфиденциальности (legal, 152-ФЗ)
+- `/terms` — Пользовательское соглашение (legal)
 - `/editor/:id` — Split-pane editor: chat (left) + live preview (right)
 
 ## Database Schema
