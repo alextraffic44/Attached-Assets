@@ -331,17 +331,17 @@ export default function DashboardPage() {
       </main>
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="sm:max-w-[540px] p-0 overflow-hidden" style={{ borderRadius: 28, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont }}>
-          <div className="px-8 pt-10 pb-8">
+        <DialogContent className="p-0 overflow-hidden" style={{ width: '90vw', maxWidth: 860, aspectRatio: createStep === 'details' ? 'auto' : 'auto', borderRadius: 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont }}>
+          <div className="px-7 pt-7 pb-6">
             <DialogHeader>
-              <DialogTitle style={{ fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F' }}>
+              <DialogTitle style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F' }}>
                 {createStep === "choose" ? "С чего начнём?" : createStep === "templates" ? "Выберите шаблон" : "Оживите мечту"}
               </DialogTitle>
             </DialogHeader>
 
             <AnimatePresence mode="wait">
               {createStep === "choose" ? (
-                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-4 mt-8">
+                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="grid grid-cols-3 gap-3 mt-6">
                   {[
                     {
                       m: "prompt",
@@ -404,29 +404,22 @@ export default function DashboardPage() {
                     <button
                       key={x.m}
                       data-testid={`button-create-${x.m}`}
-                      className="group relative flex items-center w-full transition-all duration-300 ease-out hover:-translate-y-0.5 focus:outline-none"
-                      style={{ padding: '1rem', borderRadius: 18, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'left' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(0,0,0,0.06)'; }}
+                      className="group relative flex flex-col items-center w-full transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none"
+                      style={{ padding: '1.5rem 1rem', borderRadius: 18, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'center' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
                       onClick={() => { setSelectedMode(x.m as any); setCreateStep(x.m === "template" ? "templates" : "details"); }}
                     >
-                      <div className="flex-shrink-0 flex items-center justify-center mr-4" style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
+                      <div className="flex items-center justify-center mb-3" style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         {x.icon}
                       </div>
-                      <div className="flex-grow">
-                        <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 2, letterSpacing: '-0.02em' }}>{x.t}</h3>
-                        <p style={{ fontSize: '0.85rem', color: '#86868B', fontWeight: 400 }}>{x.d}</p>
-                      </div>
-                      <div className="flex-shrink-0 transition-all duration-300 group-hover:translate-x-0.5" style={{ color: 'rgba(0,0,0,0.2)' }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                      </div>
+                      <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 3, letterSpacing: '-0.02em' }}>{x.t}</h3>
+                      <p style={{ fontSize: '0.8rem', color: '#86868B', fontWeight: 400, lineHeight: 1.4 }}>{x.d}</p>
                     </button>
                   ))}
                 </motion.div>
               ) : createStep === "templates" ? (
-                <motion.div key="t" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-4 mt-8">
+                <motion.div key="t" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="mt-6"><div className="grid grid-cols-3 gap-3">
                   {[
                     {
                       id: "hero-video",
@@ -497,29 +490,23 @@ export default function DashboardPage() {
                     <button
                       key={x.id}
                       data-testid={`button-template-${x.id}`}
-                      className="group relative flex items-center w-full transition-all duration-300 ease-out hover:-translate-y-0.5 focus:outline-none"
-                      style={{ padding: '1rem', borderRadius: 18, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'left' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(0,0,0,0.06)'; }}
+                      className="group relative flex flex-col items-center w-full transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none"
+                      style={{ padding: '1.5rem 1rem', borderRadius: 18, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'center' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
                       onClick={() => { setSelectedTemplate(x.t); setCreateStep("details"); }}
                     >
-                      <div className="flex-shrink-0 flex items-center justify-center mr-4" style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
+                      <div className="flex items-center justify-center mb-3" style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         {x.icon}
                       </div>
-                      <div className="flex-grow">
-                        <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 2, letterSpacing: '-0.02em' }}>{x.t}</h3>
-                        <p style={{ fontSize: '0.85rem', color: '#86868B' }}>{x.d}</p>
-                      </div>
-                      <div className="flex-shrink-0 transition-all duration-300 group-hover:translate-x-0.5" style={{ color: 'rgba(0,0,0,0.2)' }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                      </div>
+                      <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 3, letterSpacing: '-0.02em' }}>{x.t}</h3>
+                      <p style={{ fontSize: '0.8rem', color: '#86868B', fontWeight: 400, lineHeight: 1.4 }}>{x.d}</p>
                     </button>
                   ))}
+                  </div>
                   <button
                     data-testid="button-templates-back"
-                    className="transition-colors self-start mt-2"
+                    className="transition-colors mt-3"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem 0', fontSize: '0.9rem', fontWeight: 600, color: '#86868B', letterSpacing: '-0.01em' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#1D1D1F'; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#86868B'; }}
@@ -529,35 +516,38 @@ export default function DashboardPage() {
                   </button>
                 </motion.div>
               ) : (
-                <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6 mt-8">
-                  <div className="space-y-2">
-                    <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Название</Label>
-                    <Input 
-                      placeholder="Например: Моё кафе"
-                      value={title}
-                      onChange={e => setTitle(e.target.value)}
-                      className="h-12 rounded-2xl font-medium text-gray-900 placeholder:text-gray-400"
-                      style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.08)' }}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between px-1">
-                      <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B' }}>Описание</Label>
-                      {isEnhanced && (
-                        <span data-testid="text-enhanced-status" className="flex items-center gap-1" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#34C759' }}>
-                          <Sparkles className="w-3 h-3" /> Улучшено AI
-                        </span>
-                      )}
+                <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="mt-5">
+                  <div className="grid grid-cols-2 gap-5" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Название</Label>
+                        <Input 
+                          placeholder="Например: Моё кафе"
+                          value={title}
+                          onChange={e => setTitle(e.target.value)}
+                          className="h-10 rounded-xl font-medium text-gray-900 placeholder:text-gray-400 text-sm"
+                          style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.08)' }}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between px-1">
+                          <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B' }}>Описание</Label>
+                          {isEnhanced && (
+                            <span data-testid="text-enhanced-status" className="flex items-center gap-1" style={{ fontSize: '0.7rem', fontWeight: 600, color: '#34C759' }}>
+                              <Sparkles className="w-3 h-3" /> Улучшено AI
+                            </span>
+                          )}
+                        </div>
+                        <Textarea 
+                          placeholder="Опишите структуру, цвета и контент..."
+                          value={description}
+                          onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
+                          className={`rounded-xl font-medium text-gray-900 placeholder:text-gray-400 transition-all text-sm ${isEnhanced ? 'min-h-[160px]' : 'min-h-[120px]'}`}
+                          style={{ background: isEnhanced ? 'rgba(52,199,89,0.04)' : 'rgba(0,0,0,0.03)', border: isEnhanced ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(0,0,0,0.08)' }}
+                        />
+                      </div>
                     </div>
-                    <Textarea 
-                      placeholder="Опишите структуру, цвета и контент..."
-                      value={description}
-                      onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
-                      className={`rounded-2xl font-medium text-gray-900 placeholder:text-gray-400 transition-all ${isEnhanced ? 'min-h-[200px] text-sm' : 'min-h-[120px]'}`}
-                      style={{ background: isEnhanced ? 'rgba(52,199,89,0.04)' : 'rgba(0,0,0,0.03)', border: isEnhanced ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(0,0,0,0.08)' }}
-                    />
-                  </div>
-                  {/* Multi-page + SEO toggles */}
+                    <div className="space-y-4">
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -770,17 +760,19 @@ export default function DashboardPage() {
                       )}
                     </button>
                   </div>
-                  <div className="flex gap-3 pt-2">
+                    </div>
+                  </div>
+                  <div className="flex gap-3 pt-3">
                     <button
-                      className="flex-1 h-12 font-semibold transition-all"
-                      style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 14, color: '#86868B', cursor: 'pointer', fontSize: '0.9rem' }}
+                      className="flex-1 h-11 font-semibold transition-all text-sm"
+                      style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 14, color: '#86868B', cursor: 'pointer' }}
                       onClick={() => { setCreateStep(selectedMode === "template" ? "templates" : "choose"); setIsEnhanced(false); }}
                     >
                       Назад
                     </button>
                     <button
-                      className="flex-[2] h-12 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 14, cursor: 'pointer', fontSize: '0.95rem', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
+                      className="flex-[2] h-11 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 14, cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
                       onClick={() => createMutation.mutate()}
                       disabled={createMutation.isPending || isEnhancing || isResearching}
                     >
