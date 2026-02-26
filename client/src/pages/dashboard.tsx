@@ -520,7 +520,7 @@ export default function DashboardPage() {
                           )}
                         </div>
                         <Textarea
-                          placeholder="Опишите структуру, цвета и контент сайта..."
+                          placeholder="Сайт SPA студии, в бежевых тонах, с картинкой в Hero секции, и плавной анимацией"
                           value={description}
                           onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
                           className="rounded-xl font-medium text-gray-900 placeholder:text-gray-400 text-sm flex-1"
