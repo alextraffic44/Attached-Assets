@@ -1033,11 +1033,48 @@ export async function registerRoutes(
 
       const files: { filename: string; content: string }[] = [];
 
+      const LEADS_API_BASE = "https://craft-ai.ru";
+      const leadsScript = `<script>window.__PROJECT_ID__=${projectId};
+(function(){
+  var API='${LEADS_API_BASE}/api/leads/${projectId}';
+  document.querySelectorAll('form[data-lead-form]').forEach(function(form){
+    form.addEventListener('submit',function(e){
+      e.preventDefault();
+      var fd=new FormData(form);
+      var data={name:fd.get('name')||'',email:fd.get('email')||'',phone:fd.get('phone')||'',message:fd.get('message')||'',source:form.dataset.leadForm||'form'};
+      var btn=form.querySelector('button[type="submit"],input[type="submit"],button:not([type])');
+      var origText=btn?btn.textContent:'';
+      if(btn){btn.textContent='Отправляем...';btn.disabled=true}
+      fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+        .then(function(r){if(!r.ok)throw new Error(r.status);return r.json()})
+        .then(function(){form.reset();if(btn){btn.textContent='Отправлено ✓';btn.style.background='#22c55e';setTimeout(function(){btn.textContent=origText;btn.disabled=false;btn.style.background=''},3000)}})
+        .catch(function(){if(btn){btn.textContent='Ошибка, попробуйте ещё';btn.disabled=false;setTimeout(function(){btn.textContent=origText},3000)}});
+    });
+  });
+})();<\/script>`;
+
+      function injectLeadsScript(html: string): string {
+        let result = html;
+        result = result.replace(/<script[^>]*data-nz-leads[^>]*>[\s\S]*?<\/script>/gi, "");
+        result = result.replace(/<script[^>]*data-nz-editor[^>]*>[\s\S]*?<\/script>/gi, "");
+        result = result.replace(/<style[^>]*data-nz-editor[^>]*>[\s\S]*?<\/style>/gi, "");
+        result = result.replace(/<script[^>]*data-nz-selector[^>]*>[\s\S]*?<\/script>/gi, "");
+        result = result.replace(/<style[^>]*data-nz-selector[^>]*>[\s\S]*?<\/style>/gi, "");
+        result = result.replace(/<!--NZ_EDITOR_START-->|<!--NZ_EDITOR_END-->/g, "");
+        result = result.replace(/<script[^>]*>\s*document\.querySelectorAll\(['"]form\[data-lead-form\]['"]\)[\s\S]*?<\/script>/gi, "");
+        if (result.includes("</body>")) {
+          result = result.replace("</body>", leadsScript + "</body>");
+        } else {
+          result += leadsScript;
+        }
+        return result;
+      }
+
       let mainHtml = project.generatedCode;
       for (const img of projectImages) {
         mainHtml = mainHtml.replace(new RegExp(`\\{\\{IMG:${img.name}\\}\\}`, "g"), img.url);
       }
-      mainHtml = mainHtml.replace(/__PROJECT_ID__\s*=\s*['"]?\d*['"]?/g, `__PROJECT_ID__ = '${projectId}'`);
+      mainHtml = injectLeadsScript(mainHtml);
       files.push({ filename: "index.html", content: mainHtml });
 
       for (const f of extraFiles) {
@@ -1046,6 +1083,7 @@ export async function registerRoutes(
         for (const img of projectImages) {
           code = code.replace(new RegExp(`\\{\\{IMG:${img.name}\\}\\}`, "g"), img.url);
         }
+        code = injectLeadsScript(code);
         files.push({ filename: f.filename, content: code });
       }
 
