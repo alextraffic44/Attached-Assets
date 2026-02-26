@@ -549,14 +549,15 @@ export async function registerRoutes(
 
       conversationHistory.push({ role: "user", parts: userParts });
 
-      console.log("generateContentStream call. History messages:", conversationHistory.length, "Edit mode:", isEditMode);
+      const modelName = isEditMode ? "gemini-2.5-flash" : "gemini-3.1-pro-preview";
+      console.log("generateContentStream call. Model:", modelName, "History messages:", conversationHistory.length, "Edit mode:", isEditMode);
 
       const streamResult = await gemini.models.generateContentStream({
-        model: "gemini-3.1-pro-preview",
+        model: modelName,
         contents: conversationHistory,
         config: {
           systemInstruction: systemContent,
-          maxOutputTokens: 65536,
+          maxOutputTokens: isEditMode ? 32768 : 65536,
         },
       });
 
