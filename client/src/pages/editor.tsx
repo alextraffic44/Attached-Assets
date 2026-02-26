@@ -1282,6 +1282,9 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 setDomainResult(null);
               }
               setShowPublishModal(true);
+              if (!project?.publishedUrl) {
+                setTimeout(() => handlePublish(), 50);
+              }
             }}
             data-testid="button-publish"
           >
@@ -2086,21 +2089,6 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </div>
 
           <div style={{ padding: "1.5rem 2rem 2rem" }}>
-            {!publishResult && !isPublishing && !publishError && !project?.publishedUrl && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                <p style={{ fontSize: "0.88rem", color: "#555", lineHeight: 1.6 }}>
-                  Сайт будет опубликован на глобальной CDN Vercel. Вы получите постоянную ссылку, которую можно сразу отправить клиентам.
-                </p>
-                <div style={{ display: "flex", gap: "0.75rem" }}>
-                  <Button variant="outline" onClick={() => setShowPublishModal(false)} style={{ flex: 1 }}>Отмена</Button>
-                  <Button onClick={handlePublish} style={{ flex: 2, background: "linear-gradient(135deg,#667eea,#764ba2)", border: "none" }} data-testid="button-confirm-publish">
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Опубликовать
-                  </Button>
-                </div>
-              </div>
-            )}
-
             {!publishResult && !isPublishing && !publishError && project?.publishedUrl && (
               <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#16a34a" }}>
@@ -2233,6 +2221,79 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                     {copied ? "Скопировано!" : "Копировать"}
                   </button>
                 </div>
+
+                <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "1rem" }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#333", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                    Свой домен
+                    {domainResult && domainVerified === true && (
+                      <span style={{ fontSize: "0.72rem", color: "#16a34a", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#22c55e", display: "inline-block", boxShadow: "0 0 6px #22c55e" }} />
+                        Подключён
+                      </span>
+                    )}
+                    {domainResult && domainVerified !== true && (
+                      <span style={{ fontSize: "0.72rem", color: "#f59e0b", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#f59e0b", display: "inline-block", boxShadow: "0 0 6px #f59e0b" }} />
+                        Добавлен
+                      </span>
+                    )}
+                  </div>
+                  {!domainResult ? (
+                    <>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <input
+                          type="text"
+                          placeholder="example.ru"
+                          value={customDomain}
+                          onChange={(e) => setCustomDomain(e.target.value)}
+                          style={{ flex: 1, padding: "0.5rem 0.75rem", borderRadius: 10, border: "1px solid #e5e7eb", fontSize: "0.85rem", outline: "none" }}
+                          data-testid="input-custom-domain-result"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleAddDomain}
+                          disabled={domainAdding || !customDomain.trim()}
+                          style={{ borderRadius: 10, fontSize: "0.8rem" }}
+                          data-testid="button-add-domain-result"
+                        >
+                          {domainAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Привязать"}
+                        </Button>
+                      </div>
+                      {domainError && (
+                        <div style={{ marginTop: 8, fontSize: "0.78rem", color: "#dc2626" }}>{domainError}</div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                      <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
+                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 8 }}>Настройка DNS для <a href={`https://${customDomain}`} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline", cursor: "pointer" }}>{customDomain}</a></div>
+                        <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.8 }}>
+                          <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → выберите <b>{customDomain}</b></div>
+                          <div><b>2.</b> Раздел «<b>DNS-серверы и управление зоной</b>» → «<b>Изменить</b>»</div>
+                          <div><b>3.</b> Выберите «<b>Свой список DNS-серверов</b>» и укажите:</div>
+                          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem" }}>
+                            <div><b>ns1.vercel-dns.com</b></div>
+                            <div><b>ns2.vercel-dns.com</b></div>
+                          </div>
+                          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>Vercel сам настроит все записи и SSL-сертификат. DNS обновляется от 5 минут до 24 часов.</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <Button size="sm" variant="outline" onClick={handleCheckDomain} disabled={domainChecking} style={{ borderRadius: 10, fontSize: "0.78rem" }}>
+                          {domainChecking ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                          Проверить DNS
+                        </Button>
+                        {domainChecking === false && domainVerified === false && (
+                          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>DNS ещё не обновился</span>
+                        )}
+                        {domainChecking === false && domainVerified === true && (
+                          <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 500 }}>Домен работает!</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ display: "flex", gap: "0.75rem" }}>
                   <Button variant="outline" onClick={() => setShowPublishModal(false)} style={{ flex: 1 }}>Закрыть</Button>
                   <Button
