@@ -1,4 +1,4 @@
-# НейроЗодчий — ИИ-конструктор сайтов
+# Craft AI — ИИ-конструктор сайтов
 
 ## Overview
 AI-powered website builder that generates HTML/CSS/JS websites from text prompts, templates, or screenshots. Built with React + Express + PostgreSQL + Gemini AI.
