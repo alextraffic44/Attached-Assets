@@ -331,27 +331,25 @@ export default function DashboardPage() {
       </main>
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="p-0 overflow-hidden" style={{ width: '90vw', maxWidth: 520, borderRadius: 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont }}>
-          <div className="px-7 pt-7 pb-6">
+        <DialogContent className="p-0 overflow-hidden" style={{ width: '90vw', maxWidth: 860, borderRadius: 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont }}>
+          <div style={{ padding: '2rem 2.5rem', minHeight: 440, display: 'flex', flexDirection: 'column' }}>
             <DialogHeader>
-              <DialogTitle style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F' }}>
+              <DialogTitle style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F', textAlign: 'center' }}>
                 {createStep === "choose" ? "С чего начнём?" : createStep === "templates" ? "Выберите шаблон" : "Оживите мечту"}
               </DialogTitle>
             </DialogHeader>
 
             <AnimatePresence mode="wait">
               {createStep === "choose" ? (
-                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-3 mt-6">
+                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="grid grid-cols-3 gap-4 flex-1 items-center" style={{ marginTop: 32 }}>
                   {[
                     {
                       m: "prompt",
                       t: "По описанию",
                       d: "Просто напишите, что вам нужно",
-                      colorClass: "hover:border-blue-200/50 hover:bg-blue-50/30",
-                      iconBgClass: "bg-blue-50 group-hover:bg-blue-100/50",
                       icon: (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 relative z-10 overflow-visible">
-                          <g className="transition-transform duration-500 origin-center group-hover:scale-105 group-hover:-translate-y-0.5">
+                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-110">
                             <path d="M21 11.5C21.0034 12.8199 20.6951 14.1219 20.1 15.3C19.3944 16.7118 18.3098 17.8992 16.9674 18.7293C15.6251 19.5594 14.0782 19.9994 12.5 20C11.1702 19.9991 9.854 19.6905 8.66 19.1L3 21L4.9 15.34C4.30948 14.146 4.00085 12.8298 4 11.5C4.00061 9.92179 4.44061 8.37488 5.27072 7.03258C6.10083 5.69028 7.28825 4.6056 8.7 3.90003C9.87806 3.30491 11.1801 2.99658 12.5 3.00003H13C15.0843 3.11502 17.053 3.99479 18.5291 5.47089C20.0052 6.94699 20.885 8.91568 21 11V11.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500" />
                             <circle cx="8" cy="12" r="1.5" fill="currentColor" className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75" />
                             <circle cx="12" cy="12" r="1.5" fill="currentColor" className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-150" />
@@ -364,13 +362,11 @@ export default function DashboardPage() {
                       m: "template",
                       t: "Промт + Шаблон",
                       d: "Выберите структуру и детали",
-                      colorClass: "hover:border-indigo-200/50 hover:bg-indigo-50/30",
-                      iconBgClass: "bg-indigo-50 group-hover:bg-indigo-100/50",
                       icon: (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 relative z-10 overflow-visible">
-                          <g className="transition-transform duration-500 origin-center group-hover:scale-105">
+                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-110">
                             <path d="M12 22L2 17L12 12L22 17L12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-300 transition-transform duration-500 group-hover:translate-y-[3px]" />
-                            <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400 transition-transform duration-500" />
+                            <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400" />
                             <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-600 transition-all duration-500 group-hover:-translate-y-[3px] group-hover:fill-indigo-50" />
                           </g>
                         </svg>
@@ -380,20 +376,14 @@ export default function DashboardPage() {
                       m: "photo",
                       t: "По фото",
                       d: "Загрузите скриншот-пример",
-                      colorClass: "hover:border-purple-200/50 hover:bg-purple-50/30",
-                      iconBgClass: "bg-purple-50 group-hover:bg-purple-100/50",
                       icon: (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 relative z-10 overflow-visible">
-                          <defs>
-                            <clipPath id="photo-mask">
-                              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                            </clipPath>
-                          </defs>
-                          <g className="transition-transform duration-500 origin-center group-hover:scale-105">
-                            <g clipPath="url(#photo-mask)">
-                              <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" className="text-purple-400 transition-all duration-500 origin-center group-hover:scale-[2.5] group-hover:translate-x-1 group-hover:text-yellow-400" />
-                              <path d="M21 15L16 10L5 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-500/70 transition-transform duration-500 origin-bottom group-hover:translate-y-1 group-hover:scale-105" />
-                              <path d="M5 21L14 12L21 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-600 transition-transform duration-700 ease-out origin-bottom group-hover:scale-110" />
+                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
+                          <defs><clipPath id="pm"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /></clipPath></defs>
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-110">
+                            <g clipPath="url(#pm)">
+                              <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" className="text-purple-400 transition-all duration-500 origin-center group-hover:scale-[2.5] group-hover:text-yellow-400" />
+                              <path d="M21 15L16 10L5 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-500/70" />
+                              <path d="M5 21L14 12L21 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-600" />
                             </g>
                             <rect x="3" y="3" width="18" height="18" rx="2" ry="2" stroke="currentColor" strokeWidth="2" className="text-purple-500" />
                           </g>
@@ -404,45 +394,38 @@ export default function DashboardPage() {
                     <button
                       key={x.m}
                       data-testid={`button-create-${x.m}`}
-                      className="group relative flex items-center w-full transition-all duration-300 ease-out hover:-translate-y-0.5 focus:outline-none"
-                      style={{ padding: '0.85rem 1rem', borderRadius: 16, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'left' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(0,0,0,0.06)'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+                      className="group flex flex-col items-center justify-center text-center transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none"
+                      style={{ padding: '2rem 1.5rem', borderRadius: 20, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', minHeight: 180 }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.12)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.06)'; }}
                       onClick={() => { setSelectedMode(x.m as any); setCreateStep(x.m === "template" ? "templates" : "details"); }}
                     >
-                      <div className="flex-shrink-0 flex items-center justify-center mr-3.5" style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
+                      <div className="flex items-center justify-center mb-4" style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         {x.icon}
                       </div>
-                      <div className="flex-grow min-w-0">
-                        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 1, letterSpacing: '-0.02em' }}>{x.t}</h3>
-                        <p style={{ fontSize: '0.8rem', color: '#86868B', fontWeight: 400 }}>{x.d}</p>
-                      </div>
-                      <div className="flex-shrink-0 transition-all duration-300 group-hover:translate-x-0.5" style={{ color: 'rgba(0,0,0,0.2)' }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                      </div>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 4, letterSpacing: '-0.02em' }}>{x.t}</h3>
+                      <p style={{ fontSize: '0.82rem', color: '#86868B', fontWeight: 400, lineHeight: 1.4 }}>{x.d}</p>
                     </button>
                   ))}
                 </motion.div>
               ) : createStep === "templates" ? (
-                <motion.div key="t" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-3 mt-6">
+                <motion.div key="t" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col flex-1" style={{ marginTop: 32 }}>
+                  <div className="grid grid-cols-3 gap-4 flex-1 items-center">
                   {[
                     {
                       id: "hero-video",
                       t: "Hero с видео",
                       d: "Динамичный фон с видеоплеером",
-                      colorClass: "group-hover:border-rose-200 group-hover:shadow-rose-500/15 group-hover:bg-rose-50/30",
-                      iconBgClass: "bg-rose-100/50 group-hover:bg-rose-100",
                       icon: (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9 relative z-10 overflow-visible">
-                          <g className="transition-transform duration-500 origin-center group-hover:scale-105">
-                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 transition-colors duration-500" />
+                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9">
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-110">
+                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-rose-400 transition-colors duration-500" />
                             <path d="M2 7h20" stroke="currentColor" strokeWidth="1.5" className="text-gray-200" />
                             <circle cx="5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-red-400 transition-colors duration-300" />
                             <circle cx="7.5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-yellow-400 transition-colors duration-300 delay-75" />
                             <circle cx="10" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-green-400 transition-colors duration-300 delay-150" />
-                            <rect x="6" y="9" width="12" height="10" rx="1" fill="currentColor" className="text-rose-100 group-hover:text-rose-50 transition-colors duration-500" />
+                            <rect x="6" y="9" width="12" height="10" rx="1" fill="currentColor" className="text-rose-100" />
                             <polygon points="10.5 11.5, 14.5 14, 10.5 16.5" fill="currentColor" className="text-rose-500 transition-transform duration-300 origin-center group-hover:scale-110" />
-                            <rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-rose-400 transition-colors duration-500" />
                           </g>
                         </svg>
                       ),
@@ -451,42 +434,35 @@ export default function DashboardPage() {
                       id: "hero-photo",
                       t: "Hero с фото",
                       d: "Классический баннер с изображением",
-                      colorClass: "group-hover:border-sky-200 group-hover:shadow-sky-500/15 group-hover:bg-sky-50/30",
-                      iconBgClass: "bg-sky-100/50 group-hover:bg-sky-100",
                       icon: (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9 relative z-10 overflow-visible">
-                          <g className="transition-transform duration-500 origin-center group-hover:scale-105">
-                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 transition-colors duration-500" />
+                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9">
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-110">
+                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-sky-400 transition-colors duration-500" />
                             <path d="M2 7h20" stroke="currentColor" strokeWidth="1.5" className="text-gray-200" />
                             <circle cx="5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-red-400 transition-colors duration-300" />
                             <circle cx="7.5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-yellow-400 transition-colors duration-300 delay-75" />
                             <circle cx="10" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-green-400 transition-colors duration-300 delay-150" />
-                            <circle cx="16" cy="10" r="2" fill="currentColor" className="text-sky-300 transition-transform duration-700 origin-center group-hover:scale-150 group-hover:-translate-y-1" />
-                            <path d="M-2 22 L 8 10 L 14 16 L 26 22 Z" fill="currentColor" className="text-sky-100 group-hover:text-sky-200 transition-all duration-500 group-hover:translate-y-1" />
-                            <path d="M6 22 L 14 13 L 24 22 Z" fill="currentColor" className="text-sky-400 transition-all duration-700 group-hover:-translate-x-1 group-hover:scale-105 origin-bottom" />
-                            <rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-sky-400 transition-colors duration-500" />
+                            <circle cx="16" cy="10" r="2" fill="currentColor" className="text-sky-300" />
+                            <path d="M6 22 L 14 13 L 24 22 Z" fill="currentColor" className="text-sky-400" />
                           </g>
                         </svg>
                       ),
                     },
                     {
                       id: "hero-svg",
-                      t: "Hero с SVG анимацией",
+                      t: "Hero с SVG",
                       d: "Современная интерактивная графика",
-                      colorClass: "group-hover:border-emerald-200 group-hover:shadow-emerald-500/15 group-hover:bg-emerald-50/30",
-                      iconBgClass: "bg-emerald-100/50 group-hover:bg-emerald-100",
                       icon: (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9 relative z-10 overflow-visible">
-                          <g className="transition-transform duration-500 origin-center group-hover:scale-105">
-                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 transition-colors duration-500" />
+                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9">
+                          <g className="transition-transform duration-500 origin-center group-hover:scale-110">
+                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-emerald-400 transition-colors duration-500" />
                             <path d="M2 7h20" stroke="currentColor" strokeWidth="1.5" className="text-gray-200" />
                             <circle cx="5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-red-400 transition-colors duration-300" />
                             <circle cx="7.5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-yellow-400 transition-colors duration-300 delay-75" />
                             <circle cx="10" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-green-400 transition-colors duration-300 delay-150" />
-                            <circle cx="7" cy="14" r="2.5" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-400 transition-all duration-700 origin-center group-hover:scale-125 group-hover:-translate-y-2 group-hover:translate-x-1" />
-                            <polygon points="12 9, 15 15, 9 15" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-500 transition-all duration-700 delay-75 origin-center group-hover:rotate-12 group-hover:-translate-y-1" />
-                            <rect x="15" y="11" width="4" height="4" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-300 transition-all duration-700 delay-150 origin-center group-hover:-rotate-12 group-hover:-translate-y-2 group-hover:-translate-x-1" />
-                            <rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-emerald-400 transition-colors duration-500" />
+                            <circle cx="7" cy="14" r="2.5" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-400 transition-all duration-700 origin-center group-hover:scale-125" />
+                            <polygon points="12 9, 15 15, 9 15" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-500 transition-all duration-700 delay-75 origin-center group-hover:rotate-12" />
+                            <rect x="15" y="11" width="4" height="4" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-300 transition-all duration-700 delay-150 origin-center group-hover:-rotate-12" />
                           </g>
                         </svg>
                       ),
@@ -495,28 +471,24 @@ export default function DashboardPage() {
                     <button
                       key={x.id}
                       data-testid={`button-template-${x.id}`}
-                      className="group relative flex items-center w-full transition-all duration-300 ease-out hover:-translate-y-0.5 focus:outline-none"
-                      style={{ padding: '0.85rem 1rem', borderRadius: 16, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', textAlign: 'left' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(0,0,0,0.06)'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+                      className="group flex flex-col items-center justify-center text-center transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none"
+                      style={{ padding: '2rem 1.5rem', borderRadius: 20, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', minHeight: 170 }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.12)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.06)'; }}
                       onClick={() => { setSelectedTemplate(x.t); setCreateStep("details"); }}
                     >
-                      <div className="flex-shrink-0 flex items-center justify-center mr-3.5" style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
+                      <div className="flex items-center justify-center mb-4" style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         {x.icon}
                       </div>
-                      <div className="flex-grow min-w-0">
-                        <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 1, letterSpacing: '-0.02em' }}>{x.t}</h3>
-                        <p style={{ fontSize: '0.8rem', color: '#86868B', fontWeight: 400 }}>{x.d}</p>
-                      </div>
-                      <div className="flex-shrink-0 transition-all duration-300 group-hover:translate-x-0.5" style={{ color: 'rgba(0,0,0,0.2)' }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                      </div>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 4, letterSpacing: '-0.02em' }}>{x.t}</h3>
+                      <p style={{ fontSize: '0.82rem', color: '#86868B', fontWeight: 400, lineHeight: 1.4 }}>{x.d}</p>
                     </button>
                   ))}
+                  </div>
                   <button
                     data-testid="button-templates-back"
-                    className="transition-colors mt-3"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem 0', fontSize: '0.9rem', fontWeight: 600, color: '#86868B', letterSpacing: '-0.01em' }}
+                    className="transition-colors self-center mt-4"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 600, color: '#86868B' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#1D1D1F'; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#86868B'; }}
                     onClick={() => setCreateStep("choose")}
@@ -525,52 +497,108 @@ export default function DashboardPage() {
                   </button>
                 </motion.div>
               ) : (
-                <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 mt-5">
-                  <div className="space-y-1.5">
-                    <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Название</Label>
-                    <Input
-                      placeholder="Например: Моё кафе"
-                      value={title}
-                      onChange={e => setTitle(e.target.value)}
-                      className="h-11 rounded-2xl font-medium text-gray-900 placeholder:text-gray-400"
-                      style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.08)' }}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between px-1">
-                      <Label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B' }}>Описание</Label>
-                      {isEnhanced && (
-                        <span data-testid="text-enhanced-status" className="flex items-center gap-1" style={{ fontSize: '0.7rem', fontWeight: 600, color: '#34C759' }}>
-                          <Sparkles className="w-3 h-3" /> Улучшено AI
-                        </span>
+                <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col flex-1" style={{ marginTop: 20 }}>
+                  <div className="grid gap-6 flex-1" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                    <div className="flex flex-col gap-3">
+                      <div className="space-y-1.5">
+                        <Label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Название</Label>
+                        <Input
+                          placeholder="Например: Моё кафе"
+                          value={title}
+                          onChange={e => setTitle(e.target.value)}
+                          className="h-10 rounded-xl font-medium text-gray-900 placeholder:text-gray-400 text-sm"
+                          style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.08)' }}
+                        />
+                      </div>
+                      <div className="space-y-1.5 flex-1 flex flex-col">
+                        <div className="flex items-center justify-between px-1">
+                          <Label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B' }}>Описание</Label>
+                          {isEnhanced && (
+                            <span data-testid="text-enhanced-status" className="flex items-center gap-1" style={{ fontSize: '0.65rem', fontWeight: 600, color: '#34C759' }}>
+                              <Sparkles className="w-3 h-3" /> Улучшено AI
+                            </span>
+                          )}
+                        </div>
+                        <Textarea
+                          placeholder="Опишите структуру, цвета и контент сайта..."
+                          value={description}
+                          onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
+                          className="rounded-xl font-medium text-gray-900 placeholder:text-gray-400 text-sm flex-1"
+                          style={{ background: isEnhanced ? 'rgba(52,199,89,0.04)' : 'rgba(0,0,0,0.03)', border: isEnhanced ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(0,0,0,0.08)', resize: 'none', minHeight: 120 }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={() => setMultiPageEnabled(v => !v)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+                          style={{ border: multiPageEnabled ? '1px solid rgba(0,113,227,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: multiPageEnabled ? 'rgba(0,113,227,0.07)' : 'transparent', color: multiPageEnabled ? '#0058b3' : '#86868B', cursor: 'pointer' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                          Многостраничный
+                        </button>
+                        <button type="button" onClick={() => setSeoEnabled(v => !v)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+                          style={{ border: seoEnabled ? '1px solid rgba(52,199,89,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: seoEnabled ? 'rgba(52,199,89,0.07)' : 'transparent', color: seoEnabled ? '#1D8348' : '#86868B', cursor: 'pointer' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                          SEO
+                        </button>
+                      </div>
+                      {multiPageEnabled && (
+                        <div className="rounded-xl p-3 space-y-2" style={{ background: 'rgba(0,113,227,0.04)', border: '1px solid rgba(0,113,227,0.15)' }}>
+                          <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#0058b3', marginBottom: 2 }}>Страницы сайта</div>
+                          {pageNames.map((name, i) => (
+                            <div key={i} className="flex gap-2 items-center">
+                              <Input placeholder={`Страница ${i + 1}`} value={name}
+                                onChange={e => setPageNames(prev => prev.map((p, idx) => idx === i ? e.target.value : p))}
+                                className="h-7 rounded-lg text-xs" style={{ background: '#fff', border: '1px solid rgba(0,113,227,0.2)' }} />
+                              {pageNames.length > 1 && (
+                                <button type="button" onClick={() => setPageNames(prev => prev.filter((_, idx) => idx !== i))}
+                                  style={{ color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '2px', fontSize: '0.75rem' }}>✕</button>
+                              )}
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => setPageNames(prev => [...prev, ""])}
+                            className="text-xs font-semibold" style={{ color: '#0058b3', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 0' }}>+ Добавить</button>
+                        </div>
+                      )}
+                      {seoEnabled && (
+                        <div className="rounded-xl p-3 space-y-2" style={{ background: 'rgba(52,199,89,0.04)', border: '1px solid rgba(52,199,89,0.2)' }}>
+                          <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#1D8348', marginBottom: 2 }}>SEO заголовки</div>
+                          <div className="flex gap-2 items-center">
+                            <span className="text-xs font-bold w-6 shrink-0" style={{ color: '#1D8348' }}>H1</span>
+                            <Input placeholder="Главный заголовок" value={seoH1} onChange={e => setSeoH1(e.target.value)}
+                              className="h-7 rounded-lg text-xs" style={{ background: '#fff', border: '1px solid rgba(52,199,89,0.25)' }} />
+                          </div>
+                          {seoH2s.map((h2, i) => (
+                            <div key={i} className="flex gap-2 items-center">
+                              <span className="text-xs font-bold w-6 shrink-0" style={{ color: '#1D8348' }}>H2</span>
+                              <Input placeholder={`Подзаголовок ${i + 1}`} value={h2}
+                                onChange={e => setSeoH2s(prev => prev.map((h, idx) => idx === i ? e.target.value : h))}
+                                className="h-7 rounded-lg text-xs" style={{ background: '#fff', border: '1px solid rgba(52,199,89,0.2)' }} />
+                              {seoH2s.length > 1 && (
+                                <button type="button" onClick={() => setSeoH2s(prev => prev.filter((_, idx) => idx !== i))}
+                                  style={{ color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '2px', fontSize: '0.75rem' }}>✕</button>
+                              )}
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => setSeoH2s(prev => [...prev, ""])}
+                            className="text-xs font-semibold" style={{ color: '#1D8348', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 0' }}>+ Добавить H2</button>
+                        </div>
+                      )}
+                      {!multiPageEnabled && !seoEnabled && (
+                        <div className="flex-1 flex items-center justify-center rounded-xl" style={{ border: '1.5px dashed rgba(0,0,0,0.08)', minHeight: 80 }}>
+                          <p style={{ fontSize: '0.8rem', color: '#c0c0c0', textAlign: 'center', lineHeight: 1.5 }}>Включите опции выше<br/>для дополнительных настроек</p>
+                        </div>
                       )}
                     </div>
-                    <Textarea
-                      placeholder="Опишите структуру, цвета и контент..."
-                      value={description}
-                      onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
-                      className={`rounded-2xl font-medium text-gray-900 placeholder:text-gray-400 transition-all ${isEnhanced ? 'min-h-[140px]' : 'min-h-[90px]'}`}
-                      style={{ background: isEnhanced ? 'rgba(52,199,89,0.04)' : 'rgba(0,0,0,0.03)', border: isEnhanced ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(0,0,0,0.08)', resize: 'vertical' }}
-                    />
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid grid-cols-4 gap-3" style={{ marginTop: 16 }}>
                     <button
-                      type="button"
-                      onClick={() => setMultiPageEnabled(v => !v)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
-                      style={{ border: multiPageEnabled ? '1px solid rgba(0,113,227,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: multiPageEnabled ? 'rgba(0,113,227,0.07)' : 'transparent', color: multiPageEnabled ? '#0058b3' : '#86868B', cursor: 'pointer' }}
+                      className="h-10 font-semibold transition-all text-sm"
+                      style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, color: '#86868B', cursor: 'pointer' }}
+                      onClick={() => { setCreateStep(selectedMode === "template" ? "templates" : "choose"); setIsEnhanced(false); }}
                     >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-                      Многостраничный
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSeoEnabled(v => !v)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
-                      style={{ border: seoEnabled ? '1px solid rgba(52,199,89,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: seoEnabled ? 'rgba(52,199,89,0.07)' : 'transparent', color: seoEnabled ? '#1D8348' : '#86868B', cursor: 'pointer' }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                      SEO
+                      ← Назад
                     </button>
                     <button
                       data-testid="button-enhance-prompt"
@@ -598,24 +626,15 @@ export default function DashboardPage() {
                           }
                         } catch (err: any) {
                           let msg = "Не удалось улучшить промпт";
-                          try {
-                            const errText = err?.message || "";
-                            const jsonMatch = errText.match(/\{.*\}/);
-                            if (jsonMatch) {
-                              const parsed = JSON.parse(jsonMatch[0]);
-                              if (parsed.message) msg = parsed.message;
-                            }
-                          } catch {}
+                          try { const t = err?.message || ""; const m = t.match(/\{.*\}/); if (m) { const p = JSON.parse(m[0]); if (p.message) msg = p.message; } } catch {}
                           toast({ title: "Ошибка", description: msg, variant: "destructive" });
-                        } finally {
-                          setIsEnhancing(false);
-                        }
+                        } finally { setIsEnhancing(false); }
                       }}
                       disabled={isEnhancing || isResearching || !description.trim()}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                      style={{ border: isEnhanced ? '1px solid rgba(52,199,89,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: isEnhanced ? 'rgba(52,199,89,0.06)' : 'transparent', color: isEnhanced ? '#1D8348' : '#86868B', cursor: 'pointer' }}
+                      className="h-10 flex items-center justify-center gap-1.5 font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ border: isEnhanced ? '1px solid rgba(52,199,89,0.4)' : '1.5px dashed rgba(0,0,0,0.12)', background: isEnhanced ? 'rgba(52,199,89,0.06)' : 'transparent', color: isEnhanced ? '#1D8348' : '#86868B', borderRadius: 12, cursor: 'pointer' }}
                     >
-                      {isEnhancing ? <Loader2 className="w-3 h-3 animate-spin" /> : isEnhanced ? <Sparkles className="w-3 h-3" /> : <Wand2 className="w-3 h-3" />}
+                      {isEnhancing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isEnhanced ? <Sparkles className="w-3.5 h-3.5" /> : <Wand2 className="w-3.5 h-3.5" />}
                       {isEnhancing ? 'Улучшаем...' : isEnhanced ? 'Улучшено' : 'AI улучшение'}
                     </button>
                     <button
@@ -623,130 +642,39 @@ export default function DashboardPage() {
                       type="button"
                       onClick={async () => {
                         if (isEnhancing || isResearching) return;
-                        if (researchData) {
-                          setDeepResearchEnabled(false);
-                          setResearchData("");
-                          toast({ title: "Deep Research отключён", description: "Исследование не будет использовано" });
-                          return;
-                        }
+                        if (researchData) { setDeepResearchEnabled(false); setResearchData(""); toast({ title: "Deep Research отключён" }); return; }
                         if (!description.trim() || description.trim().length < 3) {
                           toast({ title: "Введите описание", description: "Напишите хотя бы несколько слов для исследования", variant: "destructive" });
                           return;
                         }
-                        setIsResearching(true);
-                        setDeepResearchEnabled(true);
+                        setIsResearching(true); setDeepResearchEnabled(true);
                         queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 10) } : old);
                         try {
                           const res = await apiRequest("POST", "/api/deep-research", { prompt: description });
                           const data = await res.json();
-                          if (data.newBalance !== undefined) {
-                            queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
-                          }
-                          if (data.warning) {
-                            toast({ title: "Внимание", description: data.warning });
-                            setDeepResearchEnabled(false);
-                          } else if (data.research) {
-                            setResearchData(data.research);
-                            toast({ title: "Deep Research завершён!", description: "Реальные факты будут использованы при генерации сайта" });
-                          }
+                          if (data.newBalance !== undefined) { queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old); }
+                          if (data.warning) { toast({ title: "Внимание", description: data.warning }); setDeepResearchEnabled(false); }
+                          else if (data.research) { setResearchData(data.research); toast({ title: "Deep Research завершён!", description: "Реальные факты будут использованы при генерации сайта" }); }
                         } catch (err: any) {
                           let msg = "Не удалось провести исследование";
-                          try {
-                            const errText = err?.message || "";
-                            const jsonMatch = errText.match(/\{.*\}/);
-                            if (jsonMatch) {
-                              const parsed = JSON.parse(jsonMatch[0]);
-                              if (parsed.message) msg = parsed.message;
-                            }
-                          } catch {}
-                          toast({ title: "Ошибка", description: msg, variant: "destructive" });
-                          setDeepResearchEnabled(false);
-                        } finally {
-                          setIsResearching(false);
-                        }
+                          try { const t = err?.message || ""; const m = t.match(/\{.*\}/); if (m) { const p = JSON.parse(m[0]); if (p.message) msg = p.message; } } catch {}
+                          toast({ title: "Ошибка", description: msg, variant: "destructive" }); setDeepResearchEnabled(false);
+                        } finally { setIsResearching(false); }
                       }}
                       disabled={isEnhancing || isResearching || !description.trim()}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                      style={{ border: researchData ? '1px solid rgba(0,113,227,0.3)' : '1.5px dashed rgba(0,0,0,0.15)', background: researchData ? 'rgba(0,113,227,0.06)' : 'transparent', color: researchData ? '#0058b3' : '#86868B', cursor: 'pointer' }}
+                      className="h-10 flex items-center justify-center gap-1.5 font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ border: researchData ? '1px solid rgba(0,113,227,0.3)' : '1.5px dashed rgba(0,0,0,0.12)', background: researchData ? 'rgba(0,113,227,0.06)' : 'transparent', color: researchData ? '#0058b3' : '#86868B', borderRadius: 12, cursor: 'pointer' }}
                     >
-                      {isResearching ? <Loader2 className="w-3 h-3 animate-spin" /> : researchData ? <Globe className="w-3 h-3" /> : <Search className="w-3 h-3" />}
+                      {isResearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : researchData ? <Globe className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
                       {isResearching ? 'Исследуем...' : researchData ? 'Исследовано' : 'Deep Research'}
                     </button>
-                  </div>
-                  {multiPageEnabled && (
-                    <div className="rounded-2xl p-3.5 space-y-2" style={{ background: 'rgba(0,113,227,0.04)', border: '1px solid rgba(0,113,227,0.15)' }}>
-                      <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#0058b3', marginBottom: 4 }}>Страницы сайта</div>
-                      {pageNames.map((name, i) => (
-                        <div key={i} className="flex gap-2 items-center">
-                          <Input
-                            placeholder={`Страница ${i + 1} (напр. "О нас")`}
-                            value={name}
-                            onChange={e => setPageNames(prev => prev.map((p, idx) => idx === i ? e.target.value : p))}
-                            className="h-8 rounded-lg text-sm"
-                            style={{ background: '#fff', border: '1px solid rgba(0,113,227,0.2)' }}
-                          />
-                          {pageNames.length > 1 && (
-                            <button type="button" onClick={() => setPageNames(prev => prev.filter((_, idx) => idx !== i))}
-                              style={{ color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', fontSize: '0.8rem' }}>✕</button>
-                          )}
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => setPageNames(prev => [...prev, ""])}
-                        className="text-xs font-semibold" style={{ color: '#0058b3', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}>
-                        + Добавить страницу
-                      </button>
-                    </div>
-                  )}
-                  {seoEnabled && (
-                    <div className="rounded-2xl p-3.5 space-y-2" style={{ background: 'rgba(52,199,89,0.04)', border: '1px solid rgba(52,199,89,0.2)' }}>
-                      <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#1D8348', marginBottom: 4 }}>SEO заголовки</div>
-                      <div className="flex gap-2 items-center">
-                        <span className="text-xs font-bold w-7 shrink-0" style={{ color: '#1D8348' }}>H1</span>
-                        <Input
-                          placeholder='Например: Карточка товара для маркетплейсов'
-                          value={seoH1}
-                          onChange={e => setSeoH1(e.target.value)}
-                          className="h-8 rounded-lg text-sm"
-                          style={{ background: '#fff', border: '1px solid rgba(52,199,89,0.25)' }}
-                        />
-                      </div>
-                      {seoH2s.map((h2, i) => (
-                        <div key={i} className="flex gap-2 items-center">
-                          <span className="text-xs font-bold w-7 shrink-0" style={{ color: '#1D8348' }}>H2</span>
-                          <Input
-                            placeholder={`Подзаголовок ${i + 1}`}
-                            value={h2}
-                            onChange={e => setSeoH2s(prev => prev.map((h, idx) => idx === i ? e.target.value : h))}
-                            className="h-8 rounded-lg text-sm"
-                            style={{ background: '#fff', border: '1px solid rgba(52,199,89,0.2)' }}
-                          />
-                          {seoH2s.length > 1 && (
-                            <button type="button" onClick={() => setSeoH2s(prev => prev.filter((_, idx) => idx !== i))}
-                              style={{ color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', fontSize: '0.8rem' }}>✕</button>
-                          )}
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => setSeoH2s(prev => [...prev, ""])}
-                        className="text-xs font-semibold" style={{ color: '#1D8348', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}>
-                        + Добавить H2
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex gap-3 pt-1">
                     <button
-                      className="flex-1 h-11 font-semibold transition-all"
-                      style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 14, color: '#86868B', cursor: 'pointer', fontSize: '0.9rem' }}
-                      onClick={() => { setCreateStep(selectedMode === "template" ? "templates" : "choose"); setIsEnhanced(false); }}
-                    >
-                      Назад
-                    </button>
-                    <button
-                      className="flex-[2] h-11 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 14, cursor: 'pointer', fontSize: '0.95rem', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
+                      className="h-10 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
                       onClick={() => createMutation.mutate()}
                       disabled={createMutation.isPending || isEnhancing || isResearching}
                     >
-                      {createMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Создать проект"}
+                      {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Создать проект"}
                     </button>
                   </div>
                 </motion.div>
