@@ -31,7 +31,11 @@ import {
   Wand2,
   Globe,
   Search,
+  Upload,
+  ImageIcon,
+  X,
 } from "lucide-react";
+import { useRef } from "react";
 
 const GlassCard = ({ children, className = "", onClick = undefined }: { children: any; className?: string; onClick?: any }) => (
   <div
@@ -65,6 +69,8 @@ export default function DashboardPage() {
   const [seoEnabled, setSeoEnabled] = useState(false);
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
+  const [photoImage, setPhotoImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const { data: userProjects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -86,7 +92,7 @@ export default function DashboardPage() {
     onSuccess: (project: Project) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       setShowCreateModal(false);
-      const prompt = selectedMode === "template" ? `Создай сайт: ${selectedTemplate}. ${description}` : description || title;
+      const prompt = selectedMode === "template" ? `Создай сайт: ${selectedTemplate}. ${description}` : selectedMode === "photo" ? (description || "Воссоздай дизайн с загруженного скриншота") : description || title;
       const enhancedParam = isEnhanced ? "&enhanced=1" : "";
       const researchParam = researchData ? `&research=${encodeURIComponent(researchData)}` : "";
       const multiPageParam = (multiPageEnabled && pageNames.filter(p => p.trim()).length > 0)
@@ -95,7 +101,17 @@ export default function DashboardPage() {
       const seoParam = (seoEnabled && seoH1.trim())
         ? `&seoh1=${encodeURIComponent(seoH1.trim())}&seoh2s=${encodeURIComponent(seoH2s.filter(h => h.trim()).join(","))}`
         : "";
-      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}${researchParam}${multiPageParam}${seoParam}`);
+      const mockupParam = (selectedMode === "photo" && photoImage) ? "&mockup=1" : "";
+      if (selectedMode === "photo" && photoImage) {
+        try {
+          sessionStorage.setItem(`mockup_image_${project.id}`, JSON.stringify(photoImage));
+        } catch (e) {
+          console.error("Failed to save mockup image to sessionStorage:", e);
+          toast({ title: "Ошибка", description: "Не удалось сохранить изображение. Попробуйте файл меньшего размера.", variant: "destructive" });
+          return;
+        }
+      }
+      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}${researchParam}${multiPageParam}${seoParam}${mockupParam}`);
     },
   });
 
@@ -263,7 +279,7 @@ export default function DashboardPage() {
             </h1>
           </div>
           <button
-            onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setShowCreateModal(true); }}
+            onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setShowCreateModal(true); }}
             className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
             style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.9rem 1.8rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
           >
@@ -537,15 +553,79 @@ export default function DashboardPage() {
                           )}
                         </div>
                         <Textarea
-                          placeholder="Сайт SPA студии, в бежевых тонах, с картинкой в Hero секции, и плавной анимацией"
+                          placeholder={selectedMode === "photo" ? "Воссоздай этот дизайн, замени текст на русский" : "Сайт SPA студии, в бежевых тонах, с картинкой в Hero секции, и плавной анимацией"}
                           value={description}
                           onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
                           className="rounded-xl font-medium text-gray-900 placeholder:text-gray-400 text-sm flex-1"
-                          style={{ background: isEnhanced ? 'rgba(52,199,89,0.04)' : 'rgba(0,0,0,0.03)', border: isEnhanced ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(0,0,0,0.08)', resize: 'none', minHeight: 120 }}
+                          style={{ background: isEnhanced ? 'rgba(52,199,89,0.04)' : 'rgba(0,0,0,0.03)', border: isEnhanced ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(0,0,0,0.08)', resize: 'none', minHeight: selectedMode === "photo" ? 80 : 120 }}
                         />
                       </div>
                     </div>
                     <div className="flex flex-col gap-3">
+                      {selectedMode === "photo" ? (
+                        <div className="flex flex-col gap-3 flex-1">
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Скриншот / макет</div>
+                          <input
+                            ref={photoInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            data-testid="input-photo-upload"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 10 * 1024 * 1024) {
+                                toast({ title: "Файл слишком большой", description: "Максимум 10 МБ", variant: "destructive" });
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const result = reader.result as string;
+                                const base64 = result.split(",")[1];
+                                const mimeType = file.type || "image/png";
+                                setPhotoImage({ base64, mimeType, preview: result });
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                          {photoImage ? (
+                            <div className="relative flex-1 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.04)' }}>
+                              <img src={photoImage.preview} alt="Макет" className="w-full h-full object-contain" style={{ maxHeight: 200 }} />
+                              <button
+                                type="button"
+                                data-testid="button-remove-photo"
+                                onClick={() => { setPhotoImage(null); if (photoInputRef.current) photoInputRef.current.value = ''; }}
+                                className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full transition-all hover:scale-110"
+                                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer' }}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                              <div className="absolute bottom-2 left-2 px-2 py-1 rounded-md" style={{ background: 'rgba(139,92,246,0.85)', backdropFilter: 'blur(8px)' }}>
+                                <span className="text-white text-[10px] font-semibold flex items-center gap-1">
+                                  <ImageIcon className="w-3 h-3" /> Макет загружен
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              data-testid="button-upload-photo"
+                              onClick={() => photoInputRef.current?.click()}
+                              className="flex-1 flex flex-col items-center justify-center gap-3 rounded-xl transition-all hover:border-purple-400"
+                              style={{ border: '2px dashed rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.02)', minHeight: 140, cursor: 'pointer' }}
+                            >
+                              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(139,92,246,0.08)' }}>
+                                <Upload className="w-6 h-6" style={{ color: '#8B5CF6' }} />
+                              </div>
+                              <div className="text-center">
+                                <p className="text-sm font-semibold" style={{ color: '#6D28D9' }}>Загрузить скриншот</p>
+                                <p className="text-xs mt-1" style={{ color: '#A78BFA' }}>PNG, JPG, WEBP до 10 МБ</p>
+                              </div>
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <>
                       <div className="flex flex-wrap gap-2">
                         <button type="button" onClick={() => setMultiPageEnabled(v => !v)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
@@ -606,6 +686,8 @@ export default function DashboardPage() {
                         <div className="flex-1 flex items-center justify-center rounded-xl" style={{ border: '1.5px dashed rgba(0,0,0,0.08)', minHeight: 80 }}>
                           <p style={{ fontSize: '0.8rem', color: '#c0c0c0', textAlign: 'center', lineHeight: 1.5 }}>Включите опции выше<br/>для дополнительных настроек</p>
                         </div>
+                      )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -688,7 +770,13 @@ export default function DashboardPage() {
                     <button
                       className="h-10 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                       style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
-                      onClick={() => createMutation.mutate()}
+                      onClick={() => {
+                        if (selectedMode === "photo" && !photoImage) {
+                          toast({ title: "Загрузите скриншот", description: "Для режима «По фото» нужно загрузить изображение макета", variant: "destructive" });
+                          return;
+                        }
+                        createMutation.mutate();
+                      }}
                       disabled={createMutation.isPending || isEnhancing || isResearching}
                     >
                       {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Создать проект"}

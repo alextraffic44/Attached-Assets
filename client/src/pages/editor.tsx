@@ -173,9 +173,30 @@ export default function EditorPage() {
     const initialMultiPages = urlParams.get("multipages") || "";
     const initialSeoH1 = urlParams.get("seoh1") || "";
     const initialSeoH2s = urlParams.get("seoh2s") || "";
+    const isMockup = urlParams.get("mockup") === "1";
     if (initialPrompt && !project?.generatedCode && messages.length === 0) {
+      let mockupLoaded = false;
+      if (isMockup && projectId) {
+        try {
+          const stored = sessionStorage.getItem(`mockup_image_${projectId}`);
+          if (stored) {
+            const imgData = JSON.parse(stored);
+            setAttachedImages([{ base64: imgData.base64, mimeType: imgData.mimeType, preview: imgData.preview, fileName: "mockup.png" }]);
+            setMockupMode(true);
+            mockupLoaded = true;
+            sessionStorage.removeItem(`mockup_image_${projectId}`);
+          }
+        } catch (e) {
+          console.error("Failed to load mockup image:", e);
+        }
+        if (!mockupLoaded) {
+          toast({ title: "Изображение не найдено", description: "Прикрепите скриншот макета вручную и включите режим «Макет → Код»", variant: "destructive" });
+        }
+      }
       setPrompt(initialPrompt);
-      setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch, initialMultiPages, initialSeoH1, initialSeoH2s), 500);
+      if (!isMockup || mockupLoaded) {
+        setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch, initialMultiPages, initialSeoH1, initialSeoH2s), 500);
+      }
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [project, messages.length]);
