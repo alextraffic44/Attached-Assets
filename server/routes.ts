@@ -373,7 +373,7 @@ export async function registerRoutes(
 
       const GENERATION_COST = 100;
 
-      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s } = req.body;
+      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode } = req.body;
       const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
         Array.isArray(images) && images.length > 0 ? images 
         : imageBase64 ? [{ base64: imageBase64, mimeType: imageMimeType || "image/png" }] 
@@ -520,7 +520,25 @@ export async function registerRoutes(
 
         let textPart = isEditMode ? prompt : enhancedPrompt;
         
-        if (savedImageUrls.length > 0) {
+        if (mockupMode && savedImageUrls.length > 0) {
+          textPart += `\n\n═══ РЕЖИМ "МАКЕТ → КОД" (Design-to-Code) ═══
+ПОЛЬЗОВАТЕЛЬ ЗАГРУЗИЛ СКРИНШОТ/МАКЕТ ДИЗАЙНА САЙТА. Твоя задача — ПРОАНАЛИЗИРОВАТЬ визуальный дизайн на изображении и ВОССОЗДАТЬ его как точный HTML/CSS/JS код.
+
+КРИТИЧЕСКИЕ ПРАВИЛА:
+1. НЕ вставляй загруженное изображение как <img> — это МАКЕТ, а не контент
+2. АНАЛИЗИРУЙ каждый элемент на скриншоте: layout, цвета, шрифты, отступы, тени, скругления
+3. ВОССОЗДАЙ ТОЧНУЮ структуру: навигацию, секции, карточки, кнопки, формы, футер
+4. СОХРАНИ цветовую палитру — используй пипетку: определи HEX/RGB цвета с изображения
+5. СОХРАНИ типографику — размеры шрифтов, жирность, межстрочный интервал
+6. СОХРАНИ пропорции и отступы — padding, margin, gap между элементами
+7. Для изображений на макете используй стилизованные градиентные плейсхолдеры с правильными пропорциями
+8. Все интерактивные элементы (кнопки, ссылки, формы) должны быть функциональными
+9. Используй современный CSS: flexbox, grid, custom properties, анимации при наведении
+10. Код должен быть АДАПТИВНЫМ (responsive) — работать на десктопе, планшете и мобильном
+
+Результат — полностью рабочий HTML/CSS/JS сайт, визуально ИДЕНТИЧНЫЙ загруженному макету.
+═══ КОНЕЦ РЕЖИМА МАКЕТ → КОД ═══`;
+        } else if (savedImageUrls.length > 0) {
           textPart += `\n\nПОЛЬЗОВАТЕЛЬ ПРИКРЕПИЛ ${savedImageUrls.length} ФОТО. URL фото:\n`;
           savedImageUrls.forEach((url, i) => {
             textPart += `${i + 1}. ${url}\n`;

@@ -41,6 +41,7 @@ import {
   History,
   Clock,
   FileText,
+  Layout,
   Plus,
   X,
 } from "lucide-react";
@@ -110,6 +111,7 @@ export default function EditorPage() {
   const [imgResultUrls, setImgResultUrls] = useState<string[]>([]);
   const [imgError, setImgError] = useState("");
 
+  const [mockupMode, setMockupMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -273,7 +275,7 @@ export default function EditorPage() {
     }, 100);
 
     try {
-      const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance };
+      const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance, mockupMode: mockupMode && images.length > 0 };
       if (deepResearchData) {
         bodyData.deepResearchData = deepResearchData;
       }
@@ -1466,22 +1468,34 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             )}
             {attachedImages.length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-2">
-                {attachedImages.map((img, idx) => (
-                  <div key={idx} className="relative group inline-flex items-center gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 shadow-sm border border-slate-200/50 dark:border-slate-700/50">
-                    {img.preview ? (
-                      <img src={img.preview} className="w-12 h-12 object-cover rounded-md" />
-                    ) : (
-                      <div className="w-12 h-12 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-slate-400" />
-                      </div>
-                    )}
-                    <span className="text-xs text-slate-500 dark:text-slate-400 max-w-[80px] truncate">{img.fileName}</span>
-                    <button className="ml-1 text-slate-400 hover:text-destructive transition-colors" onClick={() => setAttachedImages(prev => prev.filter((_, i) => i !== idx))}>
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+              <div className="mb-3 space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {attachedImages.map((img, idx) => (
+                    <div key={idx} className="relative group inline-flex items-center gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 shadow-sm border border-slate-200/50 dark:border-slate-700/50">
+                      {img.preview ? (
+                        <img src={img.preview} className="w-12 h-12 object-cover rounded-md" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-slate-400" />
+                        </div>
+                      )}
+                      <span className="text-xs text-slate-500 dark:text-slate-400 max-w-[80px] truncate">{img.fileName}</span>
+                      <button className="ml-1 text-slate-400 hover:text-destructive transition-colors" onClick={() => setAttachedImages(prev => prev.filter((_, i) => i !== idx))}>
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {attachedImages.some(img => img.mimeType.startsWith("image/")) && (
+                  <button
+                    onClick={() => setMockupMode(!mockupMode)}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${mockupMode ? 'bg-gradient-to-r from-primary to-blue-400 text-white shadow-md shadow-primary/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                    data-testid="button-mockup-mode"
+                  >
+                    <Layout className="w-3.5 h-3.5" />
+                    {mockupMode ? 'Макет → Код (вкл)' : 'Макет → Код'}
+                  </button>
+                )}
               </div>
             )}
             <div className="relative flex items-end">

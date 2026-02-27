@@ -9,6 +9,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - **Database**: PostgreSQL with Drizzle ORM
 - **AI Code (new site)**: Gemini 3.1 Pro via direct API (@google/genai SDK, GEMINI_API_KEY env var, generateContentStream, manual conversation history)
 - **AI Code (edit)**: Gemini 3.1 Pro for editing with SEARCH/REPLACE diff patches (falls back to full HTML if needed); base64 images stripped before sending to reduce context size
+- **Design-to-Code (Mockup Mode)**: Toggle in chat when images attached — sends specialized prompt to Gemini Vision to analyze screenshot/mockup and recreate exact layout as HTML/CSS/JS (not embed as img)
 - **AI Enhance**: Gemini 2.5 Flash for prompt enhancement (5 tokens)
 - **Deep Research**: Gemini Interactions API with deep-research-pro-preview-12-2025 agent (10 tokens, optional toggle)
 - **AI Images**: Nano Banana via KIE API (KIE_API_KEY env var, async task-based)
