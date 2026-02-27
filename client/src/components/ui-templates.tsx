@@ -1044,11 +1044,11 @@ function TemplatePreviewCard({ t, onInsert }: { t: UITemplate; onInsert: (html: 
       onMouseLeave={() => triggerHover(false)}
       data-testid={`template-${t.id}`}
     >
-      <div style={{ height: 160, overflow: 'hidden', position: 'relative' }}>
+      <div style={{ height: 180, overflow: 'hidden', position: 'relative' }}>
         <iframe
           ref={iframeRef}
           srcDoc={previewHtml}
-          style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+          style={{ width: '200%', height: '200%', border: 'none', pointerEvents: 'none', transform: 'scale(0.5)', transformOrigin: 'top left' }}
           sandbox="allow-scripts allow-same-origin"
           title={t.name}
         />
