@@ -38,9 +38,6 @@ export interface IStorage {
   markLeadRead(id: number): Promise<Lead | undefined>;
   deleteLead(id: number): Promise<void>;
   getUnreadLeadCount(userId: number): Promise<number>;
-
-  updateUserFigmaTokens(userId: number, accessToken: string, refreshToken: string, expiresAt: Date): Promise<User | undefined>;
-  clearUserFigmaTokens(userId: number): Promise<User | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -223,24 +220,6 @@ export class DatabaseStorage implements IStorage {
       count += projLeads.filter(l => l.isRead === 0).length;
     }
     return count;
-  }
-
-  async updateUserFigmaTokens(userId: number, accessToken: string, refreshToken: string, expiresAt: Date): Promise<User | undefined> {
-    const [user] = await db.update(users).set({
-      figmaAccessToken: accessToken,
-      figmaRefreshToken: refreshToken,
-      figmaExpiresAt: expiresAt,
-    }).where(eq(users.id, userId)).returning();
-    return user;
-  }
-
-  async clearUserFigmaTokens(userId: number): Promise<User | undefined> {
-    const [user] = await db.update(users).set({
-      figmaAccessToken: null,
-      figmaRefreshToken: null,
-      figmaExpiresAt: null,
-    }).where(eq(users.id, userId)).returning();
-    return user;
   }
 }
 

@@ -12,9 +12,6 @@ export const users = pgTable("users", {
   plan: text("plan").notNull().default("bronze"),
   telegramId: text("telegram_id").unique(),
   avatarUrl: text("avatar_url"),
-  figmaAccessToken: text("figma_access_token"),
-  figmaRefreshToken: text("figma_refresh_token"),
-  figmaExpiresAt: timestamp("figma_expires_at"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -65,9 +62,6 @@ export const insertUserSchema = createInsertSchema(users).omit({
   plan: true,
   telegramId: true,
   avatarUrl: true,
-  figmaAccessToken: true,
-  figmaRefreshToken: true,
-  figmaExpiresAt: true,
 });
 
 export const insertProjectSchema = createInsertSchema(projects).omit({
