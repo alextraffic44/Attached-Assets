@@ -141,6 +141,55 @@ export async function addCustomDomain(
   return { verified: data.verified ?? false, cname: "cname.vercel-dns.com" };
 }
 
+export async function unpublishFromVercel(projectId: number): Promise<void> {
+  if (!VERCEL_TOKEN) return;
+
+  const projectName = `craft-ai-p${projectId}`;
+  const suspendedPage = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Сайт приостановлен</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;color:#fff}
+.c{text-align:center;padding:2rem;max-width:480px}
+.icon{font-size:3rem;margin-bottom:1.5rem;opacity:0.4}
+h1{font-size:1.5rem;font-weight:600;margin-bottom:0.75rem;letter-spacing:-0.02em}
+p{font-size:0.95rem;color:rgba(255,255,255,0.5);line-height:1.6}
+a{color:#3b82f6;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="c">
+<div class="icon">⏸</div>
+<h1>Сайт временно приостановлен</h1>
+<p>Владелец сайта приостановил публикацию. Для возобновления работы необходимо пополнить баланс в <a href="https://craft-ai.ru">Craft AI</a>.</p>
+</div>
+</body>
+</html>`;
+
+  try {
+    const vercelProjectId = await ensureProject(projectName);
+    const sha = await uploadFile(suspendedPage);
+    const buf = Buffer.from(suspendedPage, "utf8");
+
+    await fetch(`${VERCEL_API}/v13/deployments`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({
+        name: projectName,
+        files: [{ file: "index.html", sha, size: buf.length }],
+        projectSettings: { framework: null },
+        target: "production",
+      }),
+    });
+  } catch (err) {
+    console.error(`[Vercel] Failed to unpublish project ${projectId}:`, err);
+  }
+}
+
 export async function checkDomainStatus(
   vercelProjectId: string,
   domain: string

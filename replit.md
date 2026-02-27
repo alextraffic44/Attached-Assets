@@ -75,13 +75,23 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 ## Publishing (Vercel)
 - Button "Опубликовать" in editor header → publish modal
 - `POST /api/projects/:id/publish` — deploys to Vercel via API, uploads all pages + images
+- `POST /api/projects/:id/unpublish` — suspends site (deploys "suspended" placeholder)
 - `POST /api/projects/:id/domain` — add custom domain to Vercel project
 - `GET /api/projects/:id/domain/status` — check domain verification status
 - `VERCEL_TOKEN` secret + `VERCEL_TEAM_ID` env var required
 - Published URL stored in `projects.published_url`, status in `projects.publish_status`
-- Dashboard cards show green "Live" badge when published
+- Publish statuses: `draft`, `publishing`, `published`, `suspended`, `error`
+- Dashboard cards show green "Live" badge when published, red "Приостановлен" when suspended
 - Editor button changes to "Опубликован" with green checkmark when published
 - Vercel helper: `server/vercel-deploy.ts`
+
+## Publish Limits & Billing
+- Plan limits: bronze=1 site, silver=2, gold=3, platinum=5
+- Publish endpoint checks current published count vs plan limit before allowing new publish
+- Daily cost: 20 tokens per published site, charged at 03:00 via setInterval/setTimeout cron
+- If user has insufficient balance: sites are suspended (unpublished from Vercel with placeholder page)
+- Suspended sites can be re-published when user tops up balance
+- `PLAN_PUBLISH_LIMITS` and `DAILY_PUBLISH_COST` constants in server/routes.ts
 
 ## Tech Stack Details
 - Auth: express-session + passport-local + scrypt hashing

@@ -1336,10 +1336,12 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           >
             {project?.publishStatus === "published" ? (
               <CheckCircle2 className="w-4 h-4 mr-2 text-green-400" />
+            ) : project?.publishStatus === "suspended" ? (
+              <ExternalLink className="w-4 h-4 mr-2 text-orange-400" />
             ) : (
               <ExternalLink className="w-4 h-4 mr-2" />
             )}
-            {project?.publishStatus === "published" ? "Опубликован" : "Опубликовать"}
+            {project?.publishStatus === "published" ? "Опубликован" : project?.publishStatus === "suspended" ? "Возобновить" : "Опубликовать"}
           </Button>
         </div>
       </header>
@@ -2141,7 +2143,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
               <div>
                 <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.025em" }}>Публикация сайта</div>
-                <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)" }}>Vercel Global CDN</div>
+                <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)" }}>Vercel Global CDN · 20 токенов/день</div>
               </div>
             </div>
           </div>

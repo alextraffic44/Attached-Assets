@@ -38,6 +38,10 @@ export interface IStorage {
   markLeadRead(id: number): Promise<Lead | undefined>;
   deleteLead(id: number): Promise<void>;
   getUnreadLeadCount(userId: number): Promise<number>;
+
+  getPublishedProjectsCount(userId: number): Promise<number>;
+  getAllPublishedProjects(): Promise<Project[]>;
+  getAllUsersWithPublishedSites(): Promise<{ userId: number; publishedCount: number }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -220,6 +224,24 @@ export class DatabaseStorage implements IStorage {
       count += projLeads.filter(l => l.isRead === 0).length;
     }
     return count;
+  }
+
+  async getPublishedProjectsCount(userId: number): Promise<number> {
+    const result = await db.select().from(projects).where(and(eq(projects.userId, userId), eq(projects.publishStatus, "published")));
+    return result.length;
+  }
+
+  async getAllPublishedProjects(): Promise<Project[]> {
+    return db.select().from(projects).where(eq(projects.publishStatus, "published"));
+  }
+
+  async getAllUsersWithPublishedSites(): Promise<{ userId: number; publishedCount: number }[]> {
+    const published = await db.select().from(projects).where(eq(projects.publishStatus, "published"));
+    const map = new Map<number, number>();
+    for (const p of published) {
+      map.set(p.userId, (map.get(p.userId) || 0) + 1);
+    }
+    return Array.from(map.entries()).map(([userId, publishedCount]) => ({ userId, publishedCount }));
   }
 }
 

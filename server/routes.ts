@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
-import { deployToVercel, addCustomDomain, checkDomainStatus } from "./vercel-deploy";
+import { deployToVercel, addCustomDomain, checkDomainStatus, unpublishFromVercel } from "./vercel-deploy";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
@@ -36,6 +36,16 @@ async function extractTextFromFile(base64Data: string, mimeType: string): Promis
 const KIE_API_KEY = process.env.KIE_API_KEY;
 const NANO_BANANA_CREATE_URL = "https://api.kie.ai/api/v1/jobs/createTask";
 const NANO_BANANA_STATUS_URL = "https://api.kie.ai/api/v1/jobs/recordInfo";
+
+const PLAN_PUBLISH_LIMITS: Record<string, number> = {
+  bronze: 1,
+  silver: 2,
+  gold: 3,
+  platinum: 5,
+  free: 0,
+};
+
+const DAILY_PUBLISH_COST = 20;
 
 const SYSTEM_PROMPT = `Ты — frontend-разработчик. Генерируй полные HTML-документы.
 
@@ -1270,6 +1280,22 @@ ${designAnalysis}
       if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
       if (!project.generatedCode) return res.status(400).json({ message: "Сначала сгенерируйте сайт" });
 
+      const user = await storage.getUser((req.user as any).id);
+      if (!user) return res.status(401).json({ message: "Пользователь не найден" });
+
+      const maxPublished = PLAN_PUBLISH_LIMITS[user.plan] ?? 1;
+      const currentPublished = await storage.getPublishedProjectsCount(user.id);
+      const isRepublish = project.publishStatus === "published";
+      if (!isRepublish && currentPublished >= maxPublished) {
+        return res.status(403).json({
+          message: `Ваш тариф «${user.plan === "bronze" ? "Старт" : user.plan === "silver" ? "Базовый" : user.plan === "gold" ? "Профи" : "Ультра"}» позволяет опубликовать до ${maxPublished} сайт(ов). Обновите тариф для публикации большего количества сайтов.`
+        });
+      }
+
+      if (user.credits < DAILY_PUBLISH_COST) {
+        return res.status(403).json({ message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 20 токенов/сайт." });
+      }
+
       await storage.updateProject(projectId, { publishStatus: "publishing" });
 
       const extraFiles = await storage.getProjectFiles(projectId);
@@ -1508,6 +1534,72 @@ ${designAnalysis}
       res.status(500).json({ message: "Ошибка загрузки изображения" });
     }
   });
+
+  app.post("/api/projects/:id/unpublish", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
+    try {
+      const projectId = parseInt(req.params.id);
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
+      if (project.publishStatus !== "published") return res.status(400).json({ message: "Проект не опубликован" });
+
+      await unpublishFromVercel(projectId);
+      await storage.updateProject(projectId, { publishStatus: "suspended" });
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Ошибка снятия с публикации" });
+    }
+  });
+
+  async function runDailyPublishBilling() {
+    const today = new Date().toISOString().slice(0, 10);
+    console.log(`[Billing] Starting daily publish billing for ${today}...`);
+    try {
+      const usersWithSites = await storage.getAllUsersWithPublishedSites();
+
+      for (const { userId, publishedCount } of usersWithSites) {
+        const user = await storage.getUser(userId);
+        if (!user) continue;
+
+        const userProjects = await storage.getProjectsByUser(userId);
+        const publishedProjects = userProjects.filter(p => p.publishStatus === "published");
+
+        for (const proj of publishedProjects) {
+          const idempotencyKey = `daily-publish-${proj.id}-${today}`;
+          const result = await storage.deductCredits(userId, DAILY_PUBLISH_COST, "daily_publish", idempotencyKey);
+
+          if (result.alreadyProcessed) {
+            continue;
+          }
+
+          if (result.success) {
+            console.log(`[Billing] User ${userId}: charged ${DAILY_PUBLISH_COST} tokens for project ${proj.id} (${proj.title}). Balance: ${result.newBalance}`);
+          } else {
+            await unpublishFromVercel(proj.id);
+            await storage.updateProject(proj.id, { publishStatus: "suspended" });
+            console.log(`[Billing] User ${userId}: suspended project ${proj.id} (${proj.title}) — insufficient balance (${result.newBalance} tokens)`);
+          }
+        }
+      }
+
+      console.log("[Billing] Daily publish billing completed.");
+    } catch (err) {
+      console.error("[Billing] Error during daily billing:", err);
+    }
+  }
+
+  const now = new Date();
+  const nextMidnight = new Date(now);
+  nextMidnight.setHours(3, 0, 0, 0);
+  if (nextMidnight <= now) nextMidnight.setDate(nextMidnight.getDate() + 1);
+  const msUntilFirstRun = nextMidnight.getTime() - now.getTime();
+  setTimeout(() => {
+    runDailyPublishBilling();
+    setInterval(runDailyPublishBilling, 24 * 60 * 60 * 1000);
+  }, msUntilFirstRun);
+  console.log(`[Billing] Next daily billing scheduled in ${Math.round(msUntilFirstRun / 1000 / 60)} minutes (at 03:00)`);
 
   return httpServer;
 }

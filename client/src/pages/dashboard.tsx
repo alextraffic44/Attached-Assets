@@ -342,6 +342,11 @@ export default function DashboardPage() {
                             Live
                           </span>
                         )}
+                        {project.publishStatus === 'suspended' && (
+                          <span style={{ flexShrink: 0, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 100, padding: '0.15rem 0.5rem' }}>
+                            Приостановлен
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-1.5" style={{ fontSize: '0.72rem', fontWeight: 600, color: '#86868B', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                         <Calendar style={{ width: 11, height: 11 }} />
