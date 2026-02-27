@@ -1199,7 +1199,10 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex flex-col">
-            <span className="text-sm font-black uppercase tracking-widest text-primary leading-none mb-1">PRO-PROJECT</span>
+            <div className="flex items-center gap-1.5 leading-none mb-1">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              <span className="text-sm font-black uppercase tracking-widest text-primary leading-none">Craft AI</span>
+            </div>
             <h1 className="text-xl font-black tracking-tighter leading-none" data-testid="text-project-title">{project?.title}</h1>
           </div>
         </div>
@@ -1780,7 +1783,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             <div className="sticky top-0 z-10 bg-[#0c0c0f]/90 backdrop-blur-xl border-b border-white/[0.06] px-6 py-5">
               <DialogHeader>
                 <DialogTitle className="text-lg font-black tracking-tight text-white flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-blue-400 flex items-center justify-center shadow-lg shadow-primary/20">
                     <Wand2 className="w-4 h-4 text-white" />
                   </div>
                   AI Генератор
@@ -1798,7 +1801,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   placeholder="баннер, логотип, фон..."
                   value={imgName}
                   onChange={e => setImgName(e.target.value)}
-                  className="rounded-xl bg-white/[0.05] border-white/[0.08] text-white placeholder:text-white/25 focus:border-violet-500/50 focus:ring-violet-500/20 h-11"
+                  className="rounded-xl bg-white/[0.05] border-white/[0.08] text-white placeholder:text-white/25 focus:border-primary/50 focus:ring-primary/20 h-11"
                   disabled={imgGenerating}
                   data-testid="input-image-name"
                 />
@@ -1810,7 +1813,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   placeholder="Опишите что должно быть на изображении..."
                   value={imgPrompt}
                   onChange={e => setImgPrompt(e.target.value)}
-                  className="min-h-[90px] rounded-xl bg-white/[0.05] border-white/[0.08] text-white placeholder:text-white/25 focus:border-violet-500/50 focus:ring-violet-500/20 resize-none"
+                  className="min-h-[90px] rounded-xl bg-white/[0.05] border-white/[0.08] text-white placeholder:text-white/25 focus:border-primary/50 focus:ring-primary/20 resize-none"
                   disabled={imgGenerating}
                   data-testid="input-image-prompt"
                 />
@@ -1836,7 +1839,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
 
               <Button
-                className="w-full rounded-xl font-bold h-12 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-lg shadow-violet-500/20 hover:shadow-violet-500/30 transition-all border-0"
+                className="w-full rounded-xl font-bold h-12 bg-gradient-to-r from-primary to-blue-400 hover:from-blue-500 hover:to-blue-300 text-white shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all border-0"
                 onClick={handleGenerateImage}
                 disabled={imgGenerating || !imgPrompt.trim() || !imgName.trim()}
                 data-testid="button-generate-image"
@@ -1849,11 +1852,11 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </Button>
 
               {imgStatus === "waiting" && (
-                <div className="flex items-center gap-3 p-4 bg-violet-500/[0.08] rounded-xl border border-violet-500/[0.15]">
-                  <Loader2 className="w-5 h-5 animate-spin text-violet-400 shrink-0" />
+                <div className="flex items-center gap-3 p-4 bg-primary/[0.08] rounded-xl border border-primary/[0.15]">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-400 shrink-0" />
                   <div>
-                    <p className="text-sm font-bold text-violet-300">Генерация...</p>
-                    <p className="text-xs text-violet-400/60">15–60 секунд</p>
+                    <p className="text-sm font-bold text-blue-300">Генерация...</p>
+                    <p className="text-xs text-blue-400/60">15–60 секунд</p>
                   </div>
                 </div>
               )}
