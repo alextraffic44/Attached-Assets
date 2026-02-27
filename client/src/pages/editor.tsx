@@ -1316,14 +1316,17 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
           {!showCode && currentCode && (
             <>
-              <Button variant={editMode ? "default" : "outline"} size="icon" className={`h-8 w-8 rounded-xl ${editMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }} data-testid="button-toggle-edit" title="Редактор">
-                <MousePointer2 className="w-4 h-4" />
+              <Button variant={editMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-3 ${editMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }} data-testid="button-toggle-edit" title="Визуальный редактор">
+                <MousePointer2 className="w-4 h-4 mr-1.5" />
+                Редактор
               </Button>
-              <Button variant={selectorMode ? "default" : "outline"} size="icon" className={`h-8 w-8 rounded-xl ${selectorMode ? "bg-orange-500 hover:bg-orange-600 text-white" : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-500/30 dark:hover:bg-orange-500/10"}`} onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }} data-testid="button-toggle-selector" title="Выбрать элемент">
-                <Crosshair className="w-4 h-4" />
+              <Button variant={selectorMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-3 ${selectorMode ? "bg-orange-500 hover:bg-orange-600 text-white" : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-500/30 dark:hover:bg-orange-500/10"}`} onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }} data-testid="button-toggle-selector" title="Выбрать элемент">
+                <Crosshair className="w-4 h-4 mr-1.5" />
+                Выбрать
               </Button>
-              <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl border-purple-300 text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-500/30 dark:hover:bg-purple-500/10" onClick={() => setShowTemplates(true)} data-testid="button-templates" title="Шаблоны">
-                <Sparkles className="w-4 h-4" />
+              <Button variant="outline" size="sm" className="rounded-xl font-bold px-3 border-purple-300 text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-500/30 dark:hover:bg-purple-500/10" onClick={() => setShowTemplates(true)} data-testid="button-templates" title="Шаблоны">
+                <Sparkles className="w-4 h-4 mr-1.5" />
+                Шаблоны
               </Button>
             </>
           )}
