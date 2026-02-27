@@ -521,23 +521,166 @@ export async function registerRoutes(
         let textPart = isEditMode ? prompt : enhancedPrompt;
         
         if (mockupMode && savedImageUrls.length > 0) {
-          textPart += `\n\n═══ РЕЖИМ "МАКЕТ → КОД" (Design-to-Code) ═══
-ПОЛЬЗОВАТЕЛЬ ЗАГРУЗИЛ СКРИНШОТ/МАКЕТ ДИЗАЙНА САЙТА. Твоя задача — ПРОАНАЛИЗИРОВАТЬ визуальный дизайн на изображении и ВОССОЗДАТЬ его как точный HTML/CSS/JS код.
+          // ═══ ДВУХЭТАПНЫЙ ПРОЦЕСС: МАКЕТ → КОД ═══
+          res.write(`data: ${JSON.stringify({ status: "Этап 1/2 — Анализ макета..." })}\n\n`);
 
-КРИТИЧЕСКИЕ ПРАВИЛА:
-1. НЕ вставляй загруженное изображение как <img> — это МАКЕТ, а не контент
-2. АНАЛИЗИРУЙ каждый элемент на скриншоте: layout, цвета, шрифты, отступы, тени, скругления
-3. ВОССОЗДАЙ ТОЧНУЮ структуру: навигацию, секции, карточки, кнопки, формы, футер
-4. СОХРАНИ цветовую палитру — используй пипетку: определи HEX/RGB цвета с изображения
-5. СОХРАНИ типографику — размеры шрифтов, жирность, межстрочный интервал
-6. СОХРАНИ пропорции и отступы — padding, margin, gap между элементами
-7. Для изображений на макете используй стилизованные градиентные плейсхолдеры с правильными пропорциями
+          const analysisParts: any[] = [
+            { text: `Ты — эксперт по UI/UX анализу. Проанализируй прикреплённый скриншот/макет дизайна сайта и создай ДЕТАЛЬНОЕ структурированное описание.
+
+ФОРМАТ ОТВЕТА — строго JSON:
+{
+  "page_type": "landing / portfolio / ecommerce / blog / corporate / другое",
+  "layout": {
+    "structure": "описание общей структуры страницы (header, hero, секции, footer)",
+    "grid": "тип сетки (одна колонка, 2-3 колонки, bento grid и т.д.)",
+    "max_width": "примерная максимальная ширина контента в px"
+  },
+  "color_palette": {
+    "background": "#hex основного фона",
+    "text_primary": "#hex основного текста",
+    "text_secondary": "#hex вторичного текста",
+    "accent": "#hex акцентного цвета (кнопки, ссылки)",
+    "accent_secondary": "#hex второго акцента если есть",
+    "card_bg": "#hex фона карточек/блоков",
+    "additional": ["#hex", "#hex"]
+  },
+  "typography": {
+    "heading_font": "предполагаемый шрифт заголовков (serif/sans-serif/mono + конкретное предположение)",
+    "body_font": "предполагаемый шрифт текста",
+    "h1_size": "размер в px",
+    "h2_size": "размер в px",
+    "body_size": "размер в px",
+    "heading_weight": "700/800/900",
+    "letter_spacing": "нормальный / сжатый (-0.02em) / разрежённый"
+  },
+  "sections": [
+    {
+      "type": "header / hero / features / gallery / testimonials / pricing / cta / footer / другое",
+      "description": "подробное описание секции",
+      "elements": ["навбар с логотипом слева и меню справа", "заголовок H1 крупный по центру", "подзаголовок", "2 кнопки CTA"],
+      "background": "тип фона (сплошной цвет, градиент, изображение, паттерн)",
+      "layout_details": "flex row, grid 3 колонки, центрирование и т.д.",
+      "spacing": "padding примерный в px"
+    }
+  ],
+  "effects": {
+    "shadows": "тип теней (нет, лёгкие, глубокие, цветные)",
+    "border_radius": "скругления в px (0, 8, 16, 24, полные)",
+    "glassmorphism": true/false,
+    "gradients": "описание градиентов если есть",
+    "animations": "описание анимаций если видны (hover эффекты и т.д.)"
+  },
+  "images": [
+    {
+      "location": "в какой секции",
+      "type": "фото / иллюстрация / иконка / фон",
+      "aspect_ratio": "16:9 / 1:1 / 4:3",
+      "description": "что изображено"
+    }
+  ],
+  "texts": {
+    "headings": ["точный текст заголовка 1", "точный текст заголовка 2"],
+    "paragraphs": ["точный текст параграфа 1"],
+    "buttons": ["текст кнопки 1", "текст кнопки 2"],
+    "nav_items": ["пункт меню 1", "пункт меню 2"]
+  }
+}
+
+ВАЖНО:
+- Определяй цвета МАКСИМАЛЬНО ТОЧНО по пикселям
+- Извлекай ВСЕ тексты со скриншота (заголовки, абзацы, кнопки, меню)
+- Описывай КАЖДУЮ секцию отдельно
+- Указывай точные размеры и отступы где можно определить
+- Если видно шрифт — попробуй определить его (Inter, Montserrat, Roboto, etc.)
+- Верни ТОЛЬКО JSON, без пояснений` },
+          ];
+
+          for (const imgData of imageArray) {
+            const mime = imgData.mimeType || "image/png";
+            if (mime.startsWith("image/")) {
+              analysisParts.push({ inlineData: { data: imgData.base64, mimeType: mime } });
+            }
+          }
+
+          let designAnalysis = "";
+          let analysisValid = false;
+          try {
+            const analysisResult = await gemini.models.generateContent({
+              model: "gemini-3.1-pro-preview",
+              contents: [{ role: "user", parts: analysisParts }],
+              config: { maxOutputTokens: 8192, responseMimeType: "application/json" },
+            });
+            const rawAnalysis = (analysisResult.text || "").trim();
+            // Validate JSON
+            try {
+              JSON.parse(rawAnalysis);
+              designAnalysis = rawAnalysis;
+              analysisValid = true;
+            } catch {
+              // Try extracting JSON from markdown code block
+              const jsonMatch = rawAnalysis.match(/```(?:json)?\s*([\s\S]*?)```/);
+              if (jsonMatch) {
+                JSON.parse(jsonMatch[1].trim());
+                designAnalysis = jsonMatch[1].trim();
+                analysisValid = true;
+              } else {
+                designAnalysis = rawAnalysis;
+                analysisValid = false;
+              }
+            }
+            // Truncate if too large (keep under 6000 chars to leave room for generation prompt)
+            if (designAnalysis.length > 6000) {
+              designAnalysis = designAnalysis.substring(0, 6000) + "\n...[обрезано]";
+            }
+            console.log("Mockup analysis completed, length:", designAnalysis.length, "valid JSON:", analysisValid);
+          } catch (analysisError) {
+            console.error("Mockup analysis failed:", analysisError);
+            analysisValid = false;
+          }
+
+          res.write(`data: ${JSON.stringify({ status: "Этап 2/2 — Генерация кода..." })}\n\n`);
+
+          if (analysisValid && designAnalysis) {
+            textPart += `\n\n═══ РЕЖИМ "МАКЕТ → КОД" (Design-to-Code) — ДВУХЭТАПНЫЙ ═══
+
+ЗАДАЧА: Воссоздай дизайн с прикреплённого скриншота как точный HTML/CSS/JS код.
+
+СТРУКТУРИРОВАННЫЙ АНАЛИЗ МАКЕТА (JSON):
+${designAnalysis}
+
+КРИТИЧЕСКИЕ ПРАВИЛА ГЕНЕРАЦИИ:
+1. НЕ вставляй скриншот как <img> — это МАКЕТ для воссоздания, а не контент
+2. Используй ТОЧНЫЕ цвета из анализа (HEX-значения из color_palette)
+3. Используй ТОЧНЫЕ тексты из анализа (все заголовки, параграфы, кнопки — как на макете)
+4. Воссоздай ТОЧНУЮ структуру секций в правильном порядке
+5. Соблюдай типографику: размеры, жирность, межбуквенное расстояние
+6. Соблюдай отступы и пропорции как на макете
+7. Для фотографий/иллюстраций — градиентные div-placeholder с data-image-hint
 8. Все интерактивные элементы (кнопки, ссылки, формы) должны быть функциональными
-9. Используй современный CSS: flexbox, grid, custom properties, анимации при наведении
-10. Код должен быть АДАПТИВНЫМ (responsive) — работать на десктопе, планшете и мобильном
+9. CSS: flexbox, grid, custom properties, hover-анимации, transitions
+10. АДАПТИВНОСТЬ: desktop, tablet, mobile
+11. Применяй все визуальные эффекты из анализа (тени, скругления, градиенты, glassmorphism)
+
+Результат — полностью рабочий HTML/CSS/JS, ПИКСЕЛЬ В ПИКСЕЛЬ повторяющий макет.
+═══ КОНЕЦ РЕЖИМА МАКЕТ → КОД ═══`;
+          } else {
+            // Fallback: single-step vision mode (analysis failed or invalid)
+            textPart += `\n\n═══ РЕЖИМ "МАКЕТ → КОД" (Design-to-Code) ═══
+ПОЛЬЗОВАТЕЛЬ ЗАГРУЗИЛ СКРИНШОТ/МАКЕТ ДИЗАЙНА САЙТА. Проанализируй визуальный дизайн на изображении и воссоздай его как точный HTML/CSS/JS код.
+
+ПРАВИЛА:
+1. НЕ вставляй загруженное изображение как <img> — это МАКЕТ, а не контент
+2. АНАЛИЗИРУЙ каждый элемент: layout, цвета (#HEX), шрифты, отступы, тени, скругления
+3. Извлеки ВСЕ тексты (заголовки, параграфы, кнопки, меню) и используй их ТОЧНО
+4. ВОССОЗДАЙ структуру: навигацию, секции, карточки, кнопки, формы, футер
+5. Для фотографий — градиентные div-placeholder с data-image-hint
+6. Интерактивные элементы должны быть функциональными
+7. Современный CSS: flexbox, grid, custom properties, hover-эффекты
+8. Адаптивность: desktop, tablet, mobile
 
 Результат — полностью рабочий HTML/CSS/JS сайт, визуально ИДЕНТИЧНЫЙ загруженному макету.
 ═══ КОНЕЦ РЕЖИМА МАКЕТ → КОД ═══`;
+          }
         } else if (savedImageUrls.length > 0) {
           textPart += `\n\nПОЛЬЗОВАТЕЛЬ ПРИКРЕПИЛ ${savedImageUrls.length} ФОТО. URL фото:\n`;
           savedImageUrls.forEach((url, i) => {
