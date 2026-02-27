@@ -91,7 +91,7 @@ export default function DashboardPage() {
       });
       return res.json();
     },
-    onSuccess: (project: Project) => {
+    onSuccess: async (project: Project) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       setShowCreateModal(false);
       const prompt = selectedMode === "template" ? `Создай сайт: ${selectedTemplate}. ${description}` : selectedMode === "photo" ? (description || "Воссоздай дизайн с загруженного скриншота") : description || title;
@@ -103,13 +103,21 @@ export default function DashboardPage() {
       const seoParam = (seoEnabled && seoH1.trim())
         ? `&seoh1=${encodeURIComponent(seoH1.trim())}&seoh2s=${encodeURIComponent(seoH2s.filter(h => h.trim()).join(","))}`
         : "";
-      const mockupParam = (selectedMode === "photo" && photoImage) ? "&mockup=1" : "";
+      let mockupParam = "";
       if (selectedMode === "photo" && photoImage) {
         try {
-          sessionStorage.setItem(`mockup_image_${project.id}`, JSON.stringify(photoImage));
-        } catch (e) {
-          console.error("Failed to save mockup image to sessionStorage:", e);
-          toast({ title: "Ошибка", description: "Не удалось сохранить изображение. Попробуйте файл меньшего размера.", variant: "destructive" });
+          const uploadResp = await fetch("/api/upload-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ base64: photoImage.base64, mimeType: photoImage.mimeType, name: "mockup" }),
+            credentials: "include",
+          });
+          const uploadData = await uploadResp.json();
+          if (!uploadResp.ok) throw new Error(uploadData.message);
+          mockupParam = `&mockup=1&mockupUrl=${encodeURIComponent(uploadData.url)}`;
+        } catch (e: any) {
+          console.error("Failed to upload mockup image:", e);
+          toast({ title: "Ошибка", description: "Не удалось загрузить изображение на сервер", variant: "destructive" });
           return;
         }
       }
@@ -585,30 +593,14 @@ export default function DashboardPage() {
                                 toast({ title: "Файл слишком большой", description: "Максимум 5 МБ", variant: "destructive" });
                                 return;
                               }
-                              const img = new Image();
-                              img.onload = () => {
-                                const compress = (maxDim: number, quality: number) => {
-                                  let w = img.width, h = img.height;
-                                  if (w > maxDim || h > maxDim) {
-                                    const ratio = Math.min(maxDim / w, maxDim / h);
-                                    w = Math.round(w * ratio);
-                                    h = Math.round(h * ratio);
-                                  }
-                                  const canvas = document.createElement("canvas");
-                                  canvas.width = w;
-                                  canvas.height = h;
-                                  const ctx = canvas.getContext("2d")!;
-                                  ctx.drawImage(img, 0, 0, w, h);
-                                  return canvas.toDataURL("image/jpeg", quality);
-                                };
-                                let dataUrl = compress(1280, 0.7);
-                                if (dataUrl.length > 2_500_000) dataUrl = compress(1024, 0.6);
-                                if (dataUrl.length > 2_500_000) dataUrl = compress(800, 0.5);
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const dataUrl = reader.result as string;
                                 const base64 = dataUrl.split(",")[1];
-                                setPhotoImage({ base64, mimeType: "image/jpeg", preview: dataUrl });
-                                URL.revokeObjectURL(img.src);
+                                const mimeType = file.type || "image/jpeg";
+                                setPhotoImage({ base64, mimeType, preview: dataUrl });
                               };
-                              img.src = URL.createObjectURL(file);
+                              reader.readAsDataURL(file);
                             }}
                           />
                           {photoImage ? (

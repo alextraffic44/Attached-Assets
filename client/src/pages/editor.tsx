@@ -174,28 +174,36 @@ export default function EditorPage() {
     const initialSeoH1 = urlParams.get("seoh1") || "";
     const initialSeoH2s = urlParams.get("seoh2s") || "";
     const isMockup = urlParams.get("mockup") === "1";
+    const mockupUrl = urlParams.get("mockupUrl") || "";
     if (initialPrompt && !project?.generatedCode && messages.length === 0) {
-      let mockupImages: Array<{base64: string, mimeType: string, preview: string | null, fileName: string}> | undefined;
-      if (isMockup && projectId) {
-        try {
-          const stored = sessionStorage.getItem(`mockup_image_${projectId}`);
-          if (stored) {
-            const imgData = JSON.parse(stored);
-            mockupImages = [{ base64: imgData.base64, mimeType: imgData.mimeType, preview: imgData.preview, fileName: "mockup.png" }];
+      const initMockup = async () => {
+        let mockupImages: Array<{base64: string, mimeType: string, preview: string | null, fileName: string}> | undefined;
+        if (isMockup && mockupUrl) {
+          try {
+            const imgResp = await fetch(mockupUrl);
+            const blob = await imgResp.blob();
+            const loaded = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+            const base64 = loaded.split(",")[1];
+            const mimeType = blob.type || "image/jpeg";
+            mockupImages = [{ base64, mimeType, preview: loaded, fileName: "mockup.jpg" }];
             setMockupMode(true);
-            sessionStorage.removeItem(`mockup_image_${projectId}`);
+          } catch (e) {
+            console.error("Failed to load mockup image from server:", e);
           }
-        } catch (e) {
-          console.error("Failed to load mockup image:", e);
+          if (!mockupImages) {
+            toast({ title: "Изображение не найдено", description: "Прикрепите скриншот макета вручную и включите режим «Макет → Код»", variant: "destructive" });
+          }
         }
-        if (!mockupImages) {
-          toast({ title: "Изображение не найдено", description: "Прикрепите скриншот макета вручную и включите режим «Макет → Код»", variant: "destructive" });
+        setPrompt(initialPrompt);
+        if (!isMockup || mockupImages) {
+          setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch, initialMultiPages, initialSeoH1, initialSeoH2s, mockupImages), 500);
         }
-      }
-      setPrompt(initialPrompt);
-      if (!isMockup || mockupImages) {
-        setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch, initialMultiPages, initialSeoH1, initialSeoH2s, mockupImages), 500);
-      }
+      };
+      initMockup();
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [project, messages.length]);
