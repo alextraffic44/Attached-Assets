@@ -175,27 +175,26 @@ export default function EditorPage() {
     const initialSeoH2s = urlParams.get("seoh2s") || "";
     const isMockup = urlParams.get("mockup") === "1";
     if (initialPrompt && !project?.generatedCode && messages.length === 0) {
-      let mockupLoaded = false;
+      let mockupImages: Array<{base64: string, mimeType: string, preview: string | null, fileName: string}> | undefined;
       if (isMockup && projectId) {
         try {
           const stored = sessionStorage.getItem(`mockup_image_${projectId}`);
           if (stored) {
             const imgData = JSON.parse(stored);
-            setAttachedImages([{ base64: imgData.base64, mimeType: imgData.mimeType, preview: imgData.preview, fileName: "mockup.png" }]);
+            mockupImages = [{ base64: imgData.base64, mimeType: imgData.mimeType, preview: imgData.preview, fileName: "mockup.png" }];
             setMockupMode(true);
-            mockupLoaded = true;
             sessionStorage.removeItem(`mockup_image_${projectId}`);
           }
         } catch (e) {
           console.error("Failed to load mockup image:", e);
         }
-        if (!mockupLoaded) {
+        if (!mockupImages) {
           toast({ title: "Изображение не найдено", description: "Прикрепите скриншот макета вручную и включите режим «Макет → Код»", variant: "destructive" });
         }
       }
       setPrompt(initialPrompt);
-      if (!isMockup || mockupLoaded) {
-        setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch, initialMultiPages, initialSeoH1, initialSeoH2s), 500);
+      if (!isMockup || mockupImages) {
+        setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch, initialMultiPages, initialSeoH1, initialSeoH2s, mockupImages), 500);
       }
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -251,9 +250,10 @@ export default function EditorPage() {
     }
   }, [newPageName, newPageTitle, projectId, allFiles, project, toast]);
 
-  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string, multiPagesData?: string, seoH1Data?: string, seoH2sData?: string) => {
+  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string, multiPagesData?: string, seoH1Data?: string, seoH2sData?: string, injectedImages?: Array<{base64: string, mimeType: string, preview: string | null, fileName: string}>) => {
     let text = customPrompt || prompt;
-    if (!text.trim() && attachedImages.length === 0) return;
+    const effectiveImages = injectedImages || attachedImages;
+    if (!text.trim() && effectiveImages.length === 0) return;
 
     if (selectedElement && !customPrompt) {
       const elRef = `[Выбранный элемент: <${selectedElement.tag}>${selectedElement.classes ? ` class="${selectedElement.classes}"` : ''} — "${selectedElement.text.substring(0, 80)}"\nHTML: ${selectedElement.outerSnippet}]\n\n`;
@@ -268,8 +268,8 @@ export default function EditorPage() {
     setPrompt("");
     queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 100) } : old);
 
-    const images = attachedImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
-    const sentPreviews = attachedImages.filter(img => img.preview).map(img => ({ preview: img.preview!, fileName: img.fileName }));
+    const images = effectiveImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
+    const sentPreviews = effectiveImages.filter(img => img.preview).map(img => ({ preview: img.preview!, fileName: img.fileName }));
 
     // Сразу очищаем прикреплённые файлы из поля ввода
     setAttachedImages([]);
@@ -296,7 +296,8 @@ export default function EditorPage() {
     }, 100);
 
     try {
-      const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance, mockupMode: mockupMode && images.length > 0 };
+      const isMockupActive = injectedImages ? true : mockupMode;
+      const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance, mockupMode: isMockupActive && images.length > 0 };
       if (deepResearchData) {
         bodyData.deepResearchData = deepResearchData;
       }
