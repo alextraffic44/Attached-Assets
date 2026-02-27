@@ -579,8 +579,8 @@ export default function DashboardPage() {
                             onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (!file) return;
-                              if (file.size > 10 * 1024 * 1024) {
-                                toast({ title: "Файл слишком большой", description: "Максимум 10 МБ", variant: "destructive" });
+                              if (file.size > 5 * 1024 * 1024) {
+                                toast({ title: "Файл слишком большой", description: "Максимум 5 МБ", variant: "destructive" });
                                 return;
                               }
                               const reader = new FileReader();
@@ -624,7 +624,7 @@ export default function DashboardPage() {
                               </div>
                               <div className="text-center">
                                 <p className="text-sm font-semibold" style={{ color: '#6D28D9' }}>Загрузить скриншот</p>
-                                <p className="text-xs mt-1" style={{ color: '#A78BFA' }}>PNG, JPG, WEBP до 10 МБ</p>
+                                <p className="text-xs mt-1" style={{ color: '#A78BFA' }}>PNG, JPG, WEBP до 5 МБ</p>
                               </div>
                             </button>
                           )}
