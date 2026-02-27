@@ -11,6 +11,7 @@ import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Project, ProjectMessage, ProjectImage, ProjectVersion, ProjectFile } from "@shared/schema";
 import JSZip from "jszip";
+import { UITemplatesModal } from "@/components/ui-templates";
 import {
   ArrowLeft,
   Send,
@@ -109,6 +110,7 @@ export default function EditorPage() {
   const [imgResultUrls, setImgResultUrls] = useState<string[]>([]);
   const [imgError, setImgError] = useState("");
 
+  const [showTemplates, setShowTemplates] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<string | null>(null);
@@ -1232,6 +1234,10 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <Crosshair className="w-4 h-4 mr-2" />
                 {selectorMode ? "Выбор ВКЛ" : "Выбрать"}
               </Button>
+              <Button variant="outline" size="sm" className="rounded-xl font-bold px-4 border-purple-300 text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-500/30 dark:hover:bg-purple-500/10" onClick={() => setShowTemplates(true)} data-testid="button-templates" title="Библиотека UI-шаблонов: кнопки, карточки, формы и другие элементы">
+                <Sparkles className="w-4 h-4 mr-2" />
+                Шаблоны
+              </Button>
             </>
           )}
 
@@ -2323,6 +2329,18 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </div>
         </DialogContent>
       </Dialog>
+
+      <UITemplatesModal
+        open={showTemplates}
+        onClose={() => setShowTemplates(false)}
+        onInsert={(html, css) => {
+          const code = `\n<!-- UI Template -->\n<style>\n${css}\n</style>\n${html}\n`;
+          navigator.clipboard.writeText(code).then(() => {
+            toast({ title: "Код скопирован!", description: "Вставьте его в чат или используйте Ctrl+V" });
+          });
+          setShowTemplates(false);
+        }}
+      />
 
     </div>
   );
