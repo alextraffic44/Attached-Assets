@@ -1907,112 +1907,117 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       </div>
 
       <Dialog open={imgGenOpen} onOpenChange={setImgGenOpen}>
-        <DialogContent className="sm:max-w-md p-0 bg-[#0c0c0f] border border-white/[0.08] shadow-[0_24px_80px_rgba(0,0,0,0.6)] rounded-2xl max-h-[85vh] overflow-hidden" aria-describedby="img-gen-description">
+        <DialogContent className="sm:max-w-lg p-0 bg-white dark:bg-slate-900 border-0 shadow-[0_25px_60px_-12px_rgba(0,0,0,0.25)] rounded-3xl max-h-[85vh] overflow-hidden" aria-describedby="img-gen-description">
           <div className="relative overflow-y-auto max-h-[85vh]">
-            <div className="sticky top-0 z-10 bg-[#0c0c0f]/90 backdrop-blur-xl border-b border-white/[0.06] px-6 py-5">
+            <div className="px-7 pt-7 pb-5">
               <DialogHeader>
-                <DialogTitle className="text-lg font-black tracking-tight text-white flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-blue-400 flex items-center justify-center shadow-lg shadow-primary/20">
-                    <Wand2 className="w-4 h-4 text-white" />
+                <DialogTitle className="text-xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
+                    <Wand2 className="w-5 h-5 text-white" />
                   </div>
                   AI Генератор
                 </DialogTitle>
-                <DialogDescription id="img-gen-description" className="text-white/40 text-sm mt-1">
-                  Создайте уникальное изображение с помощью ИИ
+                <DialogDescription id="img-gen-description" className="text-slate-400 dark:text-slate-500 text-sm mt-1.5 ml-[52px]">
+                  Nano Banana 2 · 2K · 10 токенов
                 </DialogDescription>
               </DialogHeader>
             </div>
 
-            <div className="px-6 py-5 space-y-5">
-              <div>
-                <label className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2 block">Название</label>
-                <Input
-                  placeholder="баннер, логотип, фон..."
-                  value={imgName}
-                  onChange={e => setImgName(e.target.value)}
-                  className="rounded-xl bg-white/[0.05] border-white/[0.08] text-white placeholder:text-white/25 focus:border-primary/50 focus:ring-primary/20 h-11"
-                  disabled={imgGenerating}
-                  data-testid="input-image-name"
-                />
+            <div className="px-7 pb-7 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Название</label>
+                  <Input
+                    placeholder="hero, баннер, фон..."
+                    value={imgName}
+                    onChange={e => setImgName(e.target.value)}
+                    className="rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-violet-400 focus:ring-violet-400/20 h-10 text-sm"
+                    disabled={imgGenerating}
+                    data-testid="input-image-name"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Формат</label>
+                  <Select value={imgSize} onValueChange={setImgSize} disabled={imgGenerating}>
+                    <SelectTrigger className="rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white h-10 text-sm" data-testid="select-image-size">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl">
+                      <SelectItem value="16:9">16:9 Широкий</SelectItem>
+                      <SelectItem value="1:1">1:1 Квадрат</SelectItem>
+                      <SelectItem value="4:3">4:3 Стандарт</SelectItem>
+                      <SelectItem value="3:2">3:2 Фото</SelectItem>
+                      <SelectItem value="9:16">9:16 Вертикальный</SelectItem>
+                      <SelectItem value="3:4">3:4 Портрет</SelectItem>
+                      <SelectItem value="21:9">21:9 Ультраширокий</SelectItem>
+                      <SelectItem value="auto">Авто</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2 block">Описание</label>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Описание</label>
                 <Textarea
                   placeholder="Опишите что должно быть на изображении..."
                   value={imgPrompt}
                   onChange={e => setImgPrompt(e.target.value)}
-                  className="min-h-[90px] rounded-xl bg-white/[0.05] border-white/[0.08] text-white placeholder:text-white/25 focus:border-primary/50 focus:ring-primary/20 resize-none"
+                  className="min-h-[80px] rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-violet-400 focus:ring-violet-400/20 resize-none text-sm"
                   disabled={imgGenerating}
                   data-testid="input-image-prompt"
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2 block">Формат</label>
-                <Select value={imgSize} onValueChange={setImgSize} disabled={imgGenerating}>
-                  <SelectTrigger className="rounded-xl bg-white/[0.05] border-white/[0.08] text-white h-11" data-testid="select-image-size">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#1a1a1f] border-white/[0.08] text-white">
-                    <SelectItem value="16:9">16:9 — Широкий</SelectItem>
-                    <SelectItem value="1:1">1:1 — Квадрат</SelectItem>
-                    <SelectItem value="4:3">4:3 — Стандарт</SelectItem>
-                    <SelectItem value="3:2">3:2 — Фото</SelectItem>
-                    <SelectItem value="9:16">9:16 — Вертикальный</SelectItem>
-                    <SelectItem value="3:4">3:4 — Портрет</SelectItem>
-                    <SelectItem value="21:9">21:9 — Ультраширокий</SelectItem>
-                    <SelectItem value="auto">Авто</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
               <Button
-                className="w-full rounded-xl font-bold h-12 bg-gradient-to-r from-primary to-blue-400 hover:from-blue-500 hover:to-blue-300 text-white shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all border-0"
+                className="w-full rounded-xl font-bold h-11 bg-gradient-to-r from-violet-600 to-purple-500 hover:from-violet-500 hover:to-purple-400 text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 transition-all border-0 text-sm"
                 onClick={handleGenerateImage}
                 disabled={imgGenerating || !imgPrompt.trim() || !imgName.trim()}
                 data-testid="button-generate-image"
               >
                 {imgGenerating ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {imgStatus === "creating" ? "Создаём..." : "Генерируем..."}</>
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {imgStatus === "creating" ? "Создаём задачу..." : "Генерируем изображение..."}</>
                 ) : (
                   <><Sparkles className="w-4 h-4 mr-2" /> Сгенерировать</>
                 )}
               </Button>
 
               {imgStatus === "waiting" && (
-                <div className="flex items-center gap-3 p-4 bg-primary/[0.08] rounded-xl border border-primary/[0.15]">
-                  <Loader2 className="w-5 h-5 animate-spin text-blue-400 shrink-0" />
+                <div className="flex items-center gap-3 p-3.5 bg-violet-50 dark:bg-violet-500/10 rounded-xl border border-violet-200 dark:border-violet-500/20">
+                  <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
+                    <Loader2 className="w-4 h-4 animate-spin text-violet-600 dark:text-violet-400" />
+                  </div>
                   <div>
-                    <p className="text-sm font-bold text-blue-300">Генерация...</p>
-                    <p className="text-xs text-blue-400/60">15–60 секунд</p>
+                    <p className="text-sm font-bold text-violet-700 dark:text-violet-300">Генерация...</p>
+                    <p className="text-xs text-violet-500/70 dark:text-violet-400/50">Обычно 15–60 сек</p>
                   </div>
                 </div>
               )}
 
               {imgStatus === "fail" && (
-                <div className="flex items-center gap-3 p-4 bg-red-500/[0.08] rounded-xl border border-red-500/[0.15]">
-                  <XCircle className="w-5 h-5 text-red-400 shrink-0" />
+                <div className="flex items-center gap-3 p-3.5 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-200 dark:border-red-500/20">
+                  <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-500/20 flex items-center justify-center shrink-0">
+                    <XCircle className="w-4 h-4 text-red-500 dark:text-red-400" />
+                  </div>
                   <div>
-                    <p className="text-sm font-bold text-red-300">Ошибка</p>
-                    <p className="text-xs text-red-400/70">{imgError}</p>
+                    <p className="text-sm font-bold text-red-600 dark:text-red-300">Ошибка генерации</p>
+                    <p className="text-xs text-red-500/70 dark:text-red-400/60">{imgError}</p>
                   </div>
                 </div>
               )}
 
               {imgStatus === "success" && imgResultUrls.length > 0 && (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {imgResultUrls.map((url, i) => (
-                    <div key={i} className="space-y-3">
-                      <div className="relative rounded-xl overflow-hidden border border-white/[0.08]">
+                    <div key={i} className="space-y-2.5">
+                      <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
                         <img src={url} alt={imgName} className="w-full" data-testid={`img-result-${i}`} />
-                        <div className="absolute top-3 left-3 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <div className="absolute top-2.5 left-2.5 bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg shadow-emerald-500/30">
                           <CheckCircle2 className="w-3 h-3" />
-                          Готово
+                          2K
                         </div>
                       </div>
                       <Button
-                        className="w-full rounded-xl font-bold h-11 bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 border-0"
+                        className="w-full rounded-xl font-bold h-10 bg-emerald-500 hover:bg-emerald-400 text-white shadow-md shadow-emerald-500/20 border-0 text-sm"
                         onClick={() => handleSaveImage(url)}
                         data-testid={`button-save-image-${i}`}
                       >
