@@ -250,9 +250,9 @@ export default function Landing() {
       grid.style.cssText = "display:grid;grid-template-columns:repeat(4,1fr);gap:1.5rem;";
 
       grid.appendChild(makeCard("1 000", "990 ₽", false, "", "1 сайт,<br>10 итераций по редактированию", "Старт"));
-      grid.appendChild(makeCard("1 900", "1 690 ₽", false, "0.1s", "3 сайта,<br>19 итераций по редактированию", "Базовый"));
-      grid.appendChild(makeCard("4 500", "3 990 ₽", false, "0.2s", "5 сайтов,<br>45 итераций по редактированию, доступ к премиум шаблонам", "Профи"));
-      grid.appendChild(makeCard("6 500", "5 990 ₽", true, "0.3s", "7 сайтов,<br>65 итераций по редактированию, доступ к премиум шаблонам", "Ультра"));
+      grid.appendChild(makeCard("1 900", "1 690 ₽", false, "0.1s", "2 сайта,<br>19 итераций по редактированию", "Базовый"));
+      grid.appendChild(makeCard("4 500", "3 990 ₽", false, "0.2s", "3 сайта,<br>45 итераций по редактированию, доступ к премиум шаблонам", "Профи"));
+      grid.appendChild(makeCard("6 500", "5 990 ₽", true, "0.3s", "5 сайтов,<br>65 итераций по редактированию, доступ к премиум шаблонам", "Ультра"));
 
       pContainer.appendChild(pHeader);
       pContainer.appendChild(grid);

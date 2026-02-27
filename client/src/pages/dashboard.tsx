@@ -741,9 +741,9 @@ export default function DashboardPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
               {[
                 { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["1 сайт", "10 итераций редактирования"] },
-                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["3 сайта", "19 итераций редактирования"] },
-                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["5 сайтов", "45 итераций редактирования", "Премиум шаблоны"] },
-                { price: 5990, tokens: 6500, label: "Ультра",  popular: true,  desc: ["7 сайтов", "65 итераций редактирования", "Премиум шаблоны"] },
+                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["2 сайта", "19 итераций редактирования"] },
+                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["3 сайта", "45 итераций редактирования", "Премиум шаблоны"] },
+                { price: 5990, tokens: 6500, label: "Ультра",  popular: true,  desc: ["5 сайтов", "65 итераций редактирования", "Премиум шаблоны"] },
               ].map((plan) => (
                 <div key={plan.price} style={{ position: 'relative' }}>
                   {plan.popular && (
