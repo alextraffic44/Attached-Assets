@@ -691,7 +691,7 @@ export default function DashboardPage() {
                       )}
                     </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-3" style={{ marginTop: 16 }}>
+                  <div className={`grid gap-3 ${selectedMode === "photo" ? "grid-cols-2" : "grid-cols-4"}`} style={{ marginTop: 16 }}>
                     <button
                       className="h-10 font-semibold transition-all text-sm"
                       style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, color: '#86868B', cursor: 'pointer' }}
@@ -699,6 +699,7 @@ export default function DashboardPage() {
                     >
                       ← Назад
                     </button>
+                    {selectedMode !== "photo" && (
                     <button
                       data-testid="button-enhance-prompt"
                       type="button"
@@ -736,6 +737,8 @@ export default function DashboardPage() {
                       {isEnhancing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isEnhanced ? <Sparkles className="w-3.5 h-3.5" /> : <Wand2 className="w-3.5 h-3.5" />}
                       {isEnhancing ? 'Улучшаем...' : isEnhanced ? 'Улучшено' : 'AI улучшение'}
                     </button>
+                    )}
+                    {selectedMode !== "photo" && (
                     <button
                       data-testid="button-deep-research"
                       type="button"
@@ -767,6 +770,7 @@ export default function DashboardPage() {
                       {isResearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : researchData ? <Globe className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
                       {isResearching ? 'Исследуем...' : researchData ? 'Исследовано' : 'Deep Research'}
                     </button>
+                    )}
                     <button
                       className="h-10 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                       style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
