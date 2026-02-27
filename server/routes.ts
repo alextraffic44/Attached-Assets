@@ -1480,6 +1480,16 @@ ${designAnalysis}
     }
   });
 
+  app.get("/api/generations", bypassAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user?.id || 1;
+      const images = await storage.getImagesByUser(userId);
+      res.json(images);
+    } catch (err) {
+      res.status(500).json({ message: "Ошибка получения генераций" });
+    }
+  });
+
   app.get("/api/leads", bypassAuth, async (req, res) => {
     try {
       const userId = (req as any).user?.id || 1;

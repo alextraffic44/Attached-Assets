@@ -21,6 +21,7 @@ export interface IStorage {
   createProjectMessage(message: InsertProjectMessage): Promise<ProjectMessage>;
 
   getProjectImages(projectId: number): Promise<ProjectImage[]>;
+  getImagesByUser(userId: number): Promise<(ProjectImage & { projectTitle: string })[]>;
   createProjectImage(image: InsertProjectImage): Promise<ProjectImage>;
   deleteProjectImage(id: number): Promise<void>;
 
@@ -140,6 +141,24 @@ export class DatabaseStorage implements IStorage {
 
   async getProjectImages(projectId: number): Promise<ProjectImage[]> {
     return db.select().from(projectImages).where(eq(projectImages.projectId, projectId)).orderBy(desc(projectImages.createdAt));
+  }
+
+  async getImagesByUser(userId: number): Promise<(ProjectImage & { projectTitle: string })[]> {
+    const rows = await db
+      .select({
+        id: projectImages.id,
+        projectId: projectImages.projectId,
+        name: projectImages.name,
+        url: projectImages.url,
+        prompt: projectImages.prompt,
+        createdAt: projectImages.createdAt,
+        projectTitle: projects.title,
+      })
+      .from(projectImages)
+      .innerJoin(projects, eq(projectImages.projectId, projects.id))
+      .where(eq(projects.userId, userId))
+      .orderBy(desc(projectImages.createdAt));
+    return rows;
   }
 
   async createProjectImage(image: InsertProjectImage): Promise<ProjectImage> {

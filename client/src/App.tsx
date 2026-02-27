@@ -10,6 +10,7 @@ import AuthPage from "@/pages/auth-page";
 import DashboardPage from "@/pages/dashboard";
 import EditorPage from "@/pages/editor";
 import LeadsPage from "@/pages/leads";
+import GenerationsPage from "@/pages/generations";
 import ProfilePage from "@/pages/profile";
 import LegalPage from "@/pages/legal";
 import CookieConsent from "@/components/cookie-consent";
@@ -58,6 +59,7 @@ function Router() {
       <Route path="/auth" component={AuthRoute} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/leads" component={LeadsPage} />
+      <Route path="/generations" component={GenerationsPage} />
       <Route path="/profile" component={ProfilePage} />
       <Route path="/editor/:id" component={EditorPage} />
       <Route path="/oferta">{() => <LegalPage doc="oferta" />}</Route>

@@ -193,6 +193,16 @@ export default function DashboardPage() {
               )}
             </button>
 
+            <button
+              onClick={() => setLocation("/generations")}
+              data-testid="button-generations"
+              className="flex items-center gap-2 transition-all"
+              style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: '0.45rem 1.1rem', fontSize: '0.82rem', fontWeight: 600, color: '#1D1D1F', cursor: 'pointer' }}
+            >
+              <ImageIcon className="w-3.5 h-3.5" style={{ color: '#86868B' }} />
+              <span>Генерации</span>
+            </button>
+
             <div className="flex items-center gap-1.5" style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: '0.45rem 1.1rem' }}>
               <Coins className="w-3.5 h-3.5" style={{ color: '#86868B' }} />
               <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1D1D1F' }}>{user?.credits ?? 0}</span>
