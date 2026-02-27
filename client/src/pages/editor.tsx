@@ -1310,55 +1310,50 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
-          <Button variant={showCode ? "secondary" : "ghost"} size="sm" className="rounded-xl font-bold px-4" onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }} data-testid="button-toggle-code" title={showCode ? "Переключить на визуальный просмотр сайта" : "Показать исходный HTML/CSS/JS код сайта"}>
-            {showCode ? <Eye className="w-4 h-4 mr-2" /> : <Code2 className="w-4 h-4 mr-2" />}
-            {showCode ? "Сайт" : "Код"}
+          <Button variant={showCode ? "secondary" : "ghost"} size="icon" className="h-8 w-8 rounded-xl" onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }} data-testid="button-toggle-code" title={showCode ? "Просмотр сайта" : "Код"}>
+            {showCode ? <Eye className="w-4 h-4" /> : <Code2 className="w-4 h-4" />}
           </Button>
 
           {!showCode && currentCode && (
             <>
-              <Button variant={editMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-4 ${editMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }} data-testid="button-toggle-edit" title="Визуальный редактор: кликните на текст или изображение в превью, чтобы отредактировать прямо на странице">
-                <MousePointer2 className="w-4 h-4 mr-2" />
-                {editMode ? "Редактор ВКЛ" : "Редактор"}
+              <Button variant={editMode ? "default" : "outline"} size="icon" className={`h-8 w-8 rounded-xl ${editMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }} data-testid="button-toggle-edit" title="Редактор">
+                <MousePointer2 className="w-4 h-4" />
               </Button>
-              <Button variant={selectorMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-4 ${selectorMode ? "bg-orange-500 hover:bg-orange-600 text-white" : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-500/30 dark:hover:bg-orange-500/10"}`} onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }} data-testid="button-toggle-selector" title="Режим выбора: наведите на элемент и кликните, чтобы удалить, скопировать или переместить его">
-                <Crosshair className="w-4 h-4 mr-2" />
-                {selectorMode ? "Выбор ВКЛ" : "Выбрать"}
+              <Button variant={selectorMode ? "default" : "outline"} size="icon" className={`h-8 w-8 rounded-xl ${selectorMode ? "bg-orange-500 hover:bg-orange-600 text-white" : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-500/30 dark:hover:bg-orange-500/10"}`} onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }} data-testid="button-toggle-selector" title="Выбрать элемент">
+                <Crosshair className="w-4 h-4" />
               </Button>
-              <Button variant="outline" size="sm" className="rounded-xl font-bold px-4 border-purple-300 text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-500/30 dark:hover:bg-purple-500/10" onClick={() => setShowTemplates(true)} data-testid="button-templates" title="Библиотека UI-шаблонов: кнопки, карточки, формы и другие элементы">
-                <Sparkles className="w-4 h-4 mr-2" />
-                Шаблоны
+              <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl border-purple-300 text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-500/30 dark:hover:bg-purple-500/10" onClick={() => setShowTemplates(true)} data-testid="button-templates" title="Шаблоны">
+                <Sparkles className="w-4 h-4" />
               </Button>
             </>
           )}
 
-          <Button variant="outline" size="sm" className="rounded-xl font-bold px-4" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip" title="Скачать весь сайт как ZIP-архив со всеми страницами и изображениями">
-            <Download className="w-4 h-4 mr-2" />
-            ZIP
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
+
+          <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip" title="ZIP">
+            <Download className="w-4 h-4" />
           </Button>
 
           <input ref={faviconInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/x-icon,image/webp" className="hidden" onChange={handleFaviconUpload} data-testid="input-favicon-upload" />
-          <Button variant="outline" size="sm" className="rounded-xl font-bold px-3" onClick={() => faviconInputRef.current?.click()} disabled={faviconUploading || !currentCode} title="Загрузить фавикон" data-testid="button-favicon-upload">
+          <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl" onClick={() => faviconInputRef.current?.click()} disabled={faviconUploading || !currentCode} title="Фавикон" data-testid="button-favicon-upload">
             {faviconUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
               project?.generatedCode?.includes('rel="icon"') || project?.generatedCode?.includes("rel='icon'")
-                ? <span style={{ fontSize: 16 }}>✅</span>
-                : <span style={{ fontSize: 16 }}>🔖</span>
+                ? <span style={{ fontSize: 14 }}>✅</span>
+                : <span style={{ fontSize: 14 }}>🔖</span>
             )}
-            <span className="ml-1.5 hidden sm:inline">Фавикон</span>
           </Button>
 
-          <Button variant="outline" size="sm" className="rounded-xl font-bold px-4 bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen" title="Сгенерировать изображение с помощью AI и вставить его на сайт">
-            <Wand2 className="w-4 h-4 mr-2" />
-            AI Фото
+          <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20 relative" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen" title="AI Фото">
+            <Wand2 className="w-4 h-4" />
             {projectImages.length > 0 && (
-              <Badge className="ml-1.5 bg-violet-500 text-white text-[10px] px-1.5 py-0 rounded-full">{projectImages.length}</Badge>
+              <span className="absolute -top-1 -right-1 bg-violet-500 text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center">{projectImages.length}</span>
             )}
           </Button>
 
           <Button
             size="sm"
-            className="rounded-xl font-black px-6 shadow-lg shadow-primary/20 hover-elevate"
-            title="Опубликовать сайт в интернет и получить ссылку для доступа"
+            className="rounded-xl font-black px-4 shadow-lg shadow-primary/20 hover-elevate"
+            title="Опубликовать"
             onClick={() => {
               setPublishResult(null);
               setPublishError(null);
@@ -1386,13 +1381,13 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             data-testid="button-publish"
           >
             {project?.publishStatus === "published" ? (
-              <CheckCircle2 className="w-4 h-4 mr-2 text-green-400" />
+              <CheckCircle2 className="w-4 h-4 mr-1.5 text-green-400" />
             ) : project?.publishStatus === "suspended" ? (
-              <ExternalLink className="w-4 h-4 mr-2 text-orange-400" />
+              <ExternalLink className="w-4 h-4 mr-1.5 text-orange-400" />
             ) : (
-              <ExternalLink className="w-4 h-4 mr-2" />
+              <ExternalLink className="w-4 h-4 mr-1.5" />
             )}
-            {project?.publishStatus === "published" ? "Опубликован" : project?.publishStatus === "suspended" ? "Возобновить" : "Опубликовать"}
+            {project?.publishStatus === "published" ? "Live" : project?.publishStatus === "suspended" ? "Off" : "Publish"}
           </Button>
         </div>
       </header>
