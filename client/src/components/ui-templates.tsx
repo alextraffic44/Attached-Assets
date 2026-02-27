@@ -183,8 +183,8 @@ export function UITemplatesModal({ open, onClose, onInsert }: UITemplatesModalPr
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="p-0 overflow-hidden" style={{ maxWidth: 1060, height: '82vh', borderRadius: 24, border: '1px solid rgba(255,255,255,0.08)', background: '#0a0a0f', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif' }}>
-        <div className="flex h-full">
+      <DialogContent className="p-0 !grid-rows-[1fr] [&>button:last-child]:hidden" style={{ maxWidth: 1060, height: '82vh', borderRadius: 24, border: '1px solid rgba(255,255,255,0.08)', background: '#0a0a0f', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
           <div style={{ width: 190, borderRight: '1px solid rgba(255,255,255,0.06)', padding: '1.5rem 0', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '0 1.25rem 1.25rem', fontSize: '1.1rem', fontWeight: 700, color: '#fff', letterSpacing: '-0.02em' }}>
               Шаблоны UI
@@ -211,7 +211,7 @@ export function UITemplatesModal({ open, onClose, onInsert }: UITemplatesModalPr
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
             <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <div>
                 <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#fff', margin: 0 }}>
@@ -226,7 +226,7 @@ export function UITemplatesModal({ open, onClose, onInsert }: UITemplatesModalPr
               </button>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
               {templates.length > 0 ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', paddingBottom: '1rem' }}>
                   {templates.map((t) => (
