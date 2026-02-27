@@ -44,6 +44,7 @@ import {
   Layout,
   Plus,
   X,
+  Video,
 } from "lucide-react";
 import {
   Dialog,
@@ -79,6 +80,7 @@ export default function EditorPage() {
   const [showCode, setShowCode] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [attachedImages, setAttachedImages] = useState<Array<{base64: string, mimeType: string, preview: string | null, fileName: string}>>([]);
+  const [attachedVideos, setAttachedVideos] = useState<Array<{id: string, url: string, fileName: string, uploading: boolean}>>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
   const [streamingReply, setStreamingReply] = useState("");
@@ -261,7 +263,8 @@ export default function EditorPage() {
   const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string, multiPagesData?: string, seoH1Data?: string, seoH2sData?: string, injectedImages?: Array<{base64: string, mimeType: string, preview: string | null, fileName: string}>) => {
     let text = customPrompt || prompt;
     const effectiveImages = injectedImages || attachedImages;
-    if (!text.trim() && effectiveImages.length === 0) return;
+    const effectiveVideos = attachedVideos.filter(v => !v.uploading && v.url);
+    if (!text.trim() && effectiveImages.length === 0 && effectiveVideos.length === 0) return;
 
     if (selectedElement && !customPrompt) {
       const elRef = `[Выбранный элемент: <${selectedElement.tag}>${selectedElement.classes ? ` class="${selectedElement.classes}"` : ''} — "${selectedElement.text.substring(0, 80)}"\nHTML: ${selectedElement.outerSnippet}]\n\n`;
@@ -278,27 +281,26 @@ export default function EditorPage() {
 
     const images = effectiveImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
     const sentPreviews = effectiveImages.filter(img => img.preview).map(img => ({ preview: img.preview!, fileName: img.fileName }));
+    const videoUrls = effectiveVideos.map(v => ({ url: v.url, fileName: v.fileName }));
 
-    // Сразу очищаем прикреплённые файлы из поля ввода
     setAttachedImages([]);
+    setAttachedVideos([]);
 
-    // Оптимистичное добавление сообщения в UI с превью картинок
     const imageInfo = sentPreviews.length > 0 ? `\n__IMAGES__${JSON.stringify(sentPreviews)}` : "";
+    const videoInfo = videoUrls.length > 0 ? `\n__VIDEOS__${JSON.stringify(videoUrls.map(v => ({ fileName: v.fileName })))}` : "";
     const tempUserMessage: ProjectMessage = {
       id: Math.random(),
       projectId,
       role: "user",
-      content: text + imageInfo,
+      content: text + imageInfo + videoInfo,
       createdAt: new Date()
     };
     
-    // Временно обновляем кэш сообщений для мгновенного отображения
     queryClient.setQueryData(["/api/projects", projectId, "messages"], (old: ProjectMessage[] | undefined) => {
       const messages = [...(old || []), tempUserMessage];
       return messages;
     });
 
-    // Прокрутка вниз после добавления сообщения
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, 100);
@@ -306,6 +308,9 @@ export default function EditorPage() {
     try {
       const isMockupActive = injectedImages ? true : mockupMode;
       const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance, mockupMode: isMockupActive && images.length > 0 };
+      if (videoUrls.length > 0) {
+        bodyData.videoUrls = videoUrls;
+      }
       if (deepResearchData) {
         bodyData.deepResearchData = deepResearchData;
       }
@@ -424,7 +429,7 @@ export default function EditorPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, projectId, attachedImages, activeFile, toast, selectedElement]);
+  }, [prompt, projectId, attachedImages, attachedVideos, activeFile, toast, selectedElement]);
 
   const handleDownloadZip = async () => {
     const indexCode = project?.generatedCode || currentCode;
@@ -728,24 +733,65 @@ export default function EditorPage() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    let imageCount = 0;
+    let videoCount = 0;
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        const b64 = dataUrl.split(",")[1];
-        const isImage = file.type.startsWith("image/");
-        setAttachedImages(prev => [...prev, {
-          base64: b64,
-          mimeType: file.type || "application/octet-stream",
-          preview: isImage ? dataUrl : null,
-          fileName: file.name,
-        }]);
-      };
-      reader.readAsDataURL(file);
+      if (file.type.startsWith("video/")) {
+        videoCount++;
+        if (file.size > 100 * 1024 * 1024) {
+          toast({ title: "Файл слишком большой", description: "Максимальный размер видео — 100 МБ", variant: "destructive" });
+          continue;
+        }
+        const uploadId = `video-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`;
+        setAttachedVideos(prev => [...prev, { id: uploadId, url: "", fileName: file.name, uploading: true }]);
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const dataUrl = reader.result as string;
+          const b64 = dataUrl.split(",")[1];
+          try {
+            const resp = await fetch("/api/upload-image", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ base64: b64, mimeType: file.type, name: file.name }),
+            });
+            const data = await resp.json();
+            if (resp.ok && data.url) {
+              setAttachedVideos(prev => prev.map(v => v.id === uploadId ? { ...v, url: data.url, uploading: false } : v));
+            } else {
+              setAttachedVideos(prev => prev.filter(v => v.id !== uploadId));
+              toast({ title: "Ошибка загрузки видео", description: data?.message, variant: "destructive" });
+            }
+          } catch {
+            setAttachedVideos(prev => prev.filter(v => v.id !== uploadId));
+            toast({ title: "Ошибка загрузки видео", variant: "destructive" });
+          }
+        };
+        reader.readAsDataURL(file);
+      } else {
+        imageCount++;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          const b64 = dataUrl.split(",")[1];
+          const isImage = file.type.startsWith("image/");
+          setAttachedImages(prev => [...prev, {
+            base64: b64,
+            mimeType: file.type || "application/octet-stream",
+            preview: isImage ? dataUrl : null,
+            fileName: file.name,
+          }]);
+        };
+        reader.readAsDataURL(file);
+      }
     }
     if (e.target) e.target.value = "";
-    toast({ title: `${files.length > 1 ? files.length + " файлов" : "Файл"} прикреплён`, description: "Можно отправить вместе с промтом" });
+    const total = imageCount + videoCount;
+    if (total > 0) {
+      toast({ title: `${total > 1 ? total + " файлов" : "Файл"} прикреплён`, description: "Можно отправить вместе с промтом" });
+    }
   };
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -1400,21 +1446,34 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 return (
                     <div key={msg.id} className={`rounded-2xl p-4 text-sm font-medium shadow-skeuo-md min-w-0 ${msg.role === "user" ? "bg-primary text-white ml-auto max-w-[85%]" : "bg-white dark:bg-slate-800 mr-auto"}`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                       {msg.role === "user" ? (() => {
-                        const hasImages = msg.content.includes("\n__IMAGES__");
-                        const textContent = hasImages ? msg.content.split("\n__IMAGES__")[0] : msg.content;
+                        let contentStr = msg.content;
                         let imgPreviews: Array<{preview: string, fileName: string}> = [];
-                        if (hasImages) {
-                          try { imgPreviews = JSON.parse(msg.content.split("\n__IMAGES__")[1]); } catch {}
+                        let vidPreviews: Array<{fileName: string}> = [];
+                        if (contentStr.includes("\n__VIDEOS__")) {
+                          const [before, after] = contentStr.split("\n__VIDEOS__");
+                          contentStr = before;
+                          try { vidPreviews = JSON.parse(after); } catch {}
+                        }
+                        if (contentStr.includes("\n__IMAGES__")) {
+                          const [before, after] = contentStr.split("\n__IMAGES__");
+                          contentStr = before;
+                          try { imgPreviews = JSON.parse(after); } catch {}
                         }
                         return (
                           <div style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
-                            {textContent}
-                            {imgPreviews.length > 0 && (
+                            {contentStr}
+                            {(imgPreviews.length > 0 || vidPreviews.length > 0) && (
                               <div className="flex flex-wrap gap-2 mt-2">
                                 {imgPreviews.map((img, i) => (
-                                  <div key={i} className="flex items-center gap-2 bg-white/15 rounded-lg px-2 py-1.5">
+                                  <div key={`img-${i}`} className="flex items-center gap-2 bg-white/15 rounded-lg px-2 py-1.5">
                                     <img src={img.preview} className="w-8 h-8 object-cover rounded" />
                                     <span className="text-[11px] opacity-80 max-w-[100px] truncate">{img.fileName}</span>
+                                  </div>
+                                ))}
+                                {vidPreviews.map((vid, i) => (
+                                  <div key={`vid-${i}`} className="flex items-center gap-2 bg-white/15 rounded-lg px-2 py-1.5">
+                                    <Video className="w-4 h-4 opacity-80" />
+                                    <span className="text-[11px] opacity-80 max-w-[100px] truncate">{vid.fileName}</span>
                                   </div>
                                 ))}
                               </div>
@@ -1499,11 +1558,11 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 </button>
               </div>
             )}
-            {attachedImages.length > 0 && (
+            {(attachedImages.length > 0 || attachedVideos.length > 0) && (
               <div className="mb-3 space-y-2">
                 <div className="flex flex-wrap gap-2">
                   {attachedImages.map((img, idx) => (
-                    <div key={idx} className="relative group inline-flex items-center gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 shadow-sm border border-slate-200/50 dark:border-slate-700/50">
+                    <div key={`img-${idx}`} className="relative group inline-flex items-center gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 shadow-sm border border-slate-200/50 dark:border-slate-700/50">
                       {img.preview ? (
                         <img src={img.preview} className="w-12 h-12 object-cover rounded-md" />
                       ) : (
@@ -1513,6 +1572,22 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       )}
                       <span className="text-xs text-slate-500 dark:text-slate-400 max-w-[80px] truncate">{img.fileName}</span>
                       <button className="ml-1 text-slate-400 hover:text-destructive transition-colors" onClick={() => setAttachedImages(prev => prev.filter((_, i) => i !== idx))}>
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {attachedVideos.map((vid, idx) => (
+                    <div key={`vid-${idx}`} className="relative group inline-flex items-center gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 shadow-sm border border-slate-200/50 dark:border-slate-700/50">
+                      <div className="w-12 h-12 rounded-md bg-gradient-to-br from-blue-500/20 to-purple-500/20 dark:from-blue-500/30 dark:to-purple-500/30 flex items-center justify-center">
+                        {vid.uploading ? (
+                          <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                        ) : (
+                          <Video className="w-5 h-5 text-blue-500" />
+                        )}
+                      </div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 max-w-[80px] truncate">{vid.fileName}</span>
+                      {vid.uploading && <span className="text-[10px] text-blue-400">загрузка...</span>}
+                      <button className="ml-1 text-slate-400 hover:text-destructive transition-colors" onClick={() => setAttachedVideos(prev => prev.filter((_, i) => i !== idx))}>
                         <XCircle className="w-4 h-4" />
                       </button>
                     </div>
@@ -1531,7 +1606,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             )}
             <div className="relative flex items-end">
-              <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx" multiple onChange={handleImageUpload} className="hidden" />
+              <input ref={fileInputRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx" multiple onChange={handleImageUpload} className="hidden" />
               <div className="flex-1 relative bg-white dark:bg-slate-900 rounded-2xl shadow-skeuo-inner border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
                 <Textarea 
                   placeholder={selectedElement ? "Напишите, что сделать с выбранным элементом..." : "Редактируйте блоки, вставляйте изображения, видео, SVG анимацию, меняйте дизайн."}
@@ -1554,7 +1629,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   </button>
                   <button
                     onClick={() => handleGenerate()}
-                    disabled={isGenerating || (!prompt.trim() && attachedImages.length === 0)}
+                    disabled={isGenerating || (!prompt.trim() && attachedImages.length === 0 && attachedVideos.filter(v => !v.uploading).length === 0)}
                     className="h-8 w-8 rounded-lg flex items-center justify-center bg-primary text-white shadow-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     data-testid="button-send"
                   >

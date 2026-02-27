@@ -249,18 +249,32 @@ export async function registerRoutes(
 
   registerObjectStorageRoutes(app);
 
+  const ALLOWED_UPLOAD_MIMES: Record<string, string> = {
+    "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/webp": "webp",
+    "image/gif": "gif", "image/svg+xml": "svg",
+    "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "video/ogg": "ogg",
+  };
+  const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
+  const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+
   app.post("/api/upload-image", bypassAuth, async (req, res) => {
     try {
       const { base64, mimeType, name } = req.body;
-      if (!base64) return res.status(400).json({ message: "Нет данных изображения" });
-      const mime = mimeType || "image/png";
-      const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
+      if (!base64) return res.status(400).json({ message: "Нет данных файла" });
+      const mime = (mimeType || "image/png").toLowerCase();
+      const ext = ALLOWED_UPLOAD_MIMES[mime];
+      if (!ext) return res.status(400).json({ message: "Неподдерживаемый формат файла" });
       const buffer = Buffer.from(base64, "base64");
+      const isVideo = mime.startsWith("video/");
+      const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+      if (buffer.length > maxSize) {
+        return res.status(400).json({ message: `Файл слишком большой. Максимум: ${Math.round(maxSize / 1024 / 1024)} МБ` });
+      }
       const url = await uploadToObjectStorage(buffer, mime, ext);
       res.json({ url, filename: name || `${crypto.randomUUID()}.${ext}` });
     } catch (err) {
       console.error("Upload error:", err);
-      res.status(500).json({ message: "Ошибка загрузки изображения" });
+      res.status(500).json({ message: "Ошибка загрузки файла" });
     }
   });
 
@@ -400,7 +414,7 @@ export async function registerRoutes(
 
       const GENERATION_COST = 100;
 
-      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode } = req.body;
+      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, videoUrls } = req.body;
       const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
         Array.isArray(images) && images.length > 0 ? images 
         : imageBase64 ? [{ base64: imageBase64, mimeType: imageMimeType || "image/png" }] 
@@ -457,13 +471,22 @@ export async function registerRoutes(
       if (projectImgs.length > 0) {
         systemContent += `\n\nДОСТУПНЫЕ ИЗОБРАЖЕНИЯ В БИБЛИОТЕКЕ ПОЛЬЗОВАТЕЛЯ:\n`;
         for (const img of projectImgs) {
-          if (img.url.startsWith("/uploads/")) {
+          if (img.url.startsWith("/uploads/") || img.url.startsWith("/objects/")) {
             systemContent += `- "${img.name}" — ПРЯМОЙ URL: ${img.url} (описание: ${img.prompt})\n`;
           } else {
             systemContent += `- "${img.name}" — маркер: {{IMG:${img.name}}} (описание: ${img.prompt})\n`;
           }
         }
-        systemContent += `\nДля загруженных фото (с URL /uploads/...) — используй URL напрямую: <img src="/uploads/xxx.png" />\nДля AI-сгенерированных изображений — используй маркер {{IMG:имя}}: <img src="{{IMG:имя}}" />`;
+        systemContent += `\nДля загруженных фото (с URL /uploads/... или /objects/...) — используй URL напрямую: <img src="URL" />\nДля AI-сгенерированных изображений — используй маркер {{IMG:имя}}: <img src="{{IMG:имя}}" />`;
+      }
+
+      const videoArray: Array<{url: string, fileName: string}> = Array.isArray(videoUrls) ? videoUrls : [];
+      if (videoArray.length > 0) {
+        systemContent += `\n\n═══ ЗАГРУЖЕННЫЕ ВИДЕО ПОЛЬЗОВАТЕЛЯ ═══\nПользователь прикрепил видеофайлы. ОБЯЗАТЕЛЬНО встрой их на сайт с помощью тега <video>:\n`;
+        for (const vid of videoArray) {
+          systemContent += `- "${vid.fileName}" — URL: ${vid.url}\n`;
+        }
+        systemContent += `\nИспользуй тег <video> с атрибутами controls, playsinline, и при необходимости autoplay muted loop:\n<video src="${videoArray[0].url}" controls playsinline style="width:100%; max-width:800px; border-radius:12px;"></video>\n\nМожно использовать видео как:\n- Фоновое видео секции (autoplay muted loop, без controls)\n- Видеоплеер в контенте (с controls)\n- Hero-видео с наложением текста\nВыбери подходящий вариант исходя из контекста запроса пользователя.\n═══ КОНЕЦ ВИДЕО ═══\n`;
       }
 
       const isEditMode = !!project.generatedCode;

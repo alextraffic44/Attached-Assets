@@ -42,6 +42,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - Auto web research before first generation (Google Search grounding, 7+ sources)
 - High-end design output: Awwwards-level quality with scroll animations, glassmorphism, noise textures, deep shadows
 - Photo/screenshot to website (Vision API)
+- Video upload support: attach video files in chat → uploaded to object storage → AI embeds `<video>` tags (mp4/webm/mov/ogg, max 100MB)
 - Manual AI image generation via Nano Banana 2 (create task → poll → insert into HTML, 2K resolution, 10 tokens)
 - Named image library with {{IMG:name}} marker system
 - Styled gradient placeholder blocks for images (users replace via AI generator or upload)
