@@ -957,10 +957,10 @@ ${designAnalysis}
 
   app.post("/api/images/generate", bypassAuth, async (req, res) => {
     try {
-      const IMAGE_COST = 15;
+      const IMAGE_COST = 10;
       const user = req.user as any;
 
-      const { prompt, imageSize = "16:9", outputFormat = "png", idempotencyKey } = req.body;
+      const { prompt, aspectRatio = "16:9", outputFormat = "jpg", idempotencyKey } = req.body;
       if (!prompt) {
         return res.status(400).json({ message: "Промпт обязателен" });
       }
@@ -978,11 +978,12 @@ ${designAnalysis}
           "Authorization": `Bearer ${KIE_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "google/nano-banana",
+          model: "nano-banana-2",
           input: {
             prompt,
             output_format: outputFormat,
-            image_size: imageSize,
+            aspect_ratio: aspectRatio,
+            resolution: "2K",
           },
         }),
       });

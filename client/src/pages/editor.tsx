@@ -774,13 +774,13 @@ export default function EditorPage() {
     setImgStatus("creating");
     setImgResultUrls([]);
     setImgError("");
-    queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 15) } : old);
+    queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 10) } : old);
 
     try {
       const resp = await fetch("/api/images/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: imgPrompt, imageSize: imgSize }),
+        body: JSON.stringify({ prompt: imgPrompt, aspectRatio: imgSize }),
         credentials: "include",
       });
       const data = await resp.json();

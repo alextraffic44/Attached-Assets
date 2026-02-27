@@ -71,6 +71,8 @@ export default function DashboardPage() {
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImage, setPhotoImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const [mockupPrompt, setMockupPrompt] = useState("");
+  const [mockupGenerating, setMockupGenerating] = useState(false);
 
   const { data: userProjects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -624,21 +626,96 @@ export default function DashboardPage() {
                               </div>
                             </div>
                           ) : (
-                            <button
-                              type="button"
-                              data-testid="button-upload-photo"
-                              onClick={() => photoInputRef.current?.click()}
-                              className="flex-1 flex flex-col items-center justify-center gap-3 rounded-xl transition-all hover:border-purple-400"
-                              style={{ border: '2px dashed rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.02)', minHeight: 140, cursor: 'pointer' }}
-                            >
-                              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(139,92,246,0.08)' }}>
-                                <Upload className="w-6 h-6" style={{ color: '#8B5CF6' }} />
+                            <div className="flex flex-col gap-2 flex-1">
+                              <button
+                                type="button"
+                                data-testid="button-upload-photo"
+                                onClick={() => photoInputRef.current?.click()}
+                                className="flex-1 flex flex-col items-center justify-center gap-2 rounded-xl transition-all hover:border-purple-400"
+                                style={{ border: '2px dashed rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.02)', minHeight: 100, cursor: 'pointer' }}
+                              >
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(139,92,246,0.08)' }}>
+                                  <Upload className="w-5 h-5" style={{ color: '#8B5CF6' }} />
+                                </div>
+                                <div className="text-center">
+                                  <p className="text-sm font-semibold" style={{ color: '#6D28D9' }}>Загрузить скриншот</p>
+                                  <p className="text-xs mt-0.5" style={{ color: '#A78BFA' }}>PNG, JPG, WEBP до 5 МБ</p>
+                                </div>
+                              </button>
+                              <div className="rounded-xl p-2.5" style={{ background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.15)' }}>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    data-testid="input-mockup-prompt"
+                                    placeholder="Опишите макет..."
+                                    value={mockupPrompt}
+                                    onChange={e => setMockupPrompt(e.target.value)}
+                                    className="flex-1 text-xs rounded-lg px-2.5 py-2 font-medium"
+                                    style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(139,92,246,0.2)', outline: 'none', color: '#1D1D1F' }}
+                                    disabled={mockupGenerating}
+                                  />
+                                  <button
+                                    type="button"
+                                    data-testid="button-generate-mockup"
+                                    disabled={!mockupPrompt.trim() || mockupGenerating}
+                                    onClick={async () => {
+                                      if (!mockupPrompt.trim()) return;
+                                      setMockupGenerating(true);
+                                      try {
+                                        const resp = await fetch("/api/images/generate", {
+                                          method: "POST",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ prompt: mockupPrompt, aspectRatio: "16:9" }),
+                                          credentials: "include",
+                                        });
+                                        const data = await resp.json();
+                                        if (!resp.ok) throw new Error(data.message);
+                                        if (data.newBalance !== undefined) {
+                                          queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
+                                        }
+                                        const taskId = data.taskId;
+                                        const poll = setInterval(async () => {
+                                          try {
+                                            const sr = await fetch(`/api/images/status/${taskId}`, { credentials: "include" });
+                                            const sd = await sr.json();
+                                            if (sd.state === "success" && sd.urls?.[0]) {
+                                              clearInterval(poll);
+                                              const imgResp = await fetch(sd.urls[0]);
+                                              const blob = await imgResp.blob();
+                                              const reader = new FileReader();
+                                              reader.onload = () => {
+                                                const dataUrl = reader.result as string;
+                                                const base64 = dataUrl.split(",")[1];
+                                                setPhotoImage({ base64, mimeType: "image/jpeg", preview: dataUrl });
+                                                setMockupGenerating(false);
+                                              };
+                                              reader.readAsDataURL(blob);
+                                            } else if (sd.state === "fail") {
+                                              clearInterval(poll);
+                                              toast({ title: "Ошибка генерации", description: sd.error || "Не удалось создать макет", variant: "destructive" });
+                                              setMockupGenerating(false);
+                                            }
+                                          } catch {
+                                            clearInterval(poll);
+                                            setMockupGenerating(false);
+                                          }
+                                        }, 3000);
+                                        setTimeout(() => { clearInterval(poll); setMockupGenerating(false); }, 180000);
+                                      } catch (err: any) {
+                                        toast({ title: "Ошибка", description: err.message || "Не удалось создать макет", variant: "destructive" });
+                                        setMockupGenerating(false);
+                                      }
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
+                                    style={{ background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)', cursor: mockupGenerating ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}
+                                  >
+                                    {mockupGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                                    {mockupGenerating ? "Генерация..." : "Создать"}
+                                  </button>
+                                </div>
+                                <p className="text-[10px] mt-1.5" style={{ color: '#A78BFA' }}>AI сгенерирует макет (10 токенов)</p>
                               </div>
-                              <div className="text-center">
-                                <p className="text-sm font-semibold" style={{ color: '#6D28D9' }}>Загрузить скриншот</p>
-                                <p className="text-xs mt-1" style={{ color: '#A78BFA' }}>PNG, JPG, WEBP до 5 МБ</p>
-                              </div>
-                            </button>
+                            </div>
                           )}
                         </div>
                       ) : (
