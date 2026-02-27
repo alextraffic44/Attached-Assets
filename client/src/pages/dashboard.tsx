@@ -113,6 +113,17 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen pb-20 relative overflow-hidden" style={{ background: '#FBFBFD', fontFamily: appleFont }}>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .uv-topup{cursor:pointer;position:relative;border-radius:100em;background-color:rgba(15,15,15,0.9);box-shadow:-0.15em -0.15em 0.15em -0.075em rgba(80,80,80,0.15),0.0375em 0.0375em 0.0675em 0 rgba(0,0,0,0.3);}
+        .uv-topup::after{content:"";position:absolute;z-index:0;width:calc(100% + 0.3em);height:calc(100% + 0.3em);top:-0.15em;left:-0.15em;border-radius:inherit;background:linear-gradient(-135deg,rgba(120,120,120,0.3),transparent 20%,transparent 100%);filter:blur(0.0125em);opacity:0.3;mix-blend-mode:screen;}
+        .uv-topup-outer{position:relative;z-index:1;border-radius:inherit;transition:box-shadow 300ms ease;will-change:box-shadow;box-shadow:0 0.05em 0.05em -0.01em rgba(0,0,0,1),0 0.01em 0.01em -0.01em rgba(0,0,0,0.5),0.15em 0.3em 0.1em -0.01em rgba(0,0,0,0.4);}
+        .uv-topup-btn:hover .uv-topup-outer{box-shadow:0 0 0 0 rgba(0,0,0,1),0 0 0 0 rgba(0,0,0,0.5),0 0 0 0 rgba(0,0,0,0.4);}
+        .uv-topup-inner{position:relative;z-index:1;border-radius:inherit;padding:0.45em 1.2em;background-image:linear-gradient(135deg,rgba(55,55,60,1),rgba(20,20,22,1));transition:box-shadow 300ms ease,clip-path 250ms ease,transform 250ms ease;will-change:box-shadow,clip-path,transform;overflow:clip;clip-path:inset(0 0 0 0 round 100em);box-shadow:0 0 0 0 inset rgba(255,255,255,0.05),-0.05em -0.05em 0.05em 0 inset rgba(0,0,0,0.6),0 0 0 0 inset rgba(0,0,0,0.2),0 0 0.05em 0.2em inset rgba(255,255,255,0.04),0.025em 0.05em 0.1em 0 inset rgba(255,255,255,0.08),0.12em 0.12em 0.12em inset rgba(255,255,255,0.05),-0.075em -0.25em 0.25em 0.1em inset rgba(0,0,0,0.5);}
+        .uv-topup-btn:hover .uv-topup-inner{clip-path:inset(clamp(1px,0.0625em,2px) clamp(1px,0.0625em,2px) clamp(1px,0.0625em,2px) clamp(1px,0.0625em,2px) round 100em);box-shadow:0.1em 0.15em 0.05em 0 inset rgba(0,0,0,0.9),-0.025em -0.03em 0.05em 0.025em inset rgba(0,0,0,0.7),0.25em 0.25em 0.2em 0 inset rgba(0,0,0,0.6),0 0 0.05em 0.5em inset rgba(255,255,255,0.03),0 0 0 0 inset rgba(255,255,255,0.08),0.12em 0.12em 0.12em inset rgba(255,255,255,0.04),-0.075em -0.12em 0.2em 0.1em inset rgba(0,0,0,0.5);}
+        .uv-topup-btn:active .uv-topup-inner{transform:scale(0.975);}
+        .uv-topup-inner span{position:relative;z-index:4;letter-spacing:-0.01em;font-weight:600;font-size:0.82rem;color:rgba(255,255,255,0);background-image:linear-gradient(135deg,rgba(255,255,255,0.95),rgba(200,200,210,0.85));-webkit-background-clip:text;background-clip:text;display:block;user-select:none;text-shadow:rgba(0,0,0,0.3) 0 0 0.2em;transition:transform 250ms ease;}
+        .uv-topup-btn:hover .uv-topup-inner span{transform:scale(0.975);}
+      ` }} />
       {/* Ambient glows matching landing page */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80%] h-[60%] pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(66,165,255,0.07) 0%, transparent 70%)' }} />
       <div className="absolute top-0 left-0 right-0 h-px pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent, rgba(66,165,255,0.3), rgba(181,66,255,0.3), transparent)' }} />
@@ -165,10 +176,16 @@ export default function DashboardPage() {
             <button
               data-testid="button-topup"
               onClick={() => setShowTopUpModal(true)}
-              className="transition-all hover:opacity-80"
-              style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 100, padding: '0.45rem 1.2rem', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', letterSpacing: '-0.01em' }}
+              className="uv-topup-btn"
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
             >
-              Пополнить
+              <div className="uv-topup">
+                <div className="uv-topup-outer">
+                  <div className="uv-topup-inner">
+                    <span>Пополнить</span>
+                  </div>
+                </div>
+              </div>
             </button>
 
             {/* Profile avatar button */}
