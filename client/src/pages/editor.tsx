@@ -1198,12 +1198,25 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           <Button variant="ghost" size="icon" className="rounded-xl shadow-skeuo-sm bg-white dark:bg-slate-900" onClick={() => setLocation("/dashboard")} data-testid="button-back">
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-1.5 leading-none mb-1">
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
-              <span className="text-sm font-black uppercase tracking-widest text-primary leading-none">Craft AI</span>
+          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setLocation("/")}>
+            <svg viewBox="0 0 32 32" stroke="currentColor" strokeWidth="2" fill="none" style={{ width: 32, height: 32 }}>
+              <defs>
+                <linearGradient id="db-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%"><animate attributeName="stop-color" values="#FF4242;#A5FF42;#42A5FF;#42E6FF;#B742FF;#FF4242" dur="5s" repeatCount="indefinite"/></stop>
+                  <stop offset="100%"><animate attributeName="stop-color" values="#B742FF;#FF4242;#A5FF42;#42A5FF;#42E6FF;#B742FF" dur="5s" repeatCount="indefinite"/></stop>
+                </linearGradient>
+              </defs>
+              <rect x="4" y="4" width="24" height="18" rx="4" stroke="url(#db-logo-grad)"/>
+              <circle cx="10" cy="10" r="1.5" fill="url(#db-logo-grad)" stroke="none"/>
+              <circle cx="22" cy="10" r="1.5" fill="url(#db-logo-grad)" stroke="none"/>
+              <path d="M12 16l-2 2 2 2 M20 16l2 2-2 2" stroke="url(#db-logo-grad)" strokeLinecap="round" strokeLinejoin="round"/>
+              <line x1="15" y1="20" x2="17" y2="20" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
+              <path d="M8 26 h16 M10 28 h12" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
+            </svg>
+            <div className="flex flex-col">
+              <span style={{ fontWeight: 700, fontSize: '1.1rem', letterSpacing: '-0.03em', color: '#1D1D1F', lineHeight: 1 }}>Craft AI</span>
+              <h1 className="text-xs font-bold tracking-tight text-slate-400 mt-0.5" data-testid="text-project-title">{project?.title}</h1>
             </div>
-            <h1 className="text-xl font-black tracking-tighter leading-none" data-testid="text-project-title">{project?.title}</h1>
           </div>
         </div>
 
