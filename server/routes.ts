@@ -1020,7 +1020,7 @@ ${designAnalysis}
       const IMAGE_COST = 10;
       const user = req.user as any;
 
-      const { prompt, aspectRatio = "16:9", outputFormat = "jpg", idempotencyKey } = req.body;
+      const { prompt, aspectRatio = "16:9", outputFormat = "jpg", idempotencyKey, referenceImageUrl } = req.body;
       if (!prompt) {
         return res.status(400).json({ message: "Промпт обязателен" });
       }
@@ -1031,6 +1031,17 @@ ${designAnalysis}
         return res.status(402).json({ message: `Недостаточно токенов. Нужно ${IMAGE_COST}, у вас ${deduction.newBalance}`, newBalance: deduction.newBalance });
       }
 
+      const inputPayload: any = {
+        prompt,
+        output_format: outputFormat,
+        aspect_ratio: aspectRatio,
+        resolution: "2K",
+      };
+      if (referenceImageUrl) {
+        const fullRefUrl = referenceImageUrl.startsWith("http") ? referenceImageUrl : `https://${req.headers.host}${referenceImageUrl}`;
+        inputPayload.image_url = fullRefUrl;
+      }
+
       const createResp = await fetch(NANO_BANANA_CREATE_URL, {
         method: "POST",
         headers: {
@@ -1039,12 +1050,7 @@ ${designAnalysis}
         },
         body: JSON.stringify({
           model: "nano-banana-2",
-          input: {
-            prompt,
-            output_format: outputFormat,
-            aspect_ratio: aspectRatio,
-            resolution: "2K",
-          },
+          input: inputPayload,
         }),
       });
 

@@ -112,6 +112,10 @@ export default function EditorPage() {
   const [imgStatus, setImgStatus] = useState<"idle" | "creating" | "waiting" | "success" | "fail">("idle");
   const [imgResultUrls, setImgResultUrls] = useState<string[]>([]);
   const [imgError, setImgError] = useState("");
+  const [imgRefUrl, setImgRefUrl] = useState<string>("");
+  const [imgRefPreview, setImgRefPreview] = useState<string>("");
+  const [imgRefUploading, setImgRefUploading] = useState(false);
+  const imgRefInputRef = useRef<HTMLInputElement>(null);
 
   const [mockupMode, setMockupMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -819,6 +823,40 @@ export default function EditorPage() {
     }
   }, [toast]);
 
+  const handleRefImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (e.target) e.target.value = "";
+    setImgRefUploading(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      setImgRefPreview(dataUrl);
+      const b64 = dataUrl.split(",")[1];
+      try {
+        const resp = await fetch("/api/upload-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ base64: b64, mimeType: file.type, name: file.name }),
+        });
+        const data = await resp.json();
+        if (resp.ok && data.url) {
+          setImgRefUrl(data.url);
+        } else {
+          setImgRefPreview("");
+          toast({ title: "Ошибка загрузки референса", variant: "destructive" });
+        }
+      } catch {
+        setImgRefPreview("");
+        toast({ title: "Ошибка загрузки", variant: "destructive" });
+      } finally {
+        setImgRefUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  }, [toast]);
+
   const handleGenerateImage = useCallback(async () => {
     if (!imgPrompt.trim() || !imgName.trim()) return;
     setImgGenerating(true);
@@ -828,10 +866,12 @@ export default function EditorPage() {
     queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 10) } : old);
 
     try {
+      const bodyData: any = { prompt: imgPrompt, aspectRatio: imgSize };
+      if (imgRefUrl) bodyData.referenceImageUrl = imgRefUrl;
       const resp = await fetch("/api/images/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: imgPrompt, aspectRatio: imgSize }),
+        body: JSON.stringify(bodyData),
         credentials: "include",
       });
       const data = await resp.json();
@@ -873,7 +913,7 @@ export default function EditorPage() {
       setImgStatus("fail");
       setImgGenerating(false);
     }
-  }, [imgPrompt, imgSize, imgName]);
+  }, [imgPrompt, imgSize, imgName, imgRefUrl]);
 
   const handleSaveImage = useCallback(async (url: string) => {
     try {
@@ -1909,16 +1949,16 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       <Dialog open={imgGenOpen} onOpenChange={setImgGenOpen}>
         <DialogContent className="sm:max-w-lg p-0 bg-white dark:bg-slate-900 border-0 shadow-[0_25px_60px_-12px_rgba(0,0,0,0.25)] rounded-3xl max-h-[85vh] overflow-hidden" aria-describedby="img-gen-description">
           <div className="relative overflow-y-auto max-h-[85vh]">
-            <div className="px-7 pt-7 pb-5">
+            <div className="px-7 pt-7 pb-4">
               <DialogHeader>
                 <DialogTitle className="text-xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
                     <Wand2 className="w-5 h-5 text-white" />
                   </div>
-                  AI Генератор
+                  Nano Banana 2
                 </DialogTitle>
-                <DialogDescription id="img-gen-description" className="text-slate-400 dark:text-slate-500 text-sm mt-1.5 ml-[52px]">
-                  Nano Banana 2 · 2K · 10 токенов
+                <DialogDescription id="img-gen-description" className="text-slate-400 dark:text-slate-500 text-[13px] mt-1.5 ml-[52px] leading-relaxed">
+                  Создавайте невероятные изображения в разрешении 2K, добавляйте референсы для похожего результата
                 </DialogDescription>
               </DialogHeader>
             </div>
@@ -1931,7 +1971,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                     placeholder="hero, баннер, фон..."
                     value={imgName}
                     onChange={e => setImgName(e.target.value)}
-                    className="rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-violet-400 focus:ring-violet-400/20 h-10 text-sm"
+                    className="rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-blue-400 focus:ring-blue-400/20 h-10 text-sm"
                     disabled={imgGenerating}
                     data-testid="input-image-name"
                   />
@@ -1962,14 +2002,46 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   placeholder="Опишите что должно быть на изображении..."
                   value={imgPrompt}
                   onChange={e => setImgPrompt(e.target.value)}
-                  className="min-h-[80px] rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-violet-400 focus:ring-violet-400/20 resize-none text-sm"
+                  className="min-h-[80px] rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-blue-400 focus:ring-blue-400/20 resize-none text-sm"
                   disabled={imgGenerating}
                   data-testid="input-image-prompt"
                 />
               </div>
 
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Референс (необязательно)</label>
+                <input ref={imgRefInputRef} type="file" accept="image/*" className="hidden" onChange={handleRefImageUpload} />
+                {imgRefPreview ? (
+                  <div className="relative inline-block">
+                    <img src={imgRefPreview} className="w-20 h-20 object-cover rounded-xl border-2 border-blue-200 dark:border-blue-500/30 shadow-sm" data-testid="img-reference-preview" />
+                    {imgRefUploading && (
+                      <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center">
+                        <Loader2 className="w-5 h-5 text-white animate-spin" />
+                      </div>
+                    )}
+                    <button
+                      onClick={() => { setImgRefPreview(""); setImgRefUrl(""); }}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs shadow-md transition-colors"
+                      data-testid="button-remove-reference"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => imgRefInputRef.current?.click()}
+                    disabled={imgGenerating}
+                    className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-blue-300 hover:text-blue-500 dark:hover:border-blue-500/40 dark:hover:text-blue-400 transition-all text-sm disabled:opacity-40"
+                    data-testid="button-add-reference"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                    Добавить фото-референс
+                  </button>
+                )}
+              </div>
+
               <Button
-                className="w-full rounded-xl font-bold h-11 bg-gradient-to-r from-violet-600 to-purple-500 hover:from-violet-500 hover:to-purple-400 text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 transition-all border-0 text-sm"
+                className="w-full rounded-xl font-bold h-11 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all border-0 text-sm"
                 onClick={handleGenerateImage}
                 disabled={imgGenerating || !imgPrompt.trim() || !imgName.trim()}
                 data-testid="button-generate-image"
@@ -1977,18 +2049,18 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 {imgGenerating ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {imgStatus === "creating" ? "Создаём задачу..." : "Генерируем изображение..."}</>
                 ) : (
-                  <><Sparkles className="w-4 h-4 mr-2" /> Сгенерировать</>
+                  <><Sparkles className="w-4 h-4 mr-2" /> Сгенерировать · 10 токенов</>
                 )}
               </Button>
 
               {imgStatus === "waiting" && (
-                <div className="flex items-center gap-3 p-3.5 bg-violet-50 dark:bg-violet-500/10 rounded-xl border border-violet-200 dark:border-violet-500/20">
-                  <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
-                    <Loader2 className="w-4 h-4 animate-spin text-violet-600 dark:text-violet-400" />
+                <div className="flex items-center gap-3 p-3.5 bg-blue-50 dark:bg-blue-500/10 rounded-xl border border-blue-200 dark:border-blue-500/20">
+                  <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-violet-700 dark:text-violet-300">Генерация...</p>
-                    <p className="text-xs text-violet-500/70 dark:text-violet-400/50">Обычно 15–60 сек</p>
+                    <p className="text-sm font-bold text-blue-700 dark:text-blue-300">Генерация...</p>
+                    <p className="text-xs text-blue-500/70 dark:text-blue-400/50">Обычно 15–60 сек</p>
                   </div>
                 </div>
               )}
@@ -2011,7 +2083,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                     <div key={i} className="space-y-2.5">
                       <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
                         <img src={url} alt={imgName} className="w-full" data-testid={`img-result-${i}`} />
-                        <div className="absolute top-2.5 left-2.5 bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg shadow-emerald-500/30">
+                        <div className="absolute top-2.5 left-2.5 bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg shadow-blue-500/30">
                           <CheckCircle2 className="w-3 h-3" />
                           2K
                         </div>
