@@ -16,6 +16,18 @@ export interface DeployFile {
   content: string;
 }
 
+async function disableProtection(name: string): Promise<void> {
+  try {
+    await fetch(`${VERCEL_API}/v9/projects/${name}`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ ssoProtection: null, passwordProtection: null }),
+    });
+  } catch {
+    // non-critical, ignore
+  }
+}
+
 async function ensureProject(name: string): Promise<string> {
   const getRes = await fetch(`${VERCEL_API}/v9/projects/${name}`, {
     headers: headers(),
@@ -23,6 +35,7 @@ async function ensureProject(name: string): Promise<string> {
 
   if (getRes.ok) {
     const proj = (await getRes.json()) as any;
+    await disableProtection(name);
     return proj.id;
   }
 
@@ -38,6 +51,7 @@ async function ensureProject(name: string): Promise<string> {
       proj?.error?.message || `Cannot create Vercel project: ${createRes.status}`
     );
   }
+  await disableProtection(name);
   return proj.id;
 }
 
