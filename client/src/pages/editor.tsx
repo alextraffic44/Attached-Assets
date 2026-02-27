@@ -746,16 +746,14 @@ export default function EditorPage() {
         }
         const uploadId = `video-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`;
         setAttachedVideos(prev => [...prev, { id: uploadId, url: "", fileName: file.name, uploading: true }]);
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const dataUrl = reader.result as string;
-          const b64 = dataUrl.split(",")[1];
+        const formData = new FormData();
+        formData.append("file", file);
+        (async () => {
           try {
-            const resp = await fetch("/api/upload-image", {
+            const resp = await fetch("/api/upload-file", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
               credentials: "include",
-              body: JSON.stringify({ base64: b64, mimeType: file.type, name: file.name }),
+              body: formData,
             });
             const data = await resp.json();
             if (resp.ok && data.url) {
@@ -768,8 +766,7 @@ export default function EditorPage() {
             setAttachedVideos(prev => prev.filter(v => v.id !== uploadId));
             toast({ title: "Ошибка загрузки видео", variant: "destructive" });
           }
-        };
-        reader.readAsDataURL(file);
+        })();
       } else {
         imageCount++;
         const reader = new FileReader();

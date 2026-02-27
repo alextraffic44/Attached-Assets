@@ -278,6 +278,29 @@ export async function registerRoutes(
     }
   });
 
+  const multer = (await import("multer")).default;
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_VIDEO_SIZE } });
+
+  app.post("/api/upload-file", bypassAuth, upload.single("file"), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ message: "Файл не прикреплён" });
+      const mime = file.mimetype.toLowerCase();
+      const ext = ALLOWED_UPLOAD_MIMES[mime];
+      if (!ext) return res.status(400).json({ message: "Неподдерживаемый формат файла" });
+      const isVideo = mime.startsWith("video/");
+      const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+      if (file.size > maxSize) {
+        return res.status(400).json({ message: `Файл слишком большой. Максимум: ${Math.round(maxSize / 1024 / 1024)} МБ` });
+      }
+      const url = await uploadToObjectStorage(file.buffer, mime, ext);
+      res.json({ url, filename: file.originalname || `${crypto.randomUUID()}.${ext}` });
+    } catch (err) {
+      console.error("Upload file error:", err);
+      res.status(500).json({ message: "Ошибка загрузки файла" });
+    }
+  });
+
   app.get("/api/projects", bypassAuth, async (req, res) => {
     try {
       const user = req.user as any;

@@ -14,14 +14,14 @@ declare module "http" {
 
 app.use(
   express.json({
-    limit: '150mb',
+    limit: '50mb',
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ limit: '150mb', extended: false }));
+app.use(express.urlencoded({ limit: '50mb', extended: false }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
