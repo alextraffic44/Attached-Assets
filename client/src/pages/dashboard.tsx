@@ -587,19 +587,23 @@ export default function DashboardPage() {
                               }
                               const img = new Image();
                               img.onload = () => {
-                                const MAX_DIM = 1920;
-                                let w = img.width, h = img.height;
-                                if (w > MAX_DIM || h > MAX_DIM) {
-                                  const ratio = Math.min(MAX_DIM / w, MAX_DIM / h);
-                                  w = Math.round(w * ratio);
-                                  h = Math.round(h * ratio);
-                                }
-                                const canvas = document.createElement("canvas");
-                                canvas.width = w;
-                                canvas.height = h;
-                                const ctx = canvas.getContext("2d")!;
-                                ctx.drawImage(img, 0, 0, w, h);
-                                const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+                                const compress = (maxDim: number, quality: number) => {
+                                  let w = img.width, h = img.height;
+                                  if (w > maxDim || h > maxDim) {
+                                    const ratio = Math.min(maxDim / w, maxDim / h);
+                                    w = Math.round(w * ratio);
+                                    h = Math.round(h * ratio);
+                                  }
+                                  const canvas = document.createElement("canvas");
+                                  canvas.width = w;
+                                  canvas.height = h;
+                                  const ctx = canvas.getContext("2d")!;
+                                  ctx.drawImage(img, 0, 0, w, h);
+                                  return canvas.toDataURL("image/jpeg", quality);
+                                };
+                                let dataUrl = compress(1280, 0.7);
+                                if (dataUrl.length > 2_500_000) dataUrl = compress(1024, 0.6);
+                                if (dataUrl.length > 2_500_000) dataUrl = compress(800, 0.5);
                                 const base64 = dataUrl.split(",")[1];
                                 setPhotoImage({ base64, mimeType: "image/jpeg", preview: dataUrl });
                                 URL.revokeObjectURL(img.src);
