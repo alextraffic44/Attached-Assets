@@ -4,9 +4,27 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
 import { deployToVercel, addCustomDomain, checkDomainStatus, unpublishFromVercel } from "./vercel-deploy";
+import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+
+const objectStorage = new ObjectStorageService();
+
+async function uploadToObjectStorage(buffer: Buffer, mimeType: string, ext: string): Promise<string> {
+  const objectId = crypto.randomUUID();
+  const objectName = `uploads/${objectId}.${ext}`;
+  const privateDir = objectStorage.getPrivateObjectDir();
+  const fullPath = `${privateDir}/${objectName}`;
+  const parts = fullPath.startsWith("/") ? fullPath.slice(1).split("/") : fullPath.split("/");
+  const bucketName = parts[0];
+  const objectKey = parts.slice(1).join("/");
+  const bucket = objectStorageClient.bucket(bucketName);
+  const file = bucket.file(objectKey);
+  await file.save(buffer, { contentType: mimeType, resumable: false });
+  return `/objects/${objectName}`;
+}
 async function extractTextFromFile(base64Data: string, mimeType: string): Promise<string | null> {
   try {
     const buffer = Buffer.from(base64Data, "base64");
@@ -229,18 +247,17 @@ export async function registerRoutes(
   const express = (await import("express")).default;
   app.use("/uploads", express.static(uploadsDir));
 
+  registerObjectStorageRoutes(app);
+
   app.post("/api/upload-image", bypassAuth, async (req, res) => {
     try {
       const { base64, mimeType, name } = req.body;
       if (!base64) return res.status(400).json({ message: "Нет данных изображения" });
       const mime = mimeType || "image/png";
       const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
-      const filename = `${crypto.randomUUID()}.${ext}`;
-      const filePath = path.join(uploadsDir, filename);
       const buffer = Buffer.from(base64, "base64");
-      fs.writeFileSync(filePath, buffer);
-      const url = `/uploads/${filename}`;
-      res.json({ url, filename: name || filename });
+      const url = await uploadToObjectStorage(buffer, mime, ext);
+      res.json({ url, filename: name || `${crypto.randomUUID()}.${ext}` });
     } catch (err) {
       console.error("Upload error:", err);
       res.status(500).json({ message: "Ошибка загрузки изображения" });
@@ -510,11 +527,8 @@ export async function registerRoutes(
           const isImage = mime.startsWith("image/");
           if (isImage) {
             const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
-            const filename = `${crypto.randomUUID()}.${ext}`;
-            const filePath = path.join(uploadsDir, filename);
             const buffer = Buffer.from(imgData.base64, "base64");
-            fs.writeFileSync(filePath, buffer);
-            const imageUrl = `/uploads/${filename}`;
+            const imageUrl = await uploadToObjectStorage(buffer, mime, ext);
             savedImageUrls.push(imageUrl);
 
             const imgName = imgData.fileName?.replace(/\.[^.]+$/, '').replace(/[^a-zA-Zа-яА-Я0-9_-]/g, '_') || `photo_${Date.now()}`;

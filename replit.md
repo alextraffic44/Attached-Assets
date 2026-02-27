@@ -100,11 +100,19 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - ZIP: JSZip (client-side)
 - Streaming: Server-Sent Events for generation progress
 
+## Object Storage
+- All uploaded images stored in Replit Object Storage (GCS-backed, persistent)
+- `uploadToObjectStorage()` helper in routes.ts saves buffer to bucket, returns `/objects/uploads/uuid.ext` URL
+- `/objects/*` route serves files from object storage via `ObjectStorageService`
+- Old `/uploads/` static folder kept for backward compatibility with existing images
+- Integration: `server/replit_integrations/object_storage/`
+
 ## Important Files
 - `shared/schema.ts` — Database schema and types
 - `server/routes.ts` — API endpoints
 - `server/auth.ts` — Authentication setup
 - `server/storage.ts` — Database CRUD operations
 - `server/db.ts` — Database connection
+- `server/replit_integrations/object_storage/` — Object storage integration
 - `client/src/lib/auth.tsx` — Auth context/hook
 - `client/src/pages/` — All page components

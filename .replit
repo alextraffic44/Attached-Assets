@@ -39,7 +39,7 @@ args = "npm run dev"
 waitForPort = 5000
 
 [agent]
-integrations = ["javascript_gemini_ai_integrations:2.0.0"]
+integrations = ["javascript_gemini_ai_integrations:2.0.0", "javascript_object_storage:2.0.0"]
 
 [userenv]
 
