@@ -1020,7 +1020,7 @@ ${designAnalysis}
       const IMAGE_COST = 10;
       const user = req.user as any;
 
-      const { prompt, aspectRatio = "16:9", outputFormat = "jpg", idempotencyKey, referenceImageUrl } = req.body;
+      const { prompt, aspectRatio = "16:9", outputFormat = "jpg", idempotencyKey, referenceImageUrls } = req.body;
       if (!prompt) {
         return res.status(400).json({ message: "Промпт обязателен" });
       }
@@ -1037,9 +1037,11 @@ ${designAnalysis}
         aspect_ratio: aspectRatio,
         resolution: "2K",
       };
-      if (referenceImageUrl) {
-        const fullRefUrl = referenceImageUrl.startsWith("http") ? referenceImageUrl : `https://${req.headers.host}${referenceImageUrl}`;
-        inputPayload.image_url = fullRefUrl;
+      if (referenceImageUrls && Array.isArray(referenceImageUrls) && referenceImageUrls.length > 0) {
+        const fullUrls = referenceImageUrls.slice(0, 14).map((u: string) =>
+          u.startsWith("http") ? u : `https://${req.headers.host}${u}`
+        );
+        inputPayload.image_url = fullUrls;
       }
 
       const createResp = await fetch(NANO_BANANA_CREATE_URL, {

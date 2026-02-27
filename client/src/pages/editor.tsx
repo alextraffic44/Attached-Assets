@@ -112,9 +112,7 @@ export default function EditorPage() {
   const [imgStatus, setImgStatus] = useState<"idle" | "creating" | "waiting" | "success" | "fail">("idle");
   const [imgResultUrls, setImgResultUrls] = useState<string[]>([]);
   const [imgError, setImgError] = useState("");
-  const [imgRefUrl, setImgRefUrl] = useState<string>("");
-  const [imgRefPreview, setImgRefPreview] = useState<string>("");
-  const [imgRefUploading, setImgRefUploading] = useState(false);
+  const [imgRefs, setImgRefs] = useState<{ preview: string; url: string; uploading: boolean }[]>([]);
   const imgRefInputRef = useRef<HTMLInputElement>(null);
 
   const [mockupMode, setMockupMode] = useState(false);
@@ -824,38 +822,41 @@ export default function EditorPage() {
   }, [toast]);
 
   const handleRefImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
     if (e.target) e.target.value = "";
-    setImgRefUploading(true);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      setImgRefPreview(dataUrl);
-      const b64 = dataUrl.split(",")[1];
-      try {
-        const resp = await fetch("/api/upload-image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ base64: b64, mimeType: file.type, name: file.name }),
-        });
-        const data = await resp.json();
-        if (resp.ok && data.url) {
-          setImgRefUrl(data.url);
-        } else {
-          setImgRefPreview("");
-          toast({ title: "Ошибка загрузки референса", variant: "destructive" });
+    const remaining = 14 - imgRefs.length;
+    const toUpload = files.slice(0, remaining);
+    if (!toUpload.length) return;
+
+    for (const file of toUpload) {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        setImgRefs(prev => [...prev, { preview: dataUrl, url: "", uploading: true }]);
+        const b64 = dataUrl.split(",")[1];
+        try {
+          const resp = await fetch("/api/upload-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ base64: b64, mimeType: file.type, name: file.name }),
+          });
+          const data = await resp.json();
+          if (resp.ok && data.url) {
+            setImgRefs(prev => prev.map(r => r.preview === dataUrl && r.uploading ? { ...r, url: data.url, uploading: false } : r));
+          } else {
+            setImgRefs(prev => prev.filter(r => !(r.preview === dataUrl && r.uploading)));
+            toast({ title: "Ошибка загрузки референса", variant: "destructive" });
+          }
+        } catch {
+          setImgRefs(prev => prev.filter(r => !(r.preview === dataUrl && r.uploading)));
+          toast({ title: "Ошибка загрузки", variant: "destructive" });
         }
-      } catch {
-        setImgRefPreview("");
-        toast({ title: "Ошибка загрузки", variant: "destructive" });
-      } finally {
-        setImgRefUploading(false);
-      }
-    };
-    reader.readAsDataURL(file);
-  }, [toast]);
+      };
+      reader.readAsDataURL(file);
+    }
+  }, [toast, imgRefs.length]);
 
   const handleGenerateImage = useCallback(async () => {
     if (!imgPrompt.trim() || !imgName.trim()) return;
@@ -867,7 +868,8 @@ export default function EditorPage() {
 
     try {
       const bodyData: any = { prompt: imgPrompt, aspectRatio: imgSize };
-      if (imgRefUrl) bodyData.referenceImageUrl = imgRefUrl;
+      const refUrls = imgRefs.filter(r => r.url).map(r => r.url);
+      if (refUrls.length) bodyData.referenceImageUrls = refUrls;
       const resp = await fetch("/api/images/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -913,7 +915,7 @@ export default function EditorPage() {
       setImgStatus("fail");
       setImgGenerating(false);
     }
-  }, [imgPrompt, imgSize, imgName, imgRefUrl]);
+  }, [imgPrompt, imgSize, imgName, imgRefs]);
 
   const handleSaveImage = useCallback(async (url: string) => {
     try {
@@ -1971,7 +1973,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                     placeholder="hero, баннер, фон..."
                     value={imgName}
                     onChange={e => setImgName(e.target.value)}
-                    className="rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-blue-400 focus:ring-blue-400/20 h-10 text-sm"
+                    className="rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-blue-400 focus-visible:ring-0 focus-visible:ring-offset-0 h-10 text-sm"
                     disabled={imgGenerating}
                     data-testid="input-image-name"
                   />
@@ -2002,42 +2004,45 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   placeholder="Опишите что должно быть на изображении..."
                   value={imgPrompt}
                   onChange={e => setImgPrompt(e.target.value)}
-                  className="min-h-[80px] rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-blue-400 focus:ring-blue-400/20 resize-none text-sm"
+                  className="min-h-[80px] rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-blue-400 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none text-sm"
                   disabled={imgGenerating}
                   data-testid="input-image-prompt"
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Референс (необязательно)</label>
-                <input ref={imgRefInputRef} type="file" accept="image/*" className="hidden" onChange={handleRefImageUpload} />
-                {imgRefPreview ? (
-                  <div className="relative inline-block">
-                    <img src={imgRefPreview} className="w-20 h-20 object-cover rounded-xl border-2 border-blue-200 dark:border-blue-500/30 shadow-sm" data-testid="img-reference-preview" />
-                    {imgRefUploading && (
-                      <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center">
-                        <Loader2 className="w-5 h-5 text-white animate-spin" />
-                      </div>
-                    )}
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Референсы ({imgRefs.length}/14)</label>
+                <input ref={imgRefInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleRefImageUpload} />
+                <div className="flex flex-wrap gap-2">
+                  {imgRefs.map((ref, i) => (
+                    <div key={i} className="relative">
+                      <img src={ref.preview} className="w-16 h-16 object-cover rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm" data-testid={`img-reference-preview-${i}`} />
+                      {ref.uploading && (
+                        <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center">
+                          <Loader2 className="w-4 h-4 text-white animate-spin" />
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setImgRefs(prev => prev.filter((_, j) => j !== i))}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
+                        data-testid={`button-remove-reference-${i}`}
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {imgRefs.length < 14 && (
                     <button
-                      onClick={() => { setImgRefPreview(""); setImgRefUrl(""); }}
-                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs shadow-md transition-colors"
-                      data-testid="button-remove-reference"
+                      onClick={() => imgRefInputRef.current?.click()}
+                      disabled={imgGenerating}
+                      className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 flex flex-col items-center justify-center gap-0.5 transition-all text-sm disabled:opacity-40"
+                      data-testid="button-add-reference"
                     >
-                      <X className="w-3 h-3" />
+                      <ImageIcon className="w-4 h-4" />
+                      <span className="text-[9px]">Фото</span>
                     </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => imgRefInputRef.current?.click()}
-                    disabled={imgGenerating}
-                    className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-blue-300 hover:text-blue-500 dark:hover:border-blue-500/40 dark:hover:text-blue-400 transition-all text-sm disabled:opacity-40"
-                    data-testid="button-add-reference"
-                  >
-                    <ImageIcon className="w-4 h-4" />
-                    Добавить фото-референс
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
 
               <Button
