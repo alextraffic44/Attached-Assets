@@ -583,14 +583,26 @@ export default function DashboardPage() {
                                 toast({ title: "Файл слишком большой", description: "Максимум 5 МБ", variant: "destructive" });
                                 return;
                               }
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                const result = reader.result as string;
-                                const base64 = result.split(",")[1];
-                                const mimeType = file.type || "image/png";
-                                setPhotoImage({ base64, mimeType, preview: result });
+                              const img = new Image();
+                              img.onload = () => {
+                                const MAX_DIM = 1920;
+                                let w = img.width, h = img.height;
+                                if (w > MAX_DIM || h > MAX_DIM) {
+                                  const ratio = Math.min(MAX_DIM / w, MAX_DIM / h);
+                                  w = Math.round(w * ratio);
+                                  h = Math.round(h * ratio);
+                                }
+                                const canvas = document.createElement("canvas");
+                                canvas.width = w;
+                                canvas.height = h;
+                                const ctx = canvas.getContext("2d")!;
+                                ctx.drawImage(img, 0, 0, w, h);
+                                const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+                                const base64 = dataUrl.split(",")[1];
+                                setPhotoImage({ base64, mimeType: "image/jpeg", preview: dataUrl });
+                                URL.revokeObjectURL(img.src);
                               };
-                              reader.readAsDataURL(file);
+                              img.src = URL.createObjectURL(file);
                             }}
                           />
                           {photoImage ? (
