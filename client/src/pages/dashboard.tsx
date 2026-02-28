@@ -59,7 +59,7 @@ export default function DashboardPage() {
   const [description, setDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [selectedStyleTemplate, setSelectedStyleTemplate] = useState<UITemplate | null>(null);
-  const [styleCategory, setStyleCategory] = useState("Все");
+  const [styleCategory, setStyleCategory] = useState("buttons");
   const [isEnhanced, setIsEnhanced] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
@@ -309,7 +309,7 @@ export default function DashboardPage() {
             </h1>
           </div>
           <button
-            onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setSelectedStyleTemplate(null); setSelectedTemplate(""); setStyleCategory("Все"); setShowCreateModal(true); }}
+            onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setSelectedStyleTemplate(null); setSelectedTemplate(""); setStyleCategory("buttons"); setShowCreateModal(true); }}
             className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
             style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.9rem 1.8rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
           >
@@ -399,13 +399,15 @@ export default function DashboardPage() {
       </main>
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="p-0 overflow-hidden" style={{ width: '90vw', maxWidth: 860, borderRadius: 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont }}>
-          <div style={{ padding: '2rem 2.5rem', minHeight: 440, display: 'flex', flexDirection: 'column' }}>
-            <DialogHeader>
-              <DialogTitle style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F', textAlign: 'center' }}>
-                {createStep === "choose" ? "С чего начнём?" : createStep === "templates" ? "Выберите стиль" : "Оживите мечту"}
-              </DialogTitle>
-            </DialogHeader>
+        <DialogContent className="p-0 overflow-hidden" style={{ width: '92vw', maxWidth: createStep === "templates" ? 1080 : 860, borderRadius: 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont, transition: 'max-width 0.3s ease' }}>
+          <div style={{ padding: createStep === "templates" ? '0' : '2rem 2.5rem', minHeight: createStep === "templates" ? 0 : 440, display: 'flex', flexDirection: 'column' }}>
+            {createStep !== "templates" && (
+              <DialogHeader>
+                <DialogTitle style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F', textAlign: 'center' }}>
+                  {createStep === "choose" ? "С чего начнём?" : "Оживите мечту"}
+                </DialogTitle>
+              </DialogHeader>
+            )}
 
             <AnimatePresence mode="wait">
               {createStep === "choose" ? (
@@ -477,65 +479,86 @@ export default function DashboardPage() {
                   ))}
                 </motion.div>
               ) : createStep === "templates" ? (
-                <motion.div key="t" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col flex-1" style={{ marginTop: 16 }}>
-                  <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-                    {Object.keys(STYLE_PICKER_BY_CATEGORY).map(cat => (
+                <motion.div key="t" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} style={{ display: 'flex', height: '80vh', minHeight: 520 }}>
+                  <div style={{ width: 200, borderRight: '1px solid rgba(0,0,0,0.07)', padding: '1.5rem 0', flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+                    <div style={{ padding: '0 1.25rem 1rem', fontSize: '1.05rem', fontWeight: 700, color: '#1D1D1F', letterSpacing: '-0.02em' }}>
+                      Стили UI
+                    </div>
+                    <div className="flex flex-col gap-0.5" style={{ padding: '0 0.5rem', flex: 1 }}>
+                      {STYLE_PICKER_BY_CATEGORY.map(cat => (
+                        <button
+                          key={cat.key}
+                          onClick={() => setStyleCategory(cat.key)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '0.6rem',
+                            padding: '0.6rem 0.75rem', borderRadius: 12, border: 'none',
+                            background: styleCategory === cat.key ? 'rgba(0,0,0,0.06)' : 'transparent',
+                            color: styleCategory === cat.key ? '#1D1D1F' : '#86868B',
+                            fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', textAlign: 'left',
+                            transition: 'all 0.15s', width: '100%',
+                          }}
+                        >
+                          <span style={{ fontSize: '1rem' }}>{cat.icon}</span>
+                          <span>{cat.label}</span>
+                          <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 400, opacity: 0.5 }}>{cat.templates.length}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ padding: '1rem 0.75rem 0' }}>
                       <button
-                        key={cat}
-                        onClick={() => setStyleCategory(cat)}
-                        style={{
-                          padding: '4px 12px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600,
-                          background: styleCategory === cat ? '#1D1D1F' : 'rgba(0,0,0,0.06)',
-                          color: styleCategory === cat ? '#fff' : '#86868B',
-                          transition: 'all 0.15s',
-                        }}
+                        data-testid="button-templates-back"
+                        onClick={() => setCreateStep("choose")}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: '#86868B', width: '100%', textAlign: 'left', borderRadius: 10 }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#1D1D1F'; (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#86868B'; (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                       >
-                        {cat} {cat !== "Все" && <span style={{ opacity: 0.6, fontWeight: 400 }}>({STYLE_PICKER_BY_CATEGORY[cat].length})</span>}
+                        ← Назад
                       </button>
-                    ))}
+                    </div>
                   </div>
-                  <div style={{ overflowY: 'auto', maxHeight: 320, paddingRight: 4 }} className="grid grid-cols-5 gap-2">
-                    {(STYLE_PICKER_BY_CATEGORY[styleCategory] || []).map(tmpl => (
-                      <button
-                        key={tmpl.id}
-                        data-testid={`button-style-template-${tmpl.id}`}
-                        onClick={() => { setSelectedStyleTemplate(tmpl); setSelectedTemplate(tmpl.name); setCreateStep("details"); }}
-                        className="group focus:outline-none text-left transition-all duration-200"
-                        style={{
-                          borderRadius: 14,
-                          border: selectedStyleTemplate?.id === tmpl.id ? '2px solid #007AFF' : '1.5px solid rgba(0,0,0,0.08)',
-                          background: selectedStyleTemplate?.id === tmpl.id ? 'rgba(0,122,255,0.05)' : 'rgba(0,0,0,0.02)',
-                          overflow: 'hidden',
-                          cursor: 'pointer',
-                          padding: 0,
-                        }}
-                        onMouseEnter={e => { if (selectedStyleTemplate?.id !== tmpl.id) { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.15)'; (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; } }}
-                        onMouseLeave={e => { if (selectedStyleTemplate?.id !== tmpl.id) { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; } }}
-                      >
-                        <div style={{ height: 90, background: '#f5f5f7', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
-                          <iframe
-                            srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box;}body{display:flex;align-items:center;justify-content:center;height:100vh;background:#f5f5f7;transform-origin:center;overflow:hidden;}${tmpl.css}</style></head><body><div style="transform:scale(0.65);transform-origin:center;">${tmpl.html}</div></body></html>`}
-                            style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
-                            scrolling="no"
-                            title={tmpl.name}
-                          />
-                        </div>
-                        <div style={{ padding: '7px 10px 9px' }}>
-                          <p style={{ fontSize: '0.72rem', fontWeight: 600, color: '#1D1D1F', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tmpl.name}</p>
-                        </div>
-                      </button>
-                    ))}
+
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+                    <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid rgba(0,0,0,0.07)', flexShrink: 0 }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#1D1D1F', margin: 0 }}>
+                        {STYLE_PICKER_BY_CATEGORY.find(c => c.key === styleCategory)?.label}
+                      </h3>
+                      <p style={{ fontSize: '0.72rem', color: '#86868B', margin: '0.15rem 0 0' }}>
+                        {STYLE_PICKER_BY_CATEGORY.find(c => c.key === styleCategory)?.templates.length} шаблонов
+                      </p>
+                    </div>
+                    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', paddingBottom: '1rem' }}>
+                        {(STYLE_PICKER_BY_CATEGORY.find(c => c.key === styleCategory)?.templates || []).map(tmpl => {
+                          const isCard = styleCategory === 'cards';
+                          const previewHtml = `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box;}html,body{height:100%;overflow:hidden;}body{display:flex;align-items:center;justify-content:center;min-height:100%;background:#f5f5f7;font-family:system-ui,sans-serif;}${tmpl.css}</style></head><body>${tmpl.html}</body></html>`;
+                          return (
+                            <div
+                              key={tmpl.id}
+                              data-testid={`button-style-template-${tmpl.id}`}
+                              className="group relative rounded-xl overflow-hidden cursor-pointer"
+                              style={{ background: '#f5f5f7', border: '1.5px solid rgba(0,0,0,0.07)', transition: 'border-color 0.2s, box-shadow 0.2s' }}
+                              onClick={() => { setSelectedStyleTemplate(tmpl); setSelectedTemplate(tmpl.name); setCreateStep("details"); }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.18)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.07)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+                            >
+                              <div style={{ height: isCard ? 180 : 160, overflow: 'hidden', position: 'relative' }}>
+                                <iframe
+                                  srcDoc={previewHtml}
+                                  style={isCard ? { width: '200%', height: '200%', border: 'none', pointerEvents: 'none', transform: 'scale(0.5)', transformOrigin: 'top left' } : { width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+                                  sandbox="allow-scripts allow-same-origin"
+                                  title={tmpl.name}
+                                />
+                              </div>
+                              <div style={{ padding: '0.6rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1D1D1F' }}>{tmpl.name}</span>
+                                <span style={{ fontSize: '0.65rem', color: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: 4 }}>&lt;/&gt; выбрать</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                  <button
-                    data-testid="button-templates-back"
-                    className="transition-colors self-center mt-3"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 600, color: '#86868B' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#1D1D1F'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#86868B'; }}
-                    onClick={() => setCreateStep("choose")}
-                  >
-                    ← Назад
-                  </button>
                 </motion.div>
               ) : (
                 <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col flex-1" style={{ marginTop: 20 }}>

@@ -1071,14 +1071,10 @@ export const STYLE_PICKER_TEMPLATES: UITemplate[] = [
   ...FORM_TEMPLATES,
 ];
 
-export const STYLE_PICKER_BY_CATEGORY: Record<string, UITemplate[]> = {
-  "Все": STYLE_PICKER_TEMPLATES,
-  "Кнопки": BUTTON_TEMPLATES,
-  "Карточки": CARD_TEMPLATES,
-  "Тогглы": TOGGLE_TEMPLATES,
-  "Лоадеры": LOADER_TEMPLATES,
-  "Формы": FORM_TEMPLATES,
-};
+export const STYLE_PICKER_BY_CATEGORY: { key: string; label: string; icon: string; templates: UITemplate[] }[] = [
+  { key: "buttons", label: "Кнопки", icon: "🔘", templates: BUTTON_TEMPLATES },
+  { key: "cards",   label: "Карточки", icon: "🃏", templates: CARD_TEMPLATES },
+];
 
 interface UITemplatesModalProps {
   open: boolean;
