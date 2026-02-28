@@ -35,8 +35,56 @@ import {
   ImageIcon,
   X,
 } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useCallback } from "react";
 import { STYLE_PICKER_BY_CATEGORY, type UITemplate } from "@/components/ui-templates";
+
+function StyleTemplateCard({ tmpl, isCard, onClick }: { tmpl: UITemplate; isCard: boolean; onClick: () => void }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [hovered, setHovered] = useState(false);
+
+  const triggerHover = useCallback((enter: boolean) => {
+    setHovered(enter);
+    const iframe = iframeRef.current;
+    if (!iframe?.contentDocument) return;
+    const allEls = iframe.contentDocument.querySelectorAll("button, a, div, span, [class]");
+    allEls.forEach(el => {
+      if (enter) {
+        el.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+        (el as HTMLElement).classList.add("hover");
+      } else {
+        el.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
+        (el as HTMLElement).classList.remove("hover");
+      }
+    });
+  }, []);
+
+  const previewHtml = `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box;}html,body{height:100%;overflow:hidden;}body{display:flex;align-items:center;justify-content:center;min-height:100%;background:#f5f5f7;font-family:system-ui,sans-serif;}${tmpl.css.replace(/:hover/g, ':hover,.hover')}</style></head><body>${tmpl.html}</body></html>`;
+
+  return (
+    <div
+      data-testid={`button-style-template-${tmpl.id}`}
+      className="group relative rounded-xl overflow-hidden cursor-pointer"
+      style={{ background: '#f5f5f7', border: hovered ? '1.5px solid rgba(0,0,0,0.18)' : '1.5px solid rgba(0,0,0,0.07)', boxShadow: hovered ? '0 4px 16px rgba(0,0,0,0.08)' : 'none', transition: 'border-color 0.2s, box-shadow 0.2s' }}
+      onClick={onClick}
+      onMouseEnter={() => triggerHover(true)}
+      onMouseLeave={() => triggerHover(false)}
+    >
+      <div style={{ height: isCard ? 180 : 160, overflow: 'hidden', position: 'relative' }}>
+        <iframe
+          ref={iframeRef}
+          srcDoc={previewHtml}
+          style={isCard ? { width: '200%', height: '200%', border: 'none', pointerEvents: 'none', transform: 'scale(0.5)', transformOrigin: 'top left' } : { width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+          sandbox="allow-scripts allow-same-origin"
+          title={tmpl.name}
+        />
+      </div>
+      <div style={{ padding: '0.6rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(0,0,0,0.06)', background: '#fff' }}>
+        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1D1D1F' }}>{tmpl.name}</span>
+        <span style={{ fontSize: '0.65rem', color: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: 4 }}>&lt;/&gt; выбрать</span>
+      </div>
+    </div>
+  );
+}
 
 const GlassCard = ({ children, className = "", onClick = undefined }: { children: any; className?: string; onClick?: any }) => (
   <div
@@ -528,34 +576,14 @@ export default function DashboardPage() {
                     </div>
                     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', paddingBottom: '1rem' }}>
-                        {(STYLE_PICKER_BY_CATEGORY.find(c => c.key === styleCategory)?.templates || []).map(tmpl => {
-                          const isCard = styleCategory === 'cards';
-                          const previewHtml = `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box;}html,body{height:100%;overflow:hidden;}body{display:flex;align-items:center;justify-content:center;min-height:100%;background:#f5f5f7;font-family:system-ui,sans-serif;}${tmpl.css}</style></head><body>${tmpl.html}</body></html>`;
-                          return (
-                            <div
-                              key={tmpl.id}
-                              data-testid={`button-style-template-${tmpl.id}`}
-                              className="group relative rounded-xl overflow-hidden cursor-pointer"
-                              style={{ background: '#f5f5f7', border: '1.5px solid rgba(0,0,0,0.07)', transition: 'border-color 0.2s, box-shadow 0.2s' }}
-                              onClick={() => { setSelectedStyleTemplate(tmpl); setSelectedTemplate(tmpl.name); setCreateStep("details"); }}
-                              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.18)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; }}
-                              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.07)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
-                            >
-                              <div style={{ height: isCard ? 180 : 160, overflow: 'hidden', position: 'relative' }}>
-                                <iframe
-                                  srcDoc={previewHtml}
-                                  style={isCard ? { width: '200%', height: '200%', border: 'none', pointerEvents: 'none', transform: 'scale(0.5)', transformOrigin: 'top left' } : { width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
-                                  sandbox="allow-scripts allow-same-origin"
-                                  title={tmpl.name}
-                                />
-                              </div>
-                              <div style={{ padding: '0.6rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1D1D1F' }}>{tmpl.name}</span>
-                                <span style={{ fontSize: '0.65rem', color: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: 4 }}>&lt;/&gt; выбрать</span>
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {(STYLE_PICKER_BY_CATEGORY.find(c => c.key === styleCategory)?.templates || []).map(tmpl => (
+                          <StyleTemplateCard
+                            key={tmpl.id}
+                            tmpl={tmpl}
+                            isCard={styleCategory === 'cards'}
+                            onClick={() => { setSelectedStyleTemplate(tmpl); setSelectedTemplate(tmpl.name); setCreateStep("details"); }}
+                          />
+                        ))}
                       </div>
                     </div>
                   </div>
