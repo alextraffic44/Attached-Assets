@@ -45,6 +45,8 @@ import {
   Plus,
   X,
   Video,
+  Globe,
+  Camera,
 } from "lucide-react";
 import {
   Dialog,
