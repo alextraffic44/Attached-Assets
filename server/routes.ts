@@ -1447,6 +1447,43 @@ ${designAnalysis}
         files.push({ filename: f.filename, content: code });
       }
 
+      // Collect and embed 3D model files (.glb/.gltf) found in HTML
+      const allHtmlForScan = files.map(f => f.content || "").join("\n");
+      const modelSrcRegex = /src\s*=\s*["']([^"']*\.(?:glb|gltf))["']/gi;
+      const foundModelUrls = new Set<string>();
+      let mMatch: RegExpExecArray | null;
+      while ((mMatch = modelSrcRegex.exec(allHtmlForScan)) !== null) {
+        foundModelUrls.add(mMatch[1]);
+      }
+      if (foundModelUrls.size > 0) {
+        const modelUrlMap = new Map<string, string>();
+        for (const modelUrl of Array.from(foundModelUrls)) {
+          try {
+            let fetchUrl = modelUrl;
+            if (modelUrl.startsWith("/")) {
+              fetchUrl = `http://localhost:${process.env.PORT || 5000}${modelUrl}`;
+            }
+            const modelResp = await fetch(fetchUrl);
+            if (modelResp.ok) {
+              const buffer = Buffer.from(await modelResp.arrayBuffer());
+              const fileName = modelUrl.split("/").pop() || `model_${Date.now()}.glb`;
+              const localPath = `models/${fileName}`;
+              files.push({ filename: localPath, contentBuffer: buffer });
+              modelUrlMap.set(modelUrl, localPath);
+            }
+          } catch (err) {
+            console.warn(`[Publish] Could not fetch 3D model ${modelUrl}:`, err);
+          }
+        }
+        // Update HTML references to use local paths
+        for (const f of files) {
+          if (!f.content) continue;
+          for (const [remoteUrl, localPath] of Array.from(modelUrlMap.entries())) {
+            f.content = f.content.split(remoteUrl).join(localPath);
+          }
+        }
+      }
+
       const { url, vercelProjectId } = await deployToVercel(projectId, files);
 
       await storage.updateProject(projectId, {

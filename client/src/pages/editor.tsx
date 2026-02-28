@@ -532,6 +532,35 @@ export default function EditorPage() {
       htmlCode = htmlCode.split(remoteUrl).join(localPath);
     }
 
+    // Download 3D models (.glb/.gltf) referenced in any src attribute
+    const modelsFolder = zip.folder("models");
+    const allCodeForModels = [htmlCode, ...projectFiles.filter(f => f.filename !== "index.html").map(f => f.code)].join("\n");
+    const modelSrcRegex = /src\s*=\s*["']([^"']*\.(?:glb|gltf))["']/gi;
+    const foundModelUrls = new Set<string>();
+    let mModelMatch: RegExpExecArray | null;
+    while ((mModelMatch = modelSrcRegex.exec(allCodeForModels)) !== null) {
+      foundModelUrls.add(mModelMatch[1]);
+    }
+    const allModelUrls = new Map<string, string>();
+    if (foundModelUrls.size > 0 && modelsFolder) {
+      let modelIdx = 0;
+      for (const modelUrl of Array.from(foundModelUrls)) {
+        try {
+          const ext = modelUrl.endsWith(".gltf") ? "gltf" : "glb";
+          const fileName = `model_${modelIdx++}.${ext}`;
+          const resp = await fetch(modelUrl);
+          if (resp.ok) {
+            const buf = await resp.arrayBuffer();
+            modelsFolder.file(fileName, buf);
+            allModelUrls.set(modelUrl, `models/${fileName}`);
+          }
+        } catch {}
+      }
+    }
+    for (const [remoteUrl, localPath] of Array.from(allModelUrls.entries())) {
+      htmlCode = htmlCode.split(remoteUrl).join(localPath);
+    }
+
     const dataUriRegex = /(?:src\s*=\s*["'])(data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,([^"']+))["']/gi;
     let dataMatch;
     let dataIdx = 0;
@@ -590,6 +619,9 @@ export default function EditorPage() {
         Array.from(allImageUrls.entries()).forEach(([remoteUrl, localPath]) => {
           pfCode = pfCode.split(remoteUrl).join(localPath);
         });
+        Array.from(allModelUrls.entries()).forEach(([remoteUrl, localPath]) => {
+          pfCode = pfCode.split(remoteUrl).join(localPath);
+        });
         pfCode = pfCode.replace('</body>', leadExportScript + '\n</body>');
         zip.file(pf.filename, pfCode);
       }
@@ -602,7 +634,7 @@ export default function EditorPage() {
     a.download = `${project?.title || "site"}.zip`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Архив готов!", description: `${allImageUrls.size} изображений включено` });
+    toast({ title: "Архив готов!", description: `${allImageUrls.size + allModelUrls.size} файлов включено` });
   };
 
   const handlePublish = async () => {

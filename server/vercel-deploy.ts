@@ -13,7 +13,8 @@ function headers(extra: Record<string, string> = {}) {
 
 export interface DeployFile {
   filename: string;
-  content: string;
+  content?: string;
+  contentBuffer?: Buffer;
 }
 
 async function disableProtection(name: string): Promise<void> {
@@ -56,8 +57,7 @@ async function ensureProject(name: string): Promise<string> {
 }
 
 // Upload a single file to Vercel file store, return its sha1
-async function uploadFile(content: string): Promise<string> {
-  const buf = Buffer.from(content, "utf8");
+async function uploadFileBuffer(buf: Buffer): Promise<string> {
   const sha1 = crypto.createHash("sha1").update(buf).digest("hex");
 
   const res = await fetch(`${VERCEL_API}/v2/files`, {
@@ -80,6 +80,10 @@ async function uploadFile(content: string): Promise<string> {
   return sha1;
 }
 
+async function uploadFile(content: string): Promise<string> {
+  return uploadFileBuffer(Buffer.from(content, "utf8"));
+}
+
 export async function deployToVercel(
   projectId: number,
   files: DeployFile[]
@@ -92,8 +96,8 @@ export async function deployToVercel(
   // Upload all files first, collect sha1 hashes
   const deployFiles: { file: string; sha: string; size: number }[] = [];
   for (const f of files) {
-    const buf = Buffer.from(f.content, "utf8");
-    const sha = await uploadFile(f.content);
+    const buf = f.contentBuffer ?? Buffer.from(f.content ?? "", "utf8");
+    const sha = await uploadFileBuffer(buf);
     deployFiles.push({ file: f.filename, sha, size: buf.length });
   }
 
