@@ -1383,13 +1383,13 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl" onClick={() => faviconInputRef.current?.click()} disabled={faviconUploading || !currentCode} title="Фавикон" data-testid="button-favicon-upload">
             {faviconUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
               project?.generatedCode?.includes('rel="icon"') || project?.generatedCode?.includes("rel='icon'")
-                ? <span style={{ fontSize: 14 }}>✅</span>
-                : <span style={{ fontSize: 14 }}>🔖</span>
+                ? <Globe className="w-4 h-4 text-emerald-500" />
+                : <Globe className="w-4 h-4 text-slate-400" />
             )}
           </Button>
 
           <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20 relative" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen" title="AI Фото">
-            <Wand2 className="w-4 h-4" />
+            <Camera className="w-4 h-4" />
             {projectImages.length > 0 && (
               <span className="absolute -top-1 -right-1 bg-violet-500 text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center">{projectImages.length}</span>
             )}
@@ -1955,7 +1955,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               <DialogHeader>
                 <DialogTitle className="text-xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                    <Wand2 className="w-5 h-5 text-white" />
+                    <Camera className="w-5 h-5 text-white" />
                   </div>
                   Nano Banana 2
                 </DialogTitle>
