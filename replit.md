@@ -14,6 +14,8 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - **AI Enhance**: Gemini 2.5 Flash for prompt enhancement (5 tokens)
 - **Deep Research**: Gemini Interactions API with deep-research-pro-preview-12-2025 agent (10 tokens, optional toggle)
 - **AI Images**: Nano Banana 2 via KIE API (KIE_API_KEY env var, async task-based, 2K resolution, 15 tokens)
+- **AI 3D Models**: Hunyuan3D V3 via WaveSpeed API (WAVESPEED_API_KEY env var, image-to-3D, GLB output, 20 tokens)
+- **3D Upload**: GLB/GLTF files (max 50MB) uploaded via chat → stored in Object Storage → AI embeds via `<model-viewer>` tag
 - **Routing**: wouter for client-side routing
 
 ## Pages
@@ -60,6 +62,10 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `POST /api/images/generate` — Create Nano Banana image task (prompt, imageSize, outputFormat)
 - `GET /api/images/status/:taskId` — Poll task status (waiting/success/fail)
 - `POST /api/projects/:id/insert-image` — Insert image URL into project code (modes: replace-first-placeholder, replace-all-placeholders, append)
+
+## API Endpoints (3D Models)
+- `POST /api/3d/generate` — Create WaveSpeed 3D task (imageUrl, enablePbr, generateType, faceCount) — 20 tokens
+- `GET /api/3d/status/:taskId` — Poll task status (waiting/success/fail), returns GLB URL on success
 
 ## API Endpoints (Leads)
 - `POST /api/leads/:projectId` — Public endpoint, generated sites POST form data here (no auth)

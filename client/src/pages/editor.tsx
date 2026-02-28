@@ -120,6 +120,18 @@ export default function EditorPage() {
   const [imgRefs, setImgRefs] = useState<{ preview: string; url: string; uploading: boolean }[]>([]);
   const imgRefInputRef = useRef<HTMLInputElement>(null);
 
+  const [gen3dOpen, setGen3dOpen] = useState(false);
+  const [gen3dImageUrl, setGen3dImageUrl] = useState("");
+  const [gen3dImagePreview, setGen3dImagePreview] = useState("");
+  const [gen3dType, setGen3dType] = useState("Normal");
+  const [gen3dPbr, setGen3dPbr] = useState(false);
+  const [gen3dGenerating, setGen3dGenerating] = useState(false);
+  const [gen3dStatus, setGen3dStatus] = useState<"idle" | "creating" | "waiting" | "success" | "fail">("idle");
+  const [gen3dResultUrl, setGen3dResultUrl] = useState("");
+  const [gen3dError, setGen3dError] = useState("");
+  const [gen3dStatusUrl, setGen3dStatusUrl] = useState("");
+  const gen3dInputRef = useRef<HTMLInputElement>(null);
+
   const [mockupMode, setMockupMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -1024,6 +1036,121 @@ export default function EditorPage() {
     }
   }, [projectId, imgName, imgPrompt, toast]);
 
+  const handle3DImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Нужно изображение", description: "Загрузите фото объекта для создания 3D модели", variant: "destructive" });
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast({ title: "Файл слишком большой", description: "Максимум 20 МБ", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setGen3dImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    const formData = new FormData();
+    formData.append("file", file);
+    (async () => {
+      try {
+        const resp = await fetch("/api/upload-file", { method: "POST", credentials: "include", body: formData });
+        const data = await resp.json();
+        if (resp.ok && data.url) {
+          setGen3dImageUrl(data.url);
+        } else {
+          toast({ title: "Ошибка загрузки", description: data?.message, variant: "destructive" });
+          setGen3dImagePreview("");
+        }
+      } catch {
+        toast({ title: "Ошибка загрузки", variant: "destructive" });
+        setGen3dImagePreview("");
+      }
+    })();
+    if (e.target) e.target.value = "";
+  }, [toast]);
+
+  const handleGenerate3D = useCallback(async () => {
+    if (!gen3dImageUrl) return;
+    setGen3dGenerating(true);
+    setGen3dStatus("creating");
+    setGen3dResultUrl("");
+    setGen3dError("");
+    queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 20) } : old);
+
+    try {
+      const resp = await fetch("/api/3d/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: gen3dImageUrl, enablePbr: gen3dPbr, generateType: gen3dType }),
+        credentials: "include",
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.message);
+      if (data.newBalance !== undefined) {
+        queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
+      }
+
+      const taskId = data.taskId;
+      const statusUrl = data.statusUrl || "";
+      setGen3dStatusUrl(statusUrl);
+      setGen3dStatus("waiting");
+
+      const pollInterval = setInterval(async () => {
+        try {
+          const sResp = await fetch(`/api/3d/status/${taskId}?statusUrl=${encodeURIComponent(statusUrl)}`, { credentials: "include" });
+          const sData = await sResp.json();
+          if (sData.state === "success") {
+            clearInterval(pollInterval);
+            const glbUrl = sData.outputs?.find((u: string) => u.endsWith(".glb")) || sData.outputs?.[0] || "";
+            setGen3dResultUrl(glbUrl);
+            setGen3dStatus("success");
+            setGen3dGenerating(false);
+          } else if (sData.state === "fail") {
+            clearInterval(pollInterval);
+            setGen3dError(sData.error || "Ошибка генерации");
+            setGen3dStatus("fail");
+            setGen3dGenerating(false);
+          }
+        } catch {
+          clearInterval(pollInterval);
+          setGen3dError("Ошибка соединения");
+          setGen3dStatus("fail");
+          setGen3dGenerating(false);
+        }
+      }, 4000);
+
+      setTimeout(() => clearInterval(pollInterval), 300000);
+    } catch (err: any) {
+      setGen3dError(err.message || "Ошибка");
+      setGen3dStatus("fail");
+      setGen3dGenerating(false);
+    }
+  }, [gen3dImageUrl, gen3dPbr, gen3dType]);
+
+  const handleInsert3D = useCallback(async (glbUrl: string) => {
+    if (!glbUrl || !project) return;
+    const formData = new FormData();
+    try {
+      const resp = await fetch(glbUrl);
+      if (!resp.ok) throw new Error("Failed to download");
+      const blob = await resp.blob();
+      formData.append("file", new File([blob], "model.glb", { type: "model/gltf-binary" }));
+      const uploadResp = await fetch("/api/upload-file", { method: "POST", credentials: "include", body: formData });
+      const uploadData = await uploadResp.json();
+      if (!uploadResp.ok) throw new Error(uploadData.message);
+      const localUrl = uploadData.url;
+
+      setAttachedModels(prev => [...prev, { id: `gen3d-${Date.now()}`, url: localUrl, fileName: "model.glb", uploading: false }]);
+      toast({ title: "3D модель добавлена", description: "Отправьте промт чтобы встроить модель на сайт" });
+      setGen3dOpen(false);
+    } catch (err: any) {
+      toast({ title: "Ошибка", description: err.message || "Не удалось загрузить 3D модель", variant: "destructive" });
+    }
+  }, [project, toast]);
+
   const handleDeleteImage = useCallback(async (imageId: number) => {
     try {
       await fetch(`/api/projects/${projectId}/images/${imageId}`, {
@@ -1456,7 +1583,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <Sparkles className="w-4 h-4 mr-1.5" />
                 Шаблоны
               </Button>
-              <Button variant="outline" size="sm" className="rounded-xl font-bold px-3 border-violet-300 text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:border-violet-500/30 dark:hover:bg-violet-500/10" onClick={() => toast({ title: "3D библиотека", description: "Интеграция 3D ассетов появится в ближайшем обновлении. Уже сейчас можно прикрепить .glb файл в чате." })} data-testid="button-3d-library" title="3D библиотека">
+              <Button variant="outline" size="sm" className="rounded-xl font-bold px-3 border-violet-300 text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:border-violet-500/30 dark:hover:bg-violet-500/10" onClick={() => { setGen3dOpen(true); setGen3dStatus("idle"); setGen3dResultUrl(""); setGen3dError(""); setGen3dImagePreview(""); setGen3dImageUrl(""); }} data-testid="button-3d-library" title="Создать 3D модель">
                 <Box className="w-4 h-4 mr-1.5" />
                 3D
               </Button>
@@ -2230,6 +2357,179 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       </Button>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={gen3dOpen} onOpenChange={(v) => { if (!gen3dGenerating) setGen3dOpen(v); }}>
+        <DialogContent className="sm:max-w-lg p-0 bg-white dark:bg-slate-900 border-0 shadow-[0_25px_60px_-12px_rgba(0,0,0,0.25)] rounded-3xl max-h-[85vh] overflow-hidden" aria-describedby="gen3d-description">
+          <div className="relative overflow-y-auto max-h-[85vh]">
+            <div className="px-7 pt-7 pb-4">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
+                    <Box className="w-5 h-5 text-white" />
+                  </div>
+                  Hunyuan3D V3
+                </DialogTitle>
+                <DialogDescription id="gen3d-description" className="text-slate-400 dark:text-slate-500 text-[13px] mt-1.5 ml-[52px] leading-relaxed">
+                  Создайте 3D модель из фотографии — загрузите изображение объекта
+                </DialogDescription>
+              </DialogHeader>
+            </div>
+
+            <div className="px-7 pb-7 space-y-4">
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Изображение объекта</label>
+                <input ref={gen3dInputRef} type="file" accept="image/*" className="hidden" onChange={handle3DImageUpload} />
+                {gen3dImagePreview ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <img src={gen3dImagePreview} className="w-full max-h-[200px] object-contain bg-slate-50 dark:bg-slate-800" data-testid="img-3d-preview" />
+                    {!gen3dImageUrl && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <Loader2 className="w-6 h-6 text-white animate-spin" />
+                      </div>
+                    )}
+                    {!gen3dGenerating && (
+                      <button
+                        onClick={() => { setGen3dImagePreview(""); setGen3dImageUrl(""); }}
+                        className="absolute top-2 right-2 w-7 h-7 bg-black/60 text-white rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
+                        data-testid="button-remove-3d-image"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => gen3dInputRef.current?.click()}
+                    disabled={gen3dGenerating}
+                    className="w-full h-32 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 flex flex-col items-center justify-center gap-2 transition-all hover:border-violet-400 hover:text-violet-500 disabled:opacity-40"
+                    data-testid="button-upload-3d-image"
+                  >
+                    <ImageIcon className="w-8 h-8" />
+                    <span className="text-sm font-bold">Загрузить фото объекта</span>
+                    <span className="text-[11px] opacity-60">PNG, JPG, WebP до 20 МБ</span>
+                  </button>
+                )}
+              </div>
+
+              {projectImages.length > 0 && !gen3dImagePreview && (
+                <div>
+                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Или выберите из библиотеки</label>
+                  <div className="flex flex-wrap gap-2">
+                    {projectImages.map((img: any) => (
+                      <button
+                        key={img.id}
+                        onClick={() => { setGen3dImagePreview(img.url); setGen3dImageUrl(img.url); }}
+                        disabled={gen3dGenerating}
+                        className="w-16 h-16 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden hover:ring-2 hover:ring-violet-400 transition-all disabled:opacity-40"
+                        data-testid={`button-3d-library-img-${img.id}`}
+                      >
+                        <img src={img.url} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Тип генерации</label>
+                  <Select value={gen3dType} onValueChange={setGen3dType} disabled={gen3dGenerating}>
+                    <SelectTrigger className="rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white h-10 text-sm" data-testid="select-3d-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl">
+                      <SelectItem value="Normal">Текстурированная</SelectItem>
+                      <SelectItem value="LowPoly">Low Poly</SelectItem>
+                      <SelectItem value="Geometry">Геометрия (белая)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end pb-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={gen3dPbr}
+                      onChange={e => setGen3dPbr(e.target.checked)}
+                      disabled={gen3dGenerating}
+                      className="rounded border-slate-300 dark:border-slate-600 text-violet-600 focus:ring-violet-500 w-4 h-4"
+                      data-testid="checkbox-pbr"
+                    />
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-300">PBR материалы</span>
+                  </label>
+                </div>
+              </div>
+
+              <Button
+                className="w-full rounded-xl font-bold h-11 bg-gradient-to-r from-violet-600 to-purple-500 hover:from-violet-500 hover:to-purple-400 text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 transition-all border-0 text-sm"
+                onClick={handleGenerate3D}
+                disabled={gen3dGenerating || !gen3dImageUrl}
+                data-testid="button-generate-3d"
+              >
+                {gen3dGenerating ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {gen3dStatus === "creating" ? "Создаём задачу..." : "Генерируем 3D модель..."}</>
+                ) : (
+                  <><Box className="w-4 h-4 mr-2" /> Создать 3D модель · 20 токенов</>
+                )}
+              </Button>
+
+              {gen3dStatus === "waiting" && (
+                <div className="flex items-center gap-3 p-3.5 bg-violet-50 dark:bg-violet-500/10 rounded-xl border border-violet-200 dark:border-violet-500/20">
+                  <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
+                    <Loader2 className="w-4 h-4 animate-spin text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-violet-700 dark:text-violet-300">Генерация 3D модели...</p>
+                    <p className="text-xs text-violet-500/70 dark:text-violet-400/50">Обычно 30–120 сек</p>
+                  </div>
+                </div>
+              )}
+
+              {gen3dStatus === "fail" && (
+                <div className="flex items-center gap-3 p-3.5 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-200 dark:border-red-500/20">
+                  <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-500/20 flex items-center justify-center shrink-0">
+                    <XCircle className="w-4 h-4 text-red-500 dark:text-red-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-red-600 dark:text-red-300">Ошибка генерации</p>
+                    <p className="text-xs text-red-500/70 dark:text-red-400/60">{gen3dError}</p>
+                  </div>
+                </div>
+              )}
+
+              {gen3dStatus === "success" && gen3dResultUrl && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-3.5 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-200 dark:border-emerald-500/20">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">3D модель готова!</p>
+                      <p className="text-xs text-emerald-500/70 dark:text-emerald-400/50 truncate max-w-[280px]">{gen3dResultUrl.split("/").pop()}</p>
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full rounded-xl font-bold h-10 bg-emerald-500 hover:bg-emerald-400 text-white shadow-md shadow-emerald-500/20 border-0 text-sm"
+                    onClick={() => handleInsert3D(gen3dResultUrl)}
+                    data-testid="button-insert-3d"
+                  >
+                    <Box className="w-4 h-4 mr-2" />
+                    Прикрепить к чату и встроить на сайт
+                  </Button>
+                  <a
+                    href={gen3dResultUrl}
+                    download="model.glb"
+                    className="block w-full text-center rounded-xl font-bold h-10 leading-10 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm transition-colors"
+                    data-testid="link-download-3d"
+                  >
+                    <Download className="w-4 h-4 mr-2 inline" />
+                    Скачать .glb файл
+                  </a>
                 </div>
               )}
             </div>

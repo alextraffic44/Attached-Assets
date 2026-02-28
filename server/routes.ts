@@ -55,6 +55,10 @@ const KIE_API_KEY = process.env.KIE_API_KEY;
 const NANO_BANANA_CREATE_URL = "https://api.kie.ai/api/v1/jobs/createTask";
 const NANO_BANANA_STATUS_URL = "https://api.kie.ai/api/v1/jobs/recordInfo";
 
+const WAVESPEED_API_KEY = process.env.WAVESPEED_API_KEY;
+const WAVESPEED_3D_URL = "https://api.wavespeed.ai/api/v3/wavespeed-ai/hunyuan3d-v3/image-to-3d";
+const MODEL_3D_COST = 20;
+
 const PLAN_PUBLISH_LIMITS: Record<string, number> = {
   bronze: 1,
   silver: 2,
@@ -1116,6 +1120,93 @@ ${designAnalysis}
     } catch (err: any) {
       console.error("Image status error:", err);
       res.status(500).json({ message: "Ошибка проверки статуса" });
+    }
+  });
+
+  // WaveSpeed 3D model generation
+  app.post("/api/3d/generate", bypassAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { imageUrl, enablePbr = false, generateType = "Normal", faceCount = 500000, idempotencyKey } = req.body;
+      if (!imageUrl) {
+        return res.status(400).json({ message: "URL изображения обязателен" });
+      }
+      if (!WAVESPEED_API_KEY) {
+        return res.status(500).json({ message: "WAVESPEED_API_KEY не настроен" });
+      }
+
+      const ikey = idempotencyKey || `3d-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      const deduction = await storage.deductCredits(user.id, MODEL_3D_COST, "3d", ikey);
+      if (!deduction.success) {
+        return res.status(402).json({ message: `Недостаточно токенов. Нужно ${MODEL_3D_COST}, у вас ${deduction.newBalance}`, newBalance: deduction.newBalance });
+      }
+
+      let fullImageUrl = imageUrl;
+      if (imageUrl.startsWith("/")) {
+        fullImageUrl = `https://${req.headers.host}${imageUrl}`;
+      }
+
+      const payload: any = {
+        image: fullImageUrl,
+        enable_pbr: enablePbr,
+        generate_type: generateType,
+        face_count: faceCount,
+      };
+
+      const createResp = await fetch(WAVESPEED_3D_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${WAVESPEED_API_KEY}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const createBody = await createResp.json() as any;
+      console.log("[WaveSpeed 3D] create response:", JSON.stringify(createBody).substring(0, 500));
+
+      if (!createResp.ok || !createBody.id) {
+        return res.status(500).json({ message: createBody?.error?.message || createBody?.detail || "Ошибка создания 3D задачи" });
+      }
+
+      res.json({
+        taskId: createBody.id,
+        statusUrl: createBody.urls?.get || `${WAVESPEED_3D_URL}/${createBody.id}`,
+        newBalance: deduction.newBalance,
+      });
+    } catch (err: any) {
+      console.error("[WaveSpeed 3D] generate error:", err);
+      res.status(500).json({ message: "Ошибка генерации 3D модели" });
+    }
+  });
+
+  app.get("/api/3d/status/:taskId", bypassAuth, async (req, res) => {
+    try {
+      if (!WAVESPEED_API_KEY) {
+        return res.status(500).json({ message: "WAVESPEED_API_KEY не настроен" });
+      }
+      const { taskId } = req.params;
+      let statusUrl = req.query.statusUrl as string || "";
+      if (!statusUrl || !statusUrl.startsWith("https://api.wavespeed.ai/")) {
+        statusUrl = `${WAVESPEED_3D_URL}/${taskId}`;
+      }
+
+      const resp = await fetch(statusUrl, {
+        headers: { "Authorization": `Bearer ${WAVESPEED_API_KEY}` },
+      });
+      const body = await resp.json() as any;
+      console.log("[WaveSpeed 3D] status:", JSON.stringify(body).substring(0, 500));
+
+      if (body.status === "completed") {
+        return res.json({ state: "success", outputs: body.outputs || [] });
+      }
+      if (body.status === "failed") {
+        return res.json({ state: "fail", error: body.error || "Ошибка генерации 3D" });
+      }
+      return res.json({ state: "waiting", status: body.status });
+    } catch (err: any) {
+      console.error("[WaveSpeed 3D] status error:", err);
+      res.status(500).json({ message: "Ошибка проверки статуса 3D" });
     }
   });
 
