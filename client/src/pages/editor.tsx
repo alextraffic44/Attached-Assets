@@ -93,7 +93,6 @@ export default function EditorPage() {
   const [selectedElement, setSelectedElement] = useState<{tag: string, text: string, classes: string, path: string, outerSnippet: string} | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const modelInputRef = useRef<HTMLInputElement>(null);
   const pendingImageTarget = useRef<string | null>(null);
 
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
@@ -794,8 +793,38 @@ export default function EditorPage() {
     let imageCount = 0;
     let videoCount = 0;
 
+    let modelCount = 0;
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      const fname = file.name.toLowerCase();
+      if (fname.endsWith(".glb") || fname.endsWith(".gltf")) {
+        modelCount++;
+        if (file.size > 50 * 1024 * 1024) {
+          toast({ title: "Файл слишком большой", description: "Максимальный размер 3D модели — 50 МБ", variant: "destructive" });
+          continue;
+        }
+        const uploadId = `model-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`;
+        setAttachedModels(prev => [...prev, { id: uploadId, url: "", fileName: file.name, uploading: true }]);
+        const formData = new FormData();
+        formData.append("file", file);
+        (async () => {
+          try {
+            const resp = await fetch("/api/upload-file", { method: "POST", credentials: "include", body: formData });
+            const data = await resp.json();
+            if (resp.ok && data.url) {
+              setAttachedModels(prev => prev.map(m => m.id === uploadId ? { ...m, url: data.url, uploading: false } : m));
+            } else {
+              setAttachedModels(prev => prev.filter(m => m.id !== uploadId));
+              toast({ title: "Ошибка загрузки 3D модели", description: data?.message, variant: "destructive" });
+            }
+          } catch {
+            setAttachedModels(prev => prev.filter(m => m.id !== uploadId));
+            toast({ title: "Ошибка загрузки 3D модели", variant: "destructive" });
+          }
+        })();
+        continue;
+      }
       if (file.type.startsWith("video/")) {
         videoCount++;
         if (file.size > 100 * 1024 * 1024) {
@@ -843,52 +872,10 @@ export default function EditorPage() {
       }
     }
     if (e.target) e.target.value = "";
-    const total = imageCount + videoCount;
+    const total = imageCount + videoCount + modelCount;
     if (total > 0) {
       toast({ title: `${total > 1 ? total + " файлов" : "Файл"} прикреплён`, description: "Можно отправить вместе с промтом" });
     }
-  };
-
-  const handle3DUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const name = file.name.toLowerCase();
-      if (!name.endsWith(".glb") && !name.endsWith(".gltf")) {
-        toast({ title: "Неподдерживаемый формат", description: "Поддерживаются только .glb и .gltf файлы", variant: "destructive" });
-        continue;
-      }
-      if (file.size > 50 * 1024 * 1024) {
-        toast({ title: "Файл слишком большой", description: "Максимальный размер 3D модели — 50 МБ", variant: "destructive" });
-        continue;
-      }
-      const uploadId = `model-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`;
-      setAttachedModels(prev => [...prev, { id: uploadId, url: "", fileName: file.name, uploading: true }]);
-      const formData = new FormData();
-      formData.append("file", file);
-      (async () => {
-        try {
-          const resp = await fetch("/api/upload-file", {
-            method: "POST",
-            credentials: "include",
-            body: formData,
-          });
-          const data = await resp.json();
-          if (resp.ok && data.url) {
-            setAttachedModels(prev => prev.map(m => m.id === uploadId ? { ...m, url: data.url, uploading: false } : m));
-            toast({ title: "3D модель загружена", description: file.name });
-          } else {
-            setAttachedModels(prev => prev.filter(m => m.id !== uploadId));
-            toast({ title: "Ошибка загрузки 3D модели", description: data?.message, variant: "destructive" });
-          }
-        } catch {
-          setAttachedModels(prev => prev.filter(m => m.id !== uploadId));
-          toast({ title: "Ошибка загрузки 3D модели", variant: "destructive" });
-        }
-      })();
-    }
-    if (e.target) e.target.value = "";
   };
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -1871,8 +1858,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             )}
             <div className="relative flex items-end">
-              <input ref={fileInputRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx" multiple onChange={handleImageUpload} className="hidden" />
-              <input ref={modelInputRef} type="file" accept=".glb,.gltf" multiple onChange={handle3DUpload} className="hidden" />
+              <input ref={fileInputRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx,.glb,.gltf" multiple onChange={handleImageUpload} className="hidden" />
               <div className="flex-1 relative bg-white dark:bg-slate-900 rounded-2xl shadow-skeuo-inner border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
                 {attachedModels.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 px-3 pt-3">
@@ -1900,15 +1886,6 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   data-testid="input-prompt"
                 />
                 <div className="absolute right-2 bottom-2 flex items-center gap-1">
-                  <button
-                    onClick={() => modelInputRef.current?.click()}
-                    disabled={isGenerating}
-                    title="Прикрепить 3D модель (.glb/.gltf)"
-                    className="h-8 w-8 rounded-lg flex items-center justify-center text-purple-400 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-all disabled:opacity-40"
-                    data-testid="button-upload-3d"
-                  >
-                    <Box className="w-4 h-4" />
-                  </button>
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isGenerating}
