@@ -1383,7 +1383,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl" onClick={() => faviconInputRef.current?.click()} disabled={faviconUploading || !currentCode} title="Фавикон" data-testid="button-favicon-upload">
             {faviconUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
               project?.generatedCode?.includes('rel="icon"') || project?.generatedCode?.includes("rel='icon'")
-                ? <Globe className="w-4 h-4 text-emerald-500" />
+                ? <Globe className="w-4 h-4 text-blue-500" />
                 : <Globe className="w-4 h-4 text-slate-400" />
             )}
           </Button>
