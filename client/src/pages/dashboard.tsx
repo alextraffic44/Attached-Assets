@@ -36,7 +36,7 @@ import {
   X,
 } from "lucide-react";
 import { useRef } from "react";
-import { STYLE_PICKER_TEMPLATES, type UITemplate } from "@/components/ui-templates";
+import { STYLE_PICKER_BY_CATEGORY, type UITemplate } from "@/components/ui-templates";
 
 const GlassCard = ({ children, className = "", onClick = undefined }: { children: any; className?: string; onClick?: any }) => (
   <div
@@ -59,6 +59,7 @@ export default function DashboardPage() {
   const [description, setDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [selectedStyleTemplate, setSelectedStyleTemplate] = useState<UITemplate | null>(null);
+  const [styleCategory, setStyleCategory] = useState("Все");
   const [isEnhanced, setIsEnhanced] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
@@ -308,7 +309,7 @@ export default function DashboardPage() {
             </h1>
           </div>
           <button
-            onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setSelectedStyleTemplate(null); setSelectedTemplate(""); setShowCreateModal(true); }}
+            onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setSelectedStyleTemplate(null); setSelectedTemplate(""); setStyleCategory("Все"); setShowCreateModal(true); }}
             className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
             style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.9rem 1.8rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
           >
@@ -477,11 +478,24 @@ export default function DashboardPage() {
                 </motion.div>
               ) : createStep === "templates" ? (
                 <motion.div key="t" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col flex-1" style={{ marginTop: 16 }}>
-                  <p style={{ fontSize: '0.82rem', color: '#86868B', marginBottom: 12, textAlign: 'center', lineHeight: 1.5 }}>
-                    Gemini возьмёт стиль выбранного компонента — цвета, шрифты, тени, анимации — и распространит его на весь сайт
-                  </p>
-                  <div style={{ overflowY: 'auto', maxHeight: 340, paddingRight: 4 }} className="grid grid-cols-4 gap-3">
-                    {STYLE_PICKER_TEMPLATES.map(tmpl => (
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                    {Object.keys(STYLE_PICKER_BY_CATEGORY).map(cat => (
+                      <button
+                        key={cat}
+                        onClick={() => setStyleCategory(cat)}
+                        style={{
+                          padding: '4px 12px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600,
+                          background: styleCategory === cat ? '#1D1D1F' : 'rgba(0,0,0,0.06)',
+                          color: styleCategory === cat ? '#fff' : '#86868B',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {cat} {cat !== "Все" && <span style={{ opacity: 0.6, fontWeight: 400 }}>({STYLE_PICKER_BY_CATEGORY[cat].length})</span>}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ overflowY: 'auto', maxHeight: 320, paddingRight: 4 }} className="grid grid-cols-5 gap-2">
+                    {(STYLE_PICKER_BY_CATEGORY[styleCategory] || []).map(tmpl => (
                       <button
                         key={tmpl.id}
                         data-testid={`button-style-template-${tmpl.id}`}

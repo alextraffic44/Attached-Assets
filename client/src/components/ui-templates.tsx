@@ -1064,9 +1064,21 @@ function TemplatePreviewCard({ t, onInsert, scaled }: { t: UITemplate; onInsert:
 }
 
 export const STYLE_PICKER_TEMPLATES: UITemplate[] = [
-  ...BUTTON_TEMPLATES.slice(0, 12),
-  ...CARD_TEMPLATES.slice(0, 6),
+  ...BUTTON_TEMPLATES,
+  ...CARD_TEMPLATES,
+  ...TOGGLE_TEMPLATES,
+  ...LOADER_TEMPLATES,
+  ...FORM_TEMPLATES,
 ];
+
+export const STYLE_PICKER_BY_CATEGORY: Record<string, UITemplate[]> = {
+  "Все": STYLE_PICKER_TEMPLATES,
+  "Кнопки": BUTTON_TEMPLATES,
+  "Карточки": CARD_TEMPLATES,
+  "Тогглы": TOGGLE_TEMPLATES,
+  "Лоадеры": LOADER_TEMPLATES,
+  "Формы": FORM_TEMPLATES,
+};
 
 interface UITemplatesModalProps {
   open: boolean;
