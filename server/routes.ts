@@ -1214,6 +1214,28 @@ ${designAnalysis}
     }
   });
 
+  app.post("/api/3d/download", bypassAuth, async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url || typeof url !== "string") {
+        return res.status(400).json({ message: "URL обязателен" });
+      }
+      const allowed = url.startsWith("https://d1q70pf5vjeyhc.cloudfront.net/") || url.startsWith("https://api.wavespeed.ai/");
+      if (!allowed) {
+        return res.status(400).json({ message: "Недопустимый URL" });
+      }
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error("Failed to download GLB");
+      const arrayBuf = await resp.arrayBuffer();
+      const buffer = Buffer.from(arrayBuf);
+      const localUrl = await uploadToObjectStorage(buffer, "model/gltf-binary", "glb");
+      res.json({ url: localUrl });
+    } catch (err: any) {
+      console.error("[3D download] error:", err);
+      res.status(500).json({ message: "Ошибка загрузки 3D модели" });
+    }
+  });
+
   app.get("/api/projects/:id/images", bypassAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));

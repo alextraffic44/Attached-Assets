@@ -1132,18 +1132,17 @@ export default function EditorPage() {
 
   const handleInsert3D = useCallback(async (glbUrl: string) => {
     if (!glbUrl || !project) return;
-    const formData = new FormData();
     try {
-      const resp = await fetch(glbUrl);
-      if (!resp.ok) throw new Error("Failed to download");
-      const blob = await resp.blob();
-      formData.append("file", new File([blob], "model.glb", { type: "model/gltf-binary" }));
-      const uploadResp = await fetch("/api/upload-file", { method: "POST", credentials: "include", body: formData });
-      const uploadData = await uploadResp.json();
-      if (!uploadResp.ok) throw new Error(uploadData.message);
-      const localUrl = uploadData.url;
+      const resp = await fetch("/api/3d/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ url: glbUrl }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.message);
 
-      setAttachedModels(prev => [...prev, { id: `gen3d-${Date.now()}`, url: localUrl, fileName: "model.glb", uploading: false }]);
+      setAttachedModels(prev => [...prev, { id: `gen3d-${Date.now()}`, url: data.url, fileName: "model.glb", uploading: false }]);
       toast({ title: "3D модель добавлена", description: "Отправьте промт чтобы встроить модель на сайт" });
       setGen3dOpen(false);
     } catch (err: any) {
