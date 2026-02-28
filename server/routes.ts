@@ -1017,7 +1017,7 @@ ${designAnalysis}
 
   app.post("/api/images/generate", bypassAuth, async (req, res) => {
     try {
-      const IMAGE_COST = 10;
+      const IMAGE_COST = 15;
       const user = req.user as any;
 
       const { prompt, aspectRatio = "16:9", outputFormat = "jpg", idempotencyKey, referenceImageUrls } = req.body;

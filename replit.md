@@ -13,7 +13,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - **Two-Step Mockup Analysis**: Step 1 extracts detailed JSON design spec (colors, typography, layout, sections, effects) via separate Gemini call; Step 2 uses that structured analysis to generate pixel-perfect code
 - **AI Enhance**: Gemini 2.5 Flash for prompt enhancement (5 tokens)
 - **Deep Research**: Gemini Interactions API with deep-research-pro-preview-12-2025 agent (10 tokens, optional toggle)
-- **AI Images**: Nano Banana 2 via KIE API (KIE_API_KEY env var, async task-based, 2K resolution, 10 tokens)
+- **AI Images**: Nano Banana 2 via KIE API (KIE_API_KEY env var, async task-based, 2K resolution, 15 tokens)
 - **Routing**: wouter for client-side routing
 
 ## Pages

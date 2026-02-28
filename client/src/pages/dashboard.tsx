@@ -762,7 +762,7 @@ export default function DashboardPage() {
                                     {mockupGenerating ? "Генерация..." : "Создать"}
                                   </button>
                                 </div>
-                                <p className="text-[10px] mt-1.5" style={{ color: '#A78BFA' }}>AI сгенерирует макет (10 токенов)</p>
+                                <p className="text-[10px] mt-1.5" style={{ color: '#A78BFA' }}>AI сгенерирует макет (15 токенов)</p>
                               </div>
                             </div>
                           )}

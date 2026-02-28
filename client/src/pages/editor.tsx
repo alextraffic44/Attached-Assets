@@ -2056,7 +2056,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 {imgGenerating ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {imgStatus === "creating" ? "Создаём задачу..." : "Генерируем изображение..."}</>
                 ) : (
-                  <><Sparkles className="w-4 h-4 mr-2" /> Сгенерировать · 10 токенов</>
+                  <><Sparkles className="w-4 h-4 mr-2" /> Сгенерировать · 15 токенов</>
                 )}
               </Button>
 
