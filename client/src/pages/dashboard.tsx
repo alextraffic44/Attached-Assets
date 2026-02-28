@@ -11,6 +11,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
@@ -113,6 +114,7 @@ export default function DashboardPage() {
   const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
   const [isResearching, setIsResearching] = useState(false);
   const [researchData, setResearchData] = useState("");
+  const [showDeepResearchPopup, setShowDeepResearchPopup] = useState(false);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [multiPageEnabled, setMultiPageEnabled] = useState(false);
@@ -446,7 +448,7 @@ export default function DashboardPage() {
         )}
       </main>
 
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+      <Dialog open={showCreateModal} onOpenChange={(open) => { if (!open && isResearching) return; setShowCreateModal(open); if (!open) { setResearchData(""); setDeepResearchEnabled(false); setIsResearching(false); } }}>
         <DialogContent className="p-0 overflow-hidden" style={{ width: '92vw', maxWidth: createStep === "templates" ? 1080 : 860, borderRadius: 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont, transition: 'max-width 0.3s ease' }}>
           <div style={{ padding: createStep === "templates" ? '0' : '2rem 2.5rem', minHeight: createStep === "templates" ? 0 : 440, display: 'flex', flexDirection: 'column' }}>
             {createStep !== "templates" && (
@@ -885,33 +887,21 @@ export default function DashboardPage() {
                     <button
                       data-testid="button-deep-research"
                       type="button"
-                      onClick={async () => {
+                      onClick={() => {
                         if (isEnhancing || isResearching) return;
                         if (researchData) { setDeepResearchEnabled(false); setResearchData(""); toast({ title: "Deep Research отключён" }); return; }
                         if (!description.trim() || description.trim().length < 3) {
                           toast({ title: "Введите описание", description: "Напишите хотя бы несколько слов для исследования", variant: "destructive" });
                           return;
                         }
-                        setIsResearching(true); setDeepResearchEnabled(true);
-                        queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 10) } : old);
-                        try {
-                          const res = await apiRequest("POST", "/api/deep-research", { prompt: description });
-                          const data = await res.json();
-                          if (data.newBalance !== undefined) { queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old); }
-                          if (data.warning) { toast({ title: "Внимание", description: data.warning }); setDeepResearchEnabled(false); }
-                          else if (data.research) { setResearchData(data.research); toast({ title: "Deep Research завершён!", description: "Реальные факты будут использованы при генерации сайта" }); }
-                        } catch (err: any) {
-                          let msg = "Не удалось провести исследование";
-                          try { const t = err?.message || ""; const m = t.match(/\{.*\}/); if (m) { const p = JSON.parse(m[0]); if (p.message) msg = p.message; } } catch {}
-                          toast({ title: "Ошибка", description: msg, variant: "destructive" }); setDeepResearchEnabled(false);
-                        } finally { setIsResearching(false); }
+                        setShowDeepResearchPopup(true);
                       }}
                       disabled={isEnhancing || isResearching || !description.trim()}
                       className="h-10 flex items-center justify-center gap-1.5 font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                      style={{ border: researchData ? '1px solid rgba(0,113,227,0.3)' : '1.5px dashed rgba(0,0,0,0.12)', background: researchData ? 'rgba(0,113,227,0.06)' : 'transparent', color: researchData ? '#0058b3' : '#86868B', borderRadius: 12, cursor: 'pointer' }}
+                      style={{ border: isResearching ? '1px solid rgba(0,113,227,0.5)' : researchData ? '1px solid rgba(0,113,227,0.3)' : '1.5px dashed rgba(0,0,0,0.12)', background: isResearching ? 'rgba(0,113,227,0.1)' : researchData ? 'rgba(0,113,227,0.06)' : 'transparent', color: isResearching ? '#0071e3' : researchData ? '#0058b3' : '#86868B', borderRadius: 12, cursor: isResearching ? 'default' : 'pointer' }}
                     >
                       {isResearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : researchData ? <Globe className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
-                      {isResearching ? 'Исследуем...' : researchData ? 'Исследовано' : 'Deep Research'}
+                      {isResearching ? 'Исследуем...' : researchData ? 'Исследовано ✓' : 'Deep Research'}
                     </button>
                     )}
                     <button
@@ -932,6 +922,68 @@ export default function DashboardPage() {
                 </motion.div>
               )}
             </AnimatePresence>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDeepResearchPopup} onOpenChange={setShowDeepResearchPopup}>
+        <DialogContent className="p-0 overflow-hidden" style={{ maxWidth: 440, borderRadius: 20, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 24px 60px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont }}>
+          <div style={{ padding: '2rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#0071e3,#005bbf)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Globe style={{ width: 22, height: 22, color: '#fff' }} />
+              </div>
+              <div>
+                <DialogTitle style={{ fontSize: '1.15rem', fontWeight: 700, color: '#1D1D1F', margin: 0 }}>Deep Research</DialogTitle>
+                <DialogDescription style={{ fontSize: '0.78rem', color: '#86868B', margin: 0 }}>Углублённый анализ темы</DialogDescription>
+              </div>
+            </div>
+            <p style={{ fontSize: '0.88rem', color: '#3a3a3c', lineHeight: 1.6, marginBottom: 20 }}>
+              AI проведёт глубокое исследование по теме вашего сайта: соберёт реальные факты, статистику и актуальные данные из интернета. Всё это будет использовано при генерации контента сайта, делая его достоверным и убедительным.
+            </p>
+            <div style={{ background: 'rgba(0,113,227,0.06)', border: '1px solid rgba(0,113,227,0.15)', borderRadius: 12, padding: '10px 14px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Coins style={{ width: 16, height: 16, color: '#0071e3', flexShrink: 0 }} />
+              <span style={{ fontSize: '0.82rem', color: '#0058b3', fontWeight: 600 }}>Стоимость: 10 токенов</span>
+              <span style={{ fontSize: '0.78rem', color: '#86868B', marginLeft: 'auto' }}>~1–2 минуты</span>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setShowDeepResearchPopup(false)}
+                style={{ flex: 1, height: 42, border: '1px solid rgba(0,0,0,0.12)', borderRadius: 12, background: 'transparent', color: '#86868B', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', fontFamily: appleFont }}
+              >
+                Отмена
+              </button>
+              <button
+                onClick={async () => {
+                  setShowDeepResearchPopup(false);
+                  setIsResearching(true);
+                  setDeepResearchEnabled(true);
+                  queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 10) } : old);
+                  try {
+                    const res = await apiRequest("POST", "/api/deep-research", { prompt: description });
+                    const data = await res.json();
+                    if (data.newBalance !== undefined) { queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old); }
+                    if (data.warning) {
+                      toast({ title: "Внимание", description: data.warning });
+                      setDeepResearchEnabled(false);
+                    } else if (data.research) {
+                      setResearchData(data.research);
+                      toast({ title: "✅ Deep Research завершён!", description: "Реальные факты и данные добавлены — теперь нажмите «Создать проект»" });
+                    }
+                  } catch (err: any) {
+                    let msg = "Не удалось провести исследование";
+                    try { const t = err?.message || ""; const m = t.match(/\{.*\}/); if (m) { const p = JSON.parse(m[0]); if (p.message) msg = p.message; } } catch {}
+                    toast({ title: "Ошибка Deep Research", description: msg, variant: "destructive" });
+                    setDeepResearchEnabled(false);
+                  } finally {
+                    setIsResearching(false);
+                  }
+                }}
+                style={{ flex: 2, height: 42, border: 'none', borderRadius: 12, background: 'linear-gradient(135deg,#0071e3,#005bbf)', color: '#fff', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: appleFont, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                <Globe style={{ width: 15, height: 15 }} /> Запустить
+              </button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
