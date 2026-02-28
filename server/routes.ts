@@ -1165,13 +1165,16 @@ ${designAnalysis}
       const createBody = await createResp.json() as any;
       console.log("[WaveSpeed 3D] create response:", JSON.stringify(createBody).substring(0, 500));
 
-      if (!createResp.ok || !createBody.id) {
-        return res.status(500).json({ message: createBody?.error?.message || createBody?.detail || "Ошибка создания 3D задачи" });
+      const taskData = createBody.data || createBody;
+      const taskId = taskData.id;
+      if (!createResp.ok || !taskId) {
+        await storage.refundCredits(user.id, MODEL_3D_COST);
+        return res.status(500).json({ message: createBody?.error?.message || createBody?.detail || createBody?.message || "Ошибка создания 3D задачи" });
       }
 
       res.json({
-        taskId: createBody.id,
-        statusUrl: createBody.urls?.get || `${WAVESPEED_3D_URL}/${createBody.id}`,
+        taskId,
+        statusUrl: taskData.urls?.get || `${WAVESPEED_3D_URL}/${taskId}`,
         newBalance: deduction.newBalance,
       });
     } catch (err: any) {
@@ -1194,11 +1197,12 @@ ${designAnalysis}
       const resp = await fetch(statusUrl, {
         headers: { "Authorization": `Bearer ${WAVESPEED_API_KEY}` },
       });
-      const body = await resp.json() as any;
-      console.log("[WaveSpeed 3D] status:", JSON.stringify(body).substring(0, 500));
+      const rawBody = await resp.json() as any;
+      const body = rawBody.data || rawBody;
+      console.log("[WaveSpeed 3D] status:", JSON.stringify(rawBody).substring(0, 500));
 
       if (body.status === "completed") {
-        return res.json({ state: "success", outputs: body.outputs || [] });
+        return res.json({ state: "success", outputs: body.outputs || body.output || [] });
       }
       if (body.status === "failed") {
         return res.json({ state: "fail", error: body.error || "Ошибка генерации 3D" });

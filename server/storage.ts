@@ -10,6 +10,7 @@ export interface IStorage {
   createTelegramUser(data: { telegramId: string; displayName: string; avatarUrl?: string }): Promise<User>;
   updateUserCredits(id: number, credits: number): Promise<User | undefined>;
   deductCredits(userId: number, amount: number, operation: string, idempotencyKey: string): Promise<{ success: boolean; newBalance: number; alreadyProcessed?: boolean }>;
+  refundCredits(userId: number, amount: number): Promise<number>;
 
   getProject(id: number): Promise<Project | undefined>;
   getProjectsByUser(userId: number): Promise<Project[]>;
@@ -104,6 +105,14 @@ export class DatabaseStorage implements IStorage {
     });
 
     return { success: true, newBalance: rows[0].credits };
+  }
+
+  async refundCredits(userId: number, amount: number): Promise<number> {
+    const result = await db.execute(
+      sql`UPDATE users SET credits = credits + ${amount} WHERE id = ${userId} RETURNING credits`
+    );
+    const rows = result.rows as Array<{ credits: number }>;
+    return rows?.[0]?.credits ?? 0;
   }
 
   async getProject(id: number): Promise<Project | undefined> {
