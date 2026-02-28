@@ -36,6 +36,7 @@ import {
   X,
 } from "lucide-react";
 import { useRef } from "react";
+import { STYLE_PICKER_TEMPLATES, type UITemplate } from "@/components/ui-templates";
 
 const GlassCard = ({ children, className = "", onClick = undefined }: { children: any; className?: string; onClick?: any }) => (
   <div
@@ -57,6 +58,7 @@ export default function DashboardPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [selectedStyleTemplate, setSelectedStyleTemplate] = useState<UITemplate | null>(null);
   const [isEnhanced, setIsEnhanced] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
@@ -94,7 +96,14 @@ export default function DashboardPage() {
     onSuccess: async (project: Project) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       setShowCreateModal(false);
-      const prompt = selectedMode === "template" ? `Создай сайт: ${selectedTemplate}. ${description}` : selectedMode === "photo" ? (description || "Воссоздай дизайн с загруженного скриншота") : description || title;
+      const styleRef = selectedStyleTemplate
+        ? `\n\nИспользуй следующий UI-компонент как эталон стиля для всего сайта — перенеси его цветовую схему, типографику, тени, анимации и визуальный характер на ВСЕ элементы сайта. НЕ вставляй этот компонент буквально, а вдохновляйся его стилем:\n\nHTML компонента:\n${selectedStyleTemplate.html}\n\nCSS компонента:\n${selectedStyleTemplate.css}`
+        : "";
+      const prompt = selectedMode === "template"
+        ? `Создай сайт: ${description || title}.${styleRef}`
+        : selectedMode === "photo"
+          ? (description || "Воссоздай дизайн с загруженного скриншота")
+          : description || title;
       const enhancedParam = isEnhanced ? "&enhanced=1" : "";
       const researchParam = researchData ? `&research=${encodeURIComponent(researchData)}` : "";
       const multiPageParam = (multiPageEnabled && pageNames.filter(p => p.trim()).length > 0)
@@ -299,7 +308,7 @@ export default function DashboardPage() {
             </h1>
           </div>
           <button
-            onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setShowCreateModal(true); }}
+            onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setSelectedStyleTemplate(null); setSelectedTemplate(""); setShowCreateModal(true); }}
             className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
             style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.9rem 1.8rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
           >
@@ -393,7 +402,7 @@ export default function DashboardPage() {
           <div style={{ padding: '2rem 2.5rem', minHeight: 440, display: 'flex', flexDirection: 'column' }}>
             <DialogHeader>
               <DialogTitle style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F', textAlign: 'center' }}>
-                {createStep === "choose" ? "С чего начнём?" : createStep === "templates" ? "Выберите шаблон" : "Оживите мечту"}
+                {createStep === "choose" ? "С чего начнём?" : createStep === "templates" ? "Выберите стиль" : "Оживите мечту"}
               </DialogTitle>
             </DialogHeader>
 
@@ -467,85 +476,45 @@ export default function DashboardPage() {
                   ))}
                 </motion.div>
               ) : createStep === "templates" ? (
-                <motion.div key="t" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col flex-1" style={{ marginTop: 32 }}>
-                  <div className="grid grid-cols-3 gap-4 flex-1 items-center">
-                  {[
-                    {
-                      id: "hero-video",
-                      t: "Hero с видео",
-                      d: "Динамичный фон с видеоплеером",
-                      icon: (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9">
-                          <g className="transition-transform duration-500 origin-center group-hover:scale-110">
-                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-rose-400 transition-colors duration-500" />
-                            <path d="M2 7h20" stroke="currentColor" strokeWidth="1.5" className="text-gray-200" />
-                            <circle cx="5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-red-400 transition-colors duration-300" />
-                            <circle cx="7.5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-yellow-400 transition-colors duration-300 delay-75" />
-                            <circle cx="10" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-green-400 transition-colors duration-300 delay-150" />
-                            <rect x="6" y="9" width="12" height="10" rx="1" fill="currentColor" className="text-rose-100" />
-                            <polygon points="10.5 11.5, 14.5 14, 10.5 16.5" fill="currentColor" className="text-rose-500 transition-transform duration-300 origin-center group-hover:scale-110" />
-                          </g>
-                        </svg>
-                      ),
-                    },
-                    {
-                      id: "hero-photo",
-                      t: "Hero с фото",
-                      d: "Классический баннер с изображением",
-                      icon: (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9">
-                          <g className="transition-transform duration-500 origin-center group-hover:scale-110">
-                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-sky-400 transition-colors duration-500" />
-                            <path d="M2 7h20" stroke="currentColor" strokeWidth="1.5" className="text-gray-200" />
-                            <circle cx="5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-red-400 transition-colors duration-300" />
-                            <circle cx="7.5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-yellow-400 transition-colors duration-300 delay-75" />
-                            <circle cx="10" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-green-400 transition-colors duration-300 delay-150" />
-                            <circle cx="16" cy="10" r="2" fill="currentColor" className="text-sky-300" />
-                            <path d="M6 22 L 14 13 L 24 22 Z" fill="currentColor" className="text-sky-400" />
-                          </g>
-                        </svg>
-                      ),
-                    },
-                    {
-                      id: "hero-svg",
-                      t: "Hero с SVG",
-                      d: "Современная интерактивная графика",
-                      icon: (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9">
-                          <g className="transition-transform duration-500 origin-center group-hover:scale-110">
-                            <rect x="2" y="3" width="20" height="18" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 group-hover:text-emerald-400 transition-colors duration-500" />
-                            <path d="M2 7h20" stroke="currentColor" strokeWidth="1.5" className="text-gray-200" />
-                            <circle cx="5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-red-400 transition-colors duration-300" />
-                            <circle cx="7.5" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-yellow-400 transition-colors duration-300 delay-75" />
-                            <circle cx="10" cy="5" r="0.75" fill="currentColor" className="text-gray-300 group-hover:text-green-400 transition-colors duration-300 delay-150" />
-                            <circle cx="7" cy="14" r="2.5" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-400 transition-all duration-700 origin-center group-hover:scale-125" />
-                            <polygon points="12 9, 15 15, 9 15" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-500 transition-all duration-700 delay-75 origin-center group-hover:rotate-12" />
-                            <rect x="15" y="11" width="4" height="4" stroke="currentColor" strokeWidth="1.5" fill="transparent" className="text-emerald-300 transition-all duration-700 delay-150 origin-center group-hover:-rotate-12" />
-                          </g>
-                        </svg>
-                      ),
-                    },
-                  ].map(x => (
-                    <button
-                      key={x.id}
-                      data-testid={`button-template-${x.id}`}
-                      className="group flex flex-col items-center justify-center text-center transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none"
-                      style={{ padding: '2rem 1.5rem', borderRadius: 20, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', minHeight: 170 }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.12)'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.06)'; }}
-                      onClick={() => { setSelectedTemplate(x.t); setCreateStep("details"); }}
-                    >
-                      <div className="flex items-center justify-center mb-4" style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
-                        {x.icon}
-                      </div>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 4, letterSpacing: '-0.02em' }}>{x.t}</h3>
-                      <p style={{ fontSize: '0.82rem', color: '#86868B', fontWeight: 400, lineHeight: 1.4 }}>{x.d}</p>
-                    </button>
-                  ))}
+                <motion.div key="t" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col flex-1" style={{ marginTop: 16 }}>
+                  <p style={{ fontSize: '0.82rem', color: '#86868B', marginBottom: 12, textAlign: 'center', lineHeight: 1.5 }}>
+                    Gemini возьмёт стиль выбранного компонента — цвета, шрифты, тени, анимации — и распространит его на весь сайт
+                  </p>
+                  <div style={{ overflowY: 'auto', maxHeight: 340, paddingRight: 4 }} className="grid grid-cols-4 gap-3">
+                    {STYLE_PICKER_TEMPLATES.map(tmpl => (
+                      <button
+                        key={tmpl.id}
+                        data-testid={`button-style-template-${tmpl.id}`}
+                        onClick={() => { setSelectedStyleTemplate(tmpl); setSelectedTemplate(tmpl.name); setCreateStep("details"); }}
+                        className="group focus:outline-none text-left transition-all duration-200"
+                        style={{
+                          borderRadius: 14,
+                          border: selectedStyleTemplate?.id === tmpl.id ? '2px solid #007AFF' : '1.5px solid rgba(0,0,0,0.08)',
+                          background: selectedStyleTemplate?.id === tmpl.id ? 'rgba(0,122,255,0.05)' : 'rgba(0,0,0,0.02)',
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          padding: 0,
+                        }}
+                        onMouseEnter={e => { if (selectedStyleTemplate?.id !== tmpl.id) { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.15)'; (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; } }}
+                        onMouseLeave={e => { if (selectedStyleTemplate?.id !== tmpl.id) { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; } }}
+                      >
+                        <div style={{ height: 90, background: '#f5f5f7', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
+                          <iframe
+                            srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box;}body{display:flex;align-items:center;justify-content:center;height:100vh;background:#f5f5f7;transform-origin:center;overflow:hidden;}${tmpl.css}</style></head><body><div style="transform:scale(0.65);transform-origin:center;">${tmpl.html}</div></body></html>`}
+                            style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+                            scrolling="no"
+                            title={tmpl.name}
+                          />
+                        </div>
+                        <div style={{ padding: '7px 10px 9px' }}>
+                          <p style={{ fontSize: '0.72rem', fontWeight: 600, color: '#1D1D1F', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tmpl.name}</p>
+                        </div>
+                      </button>
+                    ))}
                   </div>
                   <button
                     data-testid="button-templates-back"
-                    className="transition-colors self-center mt-4"
+                    className="transition-colors self-center mt-3"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 600, color: '#86868B' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#1D1D1F'; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#86868B'; }}
@@ -556,6 +525,15 @@ export default function DashboardPage() {
                 </motion.div>
               ) : (
                 <motion.div key="d" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col flex-1" style={{ marginTop: 20 }}>
+                  {selectedStyleTemplate && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                      <span style={{ fontSize: '0.72rem', color: '#86868B', fontWeight: 500 }}>Стиль:</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,122,255,0.08)', border: '1px solid rgba(0,122,255,0.2)', borderRadius: 8, padding: '3px 10px', fontSize: '0.72rem', fontWeight: 600, color: '#007AFF' }}>
+                        {selectedStyleTemplate.name}
+                        <button onClick={() => { setSelectedStyleTemplate(null); setSelectedTemplate(""); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, color: '#007AFF', opacity: 0.6, fontSize: '0.9rem', marginLeft: 2 }}>×</button>
+                      </span>
+                    </div>
+                  )}
                   <div className="grid gap-6 flex-1" style={{ gridTemplateColumns: '1fr 1fr' }}>
                     <div className="flex flex-col gap-3">
                       <div className="space-y-1.5">

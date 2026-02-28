@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 
 export type UITemplateCategory = "buttons" | "cards" | "toggles" | "loaders" | "forms";
 
-interface UITemplate {
+export interface UITemplate {
   id: string;
   name: string;
   author: string;
@@ -1062,6 +1062,11 @@ function TemplatePreviewCard({ t, onInsert, scaled }: { t: UITemplate; onInsert:
     </div>
   );
 }
+
+export const STYLE_PICKER_TEMPLATES: UITemplate[] = [
+  ...BUTTON_TEMPLATES.slice(0, 12),
+  ...CARD_TEMPLATES.slice(0, 6),
+];
 
 interface UITemplatesModalProps {
   open: boolean;
