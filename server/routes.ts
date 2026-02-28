@@ -253,9 +253,12 @@ export async function registerRoutes(
     "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/webp": "webp",
     "image/gif": "gif", "image/svg+xml": "svg",
     "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "video/ogg": "ogg",
+    "model/gltf-binary": "glb", "model/gltf+json": "gltf",
+    "application/octet-stream": "glb",
   };
   const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
   const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+  const MAX_3D_SIZE = 50 * 1024 * 1024;
 
   app.post("/api/upload-image", bypassAuth, async (req, res) => {
     try {
@@ -279,22 +282,31 @@ export async function registerRoutes(
   });
 
   const multer = (await import("multer")).default;
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_VIDEO_SIZE } });
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Math.max(MAX_VIDEO_SIZE, MAX_3D_SIZE) } });
 
   app.post("/api/upload-file", bypassAuth, upload.single("file"), async (req, res) => {
     try {
       const file = req.file;
       if (!file) return res.status(400).json({ message: "Файл не прикреплён" });
-      const mime = file.mimetype.toLowerCase();
-      const ext = ALLOWED_UPLOAD_MIMES[mime];
-      if (!ext) return res.status(400).json({ message: "Неподдерживаемый формат файла" });
+      let mime = file.mimetype.toLowerCase();
+      const originalName = (file.originalname || "").toLowerCase();
+
+      // Detect 3D model by extension when browser sends application/octet-stream
+      let ext = ALLOWED_UPLOAD_MIMES[mime];
+      if (!ext || (mime === "application/octet-stream" && !originalName.endsWith(".glb"))) {
+        if (originalName.endsWith(".glb")) { ext = "glb"; mime = "model/gltf-binary"; }
+        else if (originalName.endsWith(".gltf")) { ext = "gltf"; mime = "model/gltf+json"; }
+        else if (!ext) return res.status(400).json({ message: "Неподдерживаемый формат файла" });
+      }
+
+      const is3D = ext === "glb" || ext === "gltf";
       const isVideo = mime.startsWith("video/");
-      const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+      const maxSize = is3D ? MAX_3D_SIZE : isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
       if (file.size > maxSize) {
         return res.status(400).json({ message: `Файл слишком большой. Максимум: ${Math.round(maxSize / 1024 / 1024)} МБ` });
       }
       const url = await uploadToObjectStorage(file.buffer, mime, ext);
-      res.json({ url, filename: file.originalname || `${crypto.randomUUID()}.${ext}` });
+      res.json({ url, filename: file.originalname || `${crypto.randomUUID()}.${ext}`, fileType: is3D ? "3d" : isVideo ? "video" : "image" });
     } catch (err) {
       console.error("Upload file error:", err);
       res.status(500).json({ message: "Ошибка загрузки файла" });
@@ -437,7 +449,7 @@ export async function registerRoutes(
 
       const GENERATION_COST = 100;
 
-      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, videoUrls } = req.body;
+      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, videoUrls, modelUrls } = req.body;
       const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
         Array.isArray(images) && images.length > 0 ? images 
         : imageBase64 ? [{ base64: imageBase64, mimeType: imageMimeType || "image/png" }] 
@@ -510,6 +522,15 @@ export async function registerRoutes(
           systemContent += `- "${vid.fileName}" — URL: ${vid.url}\n`;
         }
         systemContent += `\nИспользуй тег <video> с атрибутами controls, playsinline, и при необходимости autoplay muted loop:\n<video src="${videoArray[0].url}" controls playsinline style="width:100%; max-width:800px; border-radius:12px;"></video>\n\nМожно использовать видео как:\n- Фоновое видео секции (autoplay muted loop, без controls)\n- Видеоплеер в контенте (с controls)\n- Hero-видео с наложением текста\nВыбери подходящий вариант исходя из контекста запроса пользователя.\n═══ КОНЕЦ ВИДЕО ═══\n`;
+      }
+
+      const modelArray: Array<{url: string, fileName: string}> = Array.isArray(modelUrls) ? modelUrls : [];
+      if (modelArray.length > 0) {
+        systemContent += `\n\n═══ ЗАГРУЖЕННЫЕ 3D МОДЕЛИ ПОЛЬЗОВАТЕЛЯ ═══\nПользователь прикрепил 3D модели (.glb/.gltf). ОБЯЗАТЕЛЬНО встрой их на сайт используя Google Model Viewer:\n`;
+        for (const mdl of modelArray) {
+          systemContent += `- "${mdl.fileName}" — URL: ${mdl.url}\n`;
+        }
+        systemContent += `\nДобавь в <head> скрипт: <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>\nЗатем встрой модель через тег <model-viewer>:\n<model-viewer src="${modelArray[0].url}" alt="${modelArray[0].fileName}" auto-rotate camera-controls shadow-intensity="1" style="width:100%;height:500px;background:#f0f0f0;border-radius:16px;"></model-viewer>\n\nИспользуй 3D модель как:\n- Интерактивный 3D-просмотрщик продукта\n- Hero-элемент с вращающейся моделью\n- Демонстрационный блок с управлением камерой\nВыбери подходящий вариант исходя из контекста.\n═══ КОНЕЦ 3D МОДЕЛЕЙ ═══\n`;
       }
 
       const isEditMode = !!project.generatedCode;

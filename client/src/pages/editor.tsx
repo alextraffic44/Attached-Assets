@@ -47,6 +47,7 @@ import {
   Video,
   Globe,
   Camera,
+  Box,
 } from "lucide-react";
 import {
   Dialog,
@@ -83,6 +84,7 @@ export default function EditorPage() {
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [attachedImages, setAttachedImages] = useState<Array<{base64: string, mimeType: string, preview: string | null, fileName: string}>>([]);
   const [attachedVideos, setAttachedVideos] = useState<Array<{id: string, url: string, fileName: string, uploading: boolean}>>([]);
+  const [attachedModels, setAttachedModels] = useState<Array<{id: string, url: string, fileName: string, uploading: boolean}>>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
   const [streamingReply, setStreamingReply] = useState("");
@@ -91,6 +93,7 @@ export default function EditorPage() {
   const [selectedElement, setSelectedElement] = useState<{tag: string, text: string, classes: string, path: string, outerSnippet: string} | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const modelInputRef = useRef<HTMLInputElement>(null);
   const pendingImageTarget = useRef<string | null>(null);
 
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
@@ -268,7 +271,8 @@ export default function EditorPage() {
     let text = customPrompt || prompt;
     const effectiveImages = injectedImages || attachedImages;
     const effectiveVideos = attachedVideos.filter(v => !v.uploading && v.url);
-    if (!text.trim() && effectiveImages.length === 0 && effectiveVideos.length === 0) return;
+    const effectiveModels = attachedModels.filter(m => !m.uploading && m.url);
+    if (!text.trim() && effectiveImages.length === 0 && effectiveVideos.length === 0 && effectiveModels.length === 0) return;
 
     if (selectedElement && !customPrompt) {
       const elRef = `[Выбранный элемент: <${selectedElement.tag}>${selectedElement.classes ? ` class="${selectedElement.classes}"` : ''} — "${selectedElement.text.substring(0, 80)}"\nHTML: ${selectedElement.outerSnippet}]\n\n`;
@@ -286,17 +290,20 @@ export default function EditorPage() {
     const images = effectiveImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
     const sentPreviews = effectiveImages.filter(img => img.preview).map(img => ({ preview: img.preview!, fileName: img.fileName }));
     const videoUrls = effectiveVideos.map(v => ({ url: v.url, fileName: v.fileName }));
+    const modelUrlsToSend = effectiveModels.map(m => ({ url: m.url, fileName: m.fileName }));
 
     setAttachedImages([]);
     setAttachedVideos([]);
+    setAttachedModels([]);
 
     const imageInfo = sentPreviews.length > 0 ? `\n__IMAGES__${JSON.stringify(sentPreviews)}` : "";
     const videoInfo = videoUrls.length > 0 ? `\n__VIDEOS__${JSON.stringify(videoUrls.map(v => ({ fileName: v.fileName })))}` : "";
+    const modelInfo = modelUrlsToSend.length > 0 ? `\n__MODELS__${JSON.stringify(modelUrlsToSend.map(m => ({ fileName: m.fileName })))}` : "";
     const tempUserMessage: ProjectMessage = {
       id: Math.random(),
       projectId,
       role: "user",
-      content: text + imageInfo + videoInfo,
+      content: text + imageInfo + videoInfo + modelInfo,
       createdAt: new Date()
     };
     
@@ -314,6 +321,9 @@ export default function EditorPage() {
       const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance, mockupMode: isMockupActive && images.length > 0 };
       if (videoUrls.length > 0) {
         bodyData.videoUrls = videoUrls;
+      }
+      if (modelUrlsToSend.length > 0) {
+        bodyData.modelUrls = modelUrlsToSend;
       }
       if (deepResearchData) {
         bodyData.deepResearchData = deepResearchData;
@@ -793,6 +803,48 @@ export default function EditorPage() {
     if (total > 0) {
       toast({ title: `${total > 1 ? total + " файлов" : "Файл"} прикреплён`, description: "Можно отправить вместе с промтом" });
     }
+  };
+
+  const handle3DUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const name = file.name.toLowerCase();
+      if (!name.endsWith(".glb") && !name.endsWith(".gltf")) {
+        toast({ title: "Неподдерживаемый формат", description: "Поддерживаются только .glb и .gltf файлы", variant: "destructive" });
+        continue;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        toast({ title: "Файл слишком большой", description: "Максимальный размер 3D модели — 50 МБ", variant: "destructive" });
+        continue;
+      }
+      const uploadId = `model-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`;
+      setAttachedModels(prev => [...prev, { id: uploadId, url: "", fileName: file.name, uploading: true }]);
+      const formData = new FormData();
+      formData.append("file", file);
+      (async () => {
+        try {
+          const resp = await fetch("/api/upload-file", {
+            method: "POST",
+            credentials: "include",
+            body: formData,
+          });
+          const data = await resp.json();
+          if (resp.ok && data.url) {
+            setAttachedModels(prev => prev.map(m => m.id === uploadId ? { ...m, url: data.url, uploading: false } : m));
+            toast({ title: "3D модель загружена", description: file.name });
+          } else {
+            setAttachedModels(prev => prev.filter(m => m.id !== uploadId));
+            toast({ title: "Ошибка загрузки 3D модели", description: data?.message, variant: "destructive" });
+          }
+        } catch {
+          setAttachedModels(prev => prev.filter(m => m.id !== uploadId));
+          toast({ title: "Ошибка загрузки 3D модели", variant: "destructive" });
+        }
+      })();
+    }
+    if (e.target) e.target.value = "";
   };
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -1372,6 +1424,10 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <Sparkles className="w-4 h-4 mr-1.5" />
                 Шаблоны
               </Button>
+              <Button variant="outline" size="sm" className="rounded-xl font-bold px-3 border-violet-300 text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:border-violet-500/30 dark:hover:bg-violet-500/10" onClick={() => toast({ title: "3D библиотека", description: "Интеграция 3D ассетов появится в ближайшем обновлении. Уже сейчас можно прикрепить .glb файл в чате." })} data-testid="button-3d-library" title="3D библиотека">
+                <Box className="w-4 h-4 mr-1.5" />
+                3D
+              </Button>
             </>
           )}
 
@@ -1488,6 +1544,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                         let contentStr = msg.content;
                         let imgPreviews: Array<{preview: string, fileName: string}> = [];
                         let vidPreviews: Array<{fileName: string}> = [];
+                        let mdlPreviews: Array<{fileName: string}> = [];
                         if (contentStr.includes("\n__VIDEOS__")) {
                           const [before, after] = contentStr.split("\n__VIDEOS__");
                           contentStr = before;
@@ -1498,10 +1555,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                           contentStr = before;
                           try { imgPreviews = JSON.parse(after); } catch {}
                         }
+                        if (contentStr.includes("\n__MODELS__")) {
+                          const [before, after] = contentStr.split("\n__MODELS__");
+                          contentStr = before;
+                          try { mdlPreviews = JSON.parse(after); } catch {}
+                        }
                         return (
                           <div style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                             {contentStr}
-                            {(imgPreviews.length > 0 || vidPreviews.length > 0) && (
+                            {(imgPreviews.length > 0 || vidPreviews.length > 0 || mdlPreviews.length > 0) && (
                               <div className="flex flex-wrap gap-2 mt-2">
                                 {imgPreviews.map((img, i) => (
                                   <div key={`img-${i}`} className="flex items-center gap-2 bg-white/15 rounded-lg px-2 py-1.5">
@@ -1513,6 +1575,12 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                                   <div key={`vid-${i}`} className="flex items-center gap-2 bg-white/15 rounded-lg px-2 py-1.5">
                                     <Video className="w-4 h-4 opacity-80" />
                                     <span className="text-[11px] opacity-80 max-w-[100px] truncate">{vid.fileName}</span>
+                                  </div>
+                                ))}
+                                {mdlPreviews.map((mdl, i) => (
+                                  <div key={`mdl-${i}`} className="flex items-center gap-2 bg-white/15 rounded-lg px-2 py-1.5">
+                                    <Box className="w-4 h-4 opacity-80" />
+                                    <span className="text-[11px] opacity-80 max-w-[100px] truncate">{mdl.fileName}</span>
                                   </div>
                                 ))}
                               </div>
@@ -1646,7 +1714,23 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             )}
             <div className="relative flex items-end">
               <input ref={fileInputRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx" multiple onChange={handleImageUpload} className="hidden" />
+              <input ref={modelInputRef} type="file" accept=".glb,.gltf" multiple onChange={handle3DUpload} className="hidden" />
               <div className="flex-1 relative bg-white dark:bg-slate-900 rounded-2xl shadow-skeuo-inner border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
+                {attachedModels.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+                    {attachedModels.map(model => (
+                      <div key={model.id} className="flex items-center gap-1.5 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg px-2 py-1 text-xs text-purple-700 dark:text-purple-300 font-medium">
+                        {model.uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Box className="w-3 h-3" />}
+                        <span className="max-w-[120px] truncate">{model.fileName}</span>
+                        {!model.uploading && (
+                          <button onClick={() => setAttachedModels(prev => prev.filter(m => m.id !== model.id))} className="hover:text-red-500 transition-colors">
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <Textarea 
                   placeholder={selectedElement ? "Напишите, что сделать с выбранным элементом..." : "Редактируйте блоки, вставляйте изображения, видео, SVG анимацию, меняйте дизайн."}
                   value={prompt}
@@ -1659,6 +1743,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 />
                 <div className="absolute right-2 bottom-2 flex items-center gap-1">
                   <button
+                    onClick={() => modelInputRef.current?.click()}
+                    disabled={isGenerating}
+                    title="Прикрепить 3D модель (.glb/.gltf)"
+                    className="h-8 w-8 rounded-lg flex items-center justify-center text-purple-400 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-all disabled:opacity-40"
+                    data-testid="button-upload-3d"
+                  >
+                    <Box className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isGenerating}
                     className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all disabled:opacity-40"
@@ -1668,7 +1761,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   </button>
                   <button
                     onClick={() => handleGenerate()}
-                    disabled={isGenerating || (!prompt.trim() && attachedImages.length === 0 && attachedVideos.filter(v => !v.uploading).length === 0)}
+                    disabled={isGenerating || (!prompt.trim() && attachedImages.length === 0 && attachedVideos.filter(v => !v.uploading).length === 0 && attachedModels.filter(m => !m.uploading).length === 0)}
                     className="h-8 w-8 rounded-lg flex items-center justify-center bg-primary text-white shadow-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     data-testid="button-send"
                   >
