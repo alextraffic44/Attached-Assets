@@ -1002,26 +1002,33 @@ export default function EditorPage() {
     }
   }, [imgPrompt, imgSize, imgName, imgRefs]);
 
-  const handleSaveImage = useCallback(async (url: string) => {
+  const handleAddImageToChat = useCallback(async (url: string) => {
     try {
-      const resp = await fetch(`/api/projects/${projectId}/images`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: imgName.trim(), url, prompt: imgPrompt }),
-        credentials: "include",
-      });
-      if (!resp.ok) throw new Error("Ошибка сохранения");
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "images"] });
-      toast({ title: "Сохранено в библиотеку", description: `Изображение "${imgName}" готово к использованию` });
-      setImgGenOpen(false);
-      setImgStatus("idle");
-      setImgResultUrls([]);
-      setImgName("");
-      setImgPrompt("");
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error("Не удалось загрузить изображение");
+      const blob = await resp.blob();
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const b64 = dataUrl.split(",")[1];
+        setAttachedImages(prev => [...prev, {
+          base64: b64,
+          mimeType: blob.type || "image/jpeg",
+          preview: dataUrl,
+          fileName: (imgName.trim() || "generated") + ".jpg",
+        }]);
+        toast({ title: "Изображение добавлено в чат", description: "Отправьте промт, чтобы использовать его на сайте" });
+        setImgGenOpen(false);
+        setImgStatus("idle");
+        setImgResultUrls([]);
+        setImgName("");
+        setImgPrompt("");
+      };
+      reader.readAsDataURL(blob);
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
     }
-  }, [projectId, imgName, imgPrompt, toast]);
+  }, [imgName, toast]);
 
   const handle3DImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2325,11 +2332,11 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       </div>
                       <Button
                         className="w-full rounded-xl font-bold h-10 bg-emerald-500 hover:bg-emerald-400 text-white shadow-md shadow-emerald-500/20 border-0 text-sm"
-                        onClick={() => handleSaveImage(url)}
-                        data-testid={`button-save-image-${i}`}
+                        onClick={() => handleAddImageToChat(url)}
+                        data-testid={`button-add-image-to-chat-${i}`}
                       >
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Сохранить в библиотеку
+                        <Send className="w-4 h-4 mr-2" />
+                        Добавить в чат
                       </Button>
                     </div>
                   ))}
