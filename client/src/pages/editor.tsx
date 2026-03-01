@@ -109,7 +109,6 @@ export default function EditorPage() {
   const [cropDrag, setCropDrag] = useState<{ mode: "move" | "resize"; startX: number; startY: number; origBox: { x: number; y: number; size: number } } | null>(null);
   const cropImgRef = useRef<HTMLImageElement>(null);
   const cropContainerRef = useRef<HTMLDivElement>(null);
-  const [imgName, setImgName] = useState("");
   const [imgPrompt, setImgPrompt] = useState("");
   const [imgSize, setImgSize] = useState("16:9");
   const [imgGenerating, setImgGenerating] = useState(false);
@@ -944,7 +943,7 @@ export default function EditorPage() {
   }, [toast, imgRefs.length]);
 
   const handleGenerateImage = useCallback(async () => {
-    if (!imgPrompt.trim() || !imgName.trim()) return;
+    if (!imgPrompt.trim()) return;
     setImgGenerating(true);
     setImgStatus("creating");
     setImgResultUrls([]);
@@ -1000,7 +999,7 @@ export default function EditorPage() {
       setImgStatus("fail");
       setImgGenerating(false);
     }
-  }, [imgPrompt, imgSize, imgName, imgRefs]);
+  }, [imgPrompt, imgSize, imgRefs]);
 
   const handleAddImageToChat = useCallback(async (url: string) => {
     try {
@@ -1015,20 +1014,19 @@ export default function EditorPage() {
           base64: b64,
           mimeType: blob.type || "image/jpeg",
           preview: dataUrl,
-          fileName: (imgName.trim() || "generated") + ".jpg",
+          fileName: (imgPrompt.trim().split(/\s+/).slice(0, 3).join("_") || "generated") + ".jpg",
         }]);
         toast({ title: "Изображение добавлено в чат", description: "Отправьте промт, чтобы использовать его на сайте" });
         setImgGenOpen(false);
         setImgStatus("idle");
         setImgResultUrls([]);
-        setImgName("");
         setImgPrompt("");
       };
       reader.readAsDataURL(blob);
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
     }
-  }, [imgName, toast]);
+  }, [imgPrompt, toast]);
 
   const handle3DImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2203,18 +2201,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             </div>
 
             <div className="px-7 pb-7 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Название</label>
-                  <Input
-                    placeholder="hero, баннер, фон..."
-                    value={imgName}
-                    onChange={e => setImgName(e.target.value)}
-                    className="rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-blue-400 focus-visible:ring-0 focus-visible:ring-offset-0 h-10 text-sm"
-                    disabled={imgGenerating}
-                    data-testid="input-image-name"
-                  />
-                </div>
+              <div>
                 <div>
                   <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Формат</label>
                   <Select value={imgSize} onValueChange={setImgSize} disabled={imgGenerating}>
@@ -2285,7 +2272,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               <Button
                 className="w-full rounded-xl font-bold h-11 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all border-0 text-sm"
                 onClick={handleGenerateImage}
-                disabled={imgGenerating || !imgPrompt.trim() || !imgName.trim()}
+                disabled={imgGenerating || !imgPrompt.trim()}
                 data-testid="button-generate-image"
               >
                 {imgGenerating ? (
@@ -2324,7 +2311,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   {imgResultUrls.map((url, i) => (
                     <div key={i} className="space-y-2.5">
                       <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
-                        <img src={url} alt={imgName} className="w-full" data-testid={`img-result-${i}`} />
+                        <img src={url} alt={imgPrompt} className="w-full" data-testid={`img-result-${i}`} />
                         <div className="absolute top-2.5 left-2.5 bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg shadow-blue-500/30">
                           <CheckCircle2 className="w-3 h-3" />
                           2K
