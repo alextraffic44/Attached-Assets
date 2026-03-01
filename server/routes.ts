@@ -57,7 +57,7 @@ const NANO_BANANA_STATUS_URL = "https://api.kie.ai/api/v1/jobs/recordInfo";
 
 const WAVESPEED_API_KEY = process.env.WAVESPEED_API_KEY;
 const WAVESPEED_3D_URL = "https://api.wavespeed.ai/api/v3/wavespeed-ai/hunyuan3d-v3/image-to-3d";
-const MODEL_3D_COST = 20;
+const MODEL_3D_COST = 100;
 
 const PLAN_PUBLISH_LIMITS: Record<string, number> = {
   bronze: 1,

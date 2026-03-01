@@ -129,6 +129,7 @@ export default function EditorPage() {
   const [gen3dError, setGen3dError] = useState("");
   const [gen3dStatusUrl, setGen3dStatusUrl] = useState("");
   const gen3dInputRef = useRef<HTMLInputElement>(null);
+  const gen3dRetryRef = useRef(0);
 
   const [mockupMode, setMockupMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -1070,7 +1071,8 @@ export default function EditorPage() {
     setGen3dStatus("creating");
     setGen3dResultUrl("");
     setGen3dError("");
-    queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 20) } : old);
+    gen3dRetryRef.current = 0;
+    queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 100) } : old);
 
     try {
       const resp = await fetch("/api/3d/generate", {
@@ -1106,11 +1108,14 @@ export default function EditorPage() {
             setGen3dStatus("fail");
             setGen3dGenerating(false);
           }
-        } catch {
-          clearInterval(pollInterval);
-          setGen3dError("Ошибка соединения");
-          setGen3dStatus("fail");
-          setGen3dGenerating(false);
+        } catch (pollErr: any) {
+          gen3dRetryRef.current = (gen3dRetryRef.current || 0) + 1;
+          if (gen3dRetryRef.current >= 3) {
+            clearInterval(pollInterval);
+            setGen3dError(pollErr?.message || "Ошибка соединения");
+            setGen3dStatus("fail");
+            setGen3dGenerating(false);
+          }
         }
       }, 4000);
 
@@ -2444,7 +2449,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 {gen3dGenerating ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {gen3dStatus === "creating" ? "Создаём задачу..." : "Генерируем 3D модель..."}</>
                 ) : (
-                  <><Box className="w-4 h-4 mr-2" /> Создать 3D модель · 20 токенов</>
+                  <><Box className="w-4 h-4 mr-2" /> Создать 3D модель · 100 токенов</>
                 )}
               </Button>
 
