@@ -815,6 +815,17 @@ export default function EditorPage() {
             const data = await resp.json();
             if (resp.ok && data.url) {
               setAttachedModels(prev => prev.map(m => m.id === uploadId ? { ...m, url: data.url, uploading: false } : m));
+              if (project?.id) {
+                const autoName = file.name.replace(/\.(glb|gltf)$/i, "").slice(0, 50) || `model_${Date.now()}`;
+                fetch(`/api/projects/${project.id}/images`, {
+                  method: "POST",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: autoName, url: data.url, prompt: "3D модель" }),
+                }).then(() => {
+                  queryClient.invalidateQueries({ queryKey: [`/api/projects/${project.id}/images`] });
+                }).catch(() => {});
+              }
             } else {
               setAttachedModels(prev => prev.filter(m => m.id !== uploadId));
               toast({ title: "Ошибка загрузки 3D модели", description: data?.message, variant: "destructive" });
