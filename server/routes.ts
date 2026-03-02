@@ -833,22 +833,43 @@ ${designAnalysis}
       const modelName = "gemini-3.1-pro-preview";
       console.log("generateContentStream call. Model:", modelName, "History messages:", conversationHistory.length, "Edit mode:", isEditMode);
 
-      const streamResult = await gemini.models.generateContentStream({
-        model: modelName,
-        contents: conversationHistory,
-        config: {
-          systemInstruction: systemContent,
-          maxOutputTokens: isEditMode ? 32768 : 65536,
-        },
-      });
+      const MAX_RETRIES = 3;
+      let lastError: any = null;
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+          const streamResult = await gemini.models.generateContentStream({
+            model: modelName,
+            contents: conversationHistory,
+            config: {
+              systemInstruction: systemContent,
+              maxOutputTokens: isEditMode ? 32768 : 65536,
+            },
+          });
 
-      for await (const chunk of streamResult) {
-        const text = chunk.text || "";
-        if (text) {
-          fullResponse += text;
-          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+          for await (const chunk of streamResult) {
+            const text = chunk.text || "";
+            if (text) {
+              fullResponse += text;
+              res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+            }
+          }
+          lastError = null;
+          break;
+        } catch (retryErr: any) {
+          lastError = retryErr;
+          const status = retryErr?.status || retryErr?.code || retryErr?.error?.code;
+          if ((status === 503 || status === 429) && attempt < MAX_RETRIES - 1) {
+            const delay = (attempt + 1) * 3000;
+            console.log(`[Gemini] ${status} error, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+            res.write(`data: ${JSON.stringify({ content: `\n\n⏳ Сервер перегружен, повторяю запрос (${attempt + 2}/${MAX_RETRIES})...\n\n` })}\n\n`);
+            await new Promise(r => setTimeout(r, delay));
+            fullResponse = "";
+            continue;
+          }
+          throw retryErr;
         }
       }
+      if (lastError) throw lastError;
 
       console.log("Total response length:", fullResponse.length);
       console.log("Response preview:", fullResponse.substring(0, 200));
@@ -1022,7 +1043,9 @@ ${designAnalysis}
       res.end();
     } catch (err: any) {
       console.error("Generation error:", err?.message || err);
-      const errMsg = (err?.message?.includes("RATE_LIMIT") || err?.message?.includes("429") || err?.message?.includes("RESOURCE_EXHAUSTED") || err?.message?.includes("quota"))
+      const errMsg = (err?.message?.includes("503") || err?.message?.includes("UNAVAILABLE") || err?.message?.includes("high demand"))
+        ? "Сервер ИИ временно перегружен. Попробуйте через 30 секунд — мы уже сделали 3 попытки."
+        : (err?.message?.includes("RATE_LIMIT") || err?.message?.includes("429") || err?.message?.includes("RESOURCE_EXHAUSTED") || err?.message?.includes("quota"))
         ? "Превышен лимит запросов к Gemini API. Подождите 1-2 минуты и попробуйте снова."
         : err?.message?.includes("RECITATION") 
         ? "Ответ ИИ заблокирован из-за слишком похожего контента. Попробуйте переформулировать запрос."
