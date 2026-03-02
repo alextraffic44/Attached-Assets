@@ -2999,30 +2999,47 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                           <Button
                             size="sm"
                             className="flex-1 h-7 text-[11px] rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white font-bold"
-                            onClick={() => {
+                            onClick={async () => {
                               if (is3D) {
                                 setAttachedModels(prev => [...prev, { id: `lib-${img.id}`, url: img.url, fileName: img.name + ".glb", uploading: false }]);
+                                toast({ title: "3D модель добавлена в чат" });
+                                setShowGenerations(false);
                               } else {
-                                (async () => {
-                                  try {
-                                    const r = await fetch(img.url);
-                                    const blob = await r.blob();
+                                try {
+                                  const r = await fetch(img.url);
+                                  const blob = await r.blob();
+                                  const dataUrl = await new Promise<string>((resolve) => {
                                     const reader = new FileReader();
-                                    reader.onload = () => {
-                                      const dataUrl = reader.result as string;
-                                      setAttachedImages(prev => [...prev, { base64: dataUrl.split(",")[1], mimeType: blob.type || "image/jpeg", preview: dataUrl, fileName: img.name + ".jpg" }]);
-                                    };
+                                    reader.onload = () => resolve(reader.result as string);
                                     reader.readAsDataURL(blob);
-                                  } catch {}
-                                })();
+                                  });
+                                  setAttachedImages(prev => [...prev, { base64: dataUrl.split(",")[1], mimeType: blob.type || "image/jpeg", preview: dataUrl, fileName: img.name + ".jpg" }]);
+                                  toast({ title: "Изображение добавлено в чат" });
+                                  setShowGenerations(false);
+                                } catch {
+                                  toast({ title: "Ошибка загрузки", variant: "destructive" });
+                                }
                               }
-                              toast({ title: is3D ? "3D модель добавлена в чат" : "Изображение добавлено в чат" });
-                              setShowGenerations(false);
                             }}
                             data-testid={`gen-add-${img.id}`}
                           >
                             <Send className="w-3 h-3 mr-1" />
                             В чат
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 w-7 p-0 rounded-lg border-white/30 text-white hover:bg-white/20 hover:border-white/50"
+                            onClick={() => {
+                              const a = document.createElement("a");
+                              a.href = img.url;
+                              a.download = img.name + (is3D ? ".glb" : ".jpg");
+                              a.click();
+                            }}
+                            data-testid={`gen-download-${img.id}`}
+                            title="Скачать"
+                          >
+                            <Download className="w-3 h-3" />
                           </Button>
                           <Button
                             size="sm"
