@@ -41,6 +41,7 @@ export const projectMessages = pgTable("project_messages", {
 export const projectImages = pgTable("project_images", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull(),
+  userId: integer("user_id"),
   name: text("name").notNull(),
   url: text("url").notNull(),
   prompt: text("prompt").notNull().default(""),

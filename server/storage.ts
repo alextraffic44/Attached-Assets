@@ -158,15 +158,18 @@ export class DatabaseStorage implements IStorage {
       .select({
         id: projectImages.id,
         projectId: projectImages.projectId,
+        userId: projectImages.userId,
         name: projectImages.name,
         url: projectImages.url,
         prompt: projectImages.prompt,
         createdAt: projectImages.createdAt,
-        projectTitle: projects.title,
+        projectTitle: sql<string>`COALESCE(${projects.title}, 'Удалённый проект')`,
       })
       .from(projectImages)
-      .innerJoin(projects, eq(projectImages.projectId, projects.id))
-      .where(eq(projects.userId, userId))
+      .leftJoin(projects, eq(projectImages.projectId, projects.id))
+      .where(
+        sql`(${projects.userId} = ${userId} OR ${projectImages.userId} = ${userId})`
+      )
       .orderBy(desc(projectImages.createdAt));
     return rows;
   }

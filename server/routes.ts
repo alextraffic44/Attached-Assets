@@ -605,6 +605,7 @@ export async function registerRoutes(
             const imgName = imgData.fileName?.replace(/\.[^.]+$/, '').replace(/[^a-zA-Zа-яА-Я0-9_-]/g, '_') || `photo_${Date.now()}`;
             await storage.createProjectImage({
               projectId: project.id,
+              userId: project.userId,
               name: imgName,
               url: imageUrl,
               prompt: prompt.substring(0, 200),
@@ -1150,7 +1151,8 @@ ${designAnalysis}
               localUrls.push(localUrl);
               if (projectIdParam > 0) {
                 const autoName = promptParam.trim().split(/\s+/).slice(0, 3).join("_") || `img_${Date.now()}`;
-                await storage.createProjectImage({ projectId: projectIdParam, name: autoName, url: localUrl, prompt: promptParam.substring(0, 200) });
+                const imgProject = await storage.getProject(projectIdParam);
+                await storage.createProjectImage({ projectId: projectIdParam, userId: imgProject?.userId, name: autoName, url: localUrl, prompt: promptParam.substring(0, 200) });
               }
             } else {
               localUrls.push(extUrl);
@@ -1298,7 +1300,8 @@ ${designAnalysis}
       if (projectId) {
         const pid = parseInt(projectId);
         if (pid > 0) {
-          await storage.createProjectImage({ projectId: pid, name: `3d_model_${Date.now()}`, url: localUrl, prompt: "3D модель" });
+          const dlProject = await storage.getProject(pid);
+          await storage.createProjectImage({ projectId: pid, userId: dlProject?.userId, name: `3d_model_${Date.now()}`, url: localUrl, prompt: "3D модель" });
         }
       }
       res.json({ url: localUrl });
@@ -1329,7 +1332,7 @@ ${designAnalysis}
       if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
       const { name, url, prompt } = req.body;
       if (!name || !url) return res.status(400).json({ message: "Имя и URL обязательны" });
-      const image = await storage.createProjectImage({ projectId: project.id, name, url, prompt: prompt || "" });
+      const image = await storage.createProjectImage({ projectId: project.id, userId: user.id, name, url, prompt: prompt || "" });
       res.status(201).json(image);
     } catch (err) {
       res.status(500).json({ message: "Ошибка сохранения изображения" });
