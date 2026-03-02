@@ -1867,6 +1867,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                     onClick={() => setMockupMode(!mockupMode)}
                     className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${mockupMode ? 'bg-gradient-to-r from-primary to-blue-400 text-white shadow-md shadow-primary/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                     data-testid="button-mockup-mode"
+                    title="Включите, чтобы ИИ воссоздал дизайн с вашего скриншота/макета как HTML/CSS/JS код"
                   >
                     <Layout className="w-3.5 h-3.5" />
                     {mockupMode ? 'Макет → Код (вкл)' : 'Макет → Код'}
