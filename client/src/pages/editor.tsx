@@ -2992,7 +2992,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {projectImages.map((img) => {
-                  const is3D = img.url.endsWith(".glb") || img.url.endsWith(".gltf");
+                  const is3D = img.url.endsWith(".glb") || img.url.endsWith(".gltf") || img.name.startsWith("3d_model") || img.name.toLowerCase().includes(".glb") || img.name.toLowerCase().includes(".gltf");
                   return (
                     <div key={img.id} className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 hover:border-cyan-400 dark:hover:border-cyan-500 transition-all bg-slate-50 dark:bg-slate-800" data-testid={`gen-item-${img.id}`}>
                       {is3D ? (
