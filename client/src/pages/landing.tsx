@@ -252,7 +252,7 @@ export default function Landing() {
       grid.appendChild(makeCard("1 000", "990 ₽", false, "", "1 сайт,<br>10 итераций по редактированию", "Старт"));
       grid.appendChild(makeCard("1 900", "1 690 ₽", false, "0.1s", "2 сайта,<br>19 итераций по редактированию", "Базовый"));
       grid.appendChild(makeCard("4 500", "3 990 ₽", false, "0.2s", "3 сайта,<br>45 итераций по редактированию, доступ к премиум шаблонам", "Профи"));
-      grid.appendChild(makeCard("6 500", "5 990 ₽", true, "0.3s", "5 сайтов,<br>65 итераций по редактированию, доступ к премиум шаблонам", "Ультра"));
+      grid.appendChild(makeCard("10 000", "9 990 ₽", true, "0.3s", "5 сайтов,<br>100 итераций по редактированию, доступ к премиум шаблонам, выгрузка сайта", "Ультра"));
 
       pContainer.appendChild(pHeader);
       pContainer.appendChild(grid);

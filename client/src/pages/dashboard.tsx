@@ -1030,7 +1030,7 @@ export default function DashboardPage() {
                 { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["1 сайт", "10 итераций редактирования"] },
                 { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["2 сайта", "19 итераций редактирования"] },
                 { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["3 сайта", "45 итераций редактирования", "Премиум шаблоны"] },
-                { price: 5990, tokens: 6500, label: "Ультра",  popular: true,  desc: ["5 сайтов", "65 итераций редактирования", "Премиум шаблоны"] },
+                { price: 9990, tokens: 10000, label: "Ультра",  popular: true,  desc: ["5 сайтов", "100 итераций редактирования", "Премиум шаблоны", "Выгрузка сайта"] },
               ].map((plan) => (
                 <div key={plan.price} style={{ position: 'relative' }}>
                   {plan.popular && (
