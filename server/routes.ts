@@ -1168,6 +1168,24 @@ ${designAnalysis}
     }
   });
 
+  app.post("/api/images/proxy-base64", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
+    try {
+      const { url } = req.body;
+      if (!url || typeof url !== "string") return res.status(400).json({ message: "URL обязателен" });
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const arrayBuf = await r.arrayBuffer();
+      const buffer = Buffer.from(arrayBuf);
+      const mimeType = r.headers.get("content-type") || "image/jpeg";
+      const base64 = buffer.toString("base64");
+      res.json({ base64, mimeType });
+    } catch (err: any) {
+      console.error("Proxy base64 error:", err);
+      res.status(500).json({ message: "Ошибка загрузки изображения" });
+    }
+  });
+
   // WaveSpeed 3D model generation
   app.post("/api/3d/generate", bypassAuth, async (req, res) => {
     try {

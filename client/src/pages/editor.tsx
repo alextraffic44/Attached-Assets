@@ -3006,17 +3006,39 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                                 setShowGenerations(false);
                               } else {
                                 try {
-                                  const r = await fetch(img.url);
-                                  const blob = await r.blob();
-                                  const dataUrl = await new Promise<string>((resolve) => {
-                                    const reader = new FileReader();
-                                    reader.onload = () => resolve(reader.result as string);
-                                    reader.readAsDataURL(blob);
-                                  });
-                                  setAttachedImages(prev => [...prev, { base64: dataUrl.split(",")[1], mimeType: blob.type || "image/jpeg", preview: dataUrl, fileName: img.name + ".jpg" }]);
+                                  let base64: string;
+                                  let mimeType: string;
+                                  const isExternal = img.url.startsWith("http");
+                                  if (isExternal) {
+                                    const proxyRes = await fetch("/api/images/proxy-base64", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ url: img.url }),
+                                      credentials: "same-origin",
+                                    });
+                                    if (!proxyRes.ok) throw new Error("proxy failed");
+                                    const data = await proxyRes.json();
+                                    base64 = data.base64;
+                                    mimeType = data.mimeType || "image/jpeg";
+                                  } else {
+                                    const r = await fetch(img.url, { credentials: "same-origin" });
+                                    if (!r.ok) throw new Error("fetch failed");
+                                    const blob = await r.blob();
+                                    const dataUrl = await new Promise<string>((resolve, reject) => {
+                                      const reader = new FileReader();
+                                      reader.onload = () => resolve(reader.result as string);
+                                      reader.onerror = () => reject(new Error("read failed"));
+                                      reader.readAsDataURL(blob);
+                                    });
+                                    base64 = dataUrl.split(",")[1];
+                                    mimeType = blob.type || "image/jpeg";
+                                  }
+                                  const preview = `data:${mimeType};base64,${base64}`;
+                                  setAttachedImages(prev => [...prev, { base64, mimeType, preview, fileName: img.name + ".jpg" }]);
                                   toast({ title: "Изображение добавлено в чат" });
                                   setShowGenerations(false);
-                                } catch {
+                                } catch (e) {
+                                  console.error("Gen add to chat error:", e);
                                   toast({ title: "Ошибка загрузки", variant: "destructive" });
                                 }
                               }
