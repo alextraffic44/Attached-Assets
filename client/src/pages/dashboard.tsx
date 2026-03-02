@@ -698,7 +698,7 @@ export default function DashboardPage() {
                                   <input
                                     type="text"
                                     data-testid="input-mockup-prompt"
-                                    placeholder="Опишите макет..."
+                                    placeholder="Spa центр Mango, нежные тона сайта, стильный шрифт"
                                     value={mockupPrompt}
                                     onChange={e => setMockupPrompt(e.target.value)}
                                     className="flex-1 text-xs rounded-lg px-2.5 py-2 font-medium"
@@ -716,7 +716,7 @@ export default function DashboardPage() {
                                         const resp = await fetch("/api/images/generate", {
                                           method: "POST",
                                           headers: { "Content-Type": "application/json" },
-                                          body: JSON.stringify({ prompt: mockupPrompt, aspectRatio: "16:9" }),
+                                          body: JSON.stringify({ prompt: "Макет для сайта, стильный и премиальный. " + mockupPrompt.trim(), aspectRatio: "16:9" }),
                                           credentials: "include",
                                         });
                                         const data = await resp.json();
