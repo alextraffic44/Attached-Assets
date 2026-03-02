@@ -33,6 +33,7 @@ export interface IStorage {
   getProjectFile(projectId: number, filename: string): Promise<ProjectFile | undefined>;
   upsertProjectFile(file: InsertProjectFile): Promise<ProjectFile>;
   deleteProjectFile(id: number): Promise<void>;
+  deleteProjectFilesByProject(projectId: number): Promise<void>;
 
   getLeadsByProject(projectId: number): Promise<Lead[]>;
   getLeadsByUser(userId: number): Promise<(Lead & { projectTitle: string })[]>;
@@ -209,6 +210,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProjectFile(id: number): Promise<void> {
     await db.delete(projectFiles).where(eq(projectFiles.id, id));
+  }
+
+  async deleteProjectFilesByProject(projectId: number): Promise<void> {
+    await db.delete(projectFiles).where(eq(projectFiles.projectId, projectId));
   }
 
   async getLeadsByProject(projectId: number): Promise<Lead[]> {

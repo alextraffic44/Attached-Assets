@@ -1023,10 +1023,13 @@ ${designAnalysis}
       }
 
       if (project.generatedCode && project.generatedCode.trim()) {
+        const currentFiles = await storage.getProjectFiles(project.id);
+        const filesSnapshot = currentFiles.map(f => ({ filename: f.filename, code: f.code }));
         await storage.createProjectVersion({
           projectId: project.id,
           code: project.generatedCode,
           label: `До: "${prompt.substring(0, 50)}${prompt.length > 50 ? "..." : ""}"`,
+          files: filesSnapshot.length > 0 ? filesSnapshot : null,
         });
       }
 
@@ -1385,10 +1388,13 @@ ${designAnalysis}
       if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
       if (!project.generatedCode?.trim()) return res.status(400).json({ message: "Нет кода для сохранения" });
       const { label } = req.body;
+      const currentFiles = await storage.getProjectFiles(project.id);
+      const filesSnapshot = currentFiles.map(f => ({ filename: f.filename, code: f.code }));
       const version = await storage.createProjectVersion({
         projectId: project.id,
         code: project.generatedCode,
         label: label || "Ручной чекпоинт",
+        files: filesSnapshot.length > 0 ? filesSnapshot : null,
       });
       res.status(201).json(version);
     } catch (err) {
@@ -1408,14 +1414,25 @@ ${designAnalysis}
       if (!version) return res.status(404).json({ message: "Версия не найдена" });
 
       if (project.generatedCode?.trim()) {
+        const currentFiles = await storage.getProjectFiles(project.id);
+        const filesSnapshot = currentFiles.map(f => ({ filename: f.filename, code: f.code }));
         await storage.createProjectVersion({
           projectId: project.id,
           code: project.generatedCode,
           label: "До отката",
+          files: filesSnapshot.length > 0 ? filesSnapshot : null,
         });
       }
 
       const updated = await storage.updateProject(project.id, { generatedCode: version.code });
+
+      if (version.files && Array.isArray(version.files)) {
+        await storage.deleteProjectFilesByProject(project.id);
+        for (const f of version.files) {
+          await storage.upsertProjectFile({ projectId: project.id, filename: f.filename, code: f.code });
+        }
+      }
+
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Ошибка восстановления версии" });

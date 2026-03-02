@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -52,6 +52,7 @@ export const projectVersions = pgTable("project_versions", {
   projectId: integer("project_id").notNull(),
   code: text("code").notNull(),
   label: text("label").notNull().default(""),
+  files: json("files").$type<{filename: string, code: string}[]>(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

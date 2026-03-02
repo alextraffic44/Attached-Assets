@@ -1187,6 +1187,7 @@ export default function EditorPage() {
       setStreamedCode(updated.generatedCode || "");
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
       toast({ title: "Версия восстановлена" });
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
