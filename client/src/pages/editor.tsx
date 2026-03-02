@@ -133,6 +133,7 @@ export default function EditorPage() {
 
   const [mockupMode, setMockupMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showGenerations, setShowGenerations] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<string | null>(null);
@@ -972,7 +973,7 @@ export default function EditorPage() {
 
       const pollInterval = setInterval(async () => {
         try {
-          const statusResp = await fetch(`/api/images/status/${taskId}`, { credentials: "include" });
+          const statusResp = await fetch(`/api/images/status/${taskId}?projectId=${projectId}&prompt=${encodeURIComponent(imgPrompt)}`, { credentials: "include" });
           const statusData = await statusResp.json();
 
           if (statusData.state === "success") {
@@ -980,6 +981,7 @@ export default function EditorPage() {
             setImgResultUrls(statusData.urls || []);
             setImgStatus("success");
             setImgGenerating(false);
+            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "images"] });
           } else if (statusData.state === "fail") {
             clearInterval(pollInterval);
             setImgError(statusData.error || "Ошибка генерации");
@@ -1134,13 +1136,14 @@ export default function EditorPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ url: glbUrl }),
+        body: JSON.stringify({ url: glbUrl, projectId }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.message);
 
       setAttachedModels(prev => [...prev, { id: `gen3d-${Date.now()}`, url: data.url, fileName: "model.glb", uploading: false }]);
       toast({ title: "3D модель добавлена", description: "Отправьте промт чтобы встроить модель на сайт" });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "images"] });
       setGen3dOpen(false);
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message || "Не удалось загрузить 3D модель", variant: "destructive" });
@@ -1579,6 +1582,13 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <Sparkles className="w-4 h-4 mr-1.5" />
                 Шаблоны
               </Button>
+              <Button variant="outline" size="sm" className="rounded-xl font-bold px-3 relative border-cyan-300 text-cyan-600 hover:bg-cyan-50 dark:text-cyan-400 dark:border-cyan-500/30 dark:hover:bg-cyan-500/10" onClick={() => setShowGenerations(true)} data-testid="button-generations" title="Генерации">
+                <ImagePlus className="w-4 h-4 mr-1.5" />
+                Генерации
+                {projectImages.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-cyan-500 text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center">{projectImages.length}</span>
+                )}
+              </Button>
               <Button variant="outline" size="sm" className="rounded-xl font-bold px-3 border-violet-300 text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:border-violet-500/30 dark:hover:bg-violet-500/10" onClick={() => { setGen3dOpen(true); setGen3dStatus("idle"); setGen3dResultUrl(""); setGen3dError(""); setGen3dImagePreview(""); setGen3dImageUrl(""); }} data-testid="button-3d-library" title="Создать 3D модель">
                 <Box className="w-4 h-4 mr-1.5" />
                 3D
@@ -1601,11 +1611,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             )}
           </Button>
 
-          <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20 relative" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen" title="AI Фото">
+          <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen" title="AI Фото">
             <Camera className="w-4 h-4" />
-            {projectImages.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-violet-500 text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center">{projectImages.length}</span>
-            )}
           </Button>
 
           <Button
@@ -2940,6 +2947,97 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   <Button variant="outline" onClick={() => setShowPublishModal(false)} style={{ flex: 1 }}>Закрыть</Button>
                   <Button onClick={handlePublish} style={{ flex: 1 }}>Повторить</Button>
                 </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showGenerations} onOpenChange={setShowGenerations}>
+        <DialogContent className="max-w-2xl max-h-[80vh] bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden p-0">
+          <div className="px-6 pt-6 pb-3">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-3 text-lg font-black">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
+                  <ImagePlus className="w-5 h-5 text-white" />
+                </div>
+                Генерации
+              </DialogTitle>
+              <DialogDescription className="text-slate-500 dark:text-slate-400 text-sm mt-1">Все сгенерированные изображения и 3D модели проекта</DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="px-6 pb-6 overflow-y-auto max-h-[60vh]">
+            {projectImages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+                  <ImageIcon className="w-8 h-8 opacity-40" />
+                </div>
+                <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Пока пусто</p>
+                <p className="text-xs mt-1 text-slate-400 dark:text-slate-500">Сгенерируйте изображения через AI Фото или 3D модели</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {projectImages.map((img) => {
+                  const is3D = img.url.endsWith(".glb") || img.url.endsWith(".gltf");
+                  return (
+                    <div key={img.id} className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 hover:border-cyan-400 dark:hover:border-cyan-500 transition-all bg-slate-50 dark:bg-slate-800" data-testid={`gen-item-${img.id}`}>
+                      {is3D ? (
+                        <div className="aspect-square flex flex-col items-center justify-center bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30">
+                          <Box className="w-10 h-10 text-violet-500 mb-2" />
+                          <span className="text-xs font-bold text-violet-600 dark:text-violet-400">3D модель</span>
+                          <span className="text-[10px] text-violet-400 dark:text-violet-500 mt-0.5">.GLB</span>
+                        </div>
+                      ) : (
+                        <div className="aspect-square">
+                          <img src={img.url} alt={img.name} className="w-full h-full object-cover" loading="lazy" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all flex flex-col items-stretch justify-end p-2.5 gap-1.5">
+                        <p className="text-white text-xs font-bold truncate">{img.name}</p>
+                        {img.prompt && <p className="text-white/60 text-[10px] truncate">{img.prompt}</p>}
+                        <div className="flex gap-1.5">
+                          <Button
+                            size="sm"
+                            className="flex-1 h-7 text-[11px] rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white font-bold"
+                            onClick={() => {
+                              if (is3D) {
+                                setAttachedModels(prev => [...prev, { id: `lib-${img.id}`, url: img.url, fileName: img.name + ".glb", uploading: false }]);
+                              } else {
+                                (async () => {
+                                  try {
+                                    const r = await fetch(img.url);
+                                    const blob = await r.blob();
+                                    const reader = new FileReader();
+                                    reader.onload = () => {
+                                      const dataUrl = reader.result as string;
+                                      setAttachedImages(prev => [...prev, { base64: dataUrl.split(",")[1], mimeType: blob.type || "image/jpeg", preview: dataUrl, fileName: img.name + ".jpg" }]);
+                                    };
+                                    reader.readAsDataURL(blob);
+                                  } catch {}
+                                })();
+                              }
+                              toast({ title: is3D ? "3D модель добавлена в чат" : "Изображение добавлено в чат" });
+                              setShowGenerations(false);
+                            }}
+                            data-testid={`gen-add-${img.id}`}
+                          >
+                            <Send className="w-3 h-3 mr-1" />
+                            В чат
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 w-7 p-0 rounded-lg border-white/30 text-white hover:bg-red-500/80 hover:border-red-500"
+                            onClick={() => { handleDeleteImage(img.id); }}
+                            data-testid={`gen-delete-${img.id}`}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

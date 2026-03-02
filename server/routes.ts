@@ -1134,7 +1134,29 @@ ${designAnalysis}
       const state = body.data?.state;
       if (state === "success") {
         const result = JSON.parse(body.data.resultJson);
-        return res.json({ state: "success", urls: result.resultUrls || [] });
+        const externalUrls = result.resultUrls || [];
+        const localUrls: string[] = [];
+        const projectIdParam = parseInt(req.query.projectId as string) || 0;
+        const promptParam = (req.query.prompt as string) || "";
+        for (const extUrl of externalUrls) {
+          try {
+            const imgResp = await fetch(extUrl);
+            if (imgResp.ok) {
+              const buf = Buffer.from(await imgResp.arrayBuffer());
+              const localUrl = await uploadToObjectStorage(buf, "image/jpeg", "jpg");
+              localUrls.push(localUrl);
+              if (projectIdParam > 0) {
+                const autoName = promptParam.trim().split(/\s+/).slice(0, 3).join("_") || `img_${Date.now()}`;
+                await storage.createProjectImage({ projectId: projectIdParam, name: autoName, url: localUrl, prompt: promptParam.substring(0, 200) });
+              }
+            } else {
+              localUrls.push(extUrl);
+            }
+          } catch {
+            localUrls.push(extUrl);
+          }
+        }
+        return res.json({ state: "success", urls: localUrls });
       }
       if (state === "fail") {
         return res.json({ state: "fail", error: body.data.failMsg || "Ошибка генерации" });
@@ -1239,7 +1261,7 @@ ${designAnalysis}
 
   app.post("/api/3d/download", bypassAuth, async (req, res) => {
     try {
-      const { url } = req.body;
+      const { url, projectId } = req.body;
       if (!url || typeof url !== "string") {
         return res.status(400).json({ message: "URL обязателен" });
       }
@@ -1252,6 +1274,12 @@ ${designAnalysis}
       const arrayBuf = await resp.arrayBuffer();
       const buffer = Buffer.from(arrayBuf);
       const localUrl = await uploadToObjectStorage(buffer, "model/gltf-binary", "glb");
+      if (projectId) {
+        const pid = parseInt(projectId);
+        if (pid > 0) {
+          await storage.createProjectImage({ projectId: pid, name: `3d_model_${Date.now()}`, url: localUrl, prompt: "3D модель" });
+        }
+      }
       res.json({ url: localUrl });
     } catch (err: any) {
       console.error("[3D download] error:", err);
