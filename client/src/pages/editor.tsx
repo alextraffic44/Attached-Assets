@@ -964,7 +964,9 @@ export default function EditorPage() {
     queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 10) } : old);
 
     try {
-      const bodyData: any = { prompt: imgPrompt, aspectRatio: imgSize };
+      const systemImgPrefix = "Макет для сайта, стильный и премиальный. ";
+      const finalImgPrompt = imgPrompt.trim() ? systemImgPrefix + imgPrompt.trim() : systemImgPrefix;
+      const bodyData: any = { prompt: finalImgPrompt, aspectRatio: imgSize };
       const refUrls = imgRefs.filter(r => r.url).map(r => r.url);
       if (refUrls.length) bodyData.referenceImageUrls = refUrls;
       const resp = await fetch("/api/images/generate", {
@@ -2249,7 +2251,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               <div>
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Описание</label>
                 <Textarea
-                  placeholder="Опишите что должно быть на изображении..."
+                  placeholder="Spa центр Mango, нежные тона сайта, стильный шрифт"
                   value={imgPrompt}
                   onChange={e => setImgPrompt(e.target.value)}
                   className="min-h-[80px] rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-blue-400 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none text-sm"
