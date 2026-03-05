@@ -1563,77 +1563,133 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center border border-slate-100 dark:border-slate-800 rounded-xl p-0.5 gap-0.5 bg-slate-50 dark:bg-slate-800/50">
+        <div className="flex items-center gap-1.5">
+          {/* Device switcher */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-full p-0.5 gap-0.5">
             {[
-              { d: "desktop" as const, i: Monitor, tip: "Десктоп — просмотр на большом экране" },
-              { d: "tablet" as const, i: Tablet, tip: "Планшет — просмотр на среднем экране" },
-              { d: "mobile" as const, i: Smartphone, tip: "Мобильный — просмотр на телефоне" },
+              { d: "desktop" as const, i: Monitor, tip: "Десктоп" },
+              { d: "tablet" as const, i: Tablet, tip: "Планшет" },
+              { d: "mobile" as const, i: Smartphone, tip: "Мобильный" },
             ].map(({ d, i: Icon, tip }) => (
-              <Button key={d} variant={previewDevice === d ? "secondary" : "ghost"} size="icon" className="h-8 w-8 rounded-lg" onClick={() => setPreviewDevice(d)} data-testid={`button-device-${d}`} title={tip}>
+              <button
+                key={d}
+                onClick={() => setPreviewDevice(d)}
+                data-testid={`button-device-${d}`}
+                title={tip}
+                className={`flex items-center justify-center w-7 h-7 rounded-full transition-all duration-200 ${previewDevice === d ? "bg-white dark:bg-slate-700 shadow-sm text-slate-800 dark:text-white" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
+              >
                 <Icon className="w-3.5 h-3.5" />
-              </Button>
+              </button>
             ))}
           </div>
 
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
+          <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
 
-          <Button variant={showCode ? "default" : "ghost"} size="icon" className={`h-8 w-8 rounded-lg ${showCode ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"}`} onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }} data-testid="button-toggle-code" title={showCode ? "Просмотр сайта" : "Код"}>
-            {showCode ? <Eye className="w-4 h-4" /> : <Code2 className="w-4 h-4" />}
-          </Button>
+          {/* Code toggle */}
+          <button
+            onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }}
+            data-testid="button-toggle-code"
+            title={showCode ? "Просмотр сайта" : "Код"}
+            className={`flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium transition-all duration-200 ${showCode ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+          >
+            {showCode ? <Eye className="w-3.5 h-3.5" /> : <Code2 className="w-3.5 h-3.5" />}
+            <span>{showCode ? "Превью" : "Код"}</span>
+          </button>
 
           {!showCode && currentCode && (
             <>
-              <div className="h-5 w-px bg-slate-100 dark:bg-slate-700" />
-              <Button variant="ghost" size="sm" className={`rounded-lg font-medium px-2.5 h-8 text-xs gap-1.5 ${editMode ? "bg-blue-50 text-blue-600 hover:bg-blue-100" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"}`} onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }} data-testid="button-toggle-edit" title="Визуальный редактор">
+              <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
+              <button
+                onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }}
+                data-testid="button-toggle-edit"
+                title="Визуальный редактор"
+                className={`flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium transition-all duration-200 ${editMode ? "bg-blue-500 text-white shadow-sm shadow-blue-200" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+              >
                 <MousePointer2 className="w-3.5 h-3.5" />
                 Редактор
-              </Button>
-              <Button variant="ghost" size="sm" className={`rounded-lg font-medium px-2.5 h-8 text-xs gap-1.5 ${selectorMode ? "bg-orange-50 text-orange-600 hover:bg-orange-100" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"}`} onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }} data-testid="button-toggle-selector" title="Выбрать элемент">
+              </button>
+              <button
+                onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }}
+                data-testid="button-toggle-selector"
+                title="Выбрать элемент"
+                className={`flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium transition-all duration-200 ${selectorMode ? "bg-orange-500 text-white shadow-sm shadow-orange-200" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+              >
                 <Crosshair className="w-3.5 h-3.5" />
                 Выбрать
-              </Button>
-              <Button variant="ghost" size="sm" className="rounded-lg font-medium px-2.5 h-8 text-xs gap-1.5 text-slate-500 hover:text-violet-600 hover:bg-violet-50" onClick={() => setShowTemplates(true)} data-testid="button-templates" title="Шаблоны">
+              </button>
+              <button
+                onClick={() => setShowTemplates(true)}
+                data-testid="button-templates"
+                title="Шаблоны"
+                className="flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium text-slate-500 hover:text-violet-600 hover:bg-violet-50 transition-all duration-200"
+              >
                 <Sparkles className="w-3.5 h-3.5" />
                 Шаблоны
-              </Button>
-              <Button variant="ghost" size="sm" className="rounded-lg font-medium px-2.5 h-8 text-xs gap-1.5 text-slate-500 hover:text-cyan-600 hover:bg-cyan-50 relative" onClick={() => setShowGenerations(true)} data-testid="button-generations" title="Генерации">
+              </button>
+              <button
+                onClick={() => setShowGenerations(true)}
+                data-testid="button-generations"
+                title="Генерации"
+                className="relative flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium text-slate-500 hover:text-cyan-600 hover:bg-cyan-50 transition-all duration-200"
+              >
                 <ImagePlus className="w-3.5 h-3.5" />
-                Генерации
+                Медиа
                 {projectImages.length > 0 && (
                   <span className="absolute -top-1 -right-1 bg-primary text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center">{projectImages.length}</span>
                 )}
-              </Button>
-              <Button variant="ghost" size="sm" className="rounded-lg font-medium px-2.5 h-8 text-xs gap-1.5 text-slate-500 hover:text-violet-600 hover:bg-violet-50" onClick={() => { setGen3dOpen(true); setGen3dStatus("idle"); setGen3dResultUrl(""); setGen3dError(""); setGen3dImagePreview(""); setGen3dImageUrl(""); }} data-testid="button-3d-library" title="Создать 3D модель">
+              </button>
+              <button
+                onClick={() => { setGen3dOpen(true); setGen3dStatus("idle"); setGen3dResultUrl(""); setGen3dError(""); setGen3dImagePreview(""); setGen3dImageUrl(""); }}
+                data-testid="button-3d-library"
+                title="Создать 3D модель"
+                className="flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium text-slate-500 hover:text-violet-600 hover:bg-violet-50 transition-all duration-200"
+              >
                 <Box className="w-3.5 h-3.5" />
                 3D
-              </Button>
+              </button>
             </>
           )}
 
-          <div className="h-5 w-px bg-slate-100 dark:bg-slate-700" />
-
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip" title="ZIP">
-            <Download className="w-4 h-4" />
-          </Button>
+          <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
 
           <input ref={faviconInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/x-icon,image/webp" className="hidden" onChange={handleFaviconUpload} data-testid="input-favicon-upload" />
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100" onClick={() => faviconInputRef.current?.click()} disabled={faviconUploading || !currentCode} title="Фавикон" data-testid="button-favicon-upload">
+          <button
+            onClick={() => faviconInputRef.current?.click()}
+            disabled={faviconUploading || !currentCode}
+            title="Фавикон"
+            data-testid="button-favicon-upload"
+            className="flex items-center justify-center w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all duration-200 disabled:opacity-40"
+          >
             {faviconUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
               project?.generatedCode?.includes('rel="icon"') || project?.generatedCode?.includes("rel='icon'")
-                ? <Globe className="w-4 h-4 text-blue-500" />
+                ? <Globe className="w-4 h-4 text-primary" />
                 : <Globe className="w-4 h-4" />
             )}
-          </Button>
+          </button>
 
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen" title="AI Фото">
+          <button
+            onClick={handleDownloadZip}
+            disabled={!currentCode}
+            data-testid="button-download-zip"
+            title="ZIP"
+            className="flex items-center justify-center w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all duration-200 disabled:opacity-40"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => setImgGenOpen(true)}
+            data-testid="button-open-image-gen"
+            title="AI Фото"
+            className="flex items-center justify-center w-8 h-8 rounded-full text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-all duration-200"
+          >
             <Camera className="w-4 h-4" />
-          </Button>
+          </button>
 
-          <Button
-            size="sm"
-            className="rounded-xl font-semibold px-5 h-8 text-sm"
+          {/* Publish button */}
+          <button
             title="Опубликовать"
+            data-testid="button-publish"
             onClick={() => {
               setPublishResult(null);
               setPublishError(null);
@@ -1658,28 +1714,41 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 setTimeout(() => handlePublish(), 50);
               }
             }}
-            data-testid="button-publish"
+            className={`flex items-center gap-1.5 h-8 px-4 rounded-full text-xs font-semibold transition-all duration-200 ${
+              project?.publishStatus === "published"
+                ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm shadow-emerald-200"
+                : project?.publishStatus === "suspended"
+                ? "bg-orange-500 text-white hover:bg-orange-600 shadow-sm shadow-orange-200"
+                : "bg-primary text-white hover:bg-primary/90 shadow-sm shadow-primary/20"
+            }`}
           >
             {project?.publishStatus === "published" ? (
-              <CheckCircle2 className="w-4 h-4 mr-1.5 text-green-400" />
+              <CheckCircle2 className="w-3.5 h-3.5" />
             ) : project?.publishStatus === "suspended" ? (
-              <ExternalLink className="w-4 h-4 mr-1.5 text-orange-400" />
+              <ExternalLink className="w-3.5 h-3.5" />
             ) : (
-              <ExternalLink className="w-4 h-4 mr-1.5" />
+              <ExternalLink className="w-3.5 h-3.5" />
             )}
-            {project?.publishStatus === "published" ? "Live" : project?.publishStatus === "suspended" ? "Off" : "Publish"}
-          </Button>
+            {project?.publishStatus === "published" ? "Опубликован" : project?.publishStatus === "suspended" ? "Приостановлен" : "Опубликовать"}
+          </button>
         </div>
       </header>
 
       <div className="flex-1 flex gap-3 overflow-hidden relative">
-        <SkeuoPanel className={`transition-all duration-500 ease-in-out min-w-0 ${sidebarOpen ? 'w-full sm:w-[380px] sm:min-w-[380px]' : 'w-0 opacity-0 -translate-x-full'}`}>
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-800">AI Конструктор</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">{project?.title}</p>
+        <SkeuoPanel className={`transition-all duration-500 ease-in-out min-w-0 ${sidebarOpen ? 'w-full sm:w-[440px] sm:min-w-[440px]' : 'w-0 opacity-0 -translate-x-full'}`}>
+          <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-800 truncate">AI Конструктор</h2>
+                <p className="text-[11px] text-slate-400 truncate">{project?.title}</p>
+              </div>
             </div>
-            <Badge className="bg-primary/8 text-primary border-0 rounded-lg text-[10px] font-medium">Gemini</Badge>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Gemini</span>
+            </div>
           </div>
           {showVersions && versions.length > 0 && (
             <div className="border-b border-slate-100 bg-slate-50/50 max-h-[240px] overflow-y-auto">
@@ -1893,15 +1962,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             )}
             <div className="relative flex items-end">
               <input ref={fileInputRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx,.glb,.gltf" multiple onChange={handleImageUpload} className="hidden" />
-              <div className="flex-1 relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+              <div className="flex-1 relative bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 {attachedModels.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 px-3 pt-3">
                     {attachedModels.map(model => (
-                      <div key={model.id} className="flex items-center gap-1.5 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg px-2 py-1 text-xs text-purple-700 dark:text-purple-300 font-medium">
+                      <div key={model.id} className="flex items-center gap-1.5 bg-white dark:bg-purple-900/30 border border-slate-200 dark:border-purple-700 rounded-full px-2.5 py-1 text-xs text-slate-600 dark:text-purple-300">
                         {model.uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Box className="w-3 h-3" />}
                         <span className="max-w-[120px] truncate">{model.fileName}</span>
                         {!model.uploading && (
-                          <button onClick={() => setAttachedModels(prev => prev.filter(m => m.id !== model.id))} className="hover:text-red-500 transition-colors">
+                          <button onClick={() => setAttachedModels(prev => prev.filter(m => m.id !== model.id))} className="hover:text-red-500 transition-colors ml-0.5">
                             <X className="w-3 h-3" />
                           </button>
                         )}
@@ -1910,12 +1979,12 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   </div>
                 )}
                 <Textarea 
-                  placeholder={selectedElement ? "Напишите, что сделать с выбранным элементом..." : "Редактируйте блоки, вставляйте изображения, видео, SVG анимацию, меняйте дизайн."}
+                  placeholder={selectedElement ? "Что сделать с выбранным элементом..." : "Опишите, что изменить или добавить..."}
                   value={prompt}
                   onChange={e => setPrompt(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleGenerate())}
                   onPaste={handlePaste}
-                  className="min-h-[80px] max-h-[500px] resize-y rounded-2xl border-none bg-transparent font-medium pl-4 pr-20 py-4 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+                  className="min-h-[72px] max-h-[400px] resize-y rounded-2xl border-none bg-transparent text-sm pl-4 pr-20 py-3.5 focus-visible:ring-0 focus-visible:ring-offset-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] text-slate-700 placeholder:text-slate-400"
                   disabled={isGenerating}
                   data-testid="input-prompt"
                 />
@@ -1923,18 +1992,18 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isGenerating}
-                    className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all disabled:opacity-40"
+                    className="h-7 w-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-white transition-all duration-150 disabled:opacity-40"
                     data-testid="button-upload-image"
                   >
-                    <Paperclip className="w-4 h-4" />
+                    <Paperclip className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => handleGenerate()}
                     disabled={isGenerating || (!prompt.trim() && attachedImages.length === 0 && attachedVideos.filter(v => !v.uploading).length === 0 && attachedModels.filter(m => !m.uploading).length === 0)}
-                    className="h-8 w-8 rounded-lg flex items-center justify-center bg-primary text-white shadow-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="h-7 w-7 rounded-full flex items-center justify-center bg-primary text-white hover:bg-primary/90 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-primary/30"
                     data-testid="button-send"
                   >
-                    <Send className="w-3.5 h-3.5" />
+                    <Send className="w-3 h-3" />
                   </button>
                 </div>
               </div>
@@ -1944,7 +2013,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
         <button 
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-12 bg-white dark:bg-slate-900 shadow-sm border border-slate-100 dark:border-slate-800 rounded-r-xl flex items-center justify-center hover:bg-slate-50 text-slate-400 hover:text-slate-700 transition-all ${sidebarOpen ? 'translate-x-[380px]' : 'translate-x-0'}`}
+          className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-12 bg-white dark:bg-slate-900 shadow-sm border border-slate-100 dark:border-slate-800 rounded-r-xl flex items-center justify-center hover:bg-slate-50 text-slate-400 hover:text-slate-700 transition-all duration-500 ${sidebarOpen ? 'translate-x-[440px]' : 'translate-x-0'}`}
           data-testid="button-toggle-sidebar"
         >
           {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
