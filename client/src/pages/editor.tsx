@@ -1536,9 +1536,9 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
   return (
     <div className="h-screen bg-[#F6F7FB] dark:bg-[#0F172A] flex flex-col p-3 gap-3 overflow-hidden">
-      <header className="h-14 flex items-center justify-between gap-4 bg-white dark:bg-slate-900 rounded-2xl px-4 border border-slate-100 dark:border-slate-800 shadow-sm shrink-0">
+      <header className="h-16 flex items-center justify-between gap-4 bg-white dark:bg-slate-900 rounded-2xl px-5 border border-slate-100 dark:border-slate-800 shadow-sm shrink-0">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="rounded-xl h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => setLocation("/dashboard")} data-testid="button-back">
+          <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => setLocation("/dashboard")} data-testid="button-back">
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setLocation("/")}>
@@ -1563,9 +1563,9 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           {/* Device switcher */}
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-full p-0.5 gap-0.5">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-full p-1 gap-0.5">
             {[
               { d: "desktop" as const, i: Monitor, tip: "Десктоп" },
               { d: "tablet" as const, i: Tablet, tip: "Планшет" },
@@ -1576,81 +1576,86 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 onClick={() => setPreviewDevice(d)}
                 data-testid={`button-device-${d}`}
                 title={tip}
-                className={`flex items-center justify-center w-7 h-7 rounded-full transition-all duration-200 ${previewDevice === d ? "bg-white dark:bg-slate-700 shadow-sm text-slate-800 dark:text-white" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
+                className={`flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 ${previewDevice === d ? "bg-white dark:bg-slate-700 shadow-md text-slate-800 dark:text-white scale-105" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="w-4 h-4" />
               </button>
             ))}
           </div>
 
-          <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
           {/* Code toggle */}
           <button
             onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }}
             data-testid="button-toggle-code"
             title={showCode ? "Просмотр сайта" : "Код"}
-            className={`flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium transition-all duration-200 ${showCode ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+            className={`flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium transition-all duration-200 ${showCode
+              ? "bg-slate-800 text-white shadow-md"
+              : "bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-slate-800"}`}
           >
-            {showCode ? <Eye className="w-3.5 h-3.5" /> : <Code2 className="w-3.5 h-3.5" />}
+            {showCode ? <Eye className="w-4 h-4" /> : <Code2 className="w-4 h-4" />}
             <span>{showCode ? "Превью" : "Код"}</span>
           </button>
 
           {!showCode && currentCode && (
             <>
-              <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
               <button
                 onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }}
                 data-testid="button-toggle-edit"
                 title="Визуальный редактор"
-                className={`flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium transition-all duration-200 ${editMode ? "bg-blue-500 text-white shadow-sm shadow-blue-200" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+                className={`flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium transition-all duration-200 ${editMode
+                  ? "bg-blue-500 text-white shadow-md shadow-blue-200"
+                  : "bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-slate-800"}`}
               >
-                <MousePointer2 className="w-3.5 h-3.5" />
+                <MousePointer2 className="w-4 h-4" />
                 Редактор
               </button>
               <button
                 onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }}
                 data-testid="button-toggle-selector"
                 title="Выбрать элемент"
-                className={`flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium transition-all duration-200 ${selectorMode ? "bg-orange-500 text-white shadow-sm shadow-orange-200" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+                className={`flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium transition-all duration-200 ${selectorMode
+                  ? "bg-orange-500 text-white shadow-md shadow-orange-200"
+                  : "bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-slate-800"}`}
               >
-                <Crosshair className="w-3.5 h-3.5" />
+                <Crosshair className="w-4 h-4" />
                 Выбрать
               </button>
               <button
                 onClick={() => setShowTemplates(true)}
                 data-testid="button-templates"
                 title="Шаблоны"
-                className="flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium text-slate-500 hover:text-violet-600 hover:bg-violet-50 transition-all duration-200"
+                className="flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-violet-600 transition-all duration-200"
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                <Sparkles className="w-4 h-4" />
                 Шаблоны
               </button>
               <button
                 onClick={() => setShowGenerations(true)}
                 data-testid="button-generations"
                 title="Генерации"
-                className="relative flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium text-slate-500 hover:text-cyan-600 hover:bg-cyan-50 transition-all duration-200"
+                className="relative flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-cyan-600 transition-all duration-200"
               >
-                <ImagePlus className="w-3.5 h-3.5" />
+                <ImagePlus className="w-4 h-4" />
                 Медиа
                 {projectImages.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-primary text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center">{projectImages.length}</span>
+                  <span className="absolute -top-1.5 -right-1 bg-primary text-white text-[9px] font-bold px-1.5 min-w-[18px] h-[18px] rounded-full flex items-center justify-center">{projectImages.length}</span>
                 )}
               </button>
               <button
                 onClick={() => { setGen3dOpen(true); setGen3dStatus("idle"); setGen3dResultUrl(""); setGen3dError(""); setGen3dImagePreview(""); setGen3dImageUrl(""); }}
                 data-testid="button-3d-library"
                 title="Создать 3D модель"
-                className="flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium text-slate-500 hover:text-violet-600 hover:bg-violet-50 transition-all duration-200"
+                className="flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-violet-600 transition-all duration-200"
               >
-                <Box className="w-3.5 h-3.5" />
+                <Box className="w-4 h-4" />
                 3D
               </button>
             </>
           )}
 
-          <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
           <input ref={faviconInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/x-icon,image/webp" className="hidden" onChange={handleFaviconUpload} data-testid="input-favicon-upload" />
           <button
@@ -1658,7 +1663,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             disabled={faviconUploading || !currentCode}
             title="Фавикон"
             data-testid="button-favicon-upload"
-            className="flex items-center justify-center w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all duration-200 disabled:opacity-40"
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-slate-700 hover:border-slate-300 transition-all duration-200 disabled:opacity-40"
           >
             {faviconUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
               project?.generatedCode?.includes('rel="icon"') || project?.generatedCode?.includes("rel='icon'")
@@ -1671,8 +1676,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             onClick={handleDownloadZip}
             disabled={!currentCode}
             data-testid="button-download-zip"
-            title="ZIP"
-            className="flex items-center justify-center w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all duration-200 disabled:opacity-40"
+            title="Скачать ZIP"
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-slate-700 hover:border-slate-300 transition-all duration-200 disabled:opacity-40"
           >
             <Download className="w-4 h-4" />
           </button>
@@ -1681,7 +1686,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             onClick={() => setImgGenOpen(true)}
             data-testid="button-open-image-gen"
             title="AI Фото"
-            className="flex items-center justify-center w-8 h-8 rounded-full text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-all duration-200"
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-violet-600 hover:border-violet-200 transition-all duration-200"
           >
             <Camera className="w-4 h-4" />
           </button>
@@ -1714,20 +1719,18 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 setTimeout(() => handlePublish(), 50);
               }
             }}
-            className={`flex items-center gap-1.5 h-8 px-4 rounded-full text-xs font-semibold transition-all duration-200 ${
+            className={`flex items-center gap-2 h-10 px-5 rounded-full text-sm font-semibold transition-all duration-200 ${
               project?.publishStatus === "published"
-                ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm shadow-emerald-200"
+                ? "bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-md shadow-emerald-200 hover:shadow-lg hover:shadow-emerald-300"
                 : project?.publishStatus === "suspended"
-                ? "bg-orange-500 text-white hover:bg-orange-600 shadow-sm shadow-orange-200"
-                : "bg-primary text-white hover:bg-primary/90 shadow-sm shadow-primary/20"
+                ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-200 hover:shadow-lg hover:shadow-orange-300"
+                : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md shadow-blue-200 hover:shadow-lg hover:shadow-blue-300 hover:from-blue-600 hover:to-indigo-600"
             }`}
           >
             {project?.publishStatus === "published" ? (
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            ) : project?.publishStatus === "suspended" ? (
-              <ExternalLink className="w-3.5 h-3.5" />
+              <CheckCircle2 className="w-4 h-4" />
             ) : (
-              <ExternalLink className="w-3.5 h-3.5" />
+              <ExternalLink className="w-4 h-4" />
             )}
             {project?.publishStatus === "published" ? "Опубликован" : project?.publishStatus === "suspended" ? "Приостановлен" : "Опубликовать"}
           </button>
