@@ -1896,6 +1896,74 @@ ${designAnalysis}
     }
   });
 
+  const adminOnly = (req: any, res: any, next: any) => {
+    if (!req.user || req.user.id !== 1) return res.status(403).json({ message: "Forbidden" });
+    next();
+  };
+
+  app.get("/api/admin/stats", adminOnly, async (req, res) => {
+    try {
+      const stats = await storage.adminGetStats();
+      res.json(stats);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/users", adminOnly, async (req, res) => {
+    try {
+      const allUsers = await storage.adminGetAllUsers();
+      res.json(allUsers);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/users/:userId", adminOnly, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      res.json(user);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/users/:userId/transactions", adminOnly, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const txns = await storage.adminGetUserTransactions(userId);
+      res.json(txns);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/users/:userId/projects", adminOnly, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const userProjects = await storage.adminGetUserProjects(userId);
+      res.json(userProjects);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/users/:userId/adjust-credits", adminOnly, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const { amount, type, note } = req.body;
+      if (!amount || !type || !["credit", "debit"].includes(type)) {
+        return res.status(400).json({ message: "amount, type (credit|debit) required" });
+      }
+      const user = await storage.adminAdjustCredits(userId, Number(amount), type, type === "credit" ? "admin_add" : "admin_deduct", note || "");
+      res.json({ success: true, user });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   async function runDailyPublishBilling() {
     const today = new Date().toISOString().slice(0, 10);
     console.log(`[Billing] Starting daily publish billing for ${today}...`);

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { users, projects, projectMessages, projectImages, projectVersions, projectFiles, leads, creditTransactions, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion, type ProjectFile, type InsertProjectFile, type Lead, type InsertLead } from "@shared/schema";
+import { users, projects, projectMessages, projectImages, projectVersions, projectFiles, leads, creditTransactions, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion, type ProjectFile, type InsertProjectFile, type Lead, type InsertLead, type CreditTransaction } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -45,6 +45,12 @@ export interface IStorage {
   getPublishedProjectsCount(userId: number): Promise<number>;
   getAllPublishedProjects(): Promise<Project[]>;
   getAllUsersWithPublishedSites(): Promise<{ userId: number; publishedCount: number }[]>;
+
+  adminGetAllUsers(): Promise<User[]>;
+  adminGetUserTransactions(userId: number): Promise<import("@shared/schema").CreditTransaction[]>;
+  adminAdjustCredits(userId: number, amount: number, type: "credit" | "debit", operation: string, note: string): Promise<User | undefined>;
+  adminGetUserProjects(userId: number): Promise<Project[]>;
+  adminGetStats(): Promise<{ totalUsers: number; totalProjects: number; totalTokensSpent: number; totalTokensAdded: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -278,6 +284,45 @@ export class DatabaseStorage implements IStorage {
       map.set(p.userId, (map.get(p.userId) || 0) + 1);
     }
     return Array.from(map.entries()).map(([userId, publishedCount]) => ({ userId, publishedCount }));
+  }
+
+  async adminGetAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  async adminGetUserTransactions(userId: number): Promise<CreditTransaction[]> {
+    return db.select().from(creditTransactions).where(eq(creditTransactions.userId, userId)).orderBy(desc(creditTransactions.createdAt));
+  }
+
+  async adminAdjustCredits(userId: number, amount: number, type: "credit" | "debit", operation: string, note: string): Promise<User | undefined> {
+    const idempotencyKey = `admin-${type}-${userId}-${Date.now()}-${Math.random()}`;
+    if (type === "credit") {
+      const result = await db.execute(sql`UPDATE users SET credits = credits + ${amount} WHERE id = ${userId} RETURNING credits`);
+      const rows = result.rows as Array<{ credits: number }>;
+      await db.insert(creditTransactions).values({ userId, amount, type: "credit", operation, note, idempotencyKey });
+      return this.getUser(userId);
+    } else {
+      await db.execute(sql`UPDATE users SET credits = GREATEST(0, credits - ${amount}) WHERE id = ${userId}`);
+      await db.insert(creditTransactions).values({ userId, amount, type: "debit", operation, note, idempotencyKey });
+      return this.getUser(userId);
+    }
+  }
+
+  async adminGetUserProjects(userId: number): Promise<Project[]> {
+    return db.select().from(projects).where(eq(projects.userId, userId)).orderBy(desc(projects.createdAt));
+  }
+
+  async adminGetStats(): Promise<{ totalUsers: number; totalProjects: number; totalTokensSpent: number; totalTokensAdded: number }> {
+    const r1 = await db.execute(sql`SELECT COUNT(*)::int as count FROM users`);
+    const r2 = await db.execute(sql`SELECT COUNT(*)::int as count FROM projects`);
+    const r3 = await db.execute(sql`SELECT COALESCE(SUM(amount),0)::int as total FROM credit_transactions WHERE type='debit' OR type IS NULL`);
+    const r4 = await db.execute(sql`SELECT COALESCE(SUM(amount),0)::int as total FROM credit_transactions WHERE type='credit'`);
+    return {
+      totalUsers: Number((r1.rows[0] as any)?.count ?? 0),
+      totalProjects: Number((r2.rows[0] as any)?.count ?? 0),
+      totalTokensSpent: Number((r3.rows[0] as any)?.total ?? 0),
+      totalTokensAdded: Number((r4.rows[0] as any)?.total ?? 0),
+    };
   }
 }
 

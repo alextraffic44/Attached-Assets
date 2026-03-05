@@ -22,6 +22,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - **Routing**: wouter for client-side routing
 
 ## Pages
+- `/admin` — Admin panel (только для user ID=1): статистика, список пользователей, история транзакций, начисление/списание токенов, проекты пользователя
 - `/` — Landing page with features and pricing
 - `/auth` — Login/Register with email + password
 - `/dashboard` — User's projects list with create modal + leads/generations buttons

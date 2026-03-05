@@ -117,7 +117,9 @@ export const creditTransactions = pgTable("credit_transactions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   amount: integer("amount").notNull(),
+  type: text("type").notNull().default("debit"),
   operation: text("operation").notNull(),
+  note: text("note"),
   idempotencyKey: text("idempotency_key").notNull().unique(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
