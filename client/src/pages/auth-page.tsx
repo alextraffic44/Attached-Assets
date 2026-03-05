@@ -322,7 +322,7 @@ export default function AuthPage() {
           {/* Legal */}
           <p style={{ fontSize: "0.72rem", color: "#AEAEB2", marginTop: "1.5rem", textAlign: "center", lineHeight: 1.6, maxWidth: 320 }}>
             Создавая аккаунт, вы соглашаетесь с{" "}
-            <a href="/terms" style={{ color: "#007AFF", textDecoration: "none" }}>пользовательским соглашением</a>
+            <a href="/oferta" style={{ color: "#007AFF", textDecoration: "none" }}>договором оферты</a>
             {" "}и{" "}
             <a href="/privacy" style={{ color: "#007AFF", textDecoration: "none" }}>политикой конфиденциальности</a>
           </p>
