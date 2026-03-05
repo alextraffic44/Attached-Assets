@@ -65,7 +65,7 @@ import {
 } from "@/components/ui/select";
 
 const SkeuoPanel = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <div className={`bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-white/20 dark:border-white/5 shadow-skeuo-lg rounded-[2rem] overflow-hidden flex flex-col ${className}`}>
+  <div className={`bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm rounded-2xl overflow-hidden flex flex-col ${className}`}>
     {children}
   </div>
 );
@@ -1532,13 +1532,13 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     e.target.value = "";
   }, [applyImageToIframe]);
 
-  if (projectLoading) return <div className="h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#0F172A]"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
+  if (projectLoading) return <div className="h-screen flex items-center justify-center bg-[#F6F7FB] dark:bg-[#0F172A]"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
 
   return (
-    <div className="h-screen bg-[#F8FAFC] dark:bg-[#0F172A] flex flex-col p-4 gap-4 overflow-hidden">
-      <header className="h-16 flex items-center justify-between gap-4 px-2">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" className="rounded-xl shadow-skeuo-sm bg-white dark:bg-slate-900" onClick={() => setLocation("/dashboard")} data-testid="button-back">
+    <div className="h-screen bg-[#F6F7FB] dark:bg-[#0F172A] flex flex-col p-3 gap-3 overflow-hidden">
+      <header className="h-14 flex items-center justify-between gap-4 bg-white dark:bg-slate-900 rounded-2xl px-4 border border-slate-100 dark:border-slate-800 shadow-sm shrink-0">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="rounded-xl h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => setLocation("/dashboard")} data-testid="button-back">
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setLocation("/")}>
@@ -1563,8 +1563,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </div>
         </div>
 
-        <div className="flex items-center gap-3 bg-white/40 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-2xl p-1.5 shadow-glass">
-          <div className="flex items-center border rounded-xl p-0.5 gap-0.5 bg-slate-100/50 dark:bg-slate-800/50 shadow-skeuo-inner">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center border border-slate-100 dark:border-slate-800 rounded-xl p-0.5 gap-0.5 bg-slate-50 dark:bg-slate-800/50">
             {[
               { d: "desktop" as const, i: Monitor, tip: "Десктоп — просмотр на большом экране" },
               { d: "tablet" as const, i: Tablet, tip: "Планшет — просмотр на среднем экране" },
@@ -1578,60 +1578,61 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
-          <Button variant={showCode ? "secondary" : "ghost"} size="icon" className="h-8 w-8 rounded-xl" onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }} data-testid="button-toggle-code" title={showCode ? "Просмотр сайта" : "Код"}>
+          <Button variant={showCode ? "default" : "ghost"} size="icon" className={`h-8 w-8 rounded-lg ${showCode ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"}`} onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }} data-testid="button-toggle-code" title={showCode ? "Просмотр сайта" : "Код"}>
             {showCode ? <Eye className="w-4 h-4" /> : <Code2 className="w-4 h-4" />}
           </Button>
 
           {!showCode && currentCode && (
             <>
-              <Button variant={editMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-3 ${editMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }} data-testid="button-toggle-edit" title="Визуальный редактор">
-                <MousePointer2 className="w-4 h-4 mr-1.5" />
+              <div className="h-5 w-px bg-slate-100 dark:bg-slate-700" />
+              <Button variant="ghost" size="sm" className={`rounded-lg font-medium px-2.5 h-8 text-xs gap-1.5 ${editMode ? "bg-blue-50 text-blue-600 hover:bg-blue-100" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"}`} onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }} data-testid="button-toggle-edit" title="Визуальный редактор">
+                <MousePointer2 className="w-3.5 h-3.5" />
                 Редактор
               </Button>
-              <Button variant={selectorMode ? "default" : "outline"} size="sm" className={`rounded-xl font-bold px-3 ${selectorMode ? "bg-orange-500 hover:bg-orange-600 text-white" : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-500/30 dark:hover:bg-orange-500/10"}`} onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }} data-testid="button-toggle-selector" title="Выбрать элемент">
-                <Crosshair className="w-4 h-4 mr-1.5" />
+              <Button variant="ghost" size="sm" className={`rounded-lg font-medium px-2.5 h-8 text-xs gap-1.5 ${selectorMode ? "bg-orange-50 text-orange-600 hover:bg-orange-100" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"}`} onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }} data-testid="button-toggle-selector" title="Выбрать элемент">
+                <Crosshair className="w-3.5 h-3.5" />
                 Выбрать
               </Button>
-              <Button variant="outline" size="sm" className="rounded-xl font-bold px-3 border-purple-300 text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-500/30 dark:hover:bg-purple-500/10" onClick={() => setShowTemplates(true)} data-testid="button-templates" title="Шаблоны">
-                <Sparkles className="w-4 h-4 mr-1.5" />
+              <Button variant="ghost" size="sm" className="rounded-lg font-medium px-2.5 h-8 text-xs gap-1.5 text-slate-500 hover:text-violet-600 hover:bg-violet-50" onClick={() => setShowTemplates(true)} data-testid="button-templates" title="Шаблоны">
+                <Sparkles className="w-3.5 h-3.5" />
                 Шаблоны
               </Button>
-              <Button variant="outline" size="sm" className="rounded-xl font-bold px-3 relative border-cyan-300 text-cyan-600 hover:bg-cyan-50 dark:text-cyan-400 dark:border-cyan-500/30 dark:hover:bg-cyan-500/10" onClick={() => setShowGenerations(true)} data-testid="button-generations" title="Генерации">
-                <ImagePlus className="w-4 h-4 mr-1.5" />
+              <Button variant="ghost" size="sm" className="rounded-lg font-medium px-2.5 h-8 text-xs gap-1.5 text-slate-500 hover:text-cyan-600 hover:bg-cyan-50 relative" onClick={() => setShowGenerations(true)} data-testid="button-generations" title="Генерации">
+                <ImagePlus className="w-3.5 h-3.5" />
                 Генерации
                 {projectImages.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-cyan-500 text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center">{projectImages.length}</span>
+                  <span className="absolute -top-1 -right-1 bg-primary text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center">{projectImages.length}</span>
                 )}
               </Button>
-              <Button variant="outline" size="sm" className="rounded-xl font-bold px-3 border-violet-300 text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:border-violet-500/30 dark:hover:bg-violet-500/10" onClick={() => { setGen3dOpen(true); setGen3dStatus("idle"); setGen3dResultUrl(""); setGen3dError(""); setGen3dImagePreview(""); setGen3dImageUrl(""); }} data-testid="button-3d-library" title="Создать 3D модель">
-                <Box className="w-4 h-4 mr-1.5" />
+              <Button variant="ghost" size="sm" className="rounded-lg font-medium px-2.5 h-8 text-xs gap-1.5 text-slate-500 hover:text-violet-600 hover:bg-violet-50" onClick={() => { setGen3dOpen(true); setGen3dStatus("idle"); setGen3dResultUrl(""); setGen3dError(""); setGen3dImagePreview(""); setGen3dImageUrl(""); }} data-testid="button-3d-library" title="Создать 3D модель">
+                <Box className="w-3.5 h-3.5" />
                 3D
               </Button>
             </>
           )}
 
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
+          <div className="h-5 w-px bg-slate-100 dark:bg-slate-700" />
 
-          <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip" title="ZIP">
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100" onClick={handleDownloadZip} disabled={!currentCode} data-testid="button-download-zip" title="ZIP">
             <Download className="w-4 h-4" />
           </Button>
 
           <input ref={faviconInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/x-icon,image/webp" className="hidden" onChange={handleFaviconUpload} data-testid="input-favicon-upload" />
-          <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl" onClick={() => faviconInputRef.current?.click()} disabled={faviconUploading || !currentCode} title="Фавикон" data-testid="button-favicon-upload">
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100" onClick={() => faviconInputRef.current?.click()} disabled={faviconUploading || !currentCode} title="Фавикон" data-testid="button-favicon-upload">
             {faviconUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
               project?.generatedCode?.includes('rel="icon"') || project?.generatedCode?.includes("rel='icon'")
                 ? <Globe className="w-4 h-4 text-blue-500" />
-                : <Globe className="w-4 h-4 text-slate-400" />
+                : <Globe className="w-4 h-4" />
             )}
           </Button>
 
-          <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl bg-gradient-to-r from-violet-500/10 to-pink-500/10 border-violet-500/20 text-violet-700 dark:text-violet-300 hover:from-violet-500/20 hover:to-pink-500/20" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen" title="AI Фото">
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50" onClick={() => setImgGenOpen(true)} data-testid="button-open-image-gen" title="AI Фото">
             <Camera className="w-4 h-4" />
           </Button>
 
           <Button
             size="sm"
-            className="rounded-xl font-black px-4 shadow-lg shadow-primary/20 hover-elevate"
+            className="rounded-xl font-semibold px-5 h-8 text-sm"
             title="Опубликовать"
             onClick={() => {
               setPublishResult(null);
@@ -1671,21 +1672,22 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
         </div>
       </header>
 
-      <div className="flex-1 flex gap-4 overflow-hidden relative">
-        <SkeuoPanel className={`transition-all duration-500 ease-in-out min-w-0 ${sidebarOpen ? 'w-full sm:w-[400px] sm:min-w-[400px]' : 'w-0 opacity-0 -translate-x-full'}`}>
-          <div className="p-6 border-b flex items-center justify-between">
-            <h2 className="text-lg font-black tracking-tight">AI Конструктор</h2>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-primary/10 text-primary border-primary/20 rounded-lg">Gemini 3.1</Badge>
+      <div className="flex-1 flex gap-3 overflow-hidden relative">
+        <SkeuoPanel className={`transition-all duration-500 ease-in-out min-w-0 ${sidebarOpen ? 'w-full sm:w-[380px] sm:min-w-[380px]' : 'w-0 opacity-0 -translate-x-full'}`}>
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">AI Конструктор</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">{project?.title}</p>
             </div>
+            <Badge className="bg-primary/8 text-primary border-0 rounded-lg text-[10px] font-medium">Gemini</Badge>
           </div>
           {showVersions && versions.length > 0 && (
-            <div className="border-b bg-slate-50/80 dark:bg-slate-900/50 max-h-[240px] overflow-y-auto">
+            <div className="border-b border-slate-100 bg-slate-50/50 max-h-[240px] overflow-y-auto">
               <div className="px-4 py-3">
-                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Чекпоинты</p>
-                <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Чекпоинты</p>
+                <div className="space-y-1">
                   {versions.slice().reverse().map((v) => (
-                    <div key={v.id} className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 rounded-xl px-3 py-2 shadow-sm border border-slate-100 dark:border-slate-700/50" data-testid={`version-item-${v.id}`}>
+                    <div key={v.id} className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 hover:bg-slate-100 transition-colors" data-testid={`version-item-${v.id}`}>
                       <div className="flex-1 min-w-0">
                         <p className="text-[12px] font-semibold text-slate-700 dark:text-slate-300 truncate">{v.label}</p>
                         <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
@@ -1696,12 +1698,12 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20 shrink-0"
+                        className="h-7 px-2.5 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-200 shrink-0"
                         onClick={() => handleRestoreVersion(v.id)}
                         data-testid={`button-restore-version-${v.id}`}
                       >
                         <RotateCcw className="w-3 h-3 mr-1" />
-                        <span className="text-[11px] font-bold">Откатить</span>
+                        <span className="text-[11px] font-medium">Откат</span>
                       </Button>
                     </div>
                   ))}
@@ -1710,12 +1712,12 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             </div>
           )}
           <ScrollArea className="flex-1">
-            <div className="py-6 space-y-6 px-4 min-w-0">
+            <div className="py-5 space-y-4 px-4 min-w-0">
               {messages.map((msg, idx) => {
                 const isModel = msg.role === "model";
                 const isLatestModel = isModel && !messages.slice(idx + 1).some(m => m.role === "model");
                 return (
-                    <div key={msg.id} className={`rounded-2xl p-4 text-sm font-medium shadow-skeuo-md min-w-0 ${msg.role === "user" ? "bg-primary text-white ml-auto max-w-[85%]" : "bg-white dark:bg-slate-800 mr-auto"}`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                    <div key={msg.id} className={`rounded-2xl p-3.5 text-sm min-w-0 ${msg.role === "user" ? "bg-slate-800 text-white ml-auto max-w-[85%]" : "bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 mr-auto"}`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                       {msg.role === "user" ? (() => {
                         let contentStr = msg.content;
                         let imgPreviews: Array<{preview: string, fileName: string}> = [];
