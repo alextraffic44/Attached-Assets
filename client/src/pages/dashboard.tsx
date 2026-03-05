@@ -1068,6 +1068,10 @@ export default function DashboardPage() {
 
       {/* Footer */}
       <footer style={{ textAlign: 'center', padding: '2rem 1rem 2.5rem', color: '#86868B', fontSize: '0.78rem', lineHeight: 1.8 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginBottom: '0.5rem' }}>
+          <a href="/oferta" style={{ color: '#86868B', textDecoration: 'none' }}>Договор оферты</a>
+          <a href="/privacy" style={{ color: '#86868B', textDecoration: 'none' }}>Политика конфиденциальности</a>
+        </div>
         <div>© 2026 Craft AI. Все права защищены.</div>
         <div>ИП Pushkaryov Sergey Borisovich (ПИНФЛ 30904686530039) &nbsp;·&nbsp; <a href="mailto:psb-trx1@yandex.ru" style={{ color: 'inherit', textDecoration: 'none' }}>psb-trx1@yandex.ru</a></div>
       </footer>
