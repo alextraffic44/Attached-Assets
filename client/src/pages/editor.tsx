@@ -1797,7 +1797,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               })}
               {isGenerating && (
                 <div className="flex justify-start">
-                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-sm shadow-skeuo-md max-w-[90%]">
+                  <div className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl p-3.5 text-sm max-w-[90%]">
                     <div className="flex items-center gap-2 mb-1">
                       <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
                       <span className="text-primary font-black text-[11px]">Gemini</span>
@@ -1816,7 +1816,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </ScrollArea>
 
 
-          <div className="p-4 border-t bg-slate-50/50 dark:bg-slate-800/20">
+          <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
             {selectedElement && (
               <div className="mb-3 flex items-center gap-2 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-xl px-3 py-2.5">
                 <Crosshair className="w-4 h-4 text-orange-500 shrink-0" />
@@ -1893,7 +1893,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             )}
             <div className="relative flex items-end">
               <input ref={fileInputRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx,.glb,.gltf" multiple onChange={handleImageUpload} className="hidden" />
-              <div className="flex-1 relative bg-white dark:bg-slate-900 rounded-2xl shadow-skeuo-inner border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
+              <div className="flex-1 relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
                 {attachedModels.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 px-3 pt-3">
                     {attachedModels.map(model => (
@@ -1944,16 +1944,16 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
         <button 
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-12 bg-white dark:bg-slate-900 shadow-skeuo-md border border-white/20 dark:border-white/5 rounded-r-xl flex items-center justify-center hover:bg-primary hover:text-white transition-all ${sidebarOpen ? 'translate-x-[400px]' : 'translate-x-0'}`}
+          className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-12 bg-white dark:bg-slate-900 shadow-sm border border-slate-100 dark:border-slate-800 rounded-r-xl flex items-center justify-center hover:bg-slate-50 text-slate-400 hover:text-slate-700 transition-all ${sidebarOpen ? 'translate-x-[380px]' : 'translate-x-0'}`}
           data-testid="button-toggle-sidebar"
         >
           {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
 
-        <SkeuoPanel className="flex-1 relative bg-slate-100 dark:bg-black flex flex-col overflow-hidden">
-            <div className="flex items-center gap-1 px-4 pt-3 pb-1 overflow-x-auto shrink-0">
+        <SkeuoPanel className="flex-1 relative bg-[#F6F7FB] dark:bg-slate-950 flex flex-col overflow-hidden">
+            <div className="flex items-center gap-1 px-3 pt-3 pb-2 overflow-x-auto shrink-0 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
               {allFiles.map(f => (
-                <div key={f.filename} className={`flex items-center gap-0.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeFile === f.filename ? "bg-primary text-white shadow-md" : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700"}`}>
+                <div key={f.filename} className={`flex items-center gap-0.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${activeFile === f.filename ? "bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200" : "text-slate-400 dark:text-slate-500 hover:text-slate-700 hover:bg-slate-50"}`}>
                   <button
                     onClick={() => { if (isGenerating) return; setActiveFile(f.filename); setStreamedCode(""); }}
                     className="flex items-center gap-1.5 px-3 py-1.5"
@@ -1992,14 +1992,14 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <Plus className="w-4 h-4" />
               </button>
             </div>
-          <div className="flex-1 p-4 overflow-hidden">
+          <div className="flex-1 p-3 overflow-hidden">
             {showCode ? (
-              <div className="w-full h-full p-6 bg-slate-900 rounded-[1.5rem] shadow-skeuo-inner overflow-auto">
+              <div className="w-full h-full p-6 bg-slate-900 rounded-2xl overflow-auto">
                 <pre className="text-xs font-mono text-emerald-400 whitespace-pre-wrap">{currentCode || "// Тут будет код"}</pre>
               </div>
             ) : currentCode || isGenerating ? (
               <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
-                 <div className="bg-white rounded-2xl shadow-2xl transition-all duration-500 overflow-hidden border border-white/20" style={{ width: deviceWidths[previewDevice], height: '100%' }}>
+                 <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }}>
                     <iframe key={selectorMode ? 'sel' : editMode ? 'edit' : 'view'} ref={iframeRef} srcDoc={isGenerating ? (getEditableCode(project?.generatedCode || "") || "") : getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
                  </div>
                  {isGenerating && (
