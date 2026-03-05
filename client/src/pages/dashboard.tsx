@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -168,13 +169,13 @@ function TourTooltip({ steps, currentStep, onNext, onPrev, onClose }: {
     right: { right: -6, top: '50%', transform: 'translateY(-50%) rotate(45deg)' },
   };
 
-  return (
+  return createPortal(
     <>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 99998 }} onClick={onClose} />
+      <div style={{ position: 'fixed', inset: 0, zIndex: 2147483646 }} onClick={onClose} />
       <div
         style={{
           position: 'fixed', top: pos.top, left: pos.left, width: 280,
-          zIndex: 99999, background: '#fff', borderRadius: 14,
+          zIndex: 2147483647, background: '#fff', borderRadius: 14,
           boxShadow: '0 12px 40px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08)',
           padding: '16px 18px', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
           animation: 'tourFadeIn 0.25s ease-out',
@@ -191,12 +192,12 @@ function TourTooltip({ steps, currentStep, onNext, onPrev, onClose }: {
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {currentStep > 0 && (
-              <button onClick={onPrev} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.78rem', color: '#86868B', fontWeight: 500, padding: '4px 0' }}>
+              <button onClick={(e) => { e.stopPropagation(); onPrev(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.78rem', color: '#86868B', fontWeight: 500, padding: '4px 0' }}>
                 Назад
               </button>
             )}
             <button
-              onClick={onNext}
+              onClick={(e) => { e.stopPropagation(); onNext(); }}
               style={{
                 background: '#007AFF', color: '#fff', border: 'none', cursor: 'pointer',
                 fontSize: '0.78rem', fontWeight: 600, padding: '6px 16px', borderRadius: 20,
@@ -207,7 +208,8 @@ function TourTooltip({ steps, currentStep, onNext, onPrev, onClose }: {
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
 
