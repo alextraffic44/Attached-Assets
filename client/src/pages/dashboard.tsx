@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -87,6 +87,130 @@ function StyleTemplateCard({ tmpl, isCard, onClick }: { tmpl: UITemplate; isCard
   );
 }
 
+interface TourStep {
+  target: string;
+  title: string;
+  text: string;
+  position?: "top" | "bottom" | "left" | "right";
+}
+
+const CHOOSE_TOUR_STEPS: TourStep[] = [
+  { target: '[data-tour="mode-photo"]', title: "По фото", text: "Загрузите скриншот или макет — ИИ воссоздаст его в виде HTML/CSS/JS сайта.", position: "bottom" },
+  { target: '[data-tour="mode-prompt"]', title: "По описанию", text: "Просто напишите текстом, что вам нужно — ИИ сделает сайт по вашему описанию.", position: "bottom" },
+  { target: '[data-tour="mode-template"]', title: "Промт + Шаблон", text: "Выберите готовую структуру и стиль, затем добавьте свои детали.", position: "bottom" },
+];
+
+const PHOTO_TOUR_STEPS: TourStep[] = [
+  { target: '[data-tour="photo-title"]', title: "Название", text: "Задайте имя проекта, чтобы легко найти его на дашборде.", position: "bottom" },
+  { target: '[data-tour="photo-desc"]', title: "Описание", text: "Добавьте инструкции: замените текст, укажите язык, опишите желаемые изменения.", position: "bottom" },
+  { target: '[data-tour="photo-upload"]', title: "Загрузите скриншот", text: "Перетащите скриншот или макет сайта. ИИ воссоздаст его дизайн.", position: "left" },
+  { target: '[data-tour="photo-ai-gen"]', title: "AI генератор макетов", text: "Нет скриншота? Опишите дизайн — ИИ нарисует макет для вас (15 токенов).", position: "left" },
+  { target: '[data-tour="photo-create"]', title: "Создать проект", text: "Нажмите, чтобы запустить генерацию сайта. ИИ создаст готовый HTML/CSS/JS код.", position: "top" },
+];
+
+function TourTooltip({ steps, currentStep, onNext, onPrev, onClose }: {
+  steps: TourStep[];
+  currentStep: number;
+  onNext: () => void;
+  onPrev: () => void;
+  onClose: () => void;
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number; arrowSide: string } | null>(null);
+  const step = steps[currentStep];
+
+  useEffect(() => {
+    if (!step) return;
+    const tryPosition = () => {
+      const el = document.querySelector(step.target);
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const tooltipW = 280;
+      const tooltipH = 140;
+      const gap = 12;
+      let top = 0;
+      let left = 0;
+      let arrowSide = "top";
+
+      if (step.position === "bottom") {
+        top = rect.bottom + gap;
+        left = rect.left + rect.width / 2 - tooltipW / 2;
+        arrowSide = "top";
+      } else if (step.position === "top") {
+        top = rect.top - tooltipH - gap;
+        left = rect.left + rect.width / 2 - tooltipW / 2;
+        arrowSide = "bottom";
+      } else if (step.position === "left") {
+        top = rect.top + rect.height / 2 - tooltipH / 2;
+        left = rect.left - tooltipW - gap;
+        arrowSide = "right";
+      } else {
+        top = rect.top + rect.height / 2 - tooltipH / 2;
+        left = rect.right + gap;
+        arrowSide = "left";
+      }
+
+      left = Math.max(8, Math.min(left, window.innerWidth - tooltipW - 8));
+      top = Math.max(8, Math.min(top, window.innerHeight - tooltipH - 8));
+      setPos({ top, left, arrowSide });
+
+      el.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    };
+    const timer = setTimeout(tryPosition, 150);
+    return () => clearTimeout(timer);
+  }, [step, currentStep]);
+
+  if (!step || !pos) return null;
+
+  const arrowStyles: Record<string, any> = {
+    top: { top: -6, left: '50%', transform: 'translateX(-50%) rotate(45deg)' },
+    bottom: { bottom: -6, left: '50%', transform: 'translateX(-50%) rotate(45deg)' },
+    left: { left: -6, top: '50%', transform: 'translateY(-50%) rotate(45deg)' },
+    right: { right: -6, top: '50%', transform: 'translateY(-50%) rotate(45deg)' },
+  };
+
+  return (
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 99998 }} onClick={onClose} />
+      <div
+        style={{
+          position: 'fixed', top: pos.top, left: pos.left, width: 280,
+          zIndex: 99999, background: '#fff', borderRadius: 14,
+          boxShadow: '0 12px 40px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08)',
+          padding: '16px 18px', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
+          animation: 'tourFadeIn 0.25s ease-out',
+        }}
+      >
+        <div style={{ position: 'absolute', width: 12, height: 12, background: '#fff', boxShadow: '-1px -1px 2px rgba(0,0,0,0.06)', ...arrowStyles[pos.arrowSide] }} />
+        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1D1D1F', marginBottom: 6, letterSpacing: '-0.02em' }}>{step.title}</div>
+        <div style={{ fontSize: '0.78rem', color: '#6B6B70', lineHeight: 1.5, marginBottom: 14 }}>{step.text}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {steps.map((_, i) => (
+              <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === currentStep ? '#007AFF' : '#E0E0E0', transition: 'background 0.2s' }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {currentStep > 0 && (
+              <button onClick={onPrev} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.78rem', color: '#86868B', fontWeight: 500, padding: '4px 0' }}>
+                Назад
+              </button>
+            )}
+            <button
+              onClick={onNext}
+              style={{
+                background: '#007AFF', color: '#fff', border: 'none', cursor: 'pointer',
+                fontSize: '0.78rem', fontWeight: 600, padding: '6px 16px', borderRadius: 20,
+              }}
+            >
+              {currentStep < steps.length - 1 ? "Далее" : "Готово"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 const GlassCard = ({ children, className = "", onClick = undefined }: { children: any; className?: string; onClick?: any }) => (
   <div
     onClick={onClick}
@@ -123,7 +247,23 @@ export default function DashboardPage() {
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImage, setPhotoImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
+  const [tourStep, setTourStep] = useState(-1);
+  const [activeTour, setActiveTour] = useState<TourStep[] | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!showCreateModal) { setActiveTour(null); setTourStep(-1); return; }
+    const seenChoose = localStorage.getItem("tour_choose_seen");
+    if (createStep === "choose" && !seenChoose) {
+      const t = setTimeout(() => { setActiveTour(CHOOSE_TOUR_STEPS); setTourStep(0); }, 600);
+      return () => clearTimeout(t);
+    }
+    const seenPhoto = localStorage.getItem("tour_photo_seen");
+    if (createStep === "details" && selectedMode === "photo" && !seenPhoto) {
+      const t = setTimeout(() => { setActiveTour(PHOTO_TOUR_STEPS); setTourStep(0); }, 500);
+      return () => clearTimeout(t);
+    }
+  }, [showCreateModal, createStep, selectedMode]);
   const [mockupPrompt, setMockupPrompt] = useState("");
   const [mockupGenerating, setMockupGenerating] = useState(false);
 
@@ -518,6 +658,7 @@ export default function DashboardPage() {
                     <button
                       key={x.m}
                       data-testid={`button-create-${x.m}`}
+                      data-tour={`mode-${x.m}`}
                       className="group flex flex-col items-center justify-center text-center transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none"
                       style={{ padding: '2rem 1.5rem', borderRadius: 20, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', minHeight: 180 }}
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.12)'; }}
@@ -607,7 +748,7 @@ export default function DashboardPage() {
                   )}
                   <div className="grid gap-6 flex-1" style={{ gridTemplateColumns: '1fr 1fr' }}>
                     <div className="flex flex-col gap-3">
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5" data-tour="photo-title">
                         <Label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Название</Label>
                         <Input
                           placeholder="Например: Моё кафе"
@@ -617,7 +758,7 @@ export default function DashboardPage() {
                           style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.08)' }}
                         />
                       </div>
-                      <div className="space-y-1.5 flex-1 flex flex-col">
+                      <div className="space-y-1.5 flex-1 flex flex-col" data-tour="photo-desc">
                         <div className="flex items-center justify-between px-1">
                           <Label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B' }}>Описание</Label>
                           {isEnhanced && (
@@ -685,6 +826,7 @@ export default function DashboardPage() {
                               <button
                                 type="button"
                                 data-testid="button-upload-photo"
+                                data-tour="photo-upload"
                                 onClick={() => photoInputRef.current?.click()}
                                 className="flex-1 flex flex-col items-center justify-center gap-2 rounded-xl transition-all hover:border-purple-400"
                                 style={{ border: '2px dashed rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.02)', minHeight: 100, cursor: 'pointer' }}
@@ -697,7 +839,7 @@ export default function DashboardPage() {
                                   <p className="text-xs mt-0.5" style={{ color: '#A78BFA' }}>PNG, JPG, WEBP до 5 МБ</p>
                                 </div>
                               </button>
-                              <div className="rounded-xl p-2.5" style={{ background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.15)' }}>
+                              <div className="rounded-xl p-2.5" data-tour="photo-ai-gen" style={{ background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.15)' }}>
                                 <div className="flex gap-2">
                                   <input
                                     type="text"
@@ -909,6 +1051,7 @@ export default function DashboardPage() {
                     </button>
                     )}
                     <button
+                      data-tour="photo-create"
                       className="h-10 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                       style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
                       onClick={() => {
@@ -1075,6 +1218,37 @@ export default function DashboardPage() {
         <div>© 2026 Craft AI. Все права защищены.</div>
         <div>ИП Pushkaryov Sergey Borisovich (ПИНФЛ 30904686530039) &nbsp;·&nbsp; <a href="mailto:psb-trx1@yandex.ru" style={{ color: 'inherit', textDecoration: 'none' }}>psb-trx1@yandex.ru</a></div>
       </footer>
+
+      {activeTour && tourStep >= 0 && (
+        <TourTooltip
+          steps={activeTour}
+          currentStep={tourStep}
+          onNext={() => {
+            if (tourStep < activeTour.length - 1) {
+              setTourStep(tourStep + 1);
+            } else {
+              if (activeTour === CHOOSE_TOUR_STEPS) localStorage.setItem("tour_choose_seen", "1");
+              if (activeTour === PHOTO_TOUR_STEPS) localStorage.setItem("tour_photo_seen", "1");
+              setActiveTour(null);
+              setTourStep(-1);
+            }
+          }}
+          onPrev={() => { if (tourStep > 0) setTourStep(tourStep - 1); }}
+          onClose={() => {
+            if (activeTour === CHOOSE_TOUR_STEPS) localStorage.setItem("tour_choose_seen", "1");
+            if (activeTour === PHOTO_TOUR_STEPS) localStorage.setItem("tour_photo_seen", "1");
+            setActiveTour(null);
+            setTourStep(-1);
+          }}
+        />
+      )}
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes tourFadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}} />
     </div>
   );
 }
