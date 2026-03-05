@@ -1065,6 +1065,12 @@ export default function DashboardPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Footer */}
+      <footer style={{ textAlign: 'center', padding: '2rem 1rem 2.5rem', color: '#86868B', fontSize: '0.78rem', lineHeight: 1.8 }}>
+        <div>© 2026 Craft AI. Все права защищены.</div>
+        <div>ИП Pushkaryov Sergey Borisovich (ПИНФЛ 30904686530039) &nbsp;·&nbsp; <a href="mailto:psb-trx1@yandex.ru" style={{ color: 'inherit', textDecoration: 'none' }}>psb-trx1@yandex.ru</a></div>
+      </footer>
     </div>
   );
 }
