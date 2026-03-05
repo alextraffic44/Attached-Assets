@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -169,17 +168,23 @@ function TourTooltip({ steps, currentStep, onNext, onPrev, onClose }: {
     right: { right: -6, top: '50%', transform: 'translateY(-50%) rotate(45deg)' },
   };
 
-  return createPortal(
+  return (
     <>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 2147483646 }} onClick={onClose} />
+      <div
+        style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
+      />
       <div
         style={{
           position: 'fixed', top: pos.top, left: pos.left, width: 280,
-          zIndex: 2147483647, background: '#fff', borderRadius: 14,
-          boxShadow: '0 12px 40px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08)',
+          zIndex: 9999, background: '#fff', borderRadius: 14,
+          boxShadow: '0 12px 40px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.1)',
           padding: '16px 18px', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
-          animation: 'tourFadeIn 0.25s ease-out',
+          animation: 'tourFadeIn 0.25s ease-out', pointerEvents: 'all',
         }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         <div style={{ position: 'absolute', width: 12, height: 12, background: '#fff', boxShadow: '-1px -1px 2px rgba(0,0,0,0.06)', ...arrowStyles[pos.arrowSide] }} />
         <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1D1D1F', marginBottom: 6, letterSpacing: '-0.02em' }}>{step.title}</div>
@@ -192,12 +197,17 @@ function TourTooltip({ steps, currentStep, onNext, onPrev, onClose }: {
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {currentStep > 0 && (
-              <button onClick={(e) => { e.stopPropagation(); onPrev(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.78rem', color: '#86868B', fontWeight: 500, padding: '4px 0' }}>
+              <button
+                onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onPrev(); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.78rem', color: '#86868B', fontWeight: 500, padding: '4px 0' }}
+              >
                 Назад
               </button>
             )}
             <button
-              onClick={(e) => { e.stopPropagation(); onNext(); }}
+              onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); onNext(); }}
               style={{
                 background: '#007AFF', color: '#fff', border: 'none', cursor: 'pointer',
                 fontSize: '0.78rem', fontWeight: 600, padding: '6px 16px', borderRadius: 20,
@@ -208,8 +218,7 @@ function TourTooltip({ steps, currentStep, onNext, onPrev, onClose }: {
           </div>
         </div>
       </div>
-    </>,
-    document.body
+    </>
   );
 }
 
@@ -1072,6 +1081,29 @@ export default function DashboardPage() {
               )}
             </AnimatePresence>
           </div>
+          {activeTour && tourStep >= 0 && (
+            <TourTooltip
+              steps={activeTour}
+              currentStep={tourStep}
+              onNext={() => {
+                if (tourStep < activeTour.length - 1) {
+                  setTourStep(tourStep + 1);
+                } else {
+                  if (activeTour === CHOOSE_TOUR_STEPS) localStorage.setItem("tour_choose_seen", "1");
+                  if (activeTour === PHOTO_TOUR_STEPS) localStorage.setItem("tour_photo_seen", "1");
+                  setActiveTour(null);
+                  setTourStep(-1);
+                }
+              }}
+              onPrev={() => { if (tourStep > 0) setTourStep(tourStep - 1); }}
+              onClose={() => {
+                if (activeTour === CHOOSE_TOUR_STEPS) localStorage.setItem("tour_choose_seen", "1");
+                if (activeTour === PHOTO_TOUR_STEPS) localStorage.setItem("tour_photo_seen", "1");
+                setActiveTour(null);
+                setTourStep(-1);
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -1220,30 +1252,6 @@ export default function DashboardPage() {
         <div>© 2026 Craft AI. Все права защищены.</div>
         <div>ИП Pushkaryov Sergey Borisovich (ПИНФЛ 30904686530039) &nbsp;·&nbsp; <a href="mailto:psb-trx1@yandex.ru" style={{ color: 'inherit', textDecoration: 'none' }}>psb-trx1@yandex.ru</a></div>
       </footer>
-
-      {activeTour && tourStep >= 0 && (
-        <TourTooltip
-          steps={activeTour}
-          currentStep={tourStep}
-          onNext={() => {
-            if (tourStep < activeTour.length - 1) {
-              setTourStep(tourStep + 1);
-            } else {
-              if (activeTour === CHOOSE_TOUR_STEPS) localStorage.setItem("tour_choose_seen", "1");
-              if (activeTour === PHOTO_TOUR_STEPS) localStorage.setItem("tour_photo_seen", "1");
-              setActiveTour(null);
-              setTourStep(-1);
-            }
-          }}
-          onPrev={() => { if (tourStep > 0) setTourStep(tourStep - 1); }}
-          onClose={() => {
-            if (activeTour === CHOOSE_TOUR_STEPS) localStorage.setItem("tour_choose_seen", "1");
-            if (activeTour === PHOTO_TOUR_STEPS) localStorage.setItem("tour_photo_seen", "1");
-            setActiveTour(null);
-            setTourStep(-1);
-          }}
-        />
-      )}
 
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes tourFadeIn {
