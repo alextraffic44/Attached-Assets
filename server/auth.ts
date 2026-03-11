@@ -6,7 +6,9 @@ import connectPg from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual, createHash, createHmac } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import { pool } from "./db";
+import { pool, db } from "./db";
+import { users } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 const scryptAsync = promisify(scrypt);
 
@@ -171,6 +173,46 @@ export function setupAuth(app: Express) {
       let user = await storage.getUserByTelegramId(telegramId);
       if (!user) {
         user = await storage.createTelegramUser({ telegramId, displayName, avatarUrl });
+      }
+
+      req.login(user, (err) => {
+        if (err) return next(err);
+        const { password: _, ...safeUser } = user!;
+        return res.json(safeUser);
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post("/api/auth/yandex", async (req, res, next) => {
+    try {
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ message: "Token required" });
+
+      const infoRes = await fetch(`https://login.yandex.ru/info?format=json&oauth_token=${token}`);
+      if (!infoRes.ok) return res.status(401).json({ message: "Недействительный Яндекс токен" });
+
+      const info: any = await infoRes.json();
+      const yandexId = String(info.id);
+      const displayName = info.real_name || info.display_name || info.first_name || "Пользователь";
+      const email = info.default_email || null;
+      const avatarUrl = info.default_avatar_id
+        ? `https://avatars.yandex.net/get-yapic/${info.default_avatar_id}/islands-200`
+        : null;
+
+      let user = await storage.getUserByYandexId(yandexId);
+
+      if (!user && email) {
+        const byEmail = await storage.getUserByEmail(email);
+        if (byEmail && !byEmail.yandexId) {
+          await db.update(users).set({ yandexId, avatarUrl: avatarUrl ?? byEmail.avatarUrl }).where(eq(users.id, byEmail.id));
+          user = await storage.getUser(byEmail.id);
+        }
+      }
+
+      if (!user) {
+        user = await storage.createYandexUser({ yandexId, displayName, email: email ?? undefined, avatarUrl: avatarUrl ?? undefined });
       }
 
       req.login(user, (err) => {

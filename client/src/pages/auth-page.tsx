@@ -192,15 +192,27 @@ const AgentSVG = () => (
 );
 
 declare global {
-  interface Window { onTelegramAuth?: (user: any) => void; }
+  interface Window {
+    onTelegramAuth?: (user: any) => void;
+    YaAuthSuggest?: any;
+  }
 }
+
+const YandexIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M2.04 12C2.04 6.48 6.48 2.04 12 2.04C17.52 2.04 21.96 6.48 21.96 12C21.96 17.52 17.52 21.96 12 21.96C6.48 21.96 2.04 17.52 2.04 12Z" fill="#FC3F1D"/>
+    <path d="M13.32 7.5H12.18C11.1 7.5 10.38 8.1 10.38 9C10.38 9.96 10.86 10.44 11.7 11.04L12.3 11.46L10.32 14.5H8.82L10.68 11.76C9.6 11.04 8.94 10.2 8.94 9C8.94 7.38 10.26 6.24 12.18 6.24H14.7V14.5H13.32V7.5Z" fill="white"/>
+  </svg>
+);
 
 export default function AuthPage() {
   const [isTelegramLoading, setIsTelegramLoading] = useState(false);
+  const [isYandexLoading, setIsYandexLoading] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
   const botUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME;
+  const yandexClientId = import.meta.env.VITE_YANDEX_CLIENT_ID;
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -243,6 +255,53 @@ export default function AuthPage() {
     document.getElementById("telegram-widget-container")?.appendChild(script);
     return () => { document.getElementById("telegram-widget")?.remove(); delete window.onTelegramAuth; };
   }, [botUsername, setLocation, toast]);
+
+  const handleYandexAuth = () => {
+    if (!yandexClientId || isYandexLoading) return;
+    setIsYandexLoading(true);
+
+    const initYandex = () => {
+      if (!window.YaAuthSuggest) {
+        setTimeout(initYandex, 100);
+        return;
+      }
+      window.YaAuthSuggest.init(
+        {
+          client_id: yandexClientId,
+          response_type: "token",
+          redirect_uri: window.location.origin + "/auth",
+        },
+        window.location.origin,
+        { view: "button", parentId: "yandex-hidden-btn", buttonSize: "m", buttonView: "main", buttonTheme: "light" }
+      )
+        .then(({ handler }: any) => handler())
+        .then(async (data: any) => {
+          const res = await fetch("/api/auth/yandex", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: data.access_token }),
+            credentials: "include",
+          });
+          const result = await res.json();
+          if (!res.ok) throw new Error(result.message || "Ошибка авторизации");
+          setLocation("/dashboard");
+        })
+        .catch((err: any) => {
+          toast({ title: "Ошибка", description: err.message || "Яндекс авторизация отменена", variant: "destructive" });
+        })
+        .finally(() => setIsYandexLoading(false));
+    };
+
+    if (!document.getElementById("yandex-sdk")) {
+      const script = document.createElement("script");
+      script.id = "yandex-sdk";
+      script.src = "https://yastatic.net/s3/passport-sdk/autofill/v1/sdk-suggest-with-polyfills-latest.js";
+      script.onload = initYandex;
+      document.head.appendChild(script);
+    } else {
+      initYandex();
+    }
+  };
 
   return (
     <div style={{ fontFamily: appleFont, minHeight: "100vh", display: "flex", overflow: "hidden" }}>
@@ -316,6 +375,45 @@ export default function AuthPage() {
               }}>
                 Telegram-авторизация не настроена
               </div>
+            )}
+
+            {/* Divider */}
+            {yandexClientId && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.9rem 0" }}>
+                <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
+                <span style={{ fontSize: "0.72rem", color: "#AEAEB2", fontWeight: 600, letterSpacing: "0.04em" }}>или</span>
+                <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
+              </div>
+            )}
+
+            {/* Yandex button */}
+            {yandexClientId && (
+              <>
+                <div id="yandex-hidden-btn" style={{ display: "none" }} />
+                <button
+                  onClick={handleYandexAuth}
+                  disabled={isYandexLoading}
+                  style={{
+                    width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+                    gap: "0.6rem", height: 52, borderRadius: 14, border: "1px solid rgba(0,0,0,0.08)",
+                    background: "#fff", cursor: isYandexLoading ? "not-allowed" : "pointer",
+                    fontSize: "0.95rem", fontWeight: 600, color: "#1D1D1F",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                    opacity: isYandexLoading ? 0.7 : 1,
+                    transition: "all 0.15s",
+                    fontFamily: appleFont,
+                  }}
+                  onMouseEnter={e => { if (!isYandexLoading) (e.currentTarget as HTMLButtonElement).style.background = "#F9F9F9"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#fff"; }}
+                >
+                  {isYandexLoading ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <YandexIcon />
+                  )}
+                  {isYandexLoading ? "Авторизация..." : "Войти через Яндекс"}
+                </button>
+              </>
             )}
           </div>
 

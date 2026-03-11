@@ -6,8 +6,10 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByTelegramId(telegramId: string): Promise<User | undefined>;
+  getUserByYandexId(yandexId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   createTelegramUser(data: { telegramId: string; displayName: string; avatarUrl?: string }): Promise<User>;
+  createYandexUser(data: { yandexId: string; displayName: string; email?: string; avatarUrl?: string }): Promise<User>;
   updateUserCredits(id: number, credits: number): Promise<User | undefined>;
   deductCredits(userId: number, amount: number, operation: string, idempotencyKey: string): Promise<{ success: boolean; newBalance: number; alreadyProcessed?: boolean }>;
   refundCredits(userId: number, amount: number): Promise<number>;
@@ -78,6 +80,21 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.insert(users).values({
       displayName: data.displayName,
       telegramId: data.telegramId,
+      avatarUrl: data.avatarUrl ?? null,
+    }).returning();
+    return user;
+  }
+
+  async getUserByYandexId(yandexId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.yandexId, yandexId));
+    return user;
+  }
+
+  async createYandexUser(data: { yandexId: string; displayName: string; email?: string; avatarUrl?: string }): Promise<User> {
+    const [user] = await db.insert(users).values({
+      displayName: data.displayName,
+      yandexId: data.yandexId,
+      email: data.email ?? null,
       avatarUrl: data.avatarUrl ?? null,
     }).returning();
     return user;

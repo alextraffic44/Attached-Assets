@@ -11,6 +11,7 @@ export const users = pgTable("users", {
   credits: integer("credits").notNull().default(125),
   plan: text("plan").notNull().default("bronze"),
   telegramId: text("telegram_id").unique(),
+  yandexId: text("yandex_id").unique(),
   avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
