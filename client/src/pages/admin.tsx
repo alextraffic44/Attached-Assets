@@ -334,7 +334,8 @@ export default function AdminPage() {
   });
 
   if (!user) return <Redirect to="/auth" />;
-  if (user.id !== 1) return <Redirect to="/dashboard" />;
+  const isAdmin = user.id === 1 || user.telegramId === "661325490";
+  if (!isAdmin) return <Redirect to="/dashboard" />;
 
   const filtered = users.filter((u: any) =>
     !search || u.displayName?.toLowerCase().includes(search.toLowerCase()) ||

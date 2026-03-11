@@ -1900,8 +1900,11 @@ ${designAnalysis}
     }
   });
 
+  const ADMIN_TELEGRAM_ID = "661325490";
   const adminOnly = (req: any, res: any, next: any) => {
-    if (!req.user || req.user.id !== 1) return res.status(403).json({ message: "Forbidden" });
+    if (!req.user) return res.status(403).json({ message: "Forbidden" });
+    const isAdmin = req.user.id === 1 || req.user.telegramId === ADMIN_TELEGRAM_ID;
+    if (!isAdmin) return res.status(403).json({ message: "Forbidden" });
     next();
   };
 
