@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Sparkles } from "lucide-react";
+import { queryClient } from "@/lib/queryClient";
 
 const appleFont = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
 
@@ -235,6 +236,7 @@ export default function AuthPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Ошибка авторизации");
+        queryClient.setQueryData(["/api/auth/user"], data);
         setLocation("/dashboard");
       } catch (err: any) {
         toast({ title: "Ошибка", description: err.message, variant: "destructive" });
@@ -283,6 +285,7 @@ export default function AuthPage() {
         });
         const result = await res.json();
         if (!res.ok) throw new Error(result.message || "Ошибка авторизации");
+        queryClient.setQueryData(["/api/auth/user"], result);
         setLocation("/dashboard");
       } catch (err: any) {
         toast({ title: "Ошибка", description: err.message, variant: "destructive" });
