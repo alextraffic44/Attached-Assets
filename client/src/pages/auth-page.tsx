@@ -208,6 +208,7 @@ const YandexIcon = () => (
 export default function AuthPage() {
   const [isTelegramLoading, setIsTelegramLoading] = useState(false);
   const [isYandexLoading, setIsYandexLoading] = useState(false);
+  const [yandexHandler, setYandexHandler] = useState<(() => Promise<any>) | null>(null);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -221,6 +222,34 @@ export default function AuthPage() {
     document.head.appendChild(style);
     return () => { document.getElementById("auth-svg-styles")?.remove(); };
   }, []);
+
+  useEffect(() => {
+    if (!yandexClientId) return;
+
+    const initSdk = () => {
+      if (!window.YaAuthSuggest) return;
+      const redirectUri = window.location.origin + "/yandex-suggest-token.html";
+      window.YaAuthSuggest.init(
+        { client_id: yandexClientId, response_type: "token", redirect_uri: redirectUri },
+        window.location.origin,
+        { view: "button", parentId: "yandex-sdk-hidden", buttonSize: "m" }
+      )
+        .then(({ handler }: any) => {
+          setYandexHandler(() => handler);
+        })
+        .catch(() => {});
+    };
+
+    if (!document.getElementById("yandex-sdk")) {
+      const script = document.createElement("script");
+      script.id = "yandex-sdk";
+      script.src = "https://yastatic.net/s3/passport-sdk/autofill/v1/sdk-suggest-with-polyfills-latest.js";
+      script.onload = initSdk;
+      document.head.appendChild(script);
+    } else {
+      initSdk();
+    }
+  }, [yandexClientId]);
 
   useEffect(() => {
     if (!botUsername) return;
@@ -256,50 +285,24 @@ export default function AuthPage() {
     return () => { document.getElementById("telegram-widget")?.remove(); delete window.onTelegramAuth; };
   }, [botUsername, setLocation, toast]);
 
-  const handleYandexAuth = () => {
-    if (!yandexClientId || isYandexLoading) return;
+  const handleYandexAuth = async () => {
+    if (!yandexClientId || isYandexLoading || !yandexHandler) return;
     setIsYandexLoading(true);
-
-    const initYandex = () => {
-      if (!window.YaAuthSuggest) {
-        setTimeout(initYandex, 100);
-        return;
-      }
-      window.YaAuthSuggest.init(
-        {
-          client_id: yandexClientId,
-          response_type: "token",
-          redirect_uri: window.location.origin + "/auth",
-        },
-        window.location.origin,
-        { view: "button", parentId: "yandex-hidden-btn", buttonSize: "m", buttonView: "main", buttonTheme: "light" }
-      )
-        .then(({ handler }: any) => handler())
-        .then(async (data: any) => {
-          const res = await fetch("/api/auth/yandex", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token: data.access_token }),
-            credentials: "include",
-          });
-          const result = await res.json();
-          if (!res.ok) throw new Error(result.message || "Ошибка авторизации");
-          setLocation("/dashboard");
-        })
-        .catch((err: any) => {
-          toast({ title: "Ошибка", description: err.message || "Яндекс авторизация отменена", variant: "destructive" });
-        })
-        .finally(() => setIsYandexLoading(false));
-    };
-
-    if (!document.getElementById("yandex-sdk")) {
-      const script = document.createElement("script");
-      script.id = "yandex-sdk";
-      script.src = "https://yastatic.net/s3/passport-sdk/autofill/v1/sdk-suggest-with-polyfills-latest.js";
-      script.onload = initYandex;
-      document.head.appendChild(script);
-    } else {
-      initYandex();
+    try {
+      const data = await yandexHandler();
+      const res = await fetch("/api/auth/yandex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: data.access_token }),
+        credentials: "include",
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message || "Ошибка авторизации");
+      setLocation("/dashboard");
+    } catch (err: any) {
+      toast({ title: "Ошибка", description: err.message || "Яндекс авторизация отменена", variant: "destructive" });
+    } finally {
+      setIsYandexLoading(false);
     }
   };
 
@@ -389,29 +392,29 @@ export default function AuthPage() {
             {/* Yandex button */}
             {yandexClientId && (
               <>
-                <div id="yandex-hidden-btn" style={{ display: "none" }} />
+                <div id="yandex-sdk-hidden" style={{ display: "none" }} />
                 <button
                   onClick={handleYandexAuth}
-                  disabled={isYandexLoading}
+                  disabled={isYandexLoading || !yandexHandler}
                   style={{
                     width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
                     gap: "0.6rem", height: 52, borderRadius: 14, border: "1px solid rgba(0,0,0,0.08)",
-                    background: "#fff", cursor: isYandexLoading ? "not-allowed" : "pointer",
+                    background: "#fff", cursor: (isYandexLoading || !yandexHandler) ? "not-allowed" : "pointer",
                     fontSize: "0.95rem", fontWeight: 600, color: "#1D1D1F",
                     boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-                    opacity: isYandexLoading ? 0.7 : 1,
+                    opacity: (isYandexLoading || !yandexHandler) ? 0.6 : 1,
                     transition: "all 0.15s",
                     fontFamily: appleFont,
                   }}
-                  onMouseEnter={e => { if (!isYandexLoading) (e.currentTarget as HTMLButtonElement).style.background = "#F9F9F9"; }}
+                  onMouseEnter={e => { if (!isYandexLoading && yandexHandler) (e.currentTarget as HTMLButtonElement).style.background = "#F9F9F9"; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#fff"; }}
                 >
-                  {isYandexLoading ? (
+                  {(isYandexLoading || !yandexHandler) ? (
                     <Loader2 size={18} className="animate-spin" />
                   ) : (
                     <YandexIcon />
                   )}
-                  {isYandexLoading ? "Авторизация..." : "Войти через Яндекс"}
+                  {isYandexLoading ? "Авторизация..." : !yandexHandler ? "Загрузка..." : "Войти через Яндекс"}
                 </button>
               </>
             )}
