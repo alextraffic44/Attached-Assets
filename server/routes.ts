@@ -1942,6 +1942,9 @@ ${designAnalysis}
       const verifyHash = crypto.createHash("md5").update(`${order.id}:${userId}:${apiKey}`).digest("hex");
       const userData = JSON.stringify({ orderId: order.id, userId, v: verifyHash });
 
+      const user = req.user as any;
+      const paymentUserId = user.telegramId || user.yandexId || String(user.id);
+
       const params: Record<string, string> = {
         partner_id: partnerId,
         project_id: projectId,
@@ -1949,6 +1952,8 @@ ${designAnalysis}
         description: `Craft AI: ${pack.tokens} токенов (${pack.label})`,
         success_url: `${baseUrl}/dashboard?payment=success`,
         failure_url: `${baseUrl}/dashboard?payment=failed`,
+        shop_url: "https://craft-ai.ru",
+        user_id: paymentUserId,
         user_data: userData,
       };
 
