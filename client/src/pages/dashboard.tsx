@@ -251,6 +251,7 @@ export default function DashboardPage() {
   const [researchData, setResearchData] = useState("");
   const [showDeepResearchPopup, setShowDeepResearchPopup] = useState(false);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState<number | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [multiPageEnabled, setMultiPageEnabled] = useState(false);
   const [pageNames, setPageNames] = useState<string[]>(["О нас", "Услуги", "Контакты"]);
@@ -261,6 +262,19 @@ export default function DashboardPage() {
   const [tourStep, setTourStep] = useState(-1);
   const [activeTour, setActiveTour] = useState<TourStep[] | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get("payment");
+    if (paymentStatus === "success") {
+      toast({ title: "Оплата прошла успешно!", description: "Токены будут начислены в течение минуты" });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      window.history.replaceState({}, "", "/dashboard");
+    } else if (paymentStatus === "failed") {
+      toast({ title: "Оплата не прошла", description: "Попробуйте ещё раз или выберите другой способ", variant: "destructive" });
+      window.history.replaceState({}, "", "/dashboard");
+    }
+  }, []);
 
   useEffect(() => {
     if (!showCreateModal) { setActiveTour(null); setTourStep(-1); return; }
@@ -1222,7 +1236,25 @@ export default function DashboardPage() {
                   <button
                     className="topup-m2card"
                     data-testid={`button-plan-${plan.price}`}
-                    onClick={() => { toast({ title: "Скоро!", description: "Оплата будет доступна в ближайшее время" }); }}
+                    disabled={paymentLoading !== null}
+                    onClick={async () => {
+                      try {
+                        setPaymentLoading(plan.price);
+                        const res = await apiRequest("POST", "/api/payments/create", { price: plan.price });
+                        const data = await res.json();
+                        if (data.url) {
+                          window.open(data.url, "_blank");
+                          setShowTopUpModal(false);
+                          toast({ title: "Перенаправление на оплату", description: "Откроется страница оплаты через СБП" });
+                        } else {
+                          toast({ title: "Ошибка", description: data.message || "Не удалось создать платёж", variant: "destructive" });
+                        }
+                      } catch (err: any) {
+                        toast({ title: "Ошибка", description: "Не удалось создать платёж", variant: "destructive" });
+                      } finally {
+                        setPaymentLoading(null);
+                      }
+                    }}
                   >
                     <span style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: plan.popular ? '#00d2ff' : 'rgba(255,255,255,0.5)', marginBottom: '0.6rem' }}>{plan.label}</span>
                     <span style={{ fontSize: '2.2rem', fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1, color: '#fff' }}>{plan.tokens.toLocaleString("ru-RU")}</span>
@@ -1234,7 +1266,11 @@ export default function DashboardPage() {
                       ))}
                     </div>
                     <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: '1rem' }} />
-                    <span style={{ fontSize: '1.15rem', fontWeight: 600, letterSpacing: '-0.02em', color: plan.popular ? '#00d2ff' : '#fff' }}>{plan.price.toLocaleString("ru-RU")} ₽</span>
+                    {paymentLoading === plan.price ? (
+                      <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#00d2ff' }}>Загрузка...</span>
+                    ) : (
+                      <span style={{ fontSize: '1.15rem', fontWeight: 600, letterSpacing: '-0.02em', color: plan.popular ? '#00d2ff' : '#fff' }}>{plan.price.toLocaleString("ru-RU")} ₽</span>
+                    )}
                   </button>
                 </div>
               ))}

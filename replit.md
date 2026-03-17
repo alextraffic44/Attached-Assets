@@ -41,6 +41,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `project_versions` — id, projectId, code, label, createdAt (version history/rollback)
 - `project_files` — id, projectId, filename, code, createdAt (multi-page support: extra HTML files beyond index.html)
 - `leads` — id, projectId, name, email, phone, message, source, isRead, createdAt (form submissions from generated sites)
+- `payment_orders` — id, userId, amount, tokens, status, orderId, paymentUrl, createdAt, paidAt
 - `session` — auto-managed by connect-pg-simple
 
 ## Key Features
@@ -77,6 +78,19 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `GET /api/leads/unread-count` — Get unread lead count for badge display
 - `PATCH /api/leads/:id/read` — Mark a lead as read
 - `DELETE /api/leads/:id` — Delete a lead
+
+## API Endpoints (Payments)
+- `POST /api/payments/create` — Create 1payment SBP payment form (price), returns { url, orderId }
+- `POST /api/payments/webhook` — Webhook from 1payment (status 3=success, 4=fail), credits tokens
+- `GET /api/payments/history` — Get user's payment orders
+
+## Payment System (1payment SBP)
+- 4 token packages: Старт (1000/990₽), Базовый (1900/1690₽), Профи (4500/3990₽), Ультра (10000/9990₽)
+- Flow: user clicks package → backend creates order + calls 1payment init_form → user redirected to SBP payment page → 1payment sends webhook → tokens credited
+- Sign: MD5 of "init_form" + sorted params + API key
+- Env vars: ONEPAYMENT_PARTNER_ID, ONEPAYMENT_PROJECT_ID, ONEPAYMENT_API_KEY
+- DB table: `payment_orders` (id, userId, amount, tokens, status, orderId, paymentUrl, createdAt, paidAt)
+- Webhook URL: configured in 1payment dashboard → `https://craft-ai.ru/api/payments/webhook`
 
 ## Leads System
 - SYSTEM_PROMPT instructs Gemini to generate forms with `data-lead-form` attribute

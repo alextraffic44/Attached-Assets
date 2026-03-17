@@ -146,3 +146,17 @@ export const insertLeadSchema = createInsertSchema(leads).omit({
 });
 export type Lead = typeof leads.$inferSelect;
 export type InsertLead = z.infer<typeof insertLeadSchema>;
+
+export const paymentOrders = pgTable("payment_orders", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  amount: integer("amount").notNull(),
+  tokens: integer("tokens").notNull(),
+  status: text("status").notNull().default("pending"),
+  orderId: text("order_id"),
+  paymentUrl: text("payment_url"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  paidAt: timestamp("paid_at"),
+});
+
+export type PaymentOrder = typeof paymentOrders.$inferSelect;

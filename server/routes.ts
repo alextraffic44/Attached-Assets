@@ -6,6 +6,8 @@ import { gemini } from "./gemini";
 import { deployToVercel, addCustomDomain, checkDomainStatus, unpublishFromVercel } from "./vercel-deploy";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { db } from "./db";
+import { creditTransactions } from "@shared/schema";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
@@ -1897,6 +1899,151 @@ ${designAnalysis}
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Ошибка снятия с публикации" });
+    }
+  });
+
+  // ========== PAYMENT (1payment SBP) ==========
+  const PAYMENT_PACKAGES = [
+    { price: 990, tokens: 1000, label: "Старт" },
+    { price: 1690, tokens: 1900, label: "Базовый" },
+    { price: 3990, tokens: 4500, label: "Профи" },
+    { price: 9990, tokens: 10000, label: "Ультра" },
+  ];
+
+  function make1paymentSign(params: Record<string, string>, apiKey: string): string {
+    const sorted = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join("&");
+    const raw = `init_form${sorted}${apiKey}`;
+    return crypto.createHash("md5").update(raw).digest("hex");
+  }
+
+  app.post("/api/payments/create", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Не авторизован" });
+      const userId = (req.user as any).id;
+      const { price } = req.body;
+
+      const pack = PAYMENT_PACKAGES.find(p => p.price === price);
+      if (!pack) return res.status(400).json({ message: "Неверный тариф" });
+
+      const partnerId = process.env.ONEPAYMENT_PARTNER_ID;
+      const projectId = process.env.ONEPAYMENT_PROJECT_ID;
+      const apiKey = process.env.ONEPAYMENT_API_KEY;
+      if (!partnerId || !projectId || !apiKey) {
+        return res.status(500).json({ message: "Платежная система не настроена" });
+      }
+
+      const order = await storage.createPaymentOrder({
+        userId,
+        amount: pack.price,
+        tokens: pack.tokens,
+      });
+
+      const baseUrl = req.headers.origin || `https://${req.headers.host}`;
+      const verifyHash = crypto.createHash("md5").update(`${order.id}:${userId}:${apiKey}`).digest("hex");
+      const userData = JSON.stringify({ orderId: order.id, userId, v: verifyHash });
+
+      const params: Record<string, string> = {
+        partner_id: partnerId,
+        project_id: projectId,
+        amount: String(pack.price),
+        description: `Craft AI: ${pack.tokens} токенов (${pack.label})`,
+        success_url: `${baseUrl}/dashboard?payment=success`,
+        failure_url: `${baseUrl}/dashboard?payment=failed`,
+        user_data: userData,
+      };
+
+      const sign = make1paymentSign(params, apiKey);
+      params.sign = sign;
+
+      const response = await fetch("https://api.1payment.com/init_form", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+
+      const data = await response.json() as any;
+      if (!data.url) {
+        console.error("1payment error:", data);
+        return res.status(500).json({ message: "Ошибка создания платежа" });
+      }
+
+      await storage.updatePaymentOrderStatus(order.id, "created", data.order_id || undefined, undefined);
+
+      res.json({ url: data.url, orderId: order.id });
+    } catch (err: any) {
+      console.error("Payment create error:", err);
+      res.status(500).json({ message: "Ошибка создания платежа" });
+    }
+  });
+
+  app.post("/api/payments/webhook", async (req, res) => {
+    try {
+      const { order_id, status, user_data, merchant_price, test } = req.body;
+      console.log("[Payment Webhook]", JSON.stringify(req.body));
+
+      let parsed: { orderId: number; userId: number; v?: string };
+      try {
+        parsed = JSON.parse(user_data);
+      } catch {
+        console.error("Invalid user_data in webhook:", user_data);
+        return res.json({ status: "ok" });
+      }
+
+      const order = await storage.getPaymentOrderById(parsed.orderId);
+      if (!order) {
+        console.error("Payment order not found:", parsed.orderId);
+        return res.json({ status: "ok" });
+      }
+
+      const apiKey = process.env.ONEPAYMENT_API_KEY || "";
+      const expectedHash = crypto.createHash("md5").update(`${parsed.orderId}:${parsed.userId}:${apiKey}`).digest("hex");
+      if (parsed.v !== expectedHash) {
+        console.error("Payment webhook signature mismatch for order:", parsed.orderId);
+        return res.json({ status: "ok" });
+      }
+
+      if (order.status === "paid") {
+        return res.json({ status: "ok" });
+      }
+
+      if (Number(status) === 3) {
+        await storage.updatePaymentOrderStatus(order.id, "paid", order_id, new Date());
+
+        const user = await storage.getUser(order.userId);
+        if (user) {
+          await storage.updateUserCredits(order.userId, user.credits + order.tokens);
+
+          const idempotencyKey = `payment_${order.id}`;
+          await db.insert(creditTransactions).values({
+            userId: order.userId,
+            amount: order.tokens,
+            type: "credit",
+            operation: "payment",
+            note: `Оплата ${order.amount}₽ — ${order.tokens} токенов`,
+            idempotencyKey,
+          }).onConflictDoNothing();
+        }
+
+        console.log(`[Payment] User ${order.userId} credited ${order.tokens} tokens (order ${order.id})`);
+      } else if (Number(status) === 4) {
+        await storage.updatePaymentOrderStatus(order.id, "failed", order_id);
+        console.log(`[Payment] Order ${order.id} failed`);
+      }
+
+      res.json({ status: "ok" });
+    } catch (err: any) {
+      console.error("Payment webhook error:", err);
+      res.json({ status: "ok" });
+    }
+  });
+
+  app.get("/api/payments/history", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Не авторизован" });
+      const orders = await storage.getPaymentOrdersByUser((req.user as any).id);
+      res.json(orders);
+    } catch (err: any) {
+      res.status(500).json({ message: "Ошибка загрузки истории" });
     }
   });
 

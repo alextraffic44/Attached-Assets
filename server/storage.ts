@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { users, projects, projectMessages, projectImages, projectVersions, projectFiles, leads, creditTransactions, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion, type ProjectFile, type InsertProjectFile, type Lead, type InsertLead, type CreditTransaction } from "@shared/schema";
+import { users, projects, projectMessages, projectImages, projectVersions, projectFiles, leads, creditTransactions, paymentOrders, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion, type ProjectFile, type InsertProjectFile, type Lead, type InsertLead, type CreditTransaction, type PaymentOrder } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -53,6 +53,12 @@ export interface IStorage {
   adminAdjustCredits(userId: number, amount: number, type: "credit" | "debit", operation: string, note: string): Promise<User | undefined>;
   adminGetUserProjects(userId: number): Promise<Project[]>;
   adminGetStats(): Promise<{ totalUsers: number; totalProjects: number; totalTokensSpent: number; totalTokensAdded: number }>;
+
+  createPaymentOrder(data: { userId: number; amount: number; tokens: number; orderId?: string; paymentUrl?: string }): Promise<PaymentOrder>;
+  getPaymentOrderById(id: number): Promise<PaymentOrder | undefined>;
+  getPaymentOrderByOrderId(orderId: string): Promise<PaymentOrder | undefined>;
+  updatePaymentOrderStatus(id: number, status: string, orderId?: string, paidAt?: Date): Promise<PaymentOrder | undefined>;
+  getPaymentOrdersByUser(userId: number): Promise<PaymentOrder[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -340,6 +346,33 @@ export class DatabaseStorage implements IStorage {
       totalTokensSpent: Number((r3.rows[0] as any)?.total ?? 0),
       totalTokensAdded: Number((r4.rows[0] as any)?.total ?? 0),
     };
+  }
+
+  async createPaymentOrder(data: { userId: number; amount: number; tokens: number; orderId?: string; paymentUrl?: string }): Promise<PaymentOrder> {
+    const [order] = await db.insert(paymentOrders).values(data).returning();
+    return order;
+  }
+
+  async getPaymentOrderById(id: number): Promise<PaymentOrder | undefined> {
+    const [order] = await db.select().from(paymentOrders).where(eq(paymentOrders.id, id));
+    return order;
+  }
+
+  async getPaymentOrderByOrderId(orderId: string): Promise<PaymentOrder | undefined> {
+    const [order] = await db.select().from(paymentOrders).where(eq(paymentOrders.orderId, orderId));
+    return order;
+  }
+
+  async updatePaymentOrderStatus(id: number, status: string, orderId?: string, paidAt?: Date): Promise<PaymentOrder | undefined> {
+    const updates: any = { status };
+    if (orderId) updates.orderId = orderId;
+    if (paidAt) updates.paidAt = paidAt;
+    const [order] = await db.update(paymentOrders).set(updates).where(eq(paymentOrders.id, id)).returning();
+    return order;
+  }
+
+  async getPaymentOrdersByUser(userId: number): Promise<PaymentOrder[]> {
+    return db.select().from(paymentOrders).where(eq(paymentOrders.userId, userId)).orderBy(desc(paymentOrders.createdAt));
   }
 }
 
