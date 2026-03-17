@@ -2052,6 +2052,72 @@ ${designAnalysis}
     }
   });
 
+  function make1paymentStatusSign(params: Record<string, string>, apiKey: string): string {
+    const sorted = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join("&");
+    const raw = `status_payment${sorted}${apiKey}`;
+    return crypto.createHash("md5").update(raw).digest("hex");
+  }
+
+  app.post("/api/payments/check-status", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Не авторизован" });
+      const { orderId } = req.body;
+
+      const order = await storage.getPaymentOrderById(orderId);
+      if (!order) return res.status(404).json({ message: "Заказ не найден" });
+      if (order.userId !== (req.user as any).id) return res.status(403).json({ message: "Forbidden" });
+      if (order.status === "paid") return res.json({ status: "paid", tokens: order.tokens });
+
+      const partnerId = process.env.ONEPAYMENT_PARTNER_ID;
+      const projectId = process.env.ONEPAYMENT_PROJECT_ID;
+      const apiKey = process.env.ONEPAYMENT_API_KEY;
+      if (!partnerId || !projectId || !apiKey || !order.orderId) {
+        return res.json({ status: order.status });
+      }
+
+      const params: Record<string, string> = {
+        partner_id: partnerId,
+        project_id: projectId,
+        order_id: order.orderId,
+      };
+      params.sign = make1paymentStatusSign(params, apiKey);
+
+      const response = await fetch("https://api.1payment.com/status_payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      const data = await response.json() as any;
+      console.log("[Payment Status Check]", JSON.stringify(data));
+
+      if (Number(data.status) === 3 && order.status !== "paid") {
+        await storage.updatePaymentOrderStatus(order.id, "paid", order.orderId, new Date());
+        const user = await storage.getUser(order.userId);
+        if (user) {
+          await storage.updateUserCredits(order.userId, user.credits + order.tokens);
+          const idempotencyKey = `payment_${order.id}`;
+          await db.insert(creditTransactions).values({
+            userId: order.userId,
+            amount: order.tokens,
+            type: "credit",
+            operation: "payment",
+            note: `Оплата ${order.amount}₽ — ${order.tokens} токенов`,
+            idempotencyKey,
+          }).onConflictDoNothing();
+        }
+        return res.json({ status: "paid", tokens: order.tokens });
+      } else if (Number(data.status) === 4) {
+        await storage.updatePaymentOrderStatus(order.id, "failed", order.orderId);
+        return res.json({ status: "failed" });
+      }
+
+      res.json({ status: data.status_description || order.status });
+    } catch (err: any) {
+      console.error("Payment status check error:", err);
+      res.status(500).json({ message: "Ошибка проверки статуса" });
+    }
+  });
+
   const ADMIN_TELEGRAM_ID = "661325490";
   const adminOnly = (req: any, res: any, next: any) => {
     if (!req.user) return res.status(403).json({ message: "Forbidden" });
