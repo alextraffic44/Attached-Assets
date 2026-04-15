@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { users, projects, projectMessages, projectImages, projectVersions, projectFiles, leads, creditTransactions, paymentOrders, adVideos, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion, type ProjectFile, type InsertProjectFile, type Lead, type InsertLead, type CreditTransaction, type PaymentOrder, type AdVideo, type InsertAdVideo } from "@shared/schema";
+import { users, projects, projectMessages, projectImages, projectVersions, projectFiles, leads, creditTransactions, paymentOrders, type User, type InsertUser, type Project, type InsertProject, type ProjectMessage, type InsertProjectMessage, type ProjectImage, type InsertProjectImage, type ProjectVersion, type InsertProjectVersion, type ProjectFile, type InsertProjectFile, type Lead, type InsertLead, type CreditTransaction, type PaymentOrder } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -59,11 +59,6 @@ export interface IStorage {
   getPaymentOrderByOrderId(orderId: string): Promise<PaymentOrder | undefined>;
   updatePaymentOrderStatus(id: number, status: string, orderId?: string, paidAt?: Date): Promise<PaymentOrder | undefined>;
   getPaymentOrdersByUser(userId: number): Promise<PaymentOrder[]>;
-
-  createAdVideo(data: InsertAdVideo): Promise<AdVideo>;
-  getAdVideo(id: number): Promise<AdVideo | undefined>;
-  updateAdVideo(id: number, data: Partial<AdVideo>): Promise<AdVideo | undefined>;
-  getAdVideosByUser(userId: number): Promise<AdVideo[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -378,25 +373,6 @@ export class DatabaseStorage implements IStorage {
 
   async getPaymentOrdersByUser(userId: number): Promise<PaymentOrder[]> {
     return db.select().from(paymentOrders).where(eq(paymentOrders.userId, userId)).orderBy(desc(paymentOrders.createdAt));
-  }
-
-  async createAdVideo(data: InsertAdVideo): Promise<AdVideo> {
-    const [video] = await db.insert(adVideos).values(data).returning();
-    return video;
-  }
-
-  async getAdVideo(id: number): Promise<AdVideo | undefined> {
-    const [video] = await db.select().from(adVideos).where(eq(adVideos.id, id));
-    return video;
-  }
-
-  async updateAdVideo(id: number, data: Partial<AdVideo>): Promise<AdVideo | undefined> {
-    const [video] = await db.update(adVideos).set(data).where(eq(adVideos.id, id)).returning();
-    return video;
-  }
-
-  async getAdVideosByUser(userId: number): Promise<AdVideo[]> {
-    return db.select().from(adVideos).where(eq(adVideos.userId, userId)).orderBy(desc(adVideos.createdAt));
   }
 }
 
