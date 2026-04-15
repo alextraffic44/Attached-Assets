@@ -160,3 +160,26 @@ export const paymentOrders = pgTable("payment_orders", {
 });
 
 export type PaymentOrder = typeof paymentOrders.$inferSelect;
+
+export const adVideos = pgTable("ad_videos", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  format: text("format").notNull(),
+  idea: text("idea").notNull(),
+  claudePrompt: text("claude_prompt"),
+  imageUrls: json("image_urls").$type<string[]>().default([]),
+  aspectRatio: text("aspect_ratio").notNull().default("16:9"),
+  duration: text("duration").notNull().default("5"),
+  resolution: text("resolution").notNull().default("720p"),
+  status: text("status").notNull().default("pending"),
+  videoUrl: text("video_url"),
+  taskId: text("task_id"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertAdVideoSchema = createInsertSchema(adVideos).omit({
+  id: true,
+  createdAt: true,
+});
+export type AdVideo = typeof adVideos.$inferSelect;
+export type InsertAdVideo = z.infer<typeof insertAdVideoSchema>;
