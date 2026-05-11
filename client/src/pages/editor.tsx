@@ -1786,7 +1786,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           <ScrollArea className="flex-1">
             <div className="py-5 space-y-4 px-4 min-w-0">
               {(() => {
-                const currentCodeStr = project?.generatedCode || "";
+                const currentCodeStr = streamedCode || project?.generatedCode || "";
                 let activeModelIdx = -1;
                 if (currentCodeStr && versions.length > 0) {
                   let mIdx = 0;
