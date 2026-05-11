@@ -1785,9 +1785,30 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           )}
           <ScrollArea className="flex-1">
             <div className="py-5 space-y-4 px-4 min-w-0">
+              {(() => {
+                const currentCodeStr = project?.generatedCode || "";
+                let activeModelIdx = -1;
+                if (currentCodeStr && versions.length > 0) {
+                  let mIdx = 0;
+                  for (let i = 0; i < messages.length; i++) {
+                    if (messages[i].role === "model" || messages[i].role === "assistant") {
+                      const v = versions[mIdx];
+                      if (v && v.code === currentCodeStr) activeModelIdx = i;
+                      mIdx++;
+                    }
+                  }
+                }
+                if (activeModelIdx === -1) {
+                  for (let i = messages.length - 1; i >= 0; i--) {
+                    if (messages[i].role === "model" || messages[i].role === "assistant") { activeModelIdx = i; break; }
+                  }
+                }
+                (window as any).__activeModelIdx = activeModelIdx;
+                return null;
+              })()}
               {messages.map((msg, idx) => {
                 const isModel = msg.role === "model";
-                const isLatestModel = isModel && !messages.slice(idx + 1).some(m => m.role === "model");
+                const isLatestModel = isModel && idx === (window as any).__activeModelIdx;
                 return (
                     <div key={msg.id} className={`rounded-2xl p-3.5 text-sm min-w-0 ${msg.role === "user" ? "bg-slate-800 text-white ml-auto max-w-[85%]" : "bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 mr-auto"}`} style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                       {msg.role === "user" ? (() => {
