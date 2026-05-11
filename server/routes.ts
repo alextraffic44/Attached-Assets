@@ -56,8 +56,8 @@ async function extractTextFromFile(base64Data: string, mimeType: string): Promis
 const KIE_API_KEY = process.env.KIE_API_KEY;
 const NANO_BANANA_CREATE_URL = "https://api.kie.ai/api/v1/jobs/createTask";
 const NANO_BANANA_STATUS_URL = "https://api.kie.ai/api/v1/jobs/recordInfo";
-const KIE_LLM_MODEL = "claude-opus-4-7";
-const KIE_CLAUDE_URL = "https://api.kie.ai/claude/v1/messages";
+const KIE_LLM_URL = "https://api.kie.ai/codex/v1/responses";
+const KIE_LLM_MODEL = "gpt-5-5";
 
 type KieContentItem =
   | { type: "input_text"; text: string }
@@ -65,46 +65,30 @@ type KieContentItem =
 
 type KieMessage = { role: "user" | "assistant" | "developer" | "system"; content: KieContentItem[] };
 
-// Convert internal KieMessage[] format to Anthropic Claude messages format
-function toAnthropicMessages(messages: KieMessage[]): Array<{ role: "user" | "assistant"; content: any[] }> {
-  return messages
-    .filter(m => m.role === "user" || m.role === "assistant")
-    .map(m => ({
-      role: m.role as "user" | "assistant",
-      content: m.content.map(c => {
-        if (c.type === "input_text") return { type: "text", text: c.text };
-        if (c.type === "input_image") return { type: "image", source: { type: "url", url: c.image_url } };
-        return { type: "text", text: "" };
-      }),
-    }));
-}
-
 async function kieGenerateSync(
   messages: KieMessage[],
   systemPrompt: string
 ): Promise<string> {
-  const resp = await fetch(KIE_CLAUDE_URL, {
+  const input: KieMessage[] = [
+    { role: "developer", content: [{ type: "input_text", text: systemPrompt }] },
+    ...messages,
+  ];
+  const resp = await fetch(KIE_LLM_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${KIE_API_KEY}` },
-    body: JSON.stringify({
-      model: KIE_LLM_MODEL,
-      system: systemPrompt,
-      messages: toAnthropicMessages(messages),
-      stream: false,
-      max_tokens: 16000,
-    }),
+    body: JSON.stringify({ model: KIE_LLM_MODEL, stream: false, input, reasoning: { effort: "medium" } }),
   });
   if (!resp.ok) {
     const err = await resp.text();
-    throw new Error(`KIE Claude API error ${resp.status}: ${err}`);
+    throw new Error(`KIE API error ${resp.status}: ${err}`);
   }
   const data = await resp.json() as any;
-  if (Array.isArray(data.content)) {
-    const parts: string[] = [];
-    for (const c of data.content) {
-      if (c.type === "text" && typeof c.text === "string") parts.push(c.text);
+  for (const item of data.output || []) {
+    if (item.type === "message" && Array.isArray(item.content)) {
+      for (const c of item.content) {
+        if (c.type === "output_text" && c.text) return c.text as string;
+      }
     }
-    return parts.join("");
   }
   return "";
 }
@@ -114,21 +98,18 @@ async function* kieGenerateStream(
   systemPrompt: string,
   reasoningEffort: "low" | "medium" | "high" | "xhigh" = "high"
 ): AsyncGenerator<string> {
-  const resp = await fetch(KIE_CLAUDE_URL, {
+  const input: KieMessage[] = [
+    { role: "developer", content: [{ type: "input_text", text: systemPrompt }] },
+    ...messages,
+  ];
+  const resp = await fetch(KIE_LLM_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${KIE_API_KEY}` },
-    body: JSON.stringify({
-      model: KIE_LLM_MODEL,
-      system: systemPrompt,
-      messages: toAnthropicMessages(messages),
-      stream: true,
-      max_tokens: 16000,
-      thinkingFlag: reasoningEffort === "high" || reasoningEffort === "xhigh",
-    }),
+    body: JSON.stringify({ model: KIE_LLM_MODEL, stream: true, input, reasoning: { effort: reasoningEffort } }),
   });
   if (!resp.ok) {
     const errText = await resp.text();
-    throw new Error(`KIE Claude API error ${resp.status}: ${errText}`);
+    throw new Error(`KIE API error ${resp.status}: ${errText}`);
   }
   const reader = (resp.body as any).getReader();
   const decoder = new TextDecoder();
@@ -146,16 +127,11 @@ async function* kieGenerateStream(
       } else if (line.startsWith("data: ")) {
         const raw = line.slice(6).trim();
         if (raw === "[DONE]") return;
-        // Anthropic stream format: content_block_delta with delta.text or delta.partial_json
-        if (eventType === "content_block_delta") {
+        if (eventType === "response.output_text.delta") {
           try {
             const parsed = JSON.parse(raw);
-            const d = parsed.delta;
-            if (d && d.type === "text_delta" && typeof d.text === "string") yield d.text as string;
-            else if (d && typeof d.text === "string") yield d.text as string;
+            if (parsed.delta) yield parsed.delta as string;
           } catch {}
-        } else if (eventType === "message_stop") {
-          return;
         }
       } else if (line === "") {
         eventType = "";
