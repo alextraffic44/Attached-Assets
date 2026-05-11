@@ -1750,7 +1750,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Gemini</span>
+              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Craft Agent</span>
             </div>
           </div>
           {showVersions && versions.length > 0 && (
@@ -1854,7 +1854,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                                 <span>v{messages.filter((m, i) => (m.role === "assistant" || m.role === "model") && i <= idx).length}</span>
                               </Badge>
                             </button>
-                            <span className="text-primary font-black text-[11px]">Gemini</span>
+                            <span className="text-primary font-black text-[11px]">Craft Agent</span>
                             {isLatestModel && (
                               <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0 text-[10px] px-1.5 py-0 rounded-full">текущий</Badge>
                             )}
@@ -1872,7 +1872,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   <div className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl p-3.5 text-sm max-w-[90%]">
                     <div className="flex items-center gap-2 mb-1">
                       <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
-                      <span className="text-primary font-black text-[11px]">Gemini</span>
+                      <span className="text-primary font-black text-[11px]">Craft Agent</span>
                       <Loader2 className="w-3 h-3 animate-spin text-primary" />
                     </div>
                     {streamingReply ? (
