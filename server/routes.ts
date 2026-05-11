@@ -1189,39 +1189,81 @@ ${designAnalysis}
         return res.status(402).json({ message: `Недостаточно токенов. Нужно ${IMAGE_COST}, у вас ${deduction.newBalance}`, newBalance: deduction.newBalance });
       }
 
-      const inputPayload: any = {
-        prompt,
-        output_format: outputFormat,
-        aspect_ratio: aspectRatio,
-        resolution: "2K",
-      };
-      if (referenceImageUrls && Array.isArray(referenceImageUrls) && referenceImageUrls.length > 0) {
-        const fullUrls = referenceImageUrls.slice(0, 14).map((u: string) =>
-          u.startsWith("http") ? u : `https://${req.headers.host}${u}`
-        );
-        inputPayload.image_url = fullUrls;
+      const hasRefImages = referenceImageUrls && Array.isArray(referenceImageUrls) && referenceImageUrls.length > 0;
+      const refUrlsFull = hasRefImages
+        ? referenceImageUrls.slice(0, 14).map((u: string) =>
+            u.startsWith("http") ? u : `https://${req.headers.host}${u}`
+          )
+        : [];
+
+      let createBody: any = null;
+      let usedModel = "";
+
+      // Try GPT Image-2 first (text-to-image only, no reference images support)
+      if (!hasRefImages) {
+        try {
+          const gptResolution = aspectRatio === "auto" || aspectRatio === "1:1" ? "2K" : "2K";
+          const gptInput: any = {
+            prompt,
+            aspect_ratio: aspectRatio === "auto" ? "1:1" : aspectRatio,
+            resolution: gptResolution,
+          };
+          const gptResp = await fetch(NANO_BANANA_CREATE_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${KIE_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: "gpt-image-2-text-to-image",
+              input: gptInput,
+            }),
+          });
+          const gptBody = await gptResp.json();
+          console.log("GPT Image-2 create response:", JSON.stringify(gptBody));
+          if (gptBody.code === 200 && gptBody.data?.taskId) {
+            createBody = gptBody;
+            usedModel = "gpt-image-2";
+          } else {
+            console.warn("GPT Image-2 failed, falling back to Nano Banana 2:", gptBody.msg);
+          }
+        } catch (gptErr: any) {
+          console.warn("GPT Image-2 error, falling back to Nano Banana 2:", gptErr.message);
+        }
       }
 
-      const createResp = await fetch(NANO_BANANA_CREATE_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${KIE_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "nano-banana-2",
-          input: inputPayload,
-        }),
-      });
+      // Fallback to Nano Banana 2 (or use it directly when reference images provided)
+      if (!createBody) {
+        const nbInput: any = {
+          prompt,
+          output_format: outputFormat,
+          aspect_ratio: aspectRatio,
+          resolution: "2K",
+        };
+        if (hasRefImages) nbInput.image_url = refUrlsFull;
 
-      const createBody = await createResp.json();
-      console.log("Nano Banana create response:", JSON.stringify(createBody));
+        const nbResp = await fetch(NANO_BANANA_CREATE_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${KIE_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "nano-banana-2",
+            input: nbInput,
+          }),
+        });
+        createBody = await nbResp.json();
+        usedModel = "nano-banana-2";
+        console.log("Nano Banana create response:", JSON.stringify(createBody));
+      }
 
       if (createBody.code !== 200 || !createBody.data?.taskId) {
         return res.status(500).json({ message: createBody.msg || "Ошибка создания задачи" });
       }
 
-      res.json({ taskId: createBody.data.taskId, newBalance: deduction.newBalance });
+      console.log(`[Image] Task created with ${usedModel}, taskId=${createBody.data.taskId}`);
+      res.json({ taskId: createBody.data.taskId, model: usedModel, newBalance: deduction.newBalance });
     } catch (err: any) {
       console.error("Image generation error:", err);
       res.status(500).json({ message: "Ошибка генерации изображения" });
