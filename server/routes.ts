@@ -561,6 +561,10 @@ export async function registerRoutes(
         return res.status(402).json({ message: `Не хватает токенов. Нужно ${GENERATION_COST}, у вас ${genDeduction.newBalance}.`, newBalance: genDeduction.newBalance });
       }
 
+      const reqProto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+      const reqHost = req.get("host") || "";
+      const baseUrl = process.env.APP_BASE_URL || (reqHost ? `${reqProto}://${reqHost}` : "https://craft-ai.ru");
+
       const projectImgs = await storage.getProjectImages(project.id);
 
       res.setHeader("Content-Type", "text/event-stream");
@@ -792,11 +796,10 @@ export async function registerRoutes(
               .filter((p: any) => p.inlineData)
               .map((_p: any, idx: number) => ({
                 type: "input_image" as const,
-                image_url: savedImageUrls[idx]
-                  ? `${process.env.APP_BASE_URL || "https://craft-ai.ru"}${savedImageUrls[idx]}`
-                  : "",
+                image_url: savedImageUrls[idx] ? `${baseUrl}${savedImageUrls[idx]}` : "",
               }))
               .filter((c: KieContentItem) => (c as any).image_url);
+            console.log(`[KIE Mockup] Analyzing ${analysisImageContent.length} image(s):`, analysisImageContent.map((c: any) => c.image_url));
             const analysisTextContent: KieContentItem = {
               type: "input_text",
               text: (analysisParts.find((p: any) => p.text) as any)?.text || "",
@@ -925,7 +928,6 @@ ${designAnalysis}
         } else if ((item as any).type === "image") {
           const relUrl = savedImageUrls[userContent.filter(c => c.type === "input_image").length] || "";
           if (relUrl) {
-            const baseUrl = process.env.APP_BASE_URL || "https://craft-ai.ru";
             userContent.push({ type: "input_image", image_url: `${baseUrl}${relUrl}` });
           }
         }
