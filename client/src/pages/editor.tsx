@@ -2871,12 +2871,13 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                         <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.8 }}>
                           <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → выберите <b>{customDomain}</b></div>
                           <div><b>2.</b> Раздел «<b>DNS-серверы и управление зоной</b>» → «<b>Изменить</b>»</div>
-                          <div><b>3.</b> Выберите «<b>Свой список DNS-серверов</b>» и укажите:</div>
+                          <div><b>3.</b> В разделе «<b>DNS-записи</b>» добавьте CNAME-запись:</div>
                           <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem" }}>
-                            <div><b>ns1.vercel-dns.com</b></div>
-                            <div><b>ns2.vercel-dns.com</b></div>
+                            <div><b>Тип:</b> CNAME</div>
+                            <div><b>Имя:</b> www (или @)</div>
+                            <div><b>Значение:</b> craft-ai-p{project?.id}.netlify.app</div>
                           </div>
-                          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>Vercel сам настроит все записи и SSL-сертификат. DNS обновляется от 5 минут до 24 часов.</div>
+                          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>Netlify автоматически выдаст SSL-сертификат. DNS обновляется от 5 минут до 24 часов.</div>
                         </div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -2919,7 +2920,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <Loader2 className="w-10 h-10 animate-spin" style={{ color: "#764ba2" }} />
                 <div style={{ textAlign: "center" }}>
                   <div style={{ fontWeight: 700, color: "#1D1D1F", marginBottom: 4 }}>Публикуем сайт…</div>
-                  <div style={{ fontSize: "0.82rem", color: "#86868B" }}>Загружаем файлы на Vercel CDN</div>
+                  <div style={{ fontSize: "0.82rem", color: "#86868B" }}>Загружаем файлы на Netlify CDN</div>
                 </div>
               </div>
             )}
@@ -2988,12 +2989,13 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                         <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.8 }}>
                           <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → выберите <b>{customDomain}</b></div>
                           <div><b>2.</b> Раздел «<b>DNS-серверы и управление зоной</b>» → «<b>Изменить</b>»</div>
-                          <div><b>3.</b> Выберите «<b>Свой список DNS-серверов</b>» и укажите:</div>
+                          <div><b>3.</b> В разделе «<b>DNS-записи</b>» добавьте CNAME-запись:</div>
                           <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem" }}>
-                            <div><b>ns1.vercel-dns.com</b></div>
-                            <div><b>ns2.vercel-dns.com</b></div>
+                            <div><b>Тип:</b> CNAME</div>
+                            <div><b>Имя:</b> www (или @)</div>
+                            <div><b>Значение:</b> craft-ai-p{project?.id}.netlify.app</div>
                           </div>
-                          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>Vercel сам настроит все записи и SSL-сертификат. DNS обновляется от 5 минут до 24 часов.</div>
+                          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>Netlify автоматически выдаст SSL-сертификат. DNS обновляется от 5 минут до 24 часов.</div>
                         </div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>

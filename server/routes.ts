@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
-import { deployToVercel, addCustomDomain, checkDomainStatus, unpublishFromVercel } from "./vercel-deploy";
+import { deployToNetlify, addCustomDomain, checkDomainStatus, unpublishFromNetlify } from "./netlify-deploy";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { db } from "./db";
@@ -1696,12 +1696,12 @@ ${designAnalysis}
         }
       }
 
-      const { url, vercelProjectId } = await deployToVercel(projectId, files);
+      const { url, netlifyProjectId } = await deployToNetlify(projectId, files);
 
       await storage.updateProject(projectId, {
         publishStatus: "published",
         publishedUrl: url,
-        vercelProjectId,
+        vercelProjectId: netlifyProjectId,
       });
 
       res.json({ url });
@@ -1760,9 +1760,9 @@ ${designAnalysis}
         await storage.updateProject(projectId, { customDomain: domain });
         res.json(result);
       } catch (domainErr: any) {
-        if (domainErr.message?.includes("already in use")) {
+        if (domainErr.message?.includes("already in use") || domainErr.message?.includes("already exists")) {
           await storage.updateProject(projectId, { customDomain: domain });
-          res.json({ verified: false, cname: "cname.vercel-dns.com", alreadyAdded: true });
+          res.json({ verified: false, cname: `craft-ai-p${projectId}.netlify.app`, alreadyAdded: true });
         } else {
           throw domainErr;
         }
@@ -1780,7 +1780,7 @@ ${designAnalysis}
       if (!project || !project.vercelProjectId) return res.json({ verified: false });
       const { domain } = req.query as { domain: string };
       if (!domain) return res.status(400).json({ message: "Домен обязателен" });
-      const result = await checkDomainStatus(project.vercelProjectId, domain);
+      const result = await checkDomainStatus(project.vercelProjectId, domain as string);
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -1893,7 +1893,7 @@ ${designAnalysis}
       if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
       if (project.publishStatus !== "published") return res.status(400).json({ message: "Проект не опубликован" });
 
-      await unpublishFromVercel(projectId);
+      await unpublishFromNetlify(projectId);
       await storage.updateProject(projectId, { publishStatus: "suspended" });
 
       res.json({ success: true });
@@ -2213,7 +2213,7 @@ ${designAnalysis}
           if (result.success) {
             console.log(`[Billing] User ${userId}: charged ${DAILY_PUBLISH_COST} tokens for project ${proj.id} (${proj.title}). Balance: ${result.newBalance}`);
           } else {
-            await unpublishFromVercel(proj.id);
+            await unpublishFromNetlify(proj.id);
             await storage.updateProject(proj.id, { publishStatus: "suspended" });
             console.log(`[Billing] User ${userId}: suspended project ${proj.id} (${proj.title}) — insufficient balance (${result.newBalance} tokens)`);
           }
