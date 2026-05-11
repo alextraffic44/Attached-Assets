@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Allow: /favicon.ico
+Allow: /favicon.png
+Allow: /favicon-192.png
+
+Sitemap: https://craft-ai.ru/sitemap.xml
