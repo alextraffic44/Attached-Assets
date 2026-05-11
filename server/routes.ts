@@ -56,6 +56,89 @@ async function extractTextFromFile(base64Data: string, mimeType: string): Promis
 const KIE_API_KEY = process.env.KIE_API_KEY;
 const NANO_BANANA_CREATE_URL = "https://api.kie.ai/api/v1/jobs/createTask";
 const NANO_BANANA_STATUS_URL = "https://api.kie.ai/api/v1/jobs/recordInfo";
+const KIE_LLM_URL = "https://api.kie.ai/codex/v1/responses";
+const KIE_LLM_MODEL = "gpt-5-5";
+
+type KieContentItem =
+  | { type: "input_text"; text: string }
+  | { type: "input_image"; image_url: string };
+
+type KieMessage = { role: "user" | "assistant" | "developer" | "system"; content: KieContentItem[] };
+
+async function kieGenerateSync(
+  messages: KieMessage[],
+  systemPrompt: string
+): Promise<string> {
+  const input: KieMessage[] = [
+    { role: "developer", content: [{ type: "input_text", text: systemPrompt }] },
+    ...messages,
+  ];
+  const resp = await fetch(KIE_LLM_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${KIE_API_KEY}` },
+    body: JSON.stringify({ model: KIE_LLM_MODEL, stream: false, input, reasoning: { effort: "medium" } }),
+  });
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`KIE API error ${resp.status}: ${err}`);
+  }
+  const data = await resp.json() as any;
+  for (const item of data.output || []) {
+    if (item.type === "message" && Array.isArray(item.content)) {
+      for (const c of item.content) {
+        if (c.type === "output_text" && c.text) return c.text as string;
+      }
+    }
+  }
+  return "";
+}
+
+async function* kieGenerateStream(
+  messages: KieMessage[],
+  systemPrompt: string,
+  reasoningEffort: "low" | "medium" | "high" | "xhigh" = "high"
+): AsyncGenerator<string> {
+  const input: KieMessage[] = [
+    { role: "developer", content: [{ type: "input_text", text: systemPrompt }] },
+    ...messages,
+  ];
+  const resp = await fetch(KIE_LLM_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${KIE_API_KEY}` },
+    body: JSON.stringify({ model: KIE_LLM_MODEL, stream: true, input, reasoning: { effort: reasoningEffort } }),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`KIE API error ${resp.status}: ${errText}`);
+  }
+  const reader = (resp.body as any).getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let eventType = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (line.startsWith("event: ")) {
+        eventType = line.slice(7).trim();
+      } else if (line.startsWith("data: ")) {
+        const raw = line.slice(6).trim();
+        if (raw === "[DONE]") return;
+        if (eventType === "response.output_text.delta") {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed.delta) yield parsed.delta as string;
+          } catch {}
+        }
+      } else if (line === "") {
+        eventType = "";
+      }
+    }
+  }
+}
 
 const WAVESPEED_API_KEY = process.env.WAVESPEED_API_KEY;
 const WAVESPEED_3D_URL = "https://api.wavespeed.ai/api/v3/wavespeed-ai/hunyuan3d-v3/image-to-3d";
@@ -166,9 +249,8 @@ async function enhancePromptOnly(query: string): Promise<{ enhancedPrompt: strin
   try {
     console.log("Starting prompt enhancement for:", query);
 
-    const result = await gemini.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: `Тема сайта пользователя: "${query}"
+    const enhancedPrompt = await kieGenerateSync(
+      [{ role: "user", content: [{ type: "input_text", text: `Тема сайта пользователя: "${query}"
 
 Инструкция для тебя:
 Ты — Universal Creative Director & Adaptive UI Engineer. Твоя задача — не просто пересказать шаблон, а ВДОХНОВИТЬСЯ им для создания уникальной концепции под конкретную тему пользователя.
@@ -184,17 +266,16 @@ async function enhancePromptOnly(query: string): Promise<{ enhancedPrompt: strin
 
 ТВОЯ ЗАДАЧА:
 Напиши детальный, вдохновляющий промпт (300-500 слов на русском) для AI-генератора кода. 
-Этот промпт должен описывать структуру, дизайн и контент сайта так, чтобы Gemini-кодер выдал шедевр.
+Этот промпт должен описывать структуру, дизайн и контент сайта так, чтобы AI-кодер выдал шедевр.
 - НЕ копируй текст инструкции в ответ.
 - НЕ используй фразы "Phase 1", "Phase 2". 
 - Пиши живым языком дизайнера: опиши атмосферу, конкретные цвета HEX, типы анимаций и структуру секций.
 - Сфокусируйся на УНИКАЛЬНОСТИ под тему "${query}".` }] }],
-      config: { maxOutputTokens: 4096 },
-    });
+      "Ты — творческий директор и UI/UX эксперт. Отвечай только на русском языке."
+    );
 
-    const enhancedPrompt = result.text?.trim() || query;
     console.log("Enhanced prompt length:", enhancedPrompt.length);
-    return { enhancedPrompt: enhancedPrompt.length > 100 ? enhancedPrompt : query, success: true };
+    return { enhancedPrompt: enhancedPrompt.trim().length > 100 ? enhancedPrompt.trim() : query, success: true };
   } catch (err: any) {
     console.error("Enhancement error:", err.message);
     return { enhancedPrompt: query, success: false };
@@ -707,12 +788,23 @@ export async function registerRoutes(
           let designAnalysis = "";
           let analysisValid = false;
           try {
-            const analysisResult = await gemini.models.generateContent({
-              model: "gemini-3.1-pro-preview",
-              contents: [{ role: "user", parts: analysisParts }],
-              config: { maxOutputTokens: 8192, responseMimeType: "application/json" },
-            });
-            const rawAnalysis = (analysisResult.text || "").trim();
+            const analysisImageContent: KieContentItem[] = analysisParts
+              .filter((p: any) => p.inlineData)
+              .map((_p: any, idx: number) => ({
+                type: "input_image" as const,
+                image_url: savedImageUrls[idx]
+                  ? `${process.env.APP_BASE_URL || "https://craft-ai.ru"}${savedImageUrls[idx]}`
+                  : "",
+              }))
+              .filter((c: KieContentItem) => (c as any).image_url);
+            const analysisTextContent: KieContentItem = {
+              type: "input_text",
+              text: (analysisParts.find((p: any) => p.text) as any)?.text || "",
+            };
+            const rawAnalysis = (await kieGenerateSync(
+              [{ role: "user", content: [analysisTextContent, ...analysisImageContent] }],
+              "Ты — эксперт по UI/UX анализу. Отвечай строго JSON без пояснений."
+            )).trim();
             // Validate JSON
             try {
               JSON.parse(rawAnalysis);
@@ -815,59 +907,51 @@ ${designAnalysis}
       let fullResponse = "";
 
       const messages = await storage.getProjectMessages(project.id);
-      const conversationHistory: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+      const conversationHistory: KieMessage[] = [];
 
       for (const msg of messages.slice(-10)) {
         if (msg.role === "user") {
-          conversationHistory.push({ role: "user", parts: [{ text: msg.content }] });
+          conversationHistory.push({ role: "user", content: [{ type: "input_text", text: msg.content }] });
         } else if (msg.role === "assistant") {
           const truncated = msg.content.length > 2000 ? msg.content.substring(0, 2000) + "...[обрезано]" : msg.content;
-          conversationHistory.push({ role: "model", parts: [{ text: truncated }] });
+          conversationHistory.push({ role: "assistant", content: [{ type: "input_text", text: truncated }] });
         }
       }
 
-      const userParts: any[] = [];
+      const userContent: KieContentItem[] = [];
       for (const item of inputContent) {
         if ((item as any).type === "text") {
-          userParts.push({ text: (item as any).text });
+          userContent.push({ type: "input_text", text: (item as any).text });
         } else if ((item as any).type === "image") {
-          userParts.push({ inlineData: { data: (item as any).data, mimeType: (item as any).mime_type } });
+          const relUrl = savedImageUrls[userContent.filter(c => c.type === "input_image").length] || "";
+          if (relUrl) {
+            const baseUrl = process.env.APP_BASE_URL || "https://craft-ai.ru";
+            userContent.push({ type: "input_image", image_url: `${baseUrl}${relUrl}` });
+          }
         }
       }
 
-      conversationHistory.push({ role: "user", parts: userParts });
+      conversationHistory.push({ role: "user", content: userContent });
 
-      const modelName = "gemini-3.1-pro-preview";
-      console.log("generateContentStream call. Model:", modelName, "History messages:", conversationHistory.length, "Edit mode:", isEditMode);
+      console.log(`[KIE] kieGenerateStream call. Model: ${KIE_LLM_MODEL}, History messages: ${conversationHistory.length}, Edit mode: ${isEditMode}`);
 
       const MAX_RETRIES = 3;
       let lastError: any = null;
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         try {
-          const streamResult = await gemini.models.generateContentStream({
-            model: modelName,
-            contents: conversationHistory,
-            config: {
-              systemInstruction: systemContent,
-              maxOutputTokens: isEditMode ? 32768 : 65536,
-            },
-          });
-
-          for await (const chunk of streamResult) {
-            const text = chunk.text || "";
-            if (text) {
-              fullResponse += text;
-              res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
-            }
+          for await (const chunk of kieGenerateStream(conversationHistory, systemContent, "high")) {
+            fullResponse += chunk;
+            res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
           }
           lastError = null;
           break;
         } catch (retryErr: any) {
           lastError = retryErr;
-          const status = retryErr?.status || retryErr?.code || retryErr?.error?.code;
-          if ((status === 503 || status === 429) && attempt < MAX_RETRIES - 1) {
+          const msg = String(retryErr?.message || "");
+          const status = retryErr?.status || retryErr?.code;
+          if ((status === 503 || status === 429 || msg.includes("429") || msg.includes("503")) && attempt < MAX_RETRIES - 1) {
             const delay = (attempt + 1) * 3000;
-            console.log(`[Gemini] ${status} error, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+            console.log(`[KIE] ${status || "rate-limit"} error, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})...`);
             res.write(`data: ${JSON.stringify({ content: `\n\n⏳ Сервер перегружен, повторяю запрос (${attempt + 2}/${MAX_RETRIES})...\n\n` })}\n\n`);
             await new Promise(r => setTimeout(r, delay));
             fullResponse = "";
