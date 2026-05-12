@@ -363,7 +363,7 @@ export default function DashboardPage() {
   const appleFont = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
 
   return (
-    <div className="min-h-screen pb-20 relative overflow-hidden" style={{ background: '#FBFBFD', fontFamily: appleFont }}>
+    <div className="min-h-screen relative overflow-hidden" style={{ background: '#FBFBFD', fontFamily: appleFont, display: 'flex', flexDirection: 'column' }}>
       <style dangerouslySetInnerHTML={{ __html: `
         :root { --rainbow-grad: linear-gradient(90deg, #FF4242, #A5FF42, #42A5FF, #42E6FF, #B742FF, #FF4242); }
         @keyframes db-rainbow { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
@@ -516,7 +516,7 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6" style={{ paddingTop: '6.5rem' }}>
+      <main className="max-w-7xl mx-auto px-6" style={{ paddingTop: '6.5rem', flex: 1, paddingBottom: '3rem' }}>
         {/* Page header */}
         <div className="flex items-end justify-between mb-12">
           <div>
