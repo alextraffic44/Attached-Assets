@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "YUTQ6HqWIWOPuOjcTg5_F"
+uri = "file://client/public/favicon-192.png"
+type = "image"
+title = "favicon-192.png (текущий)"
+
+[[outputs]]
+id = "zQhVy2cd6h1LnAqFfOebQ"
+uri = "file://client/public/favicon.png"
+type = "image"
+title = "favicon.png 128x128 (текущий)"
