@@ -887,7 +887,7 @@ export default function DashboardPage() {
                                         const resp = await fetch("/api/images/generate", {
                                           method: "POST",
                                           headers: { "Content-Type": "application/json" },
-                                          body: JSON.stringify({ prompt: "Макет для сайта, стильный и премиальный. " + mockupPrompt.trim(), aspectRatio: "16:9" }),
+                                          body: JSON.stringify({ prompt: "Макет для сайта, стильный и премиальный. " + mockupPrompt.trim(), aspectRatio: "9:16" }),
                                           credentials: "include",
                                         });
                                         const data = await resp.json();
