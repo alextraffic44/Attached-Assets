@@ -518,19 +518,19 @@ export default function DashboardPage() {
 
       <main className="max-w-7xl mx-auto px-6" style={{ paddingTop: '6.5rem', flex: 1, paddingBottom: '3rem' }}>
         {/* Page header */}
-        <div className="flex items-end justify-between mb-12">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '3rem' }}>
           <div>
             <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#86868B', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>
               Добро пожаловать, {user?.displayName || user?.email?.split('@')[0]}
             </p>
-            <h1 style={{ fontSize: 'clamp(2.5rem,5vw,3.5rem)', fontWeight: 700, letterSpacing: '-0.04em', color: '#1D1D1F', lineHeight: 1, margin: 0 }}>
+            <h1 style={{ fontSize: 'clamp(1.8rem,4vw,3rem)', fontWeight: 700, letterSpacing: '-0.04em', color: '#1D1D1F', lineHeight: 1.1, margin: 0 }}>
               Ваши проекты
             </h1>
           </div>
           <button
             onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setSelectedStyleTemplate(null); setSelectedTemplate(""); setStyleCategory("buttons"); setShowCreateModal(true); }}
             className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
-            style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.9rem 1.8rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
+            style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.85rem 1.6rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em', flexShrink: 0 }}
           >
             <Plus className="w-5 h-5" />
             Новый сайт
