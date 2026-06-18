@@ -317,7 +317,7 @@ function RecentTransactions({ userId }: { userId: number }) {
 }
 
 export default function AdminPage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const [search, setSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
 
@@ -333,6 +333,11 @@ export default function AdminPage() {
     refetchInterval: 15000,
   });
 
+  if (isLoading) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F5F5F7" }}>
+      <Loader2 size={32} className="animate-spin" style={{ color: "#86868B" }} />
+    </div>
+  );
   if (!user) return <Redirect to="/auth" />;
   const isAdmin = user.id === 1 || user.telegramId === "661325490";
   if (!isAdmin) return <Redirect to="/dashboard" />;
