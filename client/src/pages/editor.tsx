@@ -45,6 +45,7 @@ import {
   Plus,
   X,
   Video,
+  Music,
   Globe,
   Camera,
   Box,
@@ -82,9 +83,10 @@ export default function EditorPage() {
   const [streamedCode, setStreamedCode] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
-  const [attachedImages, setAttachedImages] = useState<Array<{base64: string, mimeType: string, preview: string | null, fileName: string}>>([]);
+  const [attachedImages, setAttachedImages] = useState<Array<{id: string, base64: string, mimeType: string, preview: string | null, fileName: string, url?: string, uploading?: boolean}>>([]);
   const [attachedVideos, setAttachedVideos] = useState<Array<{id: string, url: string, fileName: string, uploading: boolean}>>([]);
   const [attachedModels, setAttachedModels] = useState<Array<{id: string, url: string, fileName: string, uploading: boolean}>>([]);
+  const [attachedAudios, setAttachedAudios] = useState<Array<{id: string, url: string, fileName: string, uploading: boolean}>>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
   const [streamingReply, setStreamingReply] = useState("");
@@ -279,12 +281,20 @@ export default function EditorPage() {
     }
   }, [newPageName, newPageTitle, projectId, allFiles, project, toast]);
 
-  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string, multiPagesData?: string, seoH1Data?: string, seoH2sData?: string, injectedImages?: Array<{base64: string, mimeType: string, preview: string | null, fileName: string}>) => {
+  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string, multiPagesData?: string, seoH1Data?: string, seoH2sData?: string, injectedImages?: Array<{base64: string, mimeType: string, preview: string | null, fileName: string, url?: string}>) => {
     let text = customPrompt || prompt;
     const effectiveImages = injectedImages || attachedImages;
     const effectiveVideos = attachedVideos.filter(v => !v.uploading && v.url);
     const effectiveModels = attachedModels.filter(m => !m.uploading && m.url);
-    if (!text.trim() && effectiveImages.length === 0 && effectiveVideos.length === 0 && effectiveModels.length === 0) return;
+    const effectiveAudios = attachedAudios.filter(a => !a.uploading && a.url);
+    if (!text.trim() && effectiveImages.length === 0 && effectiveVideos.length === 0 && effectiveModels.length === 0 && effectiveAudios.length === 0) return;
+    if (!injectedImages && (attachedImages.some(i => i.uploading) || attachedVideos.some(v => v.uploading) || attachedModels.some(m => m.uploading) || attachedAudios.some(a => a.uploading))) {
+      toast({ title: "Подождите", description: "Файлы ещё загружаются..." });
+      return;
+    }
+    if (!text.trim()) {
+      text = "Размести прикреплённые медиафайлы на сайте в подходящих по смыслу секциях.";
+    }
 
     if (selectedElement && !customPrompt) {
       const elRef = `[Выбранный элемент: <${selectedElement.tag}>${selectedElement.classes ? ` class="${selectedElement.classes}"` : ''} — "${selectedElement.text.substring(0, 80)}"\nHTML: ${selectedElement.outerSnippet}]\n\n`;
@@ -301,21 +311,25 @@ export default function EditorPage() {
 
     const images = effectiveImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
     const sentPreviews = effectiveImages.filter(img => img.preview).map(img => ({ preview: img.preview!, fileName: img.fileName }));
+    const imageUrls = effectiveImages.filter(img => img.url).map(img => ({ url: img.url!, fileName: img.fileName }));
     const videoUrls = effectiveVideos.map(v => ({ url: v.url, fileName: v.fileName }));
     const modelUrlsToSend = effectiveModels.map(m => ({ url: m.url, fileName: m.fileName }));
+    const audioUrls = effectiveAudios.map(a => ({ url: a.url, fileName: a.fileName }));
 
     setAttachedImages([]);
     setAttachedVideos([]);
     setAttachedModels([]);
+    setAttachedAudios([]);
 
     const imageInfo = sentPreviews.length > 0 ? `\n__IMAGES__${JSON.stringify(sentPreviews)}` : "";
     const videoInfo = videoUrls.length > 0 ? `\n__VIDEOS__${JSON.stringify(videoUrls.map(v => ({ fileName: v.fileName })))}` : "";
     const modelInfo = modelUrlsToSend.length > 0 ? `\n__MODELS__${JSON.stringify(modelUrlsToSend.map(m => ({ fileName: m.fileName })))}` : "";
+    const audioInfo = audioUrls.length > 0 ? `\n__AUDIOS__${JSON.stringify(audioUrls.map(a => ({ fileName: a.fileName })))}` : "";
     const tempUserMessage: ProjectMessage = {
       id: Math.random(),
       projectId,
       role: "user",
-      content: text + imageInfo + videoInfo + modelInfo,
+      content: text + imageInfo + videoInfo + modelInfo + audioInfo,
       createdAt: new Date()
     };
     
@@ -331,11 +345,17 @@ export default function EditorPage() {
     try {
       const isMockupActive = injectedImages ? true : mockupMode;
       const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance, mockupMode: isMockupActive && images.length > 0 };
+      if (imageUrls.length > 0) {
+        bodyData.imageUrls = imageUrls;
+      }
       if (videoUrls.length > 0) {
         bodyData.videoUrls = videoUrls;
       }
       if (modelUrlsToSend.length > 0) {
         bodyData.modelUrls = modelUrlsToSend;
+      }
+      if (audioUrls.length > 0) {
+        bodyData.audioUrls = audioUrls;
       }
       if (deepResearchData) {
         bodyData.deepResearchData = deepResearchData;
@@ -455,7 +475,7 @@ export default function EditorPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, projectId, attachedImages, attachedVideos, activeFile, toast, selectedElement]);
+  }, [prompt, projectId, attachedImages, attachedVideos, attachedModels, attachedAudios, mockupMode, activeFile, toast, selectedElement]);
 
   const handleDownloadZip = async () => {
     const indexCode = project?.generatedCode || currentCode;
@@ -497,7 +517,7 @@ export default function EditorPage() {
 
     const allCodeToScan = [htmlCode, ...projectFiles.filter(f => f.filename !== "index.html").map(f => f.code)].join("\n");
 
-    const uploadRegex = /(?:src\s*=\s*["']|url\s*\(\s*["']?)(\/uploads\/[^"'\s)]+)/gi;
+    const uploadRegex = /(?:src\s*=\s*["']|href\s*=\s*["']|poster\s*=\s*["']|url\s*\(\s*["']?)(\/(?:objects|uploads)\/[^"'\s)]+)/gi;
     let uploadMatch;
     const uploadUrls = new Set<string>();
     while ((uploadMatch = uploadRegex.exec(allCodeToScan)) !== null) {
@@ -507,7 +527,7 @@ export default function EditorPage() {
     if (uploadUrls.size > 0 && imgFolder) {
       let upIdx = 0;
       for (const url of Array.from(uploadUrls)) {
-        const ext = url.match(/\.(png|jpg|jpeg|webp|gif|svg)(\?|$)/i)?.[1] || "png";
+        const ext = url.match(/\.(png|jpg|jpeg|webp|gif|svg|mp4|webm|mov|ogg|ogv|mp3|wav|m4a|aac|glb|gltf)(\?|$)/i)?.[1] || "bin";
         const fileName = `upload_${upIdx++}.${ext}`;
         const blob = await downloadImage(url);
         if (blob) {
@@ -787,12 +807,83 @@ export default function EditorPage() {
     finally { setDomainChecking(false); }
   };
 
+  const attachImageFile = useCallback((file: File) => {
+    const uploadId = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const isImage = file.type.startsWith("image/");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const b64 = dataUrl.split(",")[1];
+      setAttachedImages(prev => [...prev, {
+        id: uploadId,
+        base64: b64,
+        mimeType: file.type || "application/octet-stream",
+        preview: isImage ? dataUrl : null,
+        fileName: file.name,
+        uploading: true,
+      }]);
+      const formData = new FormData();
+      formData.append("file", file);
+      (async () => {
+        try {
+          const resp = await fetch("/api/upload-file", { method: "POST", credentials: "include", body: formData });
+          const data = await resp.json();
+          if (resp.ok && data.url) {
+            setAttachedImages(prev => prev.map(im => im.id === uploadId ? { ...im, url: data.url, uploading: false } : im));
+            if (project?.id && isImage) {
+              const baseName = (file.name || "фото").replace(/\.[^.]+$/, "").slice(0, 40) || "фото";
+              const libName = `${baseName}_${uploadId.slice(-6)}`;
+              fetch(`/api/projects/${project.id}/images`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: libName, url: data.url, prompt: "Загружено в чат" }),
+              }).then(() => {
+                queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "images"] });
+              }).catch(() => {});
+            }
+          } else {
+            setAttachedImages(prev => prev.map(im => im.id === uploadId ? { ...im, uploading: false } : im));
+            toast({ title: "Не удалось загрузить фото", description: data?.message, variant: "destructive" });
+          }
+        } catch {
+          setAttachedImages(prev => prev.map(im => im.id === uploadId ? { ...im, uploading: false } : im));
+          toast({ title: "Не удалось загрузить фото", variant: "destructive" });
+        }
+      })();
+    };
+    reader.readAsDataURL(file);
+  }, [project?.id, projectId, toast]);
+
+  const attachAudioFile = useCallback((file: File) => {
+    const uploadId = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setAttachedAudios(prev => [...prev, { id: uploadId, url: "", fileName: file.name, uploading: true }]);
+    const formData = new FormData();
+    formData.append("file", file);
+    (async () => {
+      try {
+        const resp = await fetch("/api/upload-file", { method: "POST", credentials: "include", body: formData });
+        const data = await resp.json();
+        if (resp.ok && data.url) {
+          setAttachedAudios(prev => prev.map(a => a.id === uploadId ? { ...a, url: data.url, uploading: false } : a));
+        } else {
+          setAttachedAudios(prev => prev.filter(a => a.id !== uploadId));
+          toast({ title: "Ошибка загрузки аудио", description: data?.message, variant: "destructive" });
+        }
+      } catch {
+        setAttachedAudios(prev => prev.filter(a => a.id !== uploadId));
+        toast({ title: "Ошибка загрузки аудио", variant: "destructive" });
+      }
+    })();
+  }, [toast]);
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     let imageCount = 0;
     let videoCount = 0;
+    let audioCount = 0;
 
     let modelCount = 0;
 
@@ -866,25 +957,20 @@ export default function EditorPage() {
             toast({ title: "Ошибка загрузки видео", variant: "destructive" });
           }
         })();
+      } else if (file.type.startsWith("audio/")) {
+        audioCount++;
+        if (file.size > 30 * 1024 * 1024) {
+          toast({ title: "Файл слишком большой", description: "Максимальный размер аудио — 30 МБ", variant: "destructive" });
+          continue;
+        }
+        attachAudioFile(file);
       } else {
         imageCount++;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result as string;
-          const b64 = dataUrl.split(",")[1];
-          const isImage = file.type.startsWith("image/");
-          setAttachedImages(prev => [...prev, {
-            base64: b64,
-            mimeType: file.type || "application/octet-stream",
-            preview: isImage ? dataUrl : null,
-            fileName: file.name,
-          }]);
-        };
-        reader.readAsDataURL(file);
+        attachImageFile(file);
       }
     }
     if (e.target) e.target.value = "";
-    const total = imageCount + videoCount + modelCount;
+    const total = imageCount + videoCount + modelCount + audioCount;
     if (total > 0) {
       toast({ title: `${total > 1 ? total + " файлов" : "Файл"} прикреплён`, description: "Можно отправить вместе с промтом" });
     }
@@ -900,23 +986,13 @@ export default function EditorPage() {
         const file = items[i].getAsFile();
         if (!file) continue;
         count++;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result as string;
-          setAttachedImages(prev => [...prev, {
-            base64: dataUrl.split(",")[1],
-            mimeType: file.type || "image/png",
-            preview: dataUrl,
-            fileName: file.name || `pasted-image-${Date.now()}.png`,
-          }]);
-        };
-        reader.readAsDataURL(file);
+        attachImageFile(file);
       }
     }
     if (count > 0) {
       toast({ title: "Изображение прикреплено", description: "Можно отправить вместе с промтом" });
     }
-  }, [toast]);
+  }, [toast, attachImageFile]);
 
   const handleRefImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -1027,10 +1103,12 @@ export default function EditorPage() {
         const dataUrl = reader.result as string;
         const b64 = dataUrl.split(",")[1];
         setAttachedImages(prev => [...prev, {
+          id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           base64: b64,
           mimeType: blob.type || "image/jpeg",
           preview: dataUrl,
           fileName: (imgPrompt.trim().split(/\s+/).slice(0, 3).join("_") || "generated") + ".jpg",
+          url,
         }]);
         toast({ title: "Изображение добавлено в чат", description: "Отправьте промт, чтобы использовать его на сайте" });
         setImgGenOpen(false);
@@ -1816,6 +1894,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                         let imgPreviews: Array<{preview: string, fileName: string}> = [];
                         let vidPreviews: Array<{fileName: string}> = [];
                         let mdlPreviews: Array<{fileName: string}> = [];
+                        let audPreviews: Array<{fileName: string}> = [];
                         if (contentStr.includes("\n__VIDEOS__")) {
                           const [before, after] = contentStr.split("\n__VIDEOS__");
                           contentStr = before;
@@ -1831,10 +1910,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                           contentStr = before;
                           try { mdlPreviews = JSON.parse(after); } catch {}
                         }
+                        if (contentStr.includes("\n__AUDIOS__")) {
+                          const [before, after] = contentStr.split("\n__AUDIOS__");
+                          contentStr = before;
+                          try { audPreviews = JSON.parse(after); } catch {}
+                        }
                         return (
                           <div style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                             {contentStr}
-                            {(imgPreviews.length > 0 || vidPreviews.length > 0 || mdlPreviews.length > 0) && (
+                            {(imgPreviews.length > 0 || vidPreviews.length > 0 || mdlPreviews.length > 0 || audPreviews.length > 0) && (
                               <div className="flex flex-wrap gap-2 mt-2">
                                 {imgPreviews.map((img, i) => (
                                   <div key={`img-${i}`} className="flex items-center gap-2 bg-white/15 rounded-lg px-2 py-1.5">
@@ -1852,6 +1936,12 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                                   <div key={`mdl-${i}`} className="flex items-center gap-2 bg-white/15 rounded-lg px-2 py-1.5">
                                     <Box className="w-4 h-4 opacity-80" />
                                     <span className="text-[11px] opacity-80 max-w-[100px] truncate">{mdl.fileName}</span>
+                                  </div>
+                                ))}
+                                {audPreviews.map((aud, i) => (
+                                  <div key={`aud-${i}`} className="flex items-center gap-2 bg-white/15 rounded-lg px-2 py-1.5">
+                                    <Music className="w-4 h-4 opacity-80" />
+                                    <span className="text-[11px] opacity-80 max-w-[100px] truncate">{aud.fileName}</span>
                                   </div>
                                 ))}
                               </div>
@@ -1936,20 +2026,43 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 </button>
               </div>
             )}
-            {(attachedImages.length > 0 || attachedVideos.length > 0) && (
+            {(attachedImages.length > 0 || attachedVideos.length > 0 || attachedAudios.length > 0) && (
               <div className="mb-3 space-y-2">
                 <div className="flex flex-wrap gap-2">
                   {attachedImages.map((img, idx) => (
                     <div key={`img-${idx}`} className="relative group inline-flex items-center gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 shadow-sm border border-slate-200/50 dark:border-slate-700/50">
-                      {img.preview ? (
-                        <img src={img.preview} className="w-12 h-12 object-cover rounded-md" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                          <FileText className="w-5 h-5 text-slate-400" />
-                        </div>
-                      )}
+                      <div className="relative w-12 h-12">
+                        {img.preview ? (
+                          <img src={img.preview} className="w-12 h-12 object-cover rounded-md" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-md bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-slate-400" />
+                          </div>
+                        )}
+                        {img.uploading && (
+                          <div className="absolute inset-0 rounded-md bg-black/40 flex items-center justify-center">
+                            <Loader2 className="w-5 h-5 text-white animate-spin" />
+                          </div>
+                        )}
+                      </div>
                       <span className="text-xs text-slate-500 dark:text-slate-400 max-w-[80px] truncate">{img.fileName}</span>
                       <button className="ml-1 text-slate-400 hover:text-destructive transition-colors" onClick={() => setAttachedImages(prev => prev.filter((_, i) => i !== idx))}>
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {attachedAudios.map((aud, idx) => (
+                    <div key={`aud-${idx}`} className="relative group inline-flex items-center gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 shadow-sm border border-slate-200/50 dark:border-slate-700/50">
+                      <div className="w-12 h-12 rounded-md bg-gradient-to-br from-emerald-500/20 to-teal-500/20 dark:from-emerald-500/30 dark:to-teal-500/30 flex items-center justify-center">
+                        {aud.uploading ? (
+                          <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
+                        ) : (
+                          <Music className="w-5 h-5 text-emerald-500" />
+                        )}
+                      </div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 max-w-[80px] truncate">{aud.fileName}</span>
+                      {aud.uploading && <span className="text-[10px] text-emerald-400">загрузка...</span>}
+                      <button className="ml-1 text-slate-400 hover:text-destructive transition-colors" onClick={() => setAttachedAudios(prev => prev.filter((_, i) => i !== idx))}>
                         <XCircle className="w-4 h-4" />
                       </button>
                     </div>
@@ -1985,7 +2098,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             )}
             <div className="relative flex items-end">
-              <input ref={fileInputRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx,.glb,.gltf" multiple onChange={handleImageUpload} className="hidden" />
+              <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.glb,.gltf" multiple onChange={handleImageUpload} className="hidden" />
               <div className="flex-1 relative bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 {attachedModels.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 px-3 pt-3">
@@ -2023,7 +2136,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   </button>
                   <button
                     onClick={() => handleGenerate()}
-                    disabled={isGenerating || (!prompt.trim() && attachedImages.length === 0 && attachedVideos.filter(v => !v.uploading).length === 0 && attachedModels.filter(m => !m.uploading).length === 0)}
+                    disabled={isGenerating || attachedImages.some(i => i.uploading) || attachedVideos.some(v => v.uploading) || attachedModels.some(m => m.uploading) || attachedAudios.some(a => a.uploading) || (!prompt.trim() && attachedImages.length === 0 && attachedVideos.filter(v => !v.uploading).length === 0 && attachedModels.filter(m => !m.uploading).length === 0 && attachedAudios.filter(a => !a.uploading).length === 0)}
                     className="h-7 w-7 rounded-full flex items-center justify-center bg-primary text-white hover:bg-primary/90 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-primary/30"
                     data-testid="button-send"
                   >
@@ -3146,7 +3259,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                                     mimeType = blob.type || "image/jpeg";
                                   }
                                   const preview = `data:${mimeType};base64,${base64}`;
-                                  setAttachedImages(prev => [...prev, { base64, mimeType, preview, fileName: img.name + ".jpg" }]);
+                                  setAttachedImages(prev => [...prev, { id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, base64, mimeType, preview, fileName: img.name + ".jpg", url: img.url }]);
                                   toast({ title: "Изображение добавлено в чат" });
                                   setShowGenerations(false);
                                 } catch (e) {
