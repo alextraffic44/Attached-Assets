@@ -2190,7 +2190,20 @@ ${designAnalysis}
       } catch (domainErr: any) {
         if (domainErr.message?.includes("already in use") || domainErr.message?.includes("already exists")) {
           await storage.updateProject(projectId, { customDomain: domain });
-          res.json({ verified: false, cname: `craft-ai-p${projectId}.netlify.app`, alreadyAdded: true });
+          // Fetch existing DNS zone nameservers for this domain
+          let nameservers: string[] = [];
+          try {
+            const apex = domain.replace(/^www\./, "");
+            const listRes = await fetch("https://api.netlify.com/api/v1/dns_zones", {
+              headers: { Authorization: `Bearer ${process.env.NETLIFY_TOKEN}`, "Content-Type": "application/json" },
+            });
+            if (listRes.ok) {
+              const zones = await listRes.json() as any[];
+              const zone = zones.find((z: any) => z.name === apex);
+              if (zone?.dns_servers?.length) nameservers = zone.dns_servers;
+            }
+          } catch {}
+          res.json({ verified: false, cname: `craft-ai-p${projectId}.netlify.app`, alreadyAdded: true, nameservers });
         } else {
           throw domainErr;
         }

@@ -119,19 +119,50 @@ export async function deployToNetlify(
 export async function addCustomDomain(
   netlifyProjectId: string,
   domain: string
-): Promise<{ verified: boolean; cname: string }> {
+): Promise<{ verified: boolean; cname: string; nameservers: string[] }> {
   if (!NETLIFY_TOKEN) throw new Error("NETLIFY_TOKEN не настроен");
 
+  const apex = domain.replace(/^www\./, "");
+
+  // 1. Set custom domain on the site
   const res = await fetch(`${NETLIFY_API}/sites/${netlifyProjectId}`, {
     method: "PATCH",
     headers: headers(),
-    body: JSON.stringify({ custom_domain: domain }),
+    body: JSON.stringify({ custom_domain: apex }),
   });
 
   const data = (await res.json()) as any;
   if (!res.ok) throw new Error(data?.message || `Domain error: ${res.status}`);
 
-  return { verified: false, cname: `${data.name}.netlify.app` };
+  const siteName: string = data.name;
+
+  // 2. Create (or fetch) Netlify DNS zone so users get managed nameservers
+  //    instead of using raw A-record 75.2.60.5 (often blocked in Russia)
+  let nameservers: string[] = [];
+  try {
+    // Try to create the zone
+    const zoneRes = await fetch(`${NETLIFY_API}/dns_zones`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ name: apex, site_id: netlifyProjectId }),
+    });
+    const zoneData = (await zoneRes.json()) as any;
+    if (zoneData?.dns_servers?.length) {
+      nameservers = zoneData.dns_servers;
+    } else if (zoneData?.errors || zoneData?.code === 422) {
+      // Zone may already exist — fetch it
+      const listRes = await fetch(`${NETLIFY_API}/dns_zones`, { headers: headers() });
+      if (listRes.ok) {
+        const zones = (await listRes.json()) as any[];
+        const existing = zones.find((z: any) => z.name === apex);
+        if (existing?.dns_servers?.length) nameservers = existing.dns_servers;
+      }
+    }
+  } catch (e) {
+    console.warn("[Netlify] DNS zone creation failed (non-critical):", e);
+  }
+
+  return { verified: false, cname: `${siteName}.netlify.app`, nameservers };
 }
 
 export async function unpublishFromNetlify(projectId: number): Promise<void> {
@@ -181,7 +212,17 @@ export async function checkDomainStatus(
   const apex = domain.replace(/^www\./, "");
   const www = `www.${apex}`;
 
-  // Check apex A-record
+  // Check if NS records point to Netlify (managed DNS via nsone.net)
+  let nsOk = false;
+  try {
+    const nsRecords = await dns.resolveNs(apex);
+    nsOk = nsRecords.some(ns => ns.toLowerCase().includes("nsone.net") || ns.toLowerCase().includes("netlify"));
+    console.log("[Domain Check] NS", apex, ":", nsRecords, "netlify:", nsOk);
+  } catch (e: any) {
+    console.log("[Domain Check] NS lookup failed:", e.message);
+  }
+
+  // Check apex A-record (external DNS fallback)
   let apexOk = false;
   try {
     const addrs = await dns.resolve4(apex);
@@ -191,7 +232,7 @@ export async function checkDomainStatus(
     console.log("[Domain Check] apex lookup failed:", e.message);
   }
 
-  // Check www CNAME
+  // Check www CNAME (external DNS fallback)
   let wwwOk = false;
   try {
     const cnames = await dns.resolveCname(www);
@@ -201,10 +242,10 @@ export async function checkDomainStatus(
     console.log("[Domain Check] www lookup failed:", e.message);
   }
 
-  const dnsReady = apexOk || wwwOk;
+  const dnsReady = nsOk || apexOk || wwwOk;
 
   if (!dnsReady) {
-    return { verified: false, dnsReady: false, message: "DNS ещё не обновился — попробуйте через 10-30 минут" };
+    return { verified: false, dnsReady: false, message: "DNS ещё не обновился — попробуйте через 30-60 минут" };
   }
 
   // DNS points to Netlify — now check if SSL/site is reachable
@@ -217,10 +258,8 @@ export async function checkDomainStatus(
     const siteOk = server.toLowerCase().includes("netlify") && res.status < 500;
     console.log("[Domain Check] https check status:", res.status, "server:", server);
     if (siteOk) return { verified: true, dnsReady: true };
-    // DNS ready but SSL not yet — still good, just show intermediate message
     return { verified: false, dnsReady: true, message: "DNS обновлён, SSL-сертификат выдаётся (1-15 минут)" };
   } catch {
-    // DNS ready but HTTPS not reachable yet — SSL provisioning
     return { verified: false, dnsReady: true, message: "DNS обновлён, SSL-сертификат выдаётся (1-15 минут)" };
   }
 }

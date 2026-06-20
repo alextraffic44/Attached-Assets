@@ -71,6 +71,66 @@ const SkeuoPanel = ({ children, className = "" }: { children: React.ReactNode; c
   </div>
 );
 
+function DnsInstructions({ customDomain, nameservers, domainChecking, domainVerified, domainDnsReady, domainStatusMessage, onCheck, testId }: {
+  customDomain: string;
+  nameservers: string[];
+  domainChecking: boolean;
+  domainVerified: boolean | null;
+  domainDnsReady: boolean;
+  domainStatusMessage: string;
+  onCheck: () => void;
+  testId?: string;
+}) {
+  const apex = customDomain.replace(/^www\./, "");
+  const ns = nameservers.length ? nameservers : ["dns1.p04.nsone.net", "dns2.p04.nsone.net", "dns3.p04.nsone.net", "dns4.p04.nsone.net"];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
+        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 8 }}>
+          Настройка DNS для{" "}
+          <a href={`https://${apex}`} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>{apex}</a>
+        </div>
+        <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.9 }}>
+          <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → выберите <b>{apex}</b></div>
+          <div><b>2.</b> Раздел «<b>DNS-серверы и управление зоной</b>» → «<b>Изменить DNS-серверы</b>»</div>
+          <div><b>3.</b> Удалите текущие NS и укажите 4 сервера Netlify:</div>
+          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem", display: "flex", flexDirection: "column", gap: 4 }}>
+            {ns.map((s, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>{s}</span>
+                <button
+                  onClick={() => navigator.clipboard?.writeText(s)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: "0.7rem", padding: "2px 6px" }}
+                  title="Скопировать"
+                >📋</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>
+            После смены NS-серверов DNS обновляется 1–24 часа. Netlify автоматически выдаст SSL-сертификат.
+            Сайт будет работать по всей России через Netlify CDN.
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <Button size="sm" variant="outline" onClick={onCheck} disabled={domainChecking} style={{ borderRadius: 10, fontSize: "0.78rem" }} data-testid={testId}>
+          {domainChecking ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+          Проверить DNS
+        </Button>
+        {domainChecking === false && domainVerified === false && !domainDnsReady && domainVerified !== null && (
+          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>NS-серверы ещё не обновились — подождите 1-2 часа</span>
+        )}
+        {domainChecking === false && domainVerified === false && domainDnsReady && (
+          <span style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: 500 }}>🔒 {domainStatusMessage || "DNS готов, SSL выдаётся (1-15 минут)"}</span>
+        )}
+        {domainChecking === false && domainVerified === true && (
+          <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 500 }}>✓ Домен полностью работает!</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function EditorPage() {
   const params = useParams<{ id: string }>();
   const projectId = parseInt(params.id || "0");
@@ -149,6 +209,7 @@ export default function EditorPage() {
   const [domainDnsReady, setDomainDnsReady] = useState<boolean>(false);
   const [domainStatusMessage, setDomainStatusMessage] = useState<string>("");
   const [domainChecking, setDomainChecking] = useState(false);
+  const [domainNameservers, setDomainNameservers] = useState<string[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -712,6 +773,7 @@ export default function EditorPage() {
       if (!res.ok) throw new Error(data.message || "Ошибка привязки домена");
       setDomainResult({ added: true, instructions: true });
       setDomainVerified(data.verified || false);
+      if (data.nameservers?.length) setDomainNameservers(data.nameservers);
     } catch (e: any) {
       setDomainError(e.message);
     } finally {
@@ -3007,50 +3069,16 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       )}
                     </>
                   ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                      <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
-                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 8 }}>Настройка DNS для <a href={`https://${customDomain}`} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline", cursor: "pointer" }}>{customDomain}</a></div>
-                        <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.8 }}>
-                          <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → выберите <b>{customDomain}</b></div>
-                          <div><b>2.</b> Раздел «<b>DNS-серверы и управление зоной</b>» → «<b>Изменить</b>»</div>
-                          <div><b>3.</b> В разделе «<b>DNS-записи</b>» добавьте (или замените существующие) 2 записи:</div>
-                          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem", display: "flex", flexDirection: "column", gap: 6 }}>
-                            <div style={{ paddingBottom: 6, borderBottom: "1px solid #e2e8f0" }}>
-                              <div style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: 2 }}>Запись 1 — поддомен www:</div>
-                              <div><b>Тип:</b> CNAME &nbsp; <b>Имя:</b> www &nbsp; <b>Значение:</b> craft-ai-p{project?.id}.netlify.app</div>
-                            </div>
-                            <div>
-                              <div style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: 2 }}>Запись 2 — корневой домен @:</div>
-                              <div><b>Тип:</b> A &nbsp; <b>Имя:</b> @ &nbsp; <b>Значение:</b> 75.2.60.5</div>
-                            </div>
-                          </div>
-                          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>Netlify автоматически выдаст SSL-сертификат. DNS обновляется от 5 минут до 24 часов.</div>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleCheckDomain}
-                          disabled={domainChecking}
-                          style={{ borderRadius: 10, fontSize: "0.78rem" }}
-                          data-testid="button-check-domain"
-                        >
-                          {domainChecking ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                          Проверить DNS
-                        </Button>
-                        {domainChecking === false && domainVerified === null && null}
-                        {domainChecking === false && domainVerified === false && !domainDnsReady && domainVerified !== null && (
-                          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>DNS ещё не обновился — подождите 10-30 мин</span>
-                        )}
-                        {domainChecking === false && domainVerified === false && domainDnsReady && (
-                          <span style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: 500 }}>🔒 {domainStatusMessage || "DNS готов, SSL выдаётся (1-15 минут)"}</span>
-                        )}
-                        {domainChecking === false && domainVerified === true && (
-                          <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 500 }}>✓ Домен полностью работает!</span>
-                        )}
-                      </div>
-                    </div>
+                    <DnsInstructions
+                      customDomain={customDomain}
+                      nameservers={domainNameservers}
+                      domainChecking={domainChecking}
+                      domainVerified={domainVerified}
+                      domainDnsReady={domainDnsReady}
+                      domainStatusMessage={domainStatusMessage}
+                      onCheck={handleCheckDomain}
+                      testId="button-check-domain"
+                    />
                   )}
                 </div>
 
@@ -3134,43 +3162,16 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       )}
                     </>
                   ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                      <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
-                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 8 }}>Настройка DNS для <a href={`https://${customDomain}`} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline", cursor: "pointer" }}>{customDomain}</a></div>
-                        <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.8 }}>
-                          <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → выберите <b>{customDomain}</b></div>
-                          <div><b>2.</b> Раздел «<b>DNS-серверы и управление зоной</b>» → «<b>Изменить</b>»</div>
-                          <div><b>3.</b> В разделе «<b>DNS-записи</b>» добавьте (или замените существующие) 2 записи:</div>
-                          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem", display: "flex", flexDirection: "column", gap: 6 }}>
-                            <div style={{ paddingBottom: 6, borderBottom: "1px solid #e2e8f0" }}>
-                              <div style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: 2 }}>Запись 1 — поддомен www:</div>
-                              <div><b>Тип:</b> CNAME &nbsp; <b>Имя:</b> www &nbsp; <b>Значение:</b> craft-ai-p{project?.id}.netlify.app</div>
-                            </div>
-                            <div>
-                              <div style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: 2 }}>Запись 2 — корневой домен @:</div>
-                              <div><b>Тип:</b> A &nbsp; <b>Имя:</b> @ &nbsp; <b>Значение:</b> 75.2.60.5</div>
-                            </div>
-                          </div>
-                          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>Netlify автоматически выдаст SSL-сертификат. DNS обновляется от 5 минут до 24 часов.</div>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <Button size="sm" variant="outline" onClick={handleCheckDomain} disabled={domainChecking} style={{ borderRadius: 10, fontSize: "0.78rem" }}>
-                          {domainChecking ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                          Проверить DNS
-                        </Button>
-                        {domainChecking === false && domainVerified === null && null}
-                        {domainChecking === false && domainVerified === false && !domainDnsReady && domainVerified !== null && (
-                          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>DNS ещё не обновился — подождите 10-30 мин</span>
-                        )}
-                        {domainChecking === false && domainVerified === false && domainDnsReady && (
-                          <span style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: 500 }}>🔒 {domainStatusMessage || "DNS готов, SSL выдаётся (1-15 минут)"}</span>
-                        )}
-                        {domainChecking === false && domainVerified === true && (
-                          <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 500 }}>✓ Домен полностью работает!</span>
-                        )}
-                      </div>
-                    </div>
+                    <DnsInstructions
+                      customDomain={customDomain}
+                      nameservers={domainNameservers}
+                      domainChecking={domainChecking}
+                      domainVerified={domainVerified}
+                      domainDnsReady={domainDnsReady}
+                      domainStatusMessage={domainStatusMessage}
+                      onCheck={handleCheckDomain}
+                      testId="button-check-domain-2"
+                    />
                   )}
                 </div>
 
