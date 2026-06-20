@@ -175,22 +175,52 @@ a{color:#3b82f6;text-decoration:none}
 export async function checkDomainStatus(
   netlifyProjectId: string,
   domain: string
-): Promise<{ verified: boolean }> {
+): Promise<{ verified: boolean; dnsReady: boolean; message?: string }> {
+  const { promises: dns } = await import("dns");
+  const NETLIFY_IP = "75.2.60.5";
+  const apex = domain.replace(/^www\./, "");
+  const www = `www.${apex}`;
+
+  // Check apex A-record
+  let apexOk = false;
+  try {
+    const addrs = await dns.resolve4(apex);
+    apexOk = addrs.includes(NETLIFY_IP);
+    console.log("[Domain Check] apex", apex, "A:", addrs, "netlify:", apexOk);
+  } catch (e: any) {
+    console.log("[Domain Check] apex lookup failed:", e.message);
+  }
+
+  // Check www CNAME
+  let wwwOk = false;
+  try {
+    const cnames = await dns.resolveCname(www);
+    wwwOk = cnames.some(c => c.toLowerCase().includes("netlify"));
+    console.log("[Domain Check] www", www, "CNAME:", cnames, "netlify:", wwwOk);
+  } catch (e: any) {
+    console.log("[Domain Check] www lookup failed:", e.message);
+  }
+
+  const dnsReady = apexOk || wwwOk;
+
+  if (!dnsReady) {
+    return { verified: false, dnsReady: false, message: "DNS ещё не обновился — попробуйте через 10-30 минут" };
+  }
+
+  // DNS points to Netlify — now check if SSL/site is reachable
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`https://${domain}`, {
-      method: "HEAD",
-      signal: controller.signal,
-      redirect: "follow",
-    });
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(`https://${apex}`, { method: "HEAD", signal: controller.signal, redirect: "follow" });
     clearTimeout(timeout);
     const server = res.headers.get("server") || "";
-    const isNetlify = server.toLowerCase().includes("netlify") || res.ok;
-    console.log("[Domain Check]", domain, "status:", res.status, "server:", server, "netlify:", isNetlify);
-    return { verified: isNetlify && res.status < 500 };
-  } catch (err: any) {
-    console.log("[Domain Check]", domain, "failed:", err.message);
-    return { verified: false };
+    const siteOk = server.toLowerCase().includes("netlify") && res.status < 500;
+    console.log("[Domain Check] https check status:", res.status, "server:", server);
+    if (siteOk) return { verified: true, dnsReady: true };
+    // DNS ready but SSL not yet — still good, just show intermediate message
+    return { verified: false, dnsReady: true, message: "DNS обновлён, SSL-сертификат выдаётся (1-15 минут)" };
+  } catch {
+    // DNS ready but HTTPS not reachable yet — SSL provisioning
+    return { verified: false, dnsReady: true, message: "DNS обновлён, SSL-сертификат выдаётся (1-15 минут)" };
   }
 }

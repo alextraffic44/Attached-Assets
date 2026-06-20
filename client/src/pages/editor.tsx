@@ -146,6 +146,8 @@ export default function EditorPage() {
   const [domainResult, setDomainResult] = useState<{ added: boolean; instructions: boolean } | null>(null);
   const [domainError, setDomainError] = useState<string | null>(null);
   const [domainVerified, setDomainVerified] = useState<boolean | null>(null);
+  const [domainDnsReady, setDomainDnsReady] = useState<boolean>(false);
+  const [domainStatusMessage, setDomainStatusMessage] = useState<string>("");
   const [domainChecking, setDomainChecking] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -803,7 +805,13 @@ export default function EditorPage() {
       const res = await fetch(`/api/projects/${project.id}/domain/status?domain=${encodeURIComponent(customDomain.trim())}`, { credentials: "include" });
       const data = await res.json();
       setDomainVerified(data.verified || false);
-    } catch { setDomainVerified(false); }
+      setDomainDnsReady(data.dnsReady || false);
+      setDomainStatusMessage(data.message || "");
+    } catch {
+      setDomainVerified(false);
+      setDomainDnsReady(false);
+      setDomainStatusMessage("");
+    }
     finally { setDomainChecking(false); }
   };
 
@@ -3031,11 +3039,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                           {domainChecking ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
                           Проверить DNS
                         </Button>
-                        {domainChecking === false && domainVerified === false && (
-                          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>DNS ещё не обновился</span>
+                        {domainChecking === false && domainVerified === null && null}
+                        {domainChecking === false && domainVerified === false && !domainDnsReady && domainVerified !== null && (
+                          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>DNS ещё не обновился — подождите 10-30 мин</span>
+                        )}
+                        {domainChecking === false && domainVerified === false && domainDnsReady && (
+                          <span style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: 500 }}>🔒 {domainStatusMessage || "DNS готов, SSL выдаётся (1-15 минут)"}</span>
                         )}
                         {domainChecking === false && domainVerified === true && (
-                          <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 500 }}>Домен работает!</span>
+                          <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 500 }}>✓ Домен полностью работает!</span>
                         )}
                       </div>
                     </div>
@@ -3147,11 +3159,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                           {domainChecking ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
                           Проверить DNS
                         </Button>
-                        {domainChecking === false && domainVerified === false && (
-                          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>DNS ещё не обновился</span>
+                        {domainChecking === false && domainVerified === null && null}
+                        {domainChecking === false && domainVerified === false && !domainDnsReady && domainVerified !== null && (
+                          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>DNS ещё не обновился — подождите 10-30 мин</span>
+                        )}
+                        {domainChecking === false && domainVerified === false && domainDnsReady && (
+                          <span style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: 500 }}>🔒 {domainStatusMessage || "DNS готов, SSL выдаётся (1-15 минут)"}</span>
                         )}
                         {domainChecking === false && domainVerified === true && (
-                          <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 500 }}>Домен работает!</span>
+                          <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 500 }}>✓ Домен полностью работает!</span>
                         )}
                       </div>
                     </div>
