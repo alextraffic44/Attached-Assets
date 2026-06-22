@@ -14,7 +14,6 @@ import GenerationsPage from "@/pages/generations";
 import ProfilePage from "@/pages/profile";
 import LegalPage from "@/pages/legal";
 import AdminPage from "@/pages/admin";
-import DoorwayPage from "@/pages/doorway";
 import CookieConsent from "@/components/cookie-consent";
 import { Loader2 } from "lucide-react";
 
@@ -65,7 +64,6 @@ function Router() {
       <Route path="/profile" component={ProfilePage} />
       <Route path="/editor/:id" component={EditorPage} />
       <Route path="/admin" component={AdminPage} />
-      <Route path="/doorway" component={DoorwayPage} />
       <Route path="/oferta">{() => <LegalPage doc="oferta" />}</Route>
       <Route path="/privacy">{() => <LegalPage doc="privacy" />}</Route>
       <Route path="/terms">{() => <LegalPage doc="terms" />}</Route>
