@@ -256,6 +256,7 @@ export default function DashboardPage() {
   const [multiPageEnabled, setMultiPageEnabled] = useState(false);
   const [pageNames, setPageNames] = useState<string[]>(["О нас", "Услуги", "Контакты"]);
   const [seoEnabled, setSeoEnabled] = useState(false);
+  const [leadFormEnabled, setLeadFormEnabled] = useState(true);
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImage, setPhotoImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
@@ -328,6 +329,7 @@ export default function DashboardPage() {
       const seoParam = (seoEnabled && seoH1.trim())
         ? `&seoh1=${encodeURIComponent(seoH1.trim())}&seoh2s=${encodeURIComponent(seoH2s.filter(h => h.trim()).join(","))}`
         : "";
+      const leadFormParam = leadFormEnabled ? "" : "&leadform=0";
       let mockupParam = "";
       if (selectedMode === "photo" && photoImage) {
         try {
@@ -346,7 +348,7 @@ export default function DashboardPage() {
           return;
         }
       }
-      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}${researchParam}${multiPageParam}${seoParam}${mockupParam}`);
+      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}${researchParam}${multiPageParam}${seoParam}${leadFormParam}${mockupParam}`);
     },
   });
 
@@ -955,6 +957,12 @@ export default function DashboardPage() {
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                           SEO
                         </button>
+                        <button type="button" onClick={() => setLeadFormEnabled(v => !v)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+                          style={{ border: leadFormEnabled ? '1px solid rgba(239,68,68,0.4)' : '1.5px dashed rgba(0,0,0,0.15)', background: leadFormEnabled ? 'rgba(239,68,68,0.07)' : 'transparent', color: leadFormEnabled ? '#b91c1c' : '#86868B', cursor: 'pointer' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                          Лид-форма
+                        </button>
                       </div>
                       {multiPageEnabled && (
                         <div className="rounded-xl p-3 space-y-2" style={{ background: 'rgba(0,113,227,0.04)', border: '1px solid rgba(0,113,227,0.15)' }}>
@@ -1001,6 +1009,12 @@ export default function DashboardPage() {
                       {!multiPageEnabled && !seoEnabled && (
                         <div className="flex-1 flex items-center justify-center rounded-xl" style={{ border: '1.5px dashed rgba(0,0,0,0.08)', minHeight: 80 }}>
                           <p style={{ fontSize: '0.8rem', color: '#c0c0c0', textAlign: 'center', lineHeight: 1.5 }}>Включите опции выше<br/>для дополнительных настроек</p>
+                        </div>
+                      )}
+                      {!leadFormEnabled && (
+                        <div className="rounded-xl px-3 py-2 flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.18)' }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                          <p style={{ fontSize: '0.72rem', color: '#b91c1c', margin: 0 }}>Лид-форма отключена — AI не добавит форму сбора заявок</p>
                         </div>
                       )}
                         </>

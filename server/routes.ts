@@ -771,7 +771,8 @@ export async function registerRoutes(
 
       const GENERATION_COST = 100;
 
-      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, imageUrls, videoUrls, modelUrls, audioUrls } = req.body;
+      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, imageUrls, videoUrls, modelUrls, audioUrls, leadForm } = req.body;
+      const leadFormEnabled = leadForm !== false && leadForm !== "0" && leadForm !== 0;
       const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
         Array.isArray(images) && images.length > 0 ? images 
         : imageBase64 ? [{ base64: imageBase64, mimeType: imageMimeType || "image/png" }] 
@@ -828,6 +829,9 @@ export async function registerRoutes(
           ? seoH2s.split(",").map((h: string) => h.trim()).filter(Boolean)
           : [];
         systemContent += `\n\n═══ SEO ЗАГОЛОВКИ ═══\nИСПОЛЬЗУЙ ТОЧНО эти заголовки на главной странице:\n- H1: "${seoH1.trim()}"${h2List.length > 0 ? `\n- H2: ${h2List.map((h: string) => `"${h}"`).join(", ")}` : ""}\nЭти заголовки должны присутствовать в HTML текстом (не изображением), в тегах <h1> и <h2> соответственно.\n═══ КОНЕЦ SEO ═══\n`;
+      }
+      if (!leadFormEnabled) {
+        systemContent += `\n\n═══ ФОРМЫ ═══\nНЕ добавляй форму обратной связи, лид-форму, форму заявки или любую форму сбора контактов на сайт. Если нужен CTA-блок — сделай его с кнопкой (например, ссылкой на телефон/email), но БЕЗ формы.\n═══ КОНЕЦ ФОРМ ═══\n`;
       }
       if (projectImgs.length > 0) {
         systemContent += `\n\nДОСТУПНЫЕ ИЗОБРАЖЕНИЯ В БИБЛИОТЕКЕ ПОЛЬЗОВАТЕЛЯ:\n`;

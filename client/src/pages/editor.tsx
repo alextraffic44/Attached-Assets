@@ -259,6 +259,7 @@ export default function EditorPage() {
     const initialMultiPages = urlParams.get("multipages") || "";
     const initialSeoH1 = urlParams.get("seoh1") || "";
     const initialSeoH2s = urlParams.get("seoh2s") || "";
+    const initialLeadForm = urlParams.get("leadform") !== "0";
     const isMockup = urlParams.get("mockup") === "1";
     const mockupUrl = urlParams.get("mockupUrl") || "";
     if (initialPrompt && !project?.generatedCode && messages.length === 0) {
@@ -286,7 +287,7 @@ export default function EditorPage() {
         }
         setPrompt(initialPrompt);
         if (!isMockup || mockupImages) {
-          setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch, initialMultiPages, initialSeoH1, initialSeoH2s, mockupImages), 500);
+          setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch, initialMultiPages, initialSeoH1, initialSeoH2s, mockupImages, initialLeadForm), 500);
         }
       };
       initMockup();
@@ -344,7 +345,7 @@ export default function EditorPage() {
     }
   }, [newPageName, newPageTitle, projectId, allFiles, project, toast]);
 
-  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string, multiPagesData?: string, seoH1Data?: string, seoH2sData?: string, injectedImages?: Array<{base64: string, mimeType: string, preview: string | null, fileName: string, url?: string}>) => {
+  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string, multiPagesData?: string, seoH1Data?: string, seoH2sData?: string, injectedImages?: Array<{base64: string, mimeType: string, preview: string | null, fileName: string, url?: string}>, leadFormEnabled?: boolean) => {
     let text = customPrompt || prompt;
     const effectiveImages = injectedImages || attachedImages;
     const effectiveVideos = attachedVideos.filter(v => !v.uploading && v.url);
@@ -429,6 +430,9 @@ export default function EditorPage() {
       if (seoH1Data) {
         bodyData.seoH1 = seoH1Data;
         bodyData.seoH2s = seoH2sData || "";
+      }
+      if (leadFormEnabled === false) {
+        bodyData.leadForm = false;
       }
       const response = await fetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
