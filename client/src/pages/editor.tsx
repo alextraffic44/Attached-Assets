@@ -2090,7 +2090,10 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                             <button 
                               onClick={() => {
                                 const vNum = messages.filter((m, i) => (m.role === "assistant" || m.role === "model") && i <= idx).length;
-                                const v = versions[vNum - 1];
+                                // versions is DESC (newest first); filter to only generation checkpoints (exclude "До отката" etc)
+                                const genVersions = versions.filter(v => v.label?.startsWith("До: "));
+                                // vNum=1 → oldest gen version = genVersions[genVersions.length - 1]
+                                const v = genVersions[genVersions.length - vNum];
                                 if (v) handleRestoreVersion(v.id);
                                 else toast({ title: "Инфо", description: "Чекпоинт для этой версии не найден" });
                               }}
