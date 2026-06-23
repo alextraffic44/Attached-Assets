@@ -58,12 +58,12 @@ function Router() {
     <Switch>
       <Route path="/" component={LandingPage} />
       <Route path="/auth" component={AuthRoute} />
-      <Route path="/dashboard" component={DashboardPage} />
-      <Route path="/leads" component={LeadsPage} />
-      <Route path="/generations" component={GenerationsPage} />
-      <Route path="/profile" component={ProfilePage} />
-      <Route path="/editor/:id" component={EditorPage} />
-      <Route path="/admin" component={AdminPage} />
+      <Route path="/dashboard">{() => <ProtectedRoute component={DashboardPage} />}</Route>
+      <Route path="/leads">{() => <ProtectedRoute component={LeadsPage} />}</Route>
+      <Route path="/generations">{() => <ProtectedRoute component={GenerationsPage} />}</Route>
+      <Route path="/profile">{() => <ProtectedRoute component={ProfilePage} />}</Route>
+      <Route path="/editor/:id">{() => <ProtectedRoute component={EditorPage} />}</Route>
+      <Route path="/admin">{() => <ProtectedRoute component={AdminPage} />}</Route>
       <Route path="/oferta">{() => <LegalPage doc="oferta" />}</Route>
       <Route path="/privacy">{() => <LegalPage doc="privacy" />}</Route>
       <Route path="/terms">{() => <LegalPage doc="terms" />}</Route>

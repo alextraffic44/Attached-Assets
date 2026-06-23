@@ -12,16 +12,22 @@ declare module "http" {
   }
 }
 
-app.use(
-  express.json({
-    limit: '50mb',
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
+app.set("trust proxy", 1);
 
-app.use(express.urlencoded({ limit: '50mb', extended: false }));
+const jsonVerify = (req: Request, _res: Response, buf: Buffer) => {
+  req.rawBody = buf;
+};
+
+// Large JSON limit only for routes that legitimately carry big base64 payloads
+// (image/video uploads and AI generation with attached screenshots).
+const largeJson = express.json({ limit: "50mb", verify: jsonVerify });
+app.use("/api/upload-image", largeJson);
+app.use("/api/projects", largeJson);
+
+// Small default limit everywhere else — protects against oversized-body DoS,
+// especially on the public, unauthenticated lead-intake endpoint.
+app.use(express.json({ limit: "1mb", verify: jsonVerify }));
+app.use(express.urlencoded({ limit: "1mb", extended: false }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

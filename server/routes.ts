@@ -8,9 +8,16 @@ import { ObjectStorageService, objectStorageClient } from "./replit_integrations
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { db } from "./db";
 import { creditTransactions } from "@shared/schema";
+import { rateLimit, userOrIpKey } from "./rate-limit";
+import { assertPublicHttpUrl } from "./url-guard";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+
+// Rate limiters (in-memory, single-instance)
+const leadIntakeLimiter = rateLimit("lead-intake", { windowMs: 60_000, max: 20, message: "Слишком много заявок. Попробуйте позже." });
+const aiLimiter = rateLimit("ai", { windowMs: 60_000, max: 20, keyGenerator: userOrIpKey, message: "Слишком много запросов к ИИ. Подождите минуту." });
+const proxyLimiter = rateLimit("proxy", { windowMs: 60_000, max: 60, keyGenerator: userOrIpKey });
 
 const objectStorage = new ObjectStorageService();
 
@@ -759,10 +766,9 @@ async function deepResearch(query: string): Promise<{ research: string; success:
   }
 }
 
-async function bypassAuth(req: any, res: any, next: any) {
-  if (!req.user) {
-    const dbUser = await storage.getUser(1);
-    req.user = dbUser || { id: 1, credits: 9999, displayName: "Гость" };
+function requireAuth(req: any, res: any, next: any) {
+  if (typeof req.isAuthenticated !== "function" || !req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ message: "Не авторизован" });
   }
   next();
 }
@@ -795,7 +801,7 @@ export async function registerRoutes(
   const MAX_AUDIO_SIZE = 30 * 1024 * 1024;
   const MAX_3D_SIZE = 50 * 1024 * 1024;
 
-  app.post("/api/upload-image", bypassAuth, async (req, res) => {
+  app.post("/api/upload-image", requireAuth, async (req, res) => {
     try {
       const { base64, mimeType, name } = req.body;
       if (!base64) return res.status(400).json({ message: "Нет данных файла" });
@@ -819,7 +825,7 @@ export async function registerRoutes(
   const multer = (await import("multer")).default;
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Math.max(MAX_VIDEO_SIZE, MAX_3D_SIZE) } });
 
-  app.post("/api/upload-file", bypassAuth, upload.single("file"), async (req, res) => {
+  app.post("/api/upload-file", requireAuth, upload.single("file"), async (req, res) => {
     try {
       const file = req.file;
       if (!file) return res.status(400).json({ message: "Файл не прикреплён" });
@@ -849,7 +855,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/projects", bypassAuth, async (req, res) => {
+  app.get("/api/projects", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
       const userProjects = await storage.getProjectsByUser(user.id);
@@ -859,7 +865,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/projects/:id", bypassAuth, async (req, res) => {
+  app.get("/api/projects/:id", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
@@ -875,7 +881,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/projects", bypassAuth, async (req, res) => {
+  app.post("/api/projects", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
       const { title, description } = req.body;
@@ -891,7 +897,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/projects/:id", bypassAuth, async (req, res) => {
+  app.delete("/api/projects/:id", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
@@ -908,7 +914,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/enhance-prompt", bypassAuth, async (req, res) => {
+  app.post("/api/enhance-prompt", requireAuth, aiLimiter, async (req, res) => {
     try {
       const { prompt, idempotencyKey } = req.body;
       const user = req.user as any;
@@ -933,7 +939,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/deep-research", bypassAuth, async (req, res) => {
+  app.post("/api/deep-research", requireAuth, aiLimiter, async (req, res) => {
     try {
       const { prompt, idempotencyKey } = req.body;
       const user = req.user as any;
@@ -958,7 +964,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/projects/:id/messages", bypassAuth, async (req, res) => {
+  app.get("/api/projects/:id/messages", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
@@ -975,7 +981,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/projects/:id/generate", bypassAuth, async (req, res) => {
+  app.post("/api/projects/:id/generate", requireAuth, aiLimiter, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
@@ -1686,7 +1692,7 @@ ${designAnalysis}
     }
   });
 
-  app.post("/api/images/generate", bypassAuth, async (req, res) => {
+  app.post("/api/images/generate", requireAuth, aiLimiter, async (req, res) => {
     try {
       const IMAGE_COST = 15;
       const user = req.user as any;
@@ -1783,7 +1789,7 @@ ${designAnalysis}
     }
   });
 
-  app.get("/api/images/status/:taskId", bypassAuth, async (req, res) => {
+  app.get("/api/images/status/:taskId", requireAuth, async (req, res) => {
     try {
       const { taskId } = req.params;
       const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
@@ -1813,7 +1819,9 @@ ${designAnalysis}
               if (projectIdParam > 0) {
                 const autoName = promptParam.trim().split(/\s+/).slice(0, 3).join("_") || `img_${Date.now()}`;
                 const imgProject = await storage.getProject(projectIdParam);
-                await storage.createProjectImage({ projectId: projectIdParam, userId: imgProject?.userId, name: autoName, url: localUrl, prompt: promptParam.substring(0, 200) });
+                if (imgProject && imgProject.userId === (req.user as any).id) {
+                  await storage.createProjectImage({ projectId: projectIdParam, userId: imgProject.userId, name: autoName, url: localUrl, prompt: promptParam.substring(0, 200) });
+                }
               }
             } else {
               localUrls.push(extUrl);
@@ -1834,16 +1842,33 @@ ${designAnalysis}
     }
   });
 
-  app.post("/api/images/proxy-base64", async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
+  app.post("/api/images/proxy-base64", requireAuth, proxyLimiter, async (req, res) => {
     try {
       const { url } = req.body;
       if (!url || typeof url !== "string") return res.status(400).json({ message: "URL обязателен" });
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const arrayBuf = await r.arrayBuffer();
-      const buffer = Buffer.from(arrayBuf);
-      const mimeType = r.headers.get("content-type") || "image/jpeg";
+      try {
+        await assertPublicHttpUrl(url);
+      } catch (e: any) {
+        return res.status(400).json({ message: e?.message || "Недопустимый URL" });
+      }
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      let mimeType = "image/jpeg";
+      let buffer: Buffer;
+      try {
+        const r = await fetch(url, { redirect: "error", signal: controller.signal });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        mimeType = r.headers.get("content-type") || "image/jpeg";
+        if (!mimeType.startsWith("image/")) {
+          return res.status(400).json({ message: "URL не является изображением" });
+        }
+        buffer = Buffer.from(await r.arrayBuffer());
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (buffer.length > 15 * 1024 * 1024) {
+        return res.status(413).json({ message: "Изображение слишком большое" });
+      }
       const base64 = buffer.toString("base64");
       res.json({ base64, mimeType });
     } catch (err: any) {
@@ -1853,7 +1878,7 @@ ${designAnalysis}
   });
 
   // WaveSpeed 3D model generation
-  app.post("/api/3d/generate", bypassAuth, async (req, res) => {
+  app.post("/api/3d/generate", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as any;
       const { imageUrl, enablePbr = false, generateType = "Normal", faceCount = 500000, idempotencyKey } = req.body;
@@ -1912,7 +1937,7 @@ ${designAnalysis}
     }
   });
 
-  app.get("/api/3d/status/:taskId", bypassAuth, async (req, res) => {
+  app.get("/api/3d/status/:taskId", requireAuth, async (req, res) => {
     try {
       if (!WAVESPEED_API_KEY) {
         return res.status(500).json({ message: "WAVESPEED_API_KEY не настроен" });
@@ -1943,7 +1968,7 @@ ${designAnalysis}
     }
   });
 
-  app.post("/api/3d/download", bypassAuth, async (req, res) => {
+  app.post("/api/3d/download", requireAuth, async (req, res) => {
     try {
       const { url, projectId } = req.body;
       if (!url || typeof url !== "string") {
@@ -1962,7 +1987,9 @@ ${designAnalysis}
         const pid = parseInt(projectId);
         if (pid > 0) {
           const dlProject = await storage.getProject(pid);
-          await storage.createProjectImage({ projectId: pid, userId: dlProject?.userId, name: `3d_model_${Date.now()}`, url: localUrl, prompt: "3D модель" });
+          if (dlProject && dlProject.userId === (req.user as any).id) {
+            await storage.createProjectImage({ projectId: pid, userId: dlProject.userId, name: `3d_model_${Date.now()}`, url: localUrl, prompt: "3D модель" });
+          }
         }
       }
       res.json({ url: localUrl });
@@ -1972,7 +1999,7 @@ ${designAnalysis}
     }
   });
 
-  app.get("/api/projects/:id/images", bypassAuth, async (req, res) => {
+  app.get("/api/projects/:id/images", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) return res.status(404).json({ message: "Проект не найден" });
@@ -1985,7 +2012,7 @@ ${designAnalysis}
     }
   });
 
-  app.post("/api/projects/:id/images", bypassAuth, async (req, res) => {
+  app.post("/api/projects/:id/images", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) return res.status(404).json({ message: "Проект не найден" });
@@ -2000,20 +2027,25 @@ ${designAnalysis}
     }
   });
 
-  app.delete("/api/projects/:id/images/:imageId", bypassAuth, async (req, res) => {
+  app.delete("/api/projects/:id/images/:imageId", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) return res.status(404).json({ message: "Проект не найден" });
       const user = req.user as any;
       if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
-      await storage.deleteProjectImage(parseInt(req.params.imageId));
+      const imageId = parseInt(req.params.imageId);
+      const projImages = await storage.getProjectImages(project.id);
+      if (!projImages.some((img) => img.id === imageId)) {
+        return res.status(404).json({ message: "Изображение не найдено" });
+      }
+      await storage.deleteProjectImage(imageId);
       res.json({ message: "Изображение удалено" });
     } catch (err) {
       res.status(500).json({ message: "Ошибка удаления изображения" });
     }
   });
 
-  app.put("/api/projects/:id/code", bypassAuth, async (req, res) => {
+  app.put("/api/projects/:id/code", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
@@ -2031,7 +2063,7 @@ ${designAnalysis}
     }
   });
 
-  app.get("/api/projects/:id/versions", bypassAuth, async (req, res) => {
+  app.get("/api/projects/:id/versions", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) return res.status(404).json({ message: "Проект не найден" });
@@ -2044,7 +2076,7 @@ ${designAnalysis}
     }
   });
 
-  app.post("/api/projects/:id/versions", bypassAuth, async (req, res) => {
+  app.post("/api/projects/:id/versions", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) return res.status(404).json({ message: "Проект не найден" });
@@ -2066,7 +2098,7 @@ ${designAnalysis}
     }
   });
 
-  app.post("/api/projects/:id/versions/:versionId/restore", bypassAuth, async (req, res) => {
+  app.post("/api/projects/:id/versions/:versionId/restore", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) return res.status(404).json({ message: "Проект не найден" });
@@ -2105,7 +2137,7 @@ ${designAnalysis}
 
   // ═══ PROJECT FILES API ═══
 
-  app.get("/api/projects/:id/files", bypassAuth, async (req, res) => {
+  app.get("/api/projects/:id/files", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) return res.status(404).json({ message: "Проект не найден" });
@@ -2118,7 +2150,7 @@ ${designAnalysis}
     }
   });
 
-  app.put("/api/projects/:id/files/:filename", bypassAuth, async (req, res) => {
+  app.put("/api/projects/:id/files/:filename", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) return res.status(404).json({ message: "Проект не найден" });
@@ -2136,7 +2168,7 @@ ${designAnalysis}
     }
   });
 
-  app.post("/api/projects/:id/sync-nav", bypassAuth, async (req, res) => {
+  app.post("/api/projects/:id/sync-nav", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) return res.status(404).json({ message: "Проект не найден" });
@@ -2213,13 +2245,18 @@ ${designAnalysis}
     }
   });
 
-  app.delete("/api/projects/:id/files/:fileId", bypassAuth, async (req, res) => {
+  app.delete("/api/projects/:id/files/:fileId", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) return res.status(404).json({ message: "Проект не найден" });
       const user = req.user as any;
       if (project.userId !== user.id) return res.status(403).json({ message: "Доступ запрещён" });
-      await storage.deleteProjectFile(parseInt(req.params.fileId));
+      const fileId = parseInt(req.params.fileId);
+      const projFiles = await storage.getProjectFiles(project.id);
+      if (!projFiles.some((f) => f.id === fileId)) {
+        return res.status(404).json({ message: "Файл не найден" });
+      }
+      await storage.deleteProjectFile(fileId);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Ошибка удаления файла" });
@@ -2586,12 +2623,13 @@ ${fullHtml}`;
     }
   });
 
-  app.get("/api/projects/:id/domain/status", async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
+  app.get("/api/projects/:id/domain/status", requireAuth, async (req, res) => {
     try {
       const projectId = parseInt(req.params.id);
       const project = await storage.getProject(projectId);
-      if (!project || !project.vercelProjectId) return res.json({ verified: false });
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Доступ запрещён" });
+      if (!project.vercelProjectId) return res.json({ verified: false });
       const { domain } = req.query as { domain: string };
       if (!domain) return res.status(400).json({ message: "Домен обязателен" });
       const result = await checkDomainStatus(project.vercelProjectId, domain as string);
@@ -2610,29 +2648,36 @@ ${fullHtml}`;
     res.sendStatus(204);
   });
 
-  app.post("/api/leads/:projectId", async (req, res) => {
+  app.post("/api/leads/:projectId", leadIntakeLimiter, async (req, res) => {
     res.header("Access-Control-Allow-Origin", "*");
     try {
       const projectId = parseInt(req.params.projectId);
+      if (!Number.isInteger(projectId) || projectId <= 0) {
+        return res.status(400).json({ message: "Некорректный проект" });
+      }
       const project = await storage.getProject(projectId);
       if (!project) return res.status(404).json({ message: "Проект не найден" });
 
-      const { name, email, phone, message, source } = req.body;
-      const lead = await storage.createLead({
-        projectId,
-        name: name || "",
-        email: email || "",
-        phone: phone || "",
-        message: message || "",
-        source: source || "form",
-      });
+      const clean = (v: any, max: number) =>
+        (typeof v === "string" ? v : v == null ? "" : String(v)).slice(0, max).trim();
+      const name = clean(req.body?.name, 100);
+      const email = clean(req.body?.email, 254);
+      const phone = clean(req.body?.phone, 40);
+      const message = clean(req.body?.message, 2000);
+      const source = clean(req.body?.source, 100) || "form";
+
+      if (!name && !email && !phone && !message) {
+        return res.status(400).json({ message: "Пустая заявка" });
+      }
+
+      const lead = await storage.createLead({ projectId, name, email, phone, message, source });
       res.json({ success: true, id: lead.id });
     } catch (err) {
       res.status(500).json({ message: "Ошибка сохранения заявки" });
     }
   });
 
-  app.get("/api/generations", bypassAuth, async (req, res) => {
+  app.get("/api/generations", requireAuth, async (req, res) => {
     try {
       const userId = (req as any).user?.id || 1;
       const images = await storage.getImagesByUser(userId);
@@ -2642,7 +2687,7 @@ ${fullHtml}`;
     }
   });
 
-  app.get("/api/leads", bypassAuth, async (req, res) => {
+  app.get("/api/leads", requireAuth, async (req, res) => {
     try {
       const userId = (req as any).user?.id || 1;
       const allLeads = await storage.getLeadsByUser(userId);
@@ -2652,7 +2697,7 @@ ${fullHtml}`;
     }
   });
 
-  app.get("/api/leads/unread-count", bypassAuth, async (req, res) => {
+  app.get("/api/leads/unread-count", requireAuth, async (req, res) => {
     try {
       const userId = (req as any).user?.id || 1;
       const count = await storage.getUnreadLeadCount(userId);
@@ -2662,37 +2707,68 @@ ${fullHtml}`;
     }
   });
 
-  app.patch("/api/leads/:id/read", bypassAuth, async (req, res) => {
+  app.patch("/api/leads/:id/read", requireAuth, async (req, res) => {
     try {
-      const lead = await storage.markLeadRead(parseInt(req.params.id));
+      const leadId = parseInt(req.params.id);
+      const existing = await storage.getLead(leadId);
+      if (!existing) return res.status(404).json({ message: "Заявка не найдена" });
+      const proj = await storage.getProject(existing.projectId);
+      if (!proj || proj.userId !== (req.user as any).id) {
+        return res.status(403).json({ message: "Доступ запрещён" });
+      }
+      const lead = await storage.markLeadRead(leadId);
       res.json(lead);
     } catch (err) {
       res.status(500).json({ message: "Ошибка" });
     }
   });
 
-  app.delete("/api/leads/:id", bypassAuth, async (req, res) => {
+  app.delete("/api/leads/:id", requireAuth, async (req, res) => {
     try {
-      await storage.deleteLead(parseInt(req.params.id));
+      const leadId = parseInt(req.params.id);
+      const existing = await storage.getLead(leadId);
+      if (!existing) return res.status(404).json({ message: "Заявка не найдена" });
+      const proj = await storage.getProject(existing.projectId);
+      if (!proj || proj.userId !== (req.user as any).id) {
+        return res.status(403).json({ message: "Доступ запрещён" });
+      }
+      await storage.deleteLead(leadId);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Ошибка удаления" });
     }
   });
 
-  app.get("/api/proxy-image", bypassAuth, async (req, res) => {
+  app.get("/api/proxy-image", requireAuth, proxyLimiter, async (req, res) => {
     try {
       const imageUrl = req.query.url as string;
-      if (!imageUrl || !imageUrl.startsWith("http")) {
-        return res.status(400).json({ message: "URL обязателен" });
+      if (!imageUrl) return res.status(400).json({ message: "URL обязателен" });
+      try {
+        await assertPublicHttpUrl(imageUrl);
+      } catch (e: any) {
+        return res.status(400).json({ message: e?.message || "Недопустимый URL" });
       }
-      const response = await fetch(imageUrl);
-      if (!response.ok) throw new Error("Не удалось загрузить изображение");
-      const contentType = response.headers.get("content-type") || "image/png";
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      let contentType = "application/octet-stream";
+      let buffer: Buffer;
+      try {
+        const response = await fetch(imageUrl, { redirect: "error", signal: controller.signal });
+        if (!response.ok) throw new Error("Не удалось загрузить изображение");
+        contentType = response.headers.get("content-type") || "application/octet-stream";
+        if (!contentType.startsWith("image/")) {
+          return res.status(400).json({ message: "URL не является изображением" });
+        }
+        buffer = Buffer.from(await response.arrayBuffer());
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (buffer.length > 15 * 1024 * 1024) {
+        return res.status(413).json({ message: "Изображение слишком большое" });
+      }
       res.setHeader("Content-Type", contentType);
       res.setHeader("Cache-Control", "public, max-age=3600");
-      const buffer = await response.arrayBuffer();
-      res.send(Buffer.from(buffer));
+      res.send(buffer);
     } catch (err) {
       res.status(500).json({ message: "Ошибка загрузки изображения" });
     }

@@ -6,6 +6,7 @@ import connectPg from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual, createHash, createHmac } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
+import { rateLimit } from "./rate-limit";
 import { pool, db } from "./db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -53,8 +54,14 @@ function verifyTelegramHash(data: Record<string, any>): boolean {
 export function setupAuth(app: Express) {
   const PgSessionStore = connectPg(session);
 
+  const isProd = process.env.NODE_ENV === "production";
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (isProd && !sessionSecret) {
+    throw new Error("SESSION_SECRET must be set in production");
+  }
+
   const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || "neurozodhiy-secret-key",
+    secret: sessionSecret || "dev-only-insecure-secret",
     resave: false,
     saveUninitialized: false,
     store: new PgSessionStore({
@@ -65,7 +72,7 @@ export function setupAuth(app: Express) {
     cookie: {
       maxAge: 30 * 24 * 60 * 60 * 1000,
       httpOnly: true,
-      secure: false,
+      secure: isProd,
       sameSite: "lax",
     },
   };
@@ -115,7 +122,9 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/auth/register", async (req, res, next) => {
+  const authLimiter = rateLimit("auth", { windowMs: 60_000, max: 10, message: "Слишком много попыток. Подождите минуту." });
+
+  app.post("/api/auth/register", authLimiter, async (req, res, next) => {
     try {
       const { email, password, displayName } = req.body;
       if (!email || !password || !displayName) {
@@ -144,7 +153,7 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/auth/login", (req, res, next) => {
+  app.post("/api/auth/login", authLimiter, (req, res, next) => {
     passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) return next(err);
       if (!user) {
