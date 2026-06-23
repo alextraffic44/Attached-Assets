@@ -142,6 +142,8 @@ export default function EditorPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamedCode, setStreamedCode] = useState("");
   const [showCode, setShowCode] = useState(false);
+  const [editableCode, setEditableCode] = useState("");
+  const [codeSaving, setCodeSaving] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [attachedImages, setAttachedImages] = useState<Array<{id: string, base64: string, mimeType: string, preview: string | null, fileName: string, url?: string, uploading?: boolean}>>([]);
   const [attachedVideos, setAttachedVideos] = useState<Array<{id: string, url: string, fileName: string, uploading: boolean}>>([]);
@@ -298,6 +300,10 @@ export default function EditorPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (showCode) setEditableCode(currentCode || "");
+  }, [showCode, currentCode]);
 
   const handleAddPage = useCallback(async () => {
     let name = newPageName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
@@ -2274,8 +2280,63 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             </div>
           <div className="flex-1 p-3 overflow-hidden">
             {showCode ? (
-              <div className="w-full h-full p-6 bg-slate-900 rounded-2xl overflow-auto">
-                <pre className="text-xs font-mono text-emerald-400 whitespace-pre-wrap">{currentCode || "// Тут будет код"}</pre>
+              <div className="w-full h-full flex flex-col bg-slate-900 rounded-2xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-slate-700/60 shrink-0">
+                  <span className="text-xs font-mono text-slate-400">{activeFile}</span>
+                  <button
+                    onClick={async () => {
+                      setCodeSaving(true);
+                      try {
+                        if (activeFile === "index.html") {
+                          await fetch(`/api/projects/${projectId}/code`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ generatedCode: editableCode }),
+                            credentials: "include",
+                          });
+                          setStreamedCode(editableCode);
+                          queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+                        } else {
+                          await fetch(`/api/projects/${projectId}/files/${activeFile}`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ code: editableCode }),
+                            credentials: "include",
+                          });
+                          queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+                        }
+                        toast({ title: "Сохранено", description: "Изменения применены к сайту" });
+                      } catch {
+                        toast({ title: "Ошибка", description: "Не удалось сохранить", variant: "destructive" });
+                      } finally {
+                        setCodeSaving(false);
+                      }
+                    }}
+                    disabled={codeSaving || !editableCode}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+                    style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)', cursor: 'pointer' }}
+                  >
+                    {codeSaving ? <><svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg> Сохранение...</> : <>✓ Применить</>}
+                  </button>
+                </div>
+                <textarea
+                  className="flex-1 w-full resize-none bg-transparent text-xs font-mono text-emerald-400 p-5 focus:outline-none overflow-auto"
+                  style={{ lineHeight: 1.6, tabSize: 2 }}
+                  value={editableCode}
+                  onChange={e => setEditableCode(e.target.value)}
+                  spellCheck={false}
+                  onKeyDown={e => {
+                    if (e.key === 'Tab') {
+                      e.preventDefault();
+                      const t = e.currentTarget;
+                      const start = t.selectionStart;
+                      const end = t.selectionEnd;
+                      const val = t.value;
+                      setEditableCode(val.substring(0, start) + '  ' + val.substring(end));
+                      requestAnimationFrame(() => { t.selectionStart = t.selectionEnd = start + 2; });
+                    }
+                  }}
+                />
               </div>
             ) : currentCode || isGenerating ? (
               <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
