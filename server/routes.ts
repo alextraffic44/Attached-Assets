@@ -64,57 +64,96 @@ const MAX_AUTO_IMAGES = 6;
 
 // Low-level: create a GPT Image 2 task on KIE, poll until ready, download and
 // store in object storage. Returns the "/objects/..." URL or null on failure.
+// Retries the full attempt up to MAX_ATTEMPTS times on transient errors.
 async function generateGptImage(
   prompt: string,
   aspectRatio: string,
   shouldStop: () => boolean = () => false,
 ): Promise<string | null> {
-  try {
+  const MAX_ATTEMPTS = 3;
+  const RETRY_DELAYS = [4000, 8000, 16000]; // backoff between attempts
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (shouldStop()) return null;
-    const createResp = await fetch(NANO_BANANA_CREATE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-      body: JSON.stringify({
-        model: "gpt-image-2-text-to-image",
-        input: { prompt, aspect_ratio: aspectRatio, resolution: "2K" },
-      }),
-    });
-    const createBody = await createResp.json();
-    if (createBody.code !== 200 || !createBody.data?.taskId) {
-      console.warn("[GENIMG] create failed:", createBody.msg);
-      return null;
+    if (attempt > 0) {
+      const delay = RETRY_DELAYS[attempt - 1] ?? 8000;
+      console.log(`[GENIMG] retry attempt ${attempt + 1}/${MAX_ATTEMPTS}, waiting ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+      if (shouldStop()) return null;
     }
-    const taskId = createBody.data.taskId;
-    const deadline = Date.now() + 90000;
-    while (Date.now() < deadline) {
-      if (shouldStop()) { console.warn("[GENIMG] aborted during poll"); return null; }
-      await new Promise((r) => setTimeout(r, 3000));
-      const statusResp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
-        headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
-      });
-      const statusBody = await statusResp.json();
-      if (statusBody.code !== 200) continue;
-      const state = statusBody.data?.state;
-      if (state === "success") {
-        const result = JSON.parse(statusBody.data.resultJson);
-        const urls = result.resultUrls || [];
-        if (!urls[0]) return null;
-        const imgResp = await fetch(urls[0]);
-        if (!imgResp.ok) return null;
-        const buf = Buffer.from(await imgResp.arrayBuffer());
-        return await uploadToObjectStorage(buf, "image/jpeg", "jpg");
+
+    try {
+      // --- Step 1: create task (retry create up to 2x on 5xx) ---
+      let createBody: any = null;
+      for (let cr = 0; cr < 2; cr++) {
+        if (cr > 0) await new Promise((r) => setTimeout(r, 3000));
+        const createResp = await fetch(NANO_BANANA_CREATE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
+          body: JSON.stringify({
+            model: "gpt-image-2-text-to-image",
+            input: { prompt, aspect_ratio: aspectRatio, resolution: "2K" },
+          }),
+        });
+        if (createResp.status >= 500 && cr < 1) {
+          console.warn(`[GENIMG] create HTTP ${createResp.status}, retrying create...`);
+          continue;
+        }
+        createBody = await createResp.json();
+        break;
       }
-      if (state === "fail" || state === "failed" || state === "error") {
-        console.warn("[GENIMG] task failed:", statusBody.data?.failMsg);
-        return null;
+
+      if (!createBody || createBody.code !== 200 || !createBody.data?.taskId) {
+        console.warn(`[GENIMG] create failed (attempt ${attempt + 1}):`, createBody?.msg);
+        continue; // try full attempt again
       }
+
+      // --- Step 2: poll for result ---
+      const taskId = createBody.data.taskId;
+      const deadline = Date.now() + 90000;
+      let taskFailed = false;
+      while (Date.now() < deadline) {
+        if (shouldStop()) return null;
+        await new Promise((r) => setTimeout(r, 3000));
+        let statusBody: any = null;
+        try {
+          const statusResp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
+            headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
+          });
+          statusBody = await statusResp.json();
+        } catch (pollErr: any) {
+          console.warn("[GENIMG] poll network error:", pollErr?.message);
+          continue;
+        }
+        if (!statusBody || statusBody.code !== 200) continue;
+        const state = statusBody.data?.state;
+        if (state === "success") {
+          const result = JSON.parse(statusBody.data.resultJson);
+          const urls = result.resultUrls || [];
+          if (!urls[0]) { taskFailed = true; break; }
+          const imgResp = await fetch(urls[0]);
+          if (!imgResp.ok) { taskFailed = true; break; }
+          const buf = Buffer.from(await imgResp.arrayBuffer());
+          return await uploadToObjectStorage(buf, "image/jpeg", "jpg");
+        }
+        if (state === "fail" || state === "failed" || state === "error") {
+          console.warn(`[GENIMG] task failed (attempt ${attempt + 1}):`, statusBody.data?.failMsg);
+          taskFailed = true;
+          break;
+        }
+      }
+      if (!taskFailed) {
+        console.warn(`[GENIMG] task timed out (attempt ${attempt + 1})`);
+      }
+      // loop → retry
+    } catch (e: any) {
+      console.warn(`[GENIMG] error (attempt ${attempt + 1}):`, e?.message || e);
+      // loop → retry
     }
-    console.warn("[GENIMG] task timed out");
-    return null;
-  } catch (e: any) {
-    console.warn("[GENIMG] error:", e?.message || e);
-    return null;
   }
+
+  console.warn("[GENIMG] all attempts exhausted, using gradient placeholder");
+  return null;
 }
 
 // Deterministic gradient SVG used as a graceful fallback when AI image
