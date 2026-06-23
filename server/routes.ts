@@ -1537,10 +1537,28 @@ ${designAnalysis}
         }
 
         if (parsedFiles.length === 0) {
+          // Fallback 2: bold/starred FILE markers with ```html blocks
           const altMarkerRegex = /\*{0,2}\s*FILE:\s*([^\s*]+\.html)\s*\*{0,2}\s*\n?\s*```html\s*\n?([\s\S]*?)```/gi;
           let altM;
           while ((altM = altMarkerRegex.exec(fullResponse)) !== null) {
             parsedFiles.push({ filename: altM[1].trim().toLowerCase(), code: replaceImgMarkers(altM[2].trim()) });
+          }
+        }
+
+        if (parsedFiles.length === 0 && hasFileMarkers) {
+          // Fallback 3: raw HTML without ```html wrappers (Gemini Flash style)
+          // Splits on --- FILE: name.html --- and captures everything until the next marker or end
+          const rawMarkerRegex = /---\s*FILE:\s*([^\s\-]+\.html)\s*---\s*\n([\s\S]*?)(?=\s*---\s*FILE:|$)/gi;
+          let rm;
+          while ((rm = rawMarkerRegex.exec(fullResponse)) !== null) {
+            const rawCode = rm[2].trim();
+            // Only accept if it looks like HTML
+            if (rawCode.includes("<") && rawCode.length > 50) {
+              parsedFiles.push({ filename: rm[1].trim().toLowerCase(), code: replaceImgMarkers(rawCode) });
+            }
+          }
+          if (parsedFiles.length > 0) {
+            console.log("[PARSE] Used raw fallback (no code blocks), parsed files:", parsedFiles.map(f => f.filename));
           }
         }
 
