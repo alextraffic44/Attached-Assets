@@ -58,7 +58,7 @@ const NANO_BANANA_CREATE_URL = "https://api.kie.ai/api/v1/jobs/createTask";
 const NANO_BANANA_STATUS_URL = "https://api.kie.ai/api/v1/jobs/recordInfo";
 const KIE_LLM_URL = "https://api.kie.ai/codex/v1/responses";
 const KIE_LLM_MODEL = "gpt-5-5";
-const GEMINI_V2_MODEL = "gemini-2.0-flash";
+const KIE_GEMINI_URL = "https://api.kie.ai/gemini/v1/models/gemini-3-5-flash:streamGenerateContent";
 
 const AUTO_IMAGE_COST = 15;
 const MAX_AUTO_IMAGES = 6;
@@ -403,14 +403,62 @@ async function* geminiGenerateStream(
     }).filter((p: any) => p.text);
     if (parts.length > 0) contents.push({ role, parts });
   }
-  const stream = await gemini.models.generateContentStream({
-    model: GEMINI_V2_MODEL,
-    config: { systemInstruction: systemPrompt },
+
+  const body: any = {
+    stream: true,
     contents,
+  };
+  if (systemPrompt) {
+    body.systemInstruction = { parts: [{ text: systemPrompt }] };
+  }
+
+  const resp = await fetch(KIE_GEMINI_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${KIE_API_KEY}`,
+    },
+    body: JSON.stringify(body),
   });
-  for await (const chunk of stream) {
-    const text = chunk.text;
-    if (text) yield text;
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Gemini KIE error ${resp.status}: ${errText.slice(0, 400)}`);
+  }
+
+  const reader = (resp.body as any).getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      // KIE streams either as raw JSON lines or SSE "data: {...}"
+      const jsonStr = trimmed.startsWith("data: ") ? trimmed.slice(6) : trimmed;
+      if (!jsonStr || jsonStr === "[DONE]") continue;
+      try {
+        const parsed = JSON.parse(jsonStr);
+        // Extract text from each streaming chunk
+        for (const part of parsed?.candidates?.[0]?.content?.parts ?? []) {
+          if (part.text) yield part.text as string;
+        }
+      } catch { /* incomplete chunk — buffered in next iteration */ }
+    }
+  }
+  // Flush any remaining buffer
+  if (buffer.trim()) {
+    const jsonStr = buffer.trim().startsWith("data: ") ? buffer.trim().slice(6) : buffer.trim();
+    try {
+      const parsed = JSON.parse(jsonStr);
+      for (const part of parsed?.candidates?.[0]?.content?.parts ?? []) {
+        if (part.text) yield part.text as string;
+      }
+    } catch {}
   }
 }
 
