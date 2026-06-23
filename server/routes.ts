@@ -218,8 +218,8 @@ async function resolveGenImgMarkers(
   let creditsUsed = 0;
   let outOfCredits = false;
   const total = planned.length;
-  // 12 minutes total budget for all images (including retries)
-  const phaseDeadline = Date.now() + 720000;
+  // 7 minutes total budget for all images (all run in parallel)
+  const phaseDeadline = Date.now() + 420000;
 
   const finalize = () => {
     for (const [filename, code] of Array.from(filesMap.entries())) {
@@ -289,7 +289,7 @@ async function resolveGenImgMarkers(
         try { res.write(`data: ${JSON.stringify({ status: `${passLabel}: изображения (${successSoFar}/${total})...` })}\n\n`); } catch {}
       }
     };
-    await Promise.all(Array.from({ length: Math.min(3, batch.length) }, () => worker()));
+    await Promise.all(Array.from({ length: batch.length }, () => worker()));
   };
 
   // Pass 1 — generate all images
