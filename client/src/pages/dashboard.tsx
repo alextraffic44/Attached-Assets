@@ -257,6 +257,7 @@ export default function DashboardPage() {
   const [pageNames, setPageNames] = useState<string[]>(["О нас", "Услуги", "Контакты"]);
   const [seoEnabled, setSeoEnabled] = useState(false);
   const [leadFormEnabled, setLeadFormEnabled] = useState(true);
+  const [agentVersion, setAgentVersion] = useState<"v1" | "v2">("v1");
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImage, setPhotoImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
@@ -330,6 +331,7 @@ export default function DashboardPage() {
         ? `&seoh1=${encodeURIComponent(seoH1.trim())}&seoh2s=${encodeURIComponent(seoH2s.filter(h => h.trim()).join(","))}`
         : "";
       const leadFormParam = leadFormEnabled ? "" : "&leadform=0";
+      const agentParam = agentVersion === "v2" ? "&agent=v2" : "";
       let mockupParam = "";
       if (selectedMode === "photo" && photoImage) {
         try {
@@ -348,7 +350,7 @@ export default function DashboardPage() {
           return;
         }
       }
-      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}${researchParam}${multiPageParam}${seoParam}${leadFormParam}${mockupParam}`);
+      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}${researchParam}${multiPageParam}${seoParam}${leadFormParam}${agentParam}${mockupParam}`);
     },
   });
 
@@ -944,6 +946,20 @@ export default function DashboardPage() {
                         </div>
                       ) : (
                         <>
+                      {/* Agent V1/V2 selector */}
+                      <div className="flex items-center gap-1.5 p-0.5 rounded-full" style={{ background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', display: 'inline-flex', marginBottom: 4 }}>
+                        <button type="button" onClick={() => setAgentVersion("v1")}
+                          className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all"
+                          style={{ background: agentVersion === "v1" ? '#fff' : 'transparent', color: agentVersion === "v1" ? '#1d1d1f' : '#86868B', boxShadow: agentVersion === "v1" ? '0 1px 4px rgba(0,0,0,0.12)' : 'none', cursor: 'pointer' }}>
+                          V1 · GPT-5.5
+                        </button>
+                        <button type="button" onClick={() => setAgentVersion("v2")}
+                          className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all"
+                          style={{ background: agentVersion === "v2" ? 'linear-gradient(135deg,#4f46e5,#7c3aed)' : 'transparent', color: agentVersion === "v2" ? '#fff' : '#86868B', boxShadow: agentVersion === "v2" ? '0 1px 6px rgba(99,102,241,0.4)' : 'none', cursor: 'pointer' }}>
+                          ✦ V2 · Gemini Flash
+                        </button>
+                      </div>
+
                       <div className="flex flex-wrap gap-2">
                         <button type="button" onClick={() => setMultiPageEnabled(v => !v)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"

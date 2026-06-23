@@ -58,6 +58,7 @@ const NANO_BANANA_CREATE_URL = "https://api.kie.ai/api/v1/jobs/createTask";
 const NANO_BANANA_STATUS_URL = "https://api.kie.ai/api/v1/jobs/recordInfo";
 const KIE_LLM_URL = "https://api.kie.ai/codex/v1/responses";
 const KIE_LLM_MODEL = "gpt-5-5";
+const KIE_GEMINI_URL = "https://api1.kie.ai/gemini/v1/models/gemini-3-5-flash:streamGenerateContent";
 
 const AUTO_IMAGE_COST = 15;
 const MAX_AUTO_IMAGES = 6;
@@ -353,6 +354,57 @@ async function* kieGenerateStream(
       } else if (line === "") {
         eventType = "";
       }
+    }
+  }
+}
+
+async function* geminiGenerateStream(
+  messages: KieMessage[],
+  systemPrompt: string
+): AsyncGenerator<string> {
+  const contents: any[] = [];
+  for (const msg of messages) {
+    if (msg.role === "developer" || msg.role === "system") continue;
+    const role = msg.role === "assistant" ? "model" : "user";
+    const parts = msg.content.map((c: any) => {
+      if (c.type === "input_text") return { text: c.text };
+      if (c.type === "input_image") return { text: `[Image URL: ${c.image_url}]` };
+      return { text: "" };
+    }).filter((p: any) => p.text);
+    if (parts.length > 0) contents.push({ role, parts });
+  }
+  const resp = await fetch(KIE_GEMINI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
+    body: JSON.stringify({
+      stream: true,
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents,
+    }),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Gemini API error ${resp.status}: ${errText}`);
+  }
+  const reader = (resp.body as any).getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const dataStr = trimmed.startsWith("data: ") ? trimmed.slice(6) : trimmed;
+      if (!dataStr || dataStr === "[DONE]") continue;
+      try {
+        const parsed = JSON.parse(dataStr);
+        const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) yield text as string;
+      } catch {}
     }
   }
 }
@@ -886,7 +938,8 @@ export async function registerRoutes(
 
       const GENERATION_COST = 100;
 
-      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, imageUrls, videoUrls, modelUrls, audioUrls, leadForm } = req.body;
+      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, imageUrls, videoUrls, modelUrls, audioUrls, leadForm, agentVersion } = req.body;
+      const useGemini = agentVersion === "v2";
       const leadFormEnabled = leadForm !== false && leadForm !== "0" && leadForm !== 0;
       const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
         Array.isArray(images) && images.length > 0 ? images 
@@ -1303,13 +1356,16 @@ ${designAnalysis}
 
       conversationHistory.push({ role: "user", content: userContent });
 
-      console.log(`[KIE] kieGenerateStream call. Model: ${KIE_LLM_MODEL}, History messages: ${conversationHistory.length}, Edit mode: ${isEditMode}`);
+      console.log(`[KIE] Generate call. Agent: ${useGemini ? "v2/Gemini-Flash" : "v1/GPT-5.5"}, History: ${conversationHistory.length}, Edit: ${isEditMode}`);
 
       const MAX_RETRIES = 3;
       let lastError: any = null;
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         try {
-          for await (const chunk of kieGenerateStream(conversationHistory, systemContent, "high")) {
+          const streamGen = useGemini
+            ? geminiGenerateStream(conversationHistory, systemContent)
+            : kieGenerateStream(conversationHistory, systemContent, "high");
+          for await (const chunk of streamGen) {
             fullResponse += chunk;
             res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
           }

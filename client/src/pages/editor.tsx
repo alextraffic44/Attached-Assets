@@ -172,6 +172,10 @@ export default function EditorPage() {
   const [yandexMetrika, setYandexMetrika] = useState("");
   const [yandexWebmaster, setYandexWebmaster] = useState("");
   const [yandexSaving, setYandexSaving] = useState(false);
+  const [agentVersion, setAgentVersion] = useState<"v1" | "v2">(() => {
+    const p = new URLSearchParams(window.location.search);
+    return p.get("agent") === "v2" ? "v2" : "v1";
+  });
   const [faviconRawSrc, setFaviconRawSrc] = useState<string>("");
   const [faviconRawMime, setFaviconRawMime] = useState<string>("image/png");
   const [cropBox, setCropBox] = useState({ x: 0, y: 0, size: 100 });
@@ -444,6 +448,9 @@ export default function EditorPage() {
       }
       if (leadFormEnabled === false) {
         bodyData.leadForm = false;
+      }
+      if (agentVersion === "v2") {
+        bodyData.agentVersion = "v2";
       }
       const response = await fetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
@@ -1873,6 +1880,22 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 : <Globe className="w-4 h-4" />
             )}
           </button>
+
+          {/* Agent V1/V2 toggle */}
+          <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 border border-slate-200 shadow-sm" title="Версия агента">
+            <button
+              onClick={() => setAgentVersion("v1")}
+              data-testid="button-agent-v1"
+              className="flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold transition-all"
+              style={{ background: agentVersion === "v1" ? "#fff" : "transparent", color: agentVersion === "v1" ? "#1d1d1f" : "#94a3b8", boxShadow: agentVersion === "v1" ? "0 1px 3px rgba(0,0,0,0.12)" : "none" }}
+            >V1</button>
+            <button
+              onClick={() => setAgentVersion("v2")}
+              data-testid="button-agent-v2"
+              className="flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold transition-all"
+              style={{ background: agentVersion === "v2" ? "linear-gradient(135deg,#4f46e5,#7c3aed)" : "transparent", color: agentVersion === "v2" ? "#fff" : "#94a3b8", boxShadow: agentVersion === "v2" ? "0 1px 4px rgba(99,102,241,0.5)" : "none" }}
+            >V2</button>
+          </div>
 
           <button
             onClick={openYandexModal}

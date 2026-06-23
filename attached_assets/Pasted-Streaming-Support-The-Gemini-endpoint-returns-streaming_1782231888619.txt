@@ -1,0 +1,135 @@
+Streaming Support
+The Gemini endpoint returns streaming chunks from streamGenerateContent. Function calling responses appear in candidates[].content.parts[].functionCall.
+Streaming Response Format:
+Content-Type: text/event-stream or provider stream chunks
+Function calls are returned inside parts[].functionCall
+Thinking output may be reflected through thoughtSignature and usage metadata
+Features
+Standard chat with contents.
+Google Search grounding with googleSearch.
+Function calling with functionDeclarations.
+Thinking configuration with generationConfig.thinkingConfig.
+Request Notes
+Use contents as the primary conversation input.
+Use tools.googleSearch to enable Google Search grounding.
+Use tools.functionDeclarations to define callable functions.
+Use generationConfig.thinkingConfig to control thoughts output and thinking level.
+Authentication
+Use the auth configuration for X-Goog-Api-Key. Do not add it as a regular request parameter.
+Request
+Authorization
+Bearer Token
+Provide your bearer token in the Authorization header when making requests to protected resources.
+Example:
+Authorization: Bearer ********************
+Body Params
+application/json
+Required
+stream
+boolean 
+optional
+If set to true, the provider returns stream chunks.
+Default:
+true
+contents
+array [object] 
+required
+Conversation input for Gemini.
+>= 1 items
+role
+enum<string> 
+required
+Content role.
+Allowed values:
+user
+model
+Example:
+user
+parts
+array [oneOf] 
+required
+Content parts. Use text, inline_data, or provider-specific blocks.
+tools
+array [oneOf] 
+optional
+Optional Gemini tools. Supports googleSearch and functionDeclarations.
+One of:
+
+object
+
+object
+googleSearch
+object 
+optional
+Google Search grounding tool.
+generationConfig
+object 
+optional
+Generation configuration.
+thinkingConfig
+object 
+optional
+Thinking configuration.
+Examples
+Responses
+🟢200
+application/json
+Request successful.
+Bodyapplication/json
+candidates
+array [object] 
+optional
+Candidate results
+content
+object 
+optional
+finishReason
+string 
+optional
+Candidate finish reason
+Example:
+STOP
+modelVersion
+string 
+optional
+Returned model version
+Example:
+gemini-3-flash
+usageMetadata
+object 
+optional
+Token usage metadata
+candidatesTokenCount
+integer 
+optional
+Example:
+18
+thoughtsTokenCount
+integer 
+optional
+Example:
+55
+totalTokenCount
+integer 
+optional
+Example:
+325
+promptTokenCount
+integer 
+optional
+Example:
+252
+credits_consumed
+number 
+optional
+Credits consumed by the request
+Example:
+0.01
+responseId
+string 
+optional
+Unique response identifier
+Example:
+xRS0aZC5BNHVz7IPuaO42Qk
+🟠400
+🟠401
