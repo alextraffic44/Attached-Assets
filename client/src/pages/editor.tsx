@@ -50,6 +50,11 @@ import {
   Camera,
   Box,
   BarChart2,
+  ShieldCheck,
+  ShieldAlert,
+  CheckCircle,
+  AlertTriangle,
+  AlertCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -176,6 +181,11 @@ export default function EditorPage() {
     const p = new URLSearchParams(window.location.search);
     return p.get("agent") === "v2" ? "v2" : "v1";
   });
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditRunning, setAuditRunning] = useState(false);
+  const [auditChecks, setAuditChecks] = useState<Array<{id: string; name: string; status: "ok"|"missing"|"partial"; note: string}> | null>(null);
+  const [auditHasIssues, setAuditHasIssues] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const [faviconRawSrc, setFaviconRawSrc] = useState<string>("");
   const [faviconRawMime, setFaviconRawMime] = useState<string>("image/png");
   const [cropBox, setCropBox] = useState({ x: 0, y: 0, size: 100 });
@@ -856,6 +866,46 @@ export default function EditorPage() {
       }
     } catch {}
     setFaviconUploading(false);
+  };
+
+  const runLegalAudit = async () => {
+    if (!project) return;
+    setAuditOpen(true);
+    setAuditRunning(true);
+    setAuditChecks(null);
+    setAuditError(null);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/legal-audit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Ошибка аудита");
+      setAuditChecks(data.checks);
+      setAuditHasIssues(data.hasIssues);
+    } catch (e: any) {
+      setAuditError(e.message || "Не удалось выполнить аудит");
+    } finally {
+      setAuditRunning(false);
+    }
+  };
+
+  const applyLegalFixes = () => {
+    if (!auditChecks) return;
+    const missing = auditChecks.filter(c => c.status !== "ok");
+    const fixLines = missing.map(c => {
+      if (c.id === "cookie_consent") return "— Добавь фиксированный баннер согласия с куки внизу страницы с кнопкой «Принять» (при клике скрывается через localStorage)";
+      if (c.id === "privacy_policy") return "— Добавь в футер ссылку «Политика конфиденциальности» и создай отдельный модальный блок или раздел на странице с полным текстом политики (реквизиты оператора, цели обработки, срок хранения, права субъектов ПД)";
+      if (c.id === "form_consent") return "— В каждую форму сбора данных добавь чекбокс с текстом «Я соглашаюсь с <a href=\"#privacy\">политикой обработки персональных данных</a>» (обязательный для submit)";
+      if (c.id === "public_offer") return "— Добавь в футер ссылку «Публичная оферта» и создай раздел/модал с текстом оферты: предмет, цена, оплата, доставка, возврат, ответственность, срок действия";
+      if (c.id === "payment_terms") return "— Добавь явный раздел с условиями оплаты, доставки и возврата (или включи эти условия в оферту)";
+      if (c.id === "legal_contacts") return "— В футер добавь реквизиты: название организации / ИП, ИНН, ОГРН/ОГРНИП, юридический адрес, телефон, email";
+      return "";
+    }).filter(Boolean);
+    const fixPrompt = `Выполни юридический аудит-фикс сайта. Добавь следующие обязательные элементы:\n\n${fixLines.join("\n")}\n\nВсе добавления должны органично вписаться в дизайн сайта. Куки-баннер — стильный, с кнопкой «Принять». Политика и оферта — в модальных окнах по клику на ссылки в футере. Реквизиты в футере — в отдельном блоке. Не нарушай существующий дизайн.`;
+    setAuditOpen(false);
+    handleGenerate(fixPrompt, true);
   };
 
   const openYandexModal = () => {
@@ -1896,6 +1946,23 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               style={{ background: agentVersion === "v2" ? "linear-gradient(135deg,#4f46e5,#7c3aed)" : "transparent", color: agentVersion === "v2" ? "#fff" : "#94a3b8", boxShadow: agentVersion === "v2" ? "0 1px 4px rgba(99,102,241,0.5)" : "none" }}
             >V2</button>
           </div>
+
+          {/* Legal Audit button */}
+          <button
+            onClick={runLegalAudit}
+            disabled={!currentCode || auditRunning}
+            title="Юридический аудит сайта"
+            data-testid="button-legal-audit"
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-emerald-600 hover:border-emerald-200 transition-all duration-200 disabled:opacity-40"
+          >
+            {auditRunning
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : auditChecks && !auditHasIssues
+                ? <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                : auditChecks && auditHasIssues
+                  ? <ShieldAlert className="w-4 h-4 text-amber-500" />
+                  : <ShieldCheck className="w-4 h-4" />}
+          </button>
 
           <button
             onClick={openYandexModal}
@@ -3477,6 +3544,114 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   );
                 })}
               </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Legal Audit Modal */}
+      <Dialog open={auditOpen} onOpenChange={setAuditOpen}>
+        <DialogContent className="max-w-lg" style={{ borderRadius: 20 }}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <ShieldCheck className="w-5 h-5 text-emerald-500" />
+              Юридический аудит сайта
+            </DialogTitle>
+            <DialogDescription>
+              Проверка соответствия 152-ФЗ и требованиям российского законодательства
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3 py-1">
+            {auditRunning && (
+              <div className="flex flex-col items-center justify-center gap-3 py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+                <p className="text-sm text-slate-500">ИИ анализирует сайт...</p>
+              </div>
+            )}
+
+            {auditError && !auditRunning && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 text-red-700 text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {auditError}
+              </div>
+            )}
+
+            {auditChecks && !auditRunning && (
+              <>
+                {/* Summary badge */}
+                {(() => {
+                  const issues = auditChecks.filter(c => c.status !== "ok");
+                  const okCount = auditChecks.filter(c => c.status === "ok").length;
+                  return (
+                    <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold ${issues.length === 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                      {issues.length === 0
+                        ? <><CheckCircle className="w-4 h-4" /> Всё в порядке — {okCount} из {auditChecks.length} требований выполнено</>
+                        : <><ShieldAlert className="w-4 h-4" /> Найдено {issues.length} нарушени{issues.length === 1 ? "е" : issues.length < 5 ? "я" : "й"} из {auditChecks.length} проверок</>}
+                    </div>
+                  );
+                })()}
+
+                {/* Checklist */}
+                <div className="flex flex-col gap-1.5">
+                  {auditChecks.map(check => (
+                    <div key={check.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                      check.status === "ok" ? "border-emerald-100 bg-emerald-50/50" :
+                      check.status === "partial" ? "border-amber-100 bg-amber-50/50" :
+                      "border-red-100 bg-red-50/50"
+                    }`}>
+                      <div className="mt-0.5 flex-shrink-0">
+                        {check.status === "ok"
+                          ? <CheckCircle className="w-4 h-4 text-emerald-500" />
+                          : check.status === "partial"
+                            ? <AlertTriangle className="w-4 h-4 text-amber-500" />
+                            : <AlertCircle className="w-4 h-4 text-red-500" />}
+                      </div>
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className={`text-sm font-semibold leading-tight ${
+                          check.status === "ok" ? "text-emerald-800" :
+                          check.status === "partial" ? "text-amber-800" : "text-red-800"
+                        }`}>{check.name}</span>
+                        <span className="text-xs text-slate-500 leading-relaxed">{check.note}</span>
+                      </div>
+                      <span className={`ml-auto flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        check.status === "ok" ? "bg-emerald-100 text-emerald-700" :
+                        check.status === "partial" ? "bg-amber-100 text-amber-700" :
+                        "bg-red-100 text-red-700"
+                      }`}>
+                        {check.status === "ok" ? "OK" : check.status === "partial" ? "Неполн." : "Нет"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" onClick={() => setAuditOpen(false)} className="flex-1" style={{ borderRadius: 10 }}>
+                    Закрыть
+                  </Button>
+                  {auditHasIssues && (
+                    <Button
+                      onClick={applyLegalFixes}
+                      className="flex-1 font-semibold"
+                      style={{ borderRadius: 10, background: "linear-gradient(135deg,#10b981,#059669)", border: "none" }}
+                      data-testid="button-apply-legal-fixes"
+                    >
+                      <ShieldCheck className="w-4 h-4 mr-1.5" />
+                      Исправить всё
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={runLegalAudit}
+                    className="w-10 flex-shrink-0 px-0"
+                    style={{ borderRadius: 10 }}
+                    title="Повторить аудит"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </Button>
+                </div>
+              </>
             )}
           </div>
         </DialogContent>

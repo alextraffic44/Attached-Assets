@@ -2419,6 +2419,69 @@ ${designAnalysis}
     }
   });
 
+  app.post("/api/projects/:id/legal-audit", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
+    try {
+      const projectId = parseInt(req.params.id);
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
+
+      const html = (project.generatedCode || "").slice(0, 25000);
+      if (!html || html.length < 50) return res.status(400).json({ message: "Сайт ещё не создан" });
+
+      // Also grab secondary files for multi-page analysis
+      const extraFiles = await storage.getProjectFiles(projectId);
+      const extraHtml = extraFiles.map(f => f.code).join("\n").slice(0, 8000);
+      const fullHtml = html + (extraHtml ? "\n<!-- ADDITIONAL PAGES -->\n" + extraHtml : "");
+
+      const AUDIT_SYSTEM = `Ты эксперт по юридическому соответствию российских сайтов (152-ФЗ, ГК РФ). Отвечай ТОЛЬКО валидным JSON без markdown и без пояснений.`;
+
+      const AUDIT_PROMPT = `Проверь HTML сайта на 6 юридических требований. Верни ТОЛЬКО JSON:
+
+{
+  "checks": [
+    {"id":"cookie_consent","name":"Согласие с куки","status":"ok","note":"пояснение"},
+    {"id":"privacy_policy","name":"Политика конфиденциальности","status":"missing","note":"пояснение"},
+    {"id":"form_consent","name":"Флажок согласия в формах","status":"partial","note":"пояснение"},
+    {"id":"public_offer","name":"Публичная оферта","status":"missing","note":"пояснение"},
+    {"id":"payment_terms","name":"Условия оплаты / доставки / возврата","status":"missing","note":"пояснение"},
+    {"id":"legal_contacts","name":"Реквизиты организации (ИНН/ОГРН)","status":"missing","note":"пояснение"}
+  ],
+  "hasIssues": true
+}
+
+Статусы: "ok" = присутствует и корректен, "partial" = есть но неполный, "missing" = отсутствует.
+
+Критерии:
+- cookie_consent: баннер/уведомление о куки с кнопкой принятия (ищи слова куки/cookie, согласие, баннер с accept/принять)
+- privacy_policy: страница/раздел политики конфиденциальности с реквизитами оператора и описанием обработки ПД; ссылка в футере
+- form_consent: в каждой форме сбора данных (заявка/подписка) есть checkbox согласия с текстом и ссылкой на политику
+- public_offer: публичная оферта с условиями оплаты, доставки, возврата, ответственности
+- payment_terms: явные условия оплаты, доставки, возврата (в оферте или отдельном разделе)
+- legal_contacts: в футере/контактах — название организации, ИНН, ОГРН/ОГРНИП, адрес, телефон, email
+
+HTML:
+${fullHtml}`;
+
+      const rawResp = await kieGenerateSync(
+        [{ role: "user", content: [{ type: "input_text", text: AUDIT_PROMPT }] }],
+        AUDIT_SYSTEM
+      );
+
+      let result: any = null;
+      const jsonMatch = rawResp.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try { result = JSON.parse(jsonMatch[0]); } catch {}
+      }
+      if (!result?.checks) return res.status(500).json({ message: "Не удалось разобрать ответ ИИ" });
+
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message || "Ошибка аудита" });
+    }
+  });
+
   app.post("/api/projects/:id/yandex", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
     try {
