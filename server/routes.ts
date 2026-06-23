@@ -1044,6 +1044,8 @@ export async function registerRoutes(
           return `${slug}.html (${p})`;
         });
         systemContent += `\n\n═══ СТРУКТУРА САЙТА ═══\nСоздай МНОГОСТРАНИЧНЫЙ сайт. ОБЯЗАТЕЛЬНО сгенерируй ВСЕ перечисленные страницы:\n- index.html (главная)\n- ${fileNames.join("\n- ")}\nКаждая страница — полный отдельный HTML-документ. В навигации всех страниц должны быть ссылки на ВСЕ страницы. Используй формат --- FILE: имя.html --- для каждого файла.\n\n⚠️ HEADER/FOOTER: Сначала создай полный <header> и <footer> для index.html, затем СКОПИРУЙ ИХ ДОСЛОВНО во все остальные файлы. Все кнопки, ссылки и стили навбара и футера должны быть ИДЕНТИЧНЫ на каждой странице. Отличается только класс/стиль активной ссылки.\n═══ КОНЕЦ СТРУКТУРЫ ═══\n`;
+      } else {
+        systemContent += `\n\n⚠️ ОДНОСТРАНИЧНЫЙ РЕЖИМ: Создай ОДИН файл index.html. ЗАПРЕЩЕНО использовать маркеры --- FILE: --- или разбивать на несколько файлов. Весь сайт — один HTML-документ.`;
       }
       if (seoH1 && typeof seoH1 === "string" && seoH1.trim()) {
         const h2List = seoH2s && typeof seoH2s === "string"
@@ -1455,6 +1457,13 @@ ${designAnalysis}
         }
         return result;
       };
+
+      // If single-page mode but model still emitted FILE markers, strip them
+      // so they don't leak into the HTML or trigger multi-file parsing.
+      if (!multiPagesData && fullResponse.includes("--- FILE:")) {
+        fullResponse = fullResponse.replace(/---\s*FILE:\s*[^\s\-]+\.html\s*---\s*\n?/gi, "");
+        console.log("[PARSE] Stripped rogue FILE markers (single-page mode)");
+      }
 
       const hasDiffBlocks = fullResponse.includes("<<<<<<< SEARCH");
       const hasFileMarkers = fullResponse.includes("--- FILE:");
