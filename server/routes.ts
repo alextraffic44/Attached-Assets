@@ -121,13 +121,13 @@ async function generateGptImage(
         continue; // try full attempt again
       }
 
-      // --- Step 2: poll for result (up to 2 min per task) ---
+      // --- Step 2: poll for result (up to 3 min per task) ---
       const taskId = createBody.data.taskId;
-      const deadline = Date.now() + 120000;
+      const deadline = Date.now() + 180000;
       let taskFailed = false;
       while (Date.now() < deadline) {
         if (shouldStop()) return null;
-        await new Promise((r) => setTimeout(r, 4000));
+        await new Promise((r) => setTimeout(r, 3000));
         let statusBody: any = null;
         try {
           const statusResp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
@@ -218,8 +218,8 @@ async function resolveGenImgMarkers(
   let creditsUsed = 0;
   let outOfCredits = false;
   const total = planned.length;
-  // 8 minutes total budget for all images (including retries)
-  const phaseDeadline = Date.now() + 480000;
+  // 12 minutes total budget for all images (including retries)
+  const phaseDeadline = Date.now() + 720000;
 
   const finalize = () => {
     for (const [filename, code] of Array.from(filesMap.entries())) {
