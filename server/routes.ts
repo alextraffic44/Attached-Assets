@@ -71,37 +71,42 @@ async function generateGptImage(
   aspectRatio: string,
   shouldStop: () => boolean = () => false,
 ): Promise<string | null> {
-  const MAX_ATTEMPTS = 3;
-  const RETRY_DELAYS = [4000, 8000, 16000]; // backoff between attempts
+  const MAX_ATTEMPTS = 5;
+  const RETRY_DELAYS = [4000, 8000, 15000, 20000]; // backoff between attempts
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (shouldStop()) return null;
     if (attempt > 0) {
-      const delay = RETRY_DELAYS[attempt - 1] ?? 8000;
+      const delay = RETRY_DELAYS[attempt - 1] ?? 15000;
       console.log(`[GENIMG] retry attempt ${attempt + 1}/${MAX_ATTEMPTS}, waiting ${delay}ms...`);
       await new Promise((r) => setTimeout(r, delay));
       if (shouldStop()) return null;
     }
 
     try {
-      // --- Step 1: create task (retry create up to 2x on 5xx) ---
+      // --- Step 1: create task (retry create up to 3x on 5xx/network err) ---
       let createBody: any = null;
-      for (let cr = 0; cr < 2; cr++) {
-        if (cr > 0) await new Promise((r) => setTimeout(r, 3000));
-        const createResp = await fetch(NANO_BANANA_CREATE_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-          body: JSON.stringify({
-            model: "gpt-image-2-text-to-image",
-            input: { prompt, aspect_ratio: aspectRatio, resolution: "2K" },
-          }),
-        });
-        if (createResp.status >= 500 && cr < 1) {
-          console.warn(`[GENIMG] create HTTP ${createResp.status}, retrying create...`);
-          continue;
+      for (let cr = 0; cr < 3; cr++) {
+        if (cr > 0) await new Promise((r) => setTimeout(r, 4000));
+        try {
+          const createResp = await fetch(NANO_BANANA_CREATE_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
+            body: JSON.stringify({
+              model: "gpt-image-2-text-to-image",
+              input: { prompt, aspect_ratio: aspectRatio, resolution: "2K" },
+            }),
+          });
+          if (createResp.status >= 500 && cr < 2) {
+            console.warn(`[GENIMG] create HTTP ${createResp.status}, retrying create...`);
+            continue;
+          }
+          createBody = await createResp.json();
+          break;
+        } catch (netErr: any) {
+          console.warn(`[GENIMG] create network error (cr=${cr}):`, netErr?.message);
+          if (cr >= 2) break;
         }
-        createBody = await createResp.json();
-        break;
       }
 
       if (!createBody || createBody.code !== 200 || !createBody.data?.taskId) {
@@ -109,13 +114,13 @@ async function generateGptImage(
         continue; // try full attempt again
       }
 
-      // --- Step 2: poll for result ---
+      // --- Step 2: poll for result (up to 2 min per task) ---
       const taskId = createBody.data.taskId;
-      const deadline = Date.now() + 90000;
+      const deadline = Date.now() + 120000;
       let taskFailed = false;
       while (Date.now() < deadline) {
         if (shouldStop()) return null;
-        await new Promise((r) => setTimeout(r, 3000));
+        await new Promise((r) => setTimeout(r, 4000));
         let statusBody: any = null;
         try {
           const statusResp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
@@ -205,9 +210,9 @@ async function resolveGenImgMarkers(
   let generated = 0;
   let creditsUsed = 0;
   let outOfCredits = false;
-  let done = 0;
   const total = planned.length;
-  const phaseDeadline = Date.now() + 150000;
+  // 8 minutes total budget for all images (including retries)
+  const phaseDeadline = Date.now() + 480000;
 
   const finalize = () => {
     for (const [filename, code] of Array.from(filesMap.entries())) {
@@ -223,55 +228,80 @@ async function resolveGenImgMarkers(
 
   try { res.write(`data: ${JSON.stringify({ status: `Генерирую изображения (0/${total})...` })}\n\n`); } catch {}
 
-  let idx = 0;
-  const worker = async () => {
-    while (true) {
-      const myIdx = idx++;
-      if (myIdx >= planned.length) return;
-      const [raw, parsed] = planned[myIdx];
-      let resolvedUrl: string | null = null;
+  // Worker that processes an ordered list of (raw, parsed) entries
+  const runWorkerBatch = async (
+    batch: Array<[string, { prompt: string; ratio: string }]>,
+    passLabel: string,
+  ) => {
+    let idx = 0;
+    let done = 0;
+    const worker = async () => {
+      while (true) {
+        const myIdx = idx++;
+        if (myIdx >= batch.length) return;
+        const [raw, parsed] = batch[myIdx];
+        // Skip if already successfully resolved in a prior pass
+        if (urlMap.has(raw) && !urlMap.get(raw)!.startsWith("data:")) return;
+        let resolvedUrl: string | null = null;
 
-      if (!outOfCredits && !isAborted() && Date.now() < phaseDeadline) {
-        let billed = false;
-        let proceed = true;
-        if (userId) {
-          const ikey = `auto-img-${projectId}-${runKey}-${crypto.createHash("md5").update(raw).digest("hex").slice(0, 8)}`;
-          const ded = await storage.deductCredits(userId, AUTO_IMAGE_COST, "image", ikey);
-          if (!ded.success) {
-            outOfCredits = true; // stop NEW iterations from billing; in-flight billed work below still proceeds
-            proceed = false;
-          } else if (ded.alreadyProcessed) {
-            billed = false; // charged in a prior attempt of this same request — don't double-count or refund
-          } else {
-            billed = true;
+        if (!outOfCredits && !isAborted() && Date.now() < phaseDeadline) {
+          let billed = false;
+          let proceed = true;
+          if (userId) {
+            const ikey = `auto-img-${projectId}-${runKey}-${crypto.createHash("md5").update(raw).digest("hex").slice(0, 8)}`;
+            const ded = await storage.deductCredits(userId, AUTO_IMAGE_COST, "image", ikey);
+            if (!ded.success) {
+              outOfCredits = true;
+              proceed = false;
+            } else if (ded.alreadyProcessed) {
+              billed = false; // already charged in a prior attempt — safe to retry generation
+            } else {
+              billed = true;
+            }
+          }
+          if (proceed) {
+            const url = await generateGptImage(parsed.prompt, parsed.ratio, () => isAborted() || Date.now() >= phaseDeadline);
+            if (url) {
+              resolvedUrl = url;
+              generated++;
+              if (billed) creditsUsed += AUTO_IMAGE_COST;
+              try {
+                const proj = await storage.getProject(projectId);
+                const name = (parsed.prompt.trim().split(/\s+/).slice(0, 3).join("_").replace(/[^a-zA-Z0-9_а-яА-Я-]/g, "") || `img_${myIdx}`).slice(0, 40);
+                await storage.createProjectImage({ projectId, userId: proj?.userId, name, url, prompt: parsed.prompt.substring(0, 200) });
+              } catch (e) { /* library save is best-effort */ }
+            } else if (billed && userId) {
+              try { await storage.refundCredits(userId, AUTO_IMAGE_COST); } catch {}
+            }
           }
         }
-        // Once THIS worker has cleared the credit gate, it must generate (and
-        // refund on failure) regardless of another worker flipping outOfCredits —
-        // otherwise we could charge a credit yet write only a gradient fallback.
-        if (proceed) {
-          const url = await generateGptImage(parsed.prompt, parsed.ratio, () => isAborted() || Date.now() >= phaseDeadline);
-          if (url) {
-            resolvedUrl = url;
-            generated++;
-            if (billed) creditsUsed += AUTO_IMAGE_COST;
-            try {
-              const proj = await storage.getProject(projectId);
-              const name = (parsed.prompt.trim().split(/\s+/).slice(0, 3).join("_").replace(/[^a-zA-Z0-9_а-яА-Я-]/g, "") || `img_${myIdx}`).slice(0, 40);
-              await storage.createProjectImage({ projectId, userId: proj?.userId, name, url, prompt: parsed.prompt.substring(0, 200) });
-            } catch (e) { /* library save is best-effort */ }
-          } else if (billed && userId) {
-            try { await storage.refundCredits(userId, AUTO_IMAGE_COST); } catch {}
-          }
-        }
+
+        urlMap.set(raw, resolvedUrl ?? gradientPlaceholderDataUri(raw));
+        done++;
+        const successSoFar = Array.from(urlMap.values()).filter(v => !v.startsWith("data:")).length;
+        try { res.write(`data: ${JSON.stringify({ status: `${passLabel}: изображения (${successSoFar}/${total})...` })}\n\n`); } catch {}
       }
-
-      urlMap.set(raw, resolvedUrl ?? gradientPlaceholderDataUri(raw));
-      done++;
-      try { res.write(`data: ${JSON.stringify({ status: `Генерирую изображения (${done}/${total})...` })}\n\n`); } catch {}
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(3, batch.length) }, () => worker()));
   };
-  await Promise.all(Array.from({ length: Math.min(3, planned.length) }, () => worker()));
+
+  // Pass 1 — generate all images
+  await runWorkerBatch(planned, "Генерирую изображения");
+
+  // Pass 2 — retry any that failed (got a gradient placeholder), if time remains
+  if (!isAborted() && Date.now() < phaseDeadline) {
+    const failed = planned.filter(([raw]) => {
+      const v = urlMap.get(raw);
+      return !v || v.startsWith("data:"); // gradient SVG = failed
+    });
+    if (failed.length > 0) {
+      console.log(`[GENIMG] retry pass: ${failed.length} failed image(s) — retrying...`);
+      try { res.write(`data: ${JSON.stringify({ status: `Повторяю генерацию для ${failed.length} изображений...` })}\n\n`); } catch {}
+      // Clear failed entries so worker will retry them
+      for (const [raw] of failed) urlMap.delete(raw);
+      await runWorkerBatch(failed, "Повтор изображений");
+    }
+  }
 
   finalize();
   return { generated, creditsUsed };
