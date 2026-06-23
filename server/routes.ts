@@ -2104,14 +2104,6 @@ ${designAnalysis}
       const user = await storage.getUser((req.user as any).id);
       if (!user) return res.status(401).json({ message: "Пользователь не найден" });
 
-      const maxPublished = PLAN_PUBLISH_LIMITS[user.plan] ?? 1;
-      const currentPublished = await storage.getPublishedProjectsCount(user.id);
-      const isRepublish = project.publishStatus === "published";
-      if (!isRepublish && currentPublished >= maxPublished) {
-        return res.status(403).json({
-          message: `Ваш тариф «${user.plan === "bronze" ? "Старт" : user.plan === "silver" ? "Базовый" : user.plan === "gold" ? "Профи" : "Ультра"}» позволяет опубликовать до ${maxPublished} сайт(ов). Обновите тариф для публикации большего количества сайтов.`
-        });
-      }
 
       if (user.credits < DAILY_PUBLISH_COST) {
         return res.status(403).json({ message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 20 токенов/сайт." });
