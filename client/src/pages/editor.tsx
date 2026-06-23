@@ -49,6 +49,7 @@ import {
   Globe,
   Camera,
   Box,
+  BarChart2,
 } from "lucide-react";
 import {
   Dialog,
@@ -167,6 +168,10 @@ export default function EditorPage() {
   const [faviconUploading, setFaviconUploading] = useState(false);
   const faviconInputRef = useRef<HTMLInputElement>(null);
   const [faviconCropOpen, setFaviconCropOpen] = useState(false);
+  const [yandexOpen, setYandexOpen] = useState(false);
+  const [yandexMetrika, setYandexMetrika] = useState("");
+  const [yandexWebmaster, setYandexWebmaster] = useState("");
+  const [yandexSaving, setYandexSaving] = useState(false);
   const [faviconRawSrc, setFaviconRawSrc] = useState<string>("");
   const [faviconRawMime, setFaviconRawMime] = useState<string>("image/png");
   const [cropBox, setCropBox] = useState({ x: 0, y: 0, size: 100 });
@@ -844,6 +849,45 @@ export default function EditorPage() {
       }
     } catch {}
     setFaviconUploading(false);
+  };
+
+  const openYandexModal = () => {
+    const code = currentCode || "";
+    const metrikaMatch = code.match(/ym\((\d+),\s*['"]init['"]/);
+    setYandexMetrika(metrikaMatch ? metrikaMatch[1] : "");
+    const wmMatch = code.match(/<meta[^>]+name=["']yandex-verification["'][^>]+content=["']([^"']+)["'][^>]*\/?>/i)
+      || code.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']yandex-verification["'][^>]*\/?>/i);
+    setYandexWebmaster(wmMatch ? wmMatch[1] : "");
+    setYandexOpen(true);
+  };
+
+  const saveYandex = async () => {
+    if (!project) return;
+    setYandexSaving(true);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/yandex`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ metrika: yandexMetrika, webmaster: yandexWebmaster }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.code && iframeRef.current) {
+          const blob = new Blob([data.code], { type: "text/html" });
+          iframeRef.current.src = URL.createObjectURL(blob);
+        }
+        await queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+        setYandexOpen(false);
+        toast({ title: "Сохранено!", description: "Яндекс.Метрика и метатег вебмастера обновлены" });
+      } else {
+        const err = await res.json();
+        toast({ title: "Ошибка", description: err.message || "Не удалось сохранить", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Ошибка сети", variant: "destructive" });
+    }
+    setYandexSaving(false);
   };
 
   const onCropMouseDown = (e: React.MouseEvent, mode: "move" | "resize") => {
@@ -1828,6 +1872,18 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 ? <Globe className="w-4 h-4 text-primary" />
                 : <Globe className="w-4 h-4" />
             )}
+          </button>
+
+          <button
+            onClick={openYandexModal}
+            disabled={!currentCode}
+            title="Яндекс.Метрика и Вебмастер"
+            data-testid="button-yandex-settings"
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-red-500 hover:border-red-200 transition-all duration-200 disabled:opacity-40"
+          >
+            {(currentCode?.includes("mc.yandex.ru/metrika") || currentCode?.includes('name="yandex-verification"'))
+              ? <BarChart2 className="w-4 h-4 text-red-500" />
+              : <BarChart2 className="w-4 h-4" />}
           </button>
 
           <button
@@ -3396,6 +3452,82 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 })}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Yandex Metrika & Webmaster Modal */}
+      <Dialog open={yandexOpen} onOpenChange={setYandexOpen}>
+        <DialogContent className="max-w-lg" style={{ borderRadius: 20 }}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <BarChart2 className="w-5 h-5 text-red-500" />
+              Яндекс-интеграции
+            </DialogTitle>
+            <DialogDescription>
+              Вставьте код или номер счётчика — он будет автоматически добавлен в правильное место сайта
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-5 py-2">
+            {/* Metrika */}
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-100 text-red-600 text-xs font-bold">М</span>
+                Яндекс.Метрика
+              </label>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Вставьте только <strong>номер счётчика</strong> (например: <code className="bg-slate-100 px-1 rounded">110093984</code>) или полный код <code className="bg-slate-100 px-1 rounded">&lt;script&gt;...&lt;/script&gt;</code> из интерфейса Метрики
+              </p>
+              <Textarea
+                value={yandexMetrika}
+                onChange={e => setYandexMetrika(e.target.value)}
+                placeholder={"110093984\n\nили вставьте полный скрипт Яндекс.Метрики"}
+                rows={4}
+                className="font-mono text-xs resize-none"
+                data-testid="input-yandex-metrika"
+              />
+            </div>
+
+            {/* Webmaster */}
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-yellow-100 text-yellow-700 text-xs font-bold">В</span>
+                Яндекс.Вебмастер — подтверждение прав
+              </label>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Скопируйте метатег из Яндекс.Вебмастера (раздел «Подтверждение прав → HTML-файл / Метатег») и вставьте сюда
+              </p>
+              <Textarea
+                value={yandexWebmaster}
+                onChange={e => setYandexWebmaster(e.target.value)}
+                placeholder={'<meta name="yandex-verification" content="df43d5ca01a446cc" />\n\nили просто значение content: df43d5ca01a446cc'}
+                rows={3}
+                className="font-mono text-xs resize-none"
+                data-testid="input-yandex-webmaster"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setYandexOpen(false)}
+                className="flex-1"
+                style={{ borderRadius: 10 }}
+              >
+                Отмена
+              </Button>
+              <Button
+                onClick={saveYandex}
+                disabled={yandexSaving || (!yandexMetrika.trim() && !yandexWebmaster.trim())}
+                className="flex-1"
+                style={{ borderRadius: 10, background: "linear-gradient(135deg,#f43f5e,#dc2626)", border: "none" }}
+                data-testid="button-save-yandex"
+              >
+                {yandexSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                Сохранить и применить
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

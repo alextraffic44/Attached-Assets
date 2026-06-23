@@ -2283,6 +2283,69 @@ ${designAnalysis}
     }
   });
 
+  app.post("/api/projects/:id/yandex", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
+    try {
+      const projectId = parseInt(req.params.id);
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ message: "Проект не найден" });
+      if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
+
+      const { metrika, webmaster } = req.body;
+
+      let metrikaBlock = "";
+      if (metrika && metrika.trim()) {
+        const trimmed = metrika.trim();
+        if (/^\d+$/.test(trimmed)) {
+          metrikaBlock = `<!-- Yandex.Metrika counter -->\n<script type="text/javascript">\n  (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};\n  m[i].l=1*new Date();\n  for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}\n  k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)\n  })(window, document, 'script', 'https://mc.yandex.ru/metrika/tag.js', 'ym');\n  ym(${trimmed}, 'init', {\n    clickmap: true,\n    trackLinks: true,\n    accurateTrackBounce: true,\n    webvisor: true\n  });\n</script>\n<noscript><div><img src="https://mc.yandex.ru/watch/${trimmed}" style="position:absolute; left:-9999px;" alt="" /></div></noscript>\n<!-- /Yandex.Metrika counter -->`;
+        } else {
+          metrikaBlock = trimmed.replace(/\bssr\s*:\s*(true|false)\s*,?\s*/g, "").replace(/,(\s*})/g, "$1");
+        }
+      }
+
+      let webmasterMeta = "";
+      if (webmaster && webmaster.trim()) {
+        const trimmed = webmaster.trim();
+        if (trimmed.startsWith("<")) {
+          webmasterMeta = trimmed;
+        } else {
+          webmasterMeta = `<meta name="yandex-verification" content="${trimmed}" />`;
+        }
+      }
+
+      const injectYandex = (html: string): string => {
+        let result = html;
+        result = result.replace(/<!-- Yandex\.Metrika counter -->[\s\S]*?<!-- \/Yandex\.Metrika counter -->/gi, "");
+        result = result.replace(/<script[^>]*>[\s\S]*?mc\.yandex\.ru\/metrika[\s\S]*?<\/script>/gi, "");
+        result = result.replace(/<noscript[^>]*>[\s\S]*?mc\.yandex\.ru\/watch[\s\S]*?<\/noscript>/gi, "");
+        result = result.replace(/<meta[^>]+name=["']yandex-verification["'][^>]*\/?>/gi, "");
+        const toInject = [webmasterMeta, metrikaBlock].filter(Boolean).join("\n");
+        if (toInject) {
+          if (result.includes("</head>")) {
+            result = result.replace("</head>", `${toInject}\n</head>`);
+          } else {
+            result = toInject + "\n" + result;
+          }
+        }
+        return result;
+      };
+
+      const updatedCode = injectYandex(project.generatedCode);
+      await storage.updateProject(projectId, { generatedCode: updatedCode });
+
+      const files = await storage.getProjectFiles(projectId);
+      for (const f of files) {
+        if (f.filename.endsWith(".html")) {
+          await storage.upsertProjectFile({ projectId, filename: f.filename, code: injectYandex(f.code) });
+        }
+      }
+
+      res.json({ success: true, code: updatedCode });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Ошибка сохранения" });
+    }
+  });
+
   app.post("/api/projects/:id/domain", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Не авторизован" });
     try {
