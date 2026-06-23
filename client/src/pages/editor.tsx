@@ -186,6 +186,7 @@ export default function EditorPage() {
   const [auditChecks, setAuditChecks] = useState<Array<{id: string; name: string; status: "ok"|"missing"|"partial"; note: string}> | null>(null);
   const [auditHasIssues, setAuditHasIssues] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditOrgDetails, setAuditOrgDetails] = useState("");
   const [faviconRawSrc, setFaviconRawSrc] = useState<string>("");
   const [faviconRawMime, setFaviconRawMime] = useState<string>("image/png");
   const [cropBox, setCropBox] = useState({ x: 0, y: 0, size: 100 });
@@ -900,7 +901,12 @@ export default function EditorPage() {
       if (c.id === "form_consent") return "— В каждую форму сбора данных добавь чекбокс с текстом «Я соглашаюсь с <a href=\"#privacy\">политикой обработки персональных данных</a>» (обязательный для submit)";
       if (c.id === "public_offer") return "— Добавь в футер ссылку «Публичная оферта» и создай раздел/модал с текстом оферты: предмет, цена, оплата, доставка, возврат, ответственность, срок действия";
       if (c.id === "payment_terms") return "— Добавь явный раздел с условиями оплаты, доставки и возврата (или включи эти условия в оферту)";
-      if (c.id === "legal_contacts") return "— В футер добавь реквизиты: название организации / ИП, ИНН, ОГРН/ОГРНИП, юридический адрес, телефон, email";
+      if (c.id === "legal_contacts") {
+        const details = auditOrgDetails.trim();
+        return details
+          ? `— В футер добавь реквизиты организации. Используй ТОЧНО следующие данные: ${details}`
+          : "— В футер добавь реквизиты: название организации / ИП, ИНН, ОГРН/ОГРНИП, юридический адрес, телефон, email";
+      }
       return "";
     }).filter(Boolean);
     const fixPrompt = `Выполни юридический аудит-фикс сайта. Добавь следующие обязательные элементы:\n\n${fixLines.join("\n")}\n\nВсе добавления должны органично вписаться в дизайн сайта. Куки-баннер — стильный, с кнопкой «Принять». Политика и оферта — в модальных окнах по клику на ссылки в футере. Реквизиты в футере — в отдельном блоке. Не нарушай существующий дизайн.`;
@@ -3623,6 +3629,21 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       </span>
                     </div>
                   ))}
+                </div>
+
+                {/* Org details input */}
+                <div className="flex flex-col gap-1.5 pt-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Реквизиты организации <span className="font-normal text-slate-400">(для «Исправить всё»)</span>
+                  </label>
+                  <textarea
+                    value={auditOrgDetails}
+                    onChange={e => setAuditOrgDetails(e.target.value)}
+                    placeholder={"ООО «Ромашка», ИНН 7701234567, ОГРН 1027700132195\nАдрес: 125009, г. Москва, ул. Тверская, д. 1\nТел.: +7 (495) 000-00-00, email: info@romashka.ru"}
+                    rows={3}
+                    data-testid="input-org-details"
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 resize-none transition-all"
+                  />
                 </div>
 
                 {/* Action buttons */}
