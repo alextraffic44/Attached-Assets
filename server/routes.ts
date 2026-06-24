@@ -417,13 +417,27 @@ function injectLoadingOverlay(html: string): string {
 function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>): string {
   const first = texts[0] || { title: "", sub: "" };
   const tid = "pnd" + Math.random().toString(36).slice(2, 8);
-  return `<section data-scroll-anim-pending="1" style="position:relative;height:100vh;min-height:600px;background:linear-gradient(135deg,#0a0a0a 0%,#1a1a2e 50%,#0a0a0a 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;">
-<style>@keyframes ${tid}-spin{to{transform:rotate(360deg)}}@keyframes ${tid}-pulse{0%,100%{opacity:.35}50%{opacity:1}}</style>
-<div style="text-align:center;color:#fff;z-index:2;padding:40px;">
-  ${first.title ? `<h2 style="font-size:clamp(1.8rem,5vw,3.5rem);font-weight:800;margin:0 0 .4em;opacity:.9;letter-spacing:-0.03em;">${csaEsc(first.title)}</h2>` : ""}
-  ${first.sub ? `<p style="font-size:clamp(1rem,2vw,1.3rem);color:rgba(255,255,255,.6);margin:0 0 2rem;max-width:600px;">${csaEsc(first.sub)}</p>` : ""}
-  <div style="width:48px;height:48px;border:3px solid rgba(255,255,255,.12);border-top-color:rgba(255,255,255,.8);border-radius:50%;margin:0 auto 1.2rem;animation:${tid}-spin 1s linear infinite;"></div>
-  <p style="font-size:.8rem;color:rgba(255,255,255,.35);letter-spacing:.1em;text-transform:uppercase;animation:${tid}-pulse 2s ease-in-out infinite;">Видеоанимация генерируется...</p>
+  return `<section data-scroll-anim-pending="1" style="position:relative;height:100vh;min-height:600px;background:linear-gradient(135deg,#0a0a0a 0%,#16213e 50%,#0a0a0a 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+<style>
+@keyframes ${tid}-spin{to{transform:rotate(360deg)}}
+@keyframes ${tid}-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes ${tid}-bar{0%{width:0%}100%{width:85%}}
+@keyframes ${tid}-fade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+</style>
+<div style="text-align:center;color:#fff;z-index:2;padding:40px;max-width:560px;animation:${tid}-fade .6s ease both;">
+  ${first.title ? `<div style="font-size:clamp(1.6rem,4vw,2.8rem);font-weight:800;margin:0 0 .3em;opacity:.9;letter-spacing:-0.02em;line-height:1.1;">${csaEsc(first.title)}</div>` : ""}
+  ${first.sub ? `<div style="font-size:clamp(.95rem,2vw,1.15rem);color:rgba(255,255,255,.5);margin:0 0 2.5rem;line-height:1.5;">${csaEsc(first.sub)}</div>` : ""}
+  <div style="display:inline-flex;align-items:center;gap:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:18px 28px;margin-bottom:1.5rem;">
+    <div style="width:36px;height:36px;border:2.5px solid rgba(255,255,255,.1);border-top-color:#a78bfa;border-radius:50%;flex-shrink:0;animation:${tid}-spin .9s linear infinite;"></div>
+    <div style="text-align:left;">
+      <div style="font-size:.95rem;font-weight:600;color:#fff;margin-bottom:2px;">🎬 Генерация видеоанимации</div>
+      <div style="font-size:.8rem;color:rgba(255,255,255,.5);">Обычно занимает 2–10 минут</div>
+    </div>
+  </div>
+  <div style="width:220px;height:3px;background:rgba(255,255,255,.08);border-radius:99px;margin:0 auto 1.5rem;overflow:hidden;">
+    <div style="height:100%;background:linear-gradient(90deg,#a78bfa,#60a5fa);border-radius:99px;animation:${tid}-bar 9s cubic-bezier(.4,0,.2,1) forwards;"></div>
+  </div>
+  <div style="font-size:.78rem;color:rgba(255,255,255,.3);line-height:1.6;animation:${tid}-pulse 2.5s ease-in-out infinite;">Страница обновится автоматически.<br>Остальные секции сайта уже готовы — прокрутите вниз ↓</div>
 </div>
 </section>`;
 }

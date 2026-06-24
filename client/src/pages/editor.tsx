@@ -569,7 +569,7 @@ export default function EditorPage() {
             }
             // Animation is still rendering in the background — poll until it's ready
             if (data.animPending) {
-              toast({ title: "🎬 Видеоанимация генерируется", description: "Сайт уже готов. Анимация встроится автоматически через 10–35 минут." });
+              toast({ title: "🎬 Видеоанимация генерируется", description: "Идёт создание видео (~2–10 мин). Сайт уже готов — прокрутите вниз. Превью обновится автоматически." });
               if (animPollRef.current) clearInterval(animPollRef.current);
               const pollStart = Date.now();
               const POLL_INTERVAL = 15000;
