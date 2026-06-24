@@ -1996,6 +1996,44 @@ ${designAnalysis}
       console.log("Total response length:", fullResponse.length);
       console.log("Response preview:", fullResponse.substring(0, 200));
 
+      // Gemini Flash via KIE sometimes returns shell-command JSON lines:
+      //   {"cmd":"cat > index.html <<'EOF'\n...HTML...\nEOF","workdir":""}  {"end":""}
+      // Strip these so they don't bleed into the preview.
+      if (fullResponse.includes('"cmd"') && fullResponse.includes('"workdir"')) {
+        console.log("[PARSE] Detected Gemini shell-command JSON format — sanitizing");
+        // 1) Try to extract HTML from heredoc patterns inside cmd values
+        // Matches: cat > *.html <<'EOF'\n(content)\nEOF
+        const heredocRegex = /cat\s*>\s*[\w.-]+\.html\s*<<['"]?EOF['"]?\n([\s\S]*?)\nEOF/g;
+        const extractedFiles: string[] = [];
+        let hm;
+        while ((hm = heredocRegex.exec(fullResponse)) !== null) {
+          const content = hm[1].trim();
+          if (content.includes("<") && content.length > 100) {
+            extractedFiles.push(content);
+          }
+        }
+        if (extractedFiles.length > 0) {
+          // Re-assemble as ```html blocks so the existing parser picks them up
+          fullResponse = extractedFiles.map(c => "```html\n" + c + "\n```").join("\n");
+          console.log("[PARSE] Extracted", extractedFiles.length, "file(s) from heredoc");
+        } else {
+          // 2) Fallback: strip all JSON cmd/workdir/end lines, keep the rest
+          fullResponse = fullResponse
+            .split("\n")
+            .filter(line => {
+              const t = line.trim();
+              if (!t.startsWith("{")) return true;
+              try {
+                const obj = JSON.parse(t);
+                if ("cmd" in obj || "workdir" in obj || "end" in obj) return false;
+              } catch {}
+              return true;
+            })
+            .join("\n");
+          console.log("[PARSE] Stripped JSON command lines, remaining length:", fullResponse.length);
+        }
+      }
+
       const replaceImgMarkers = (code: string) => {
         const imgMarkerRegex = /\{\{IMG:([^}]+)\}\}/g;
         let m;
