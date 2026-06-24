@@ -166,8 +166,8 @@ async function generateStillForVideo(
 // Regenerate an uploaded product photo onto a CLEAN SOLID (monochrome) background
 // with the product positioned for the chosen layout (right for "split", centered for
 // "parallax"), then return the raw KIE CDN URL so Kling can use it as the video source.
-// gpt-image-2 is text-to-image only and can't take a reference image, so the product
-// is preserved via Nano Banana 2 (image-to-image with image_url).
+// Uses gpt-image-2-image-to-image (KIE) with input_urls so the model EDITS the user's
+// actual product photo (preserving the real product) rather than inventing a new one.
 async function generateProductStill(
   productImageUrl: string,
   layout: "parallax" | "split",
@@ -183,7 +183,7 @@ async function generateProductStill(
     `COMPLETELY SOLID, FLAT, UNIFORM single-color studio background — one plain matte color filling the whole frame, ` +
     `absolutely no gradient, no pattern, no texture, no scenery, no props, no visible surface or horizon line. ` +
     `${placement} Soft even studio lighting, a subtle realistic contact shadow under the product, photorealistic, ` +
-    `ultra-high detail, 16:9 aspect ratio, no text, no watermark.`;
+    `ultra-high detail, 16:9 aspect ratio. Keep the product's own label and text exactly intact; add no extra text, captions or watermark.`;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (shouldStop()) return null;
     if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
@@ -192,7 +192,7 @@ async function generateProductStill(
       const resp = await fetch(NANO_BANANA_CREATE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({ model: "nano-banana-2", input: { prompt, image_url: [productImageUrl], aspect_ratio: "16:9", resolution: "2K" } }),
+        body: JSON.stringify({ model: "gpt-image-2-image-to-image", input: { prompt, input_urls: [productImageUrl], aspect_ratio: "16:9", resolution: "2K" } }),
       });
       const body: any = await resp.json().catch(() => null);
       if (body?.code === 200 && body?.data?.taskId) taskId = body.data.taskId;

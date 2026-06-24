@@ -42,8 +42,10 @@ generation, storage, deployability, cap, billing, and fallback.
   photo straight to the Kling image-to-video model — the busy original background leaks into
   the video. First regenerate the product onto a COMPLETELY SOLID single-color background
   (product on the RIGHT for "split" layout, centered for "parallax") and use that still as
-  Kling's source. Reference-image regeneration must use `nano-banana-2` (`input.image_url`
-  array); `gpt-image-2-text-to-image` is text-to-image only and silently ignores references.
+  Kling's source. Reference-image regeneration must use `gpt-image-2-image-to-image`
+  (`input.input_urls` array) — the dedicated KIE image-to-image model. NOTE: `nano-banana-2`
+  with `image_url` and `gpt-image-2-text-to-image` both IGNORE the reference for this and
+  invent a random product (a hair-wax photo came back as a gin bottle), so never use them here.
   On regen failure, leave the reference still undefined so the pipeline falls back to a
   text-to-image still — which still yields a solid background (the hard requirement).
   **Why:** users explicitly require a monochrome video background regardless of their photo.
