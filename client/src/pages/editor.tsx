@@ -589,6 +589,11 @@ export default function EditorPage() {
                     clearInterval(animPollRef.current!);
                     animPollRef.current = null;
                     setStreamedCode(code);
+                    // Force iframe reload — srcDoc is ignored when src blob-URL is still set
+                    if (iframeRef.current) {
+                      const blob = new Blob([code], { type: "text/html" });
+                      iframeRef.current.src = URL.createObjectURL(blob);
+                    }
                     queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
                     toast({ title: "✅ Видеоанимация готова!", description: "Превью обновлено." });
                   }
