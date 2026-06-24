@@ -335,6 +335,85 @@ async function generateScrollFrames(
 }
 
 // Static, non-animated fallback so a page never ships a broken {{SCROLLANIM}} marker.
+// Injects a branded SVG loading overlay that fades out once all resources are
+// loaded. Content stays in the DOM (SEO-safe); overlay is a fixed layer on top.
+function injectLoadingOverlay(html: string): string {
+  // Only inject into full HTML documents
+  if (!html.includes('<body') || !html.includes('</body>')) return html;
+  // Skip if already injected
+  if (html.includes('__craft_loader__')) return html;
+
+  // Extract page title for branded feel
+  const titleM = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const siteTitle = titleM ? titleM[1].replace(/<[^>]+>/g, '').trim().slice(0, 50) : '';
+
+  const loaderHtml = `
+<!-- SEO-safe page-load overlay: content is in DOM, this fixed overlay sits on top -->
+<style id="__craft_loader_style__">
+#__craft_loader__{position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity .55s cubic-bezier(.4,0,.2,1),visibility .55s;background:#fff;}
+#__craft_loader__.hide{opacity:0;visibility:hidden;pointer-events:none;}
+#__craft_loader__ svg{overflow:visible;}
+#__craft_loader__ .ldr-title{font-family:system-ui,-apple-system,sans-serif;font-size:13px;letter-spacing:.08em;opacity:.45;color:inherit;user-select:none;}
+</style>
+<div id="__craft_loader__" role="progressbar" aria-label="Загрузка страницы" aria-hidden="true">
+  <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Outer track -->
+    <circle cx="36" cy="36" r="30" stroke="var(--ldr,#6366f1)" stroke-opacity=".12" stroke-width="3.5"/>
+    <!-- Outer arc — CW -->
+    <path d="M36 6 A30 30 0 0 1 62.39 51" stroke="var(--ldr,#6366f1)" stroke-width="3.5" stroke-linecap="round" opacity=".9">
+      <animateTransform attributeName="transform" type="rotate" from="0 36 36" to="360 36 36" dur="1.15s" repeatCount="indefinite"/>
+    </path>
+    <!-- Middle track -->
+    <circle cx="36" cy="36" r="18" stroke="var(--ldr,#6366f1)" stroke-opacity=".08" stroke-width="3"/>
+    <!-- Middle arc — CCW -->
+    <path d="M36 18 A18 18 0 0 0 54 36" stroke="var(--ldr,#6366f1)" stroke-width="3" stroke-linecap="round" opacity=".6">
+      <animateTransform attributeName="transform" type="rotate" from="0 36 36" to="-360 36 36" dur="0.85s" repeatCount="indefinite"/>
+    </path>
+    <!-- Centre dot -->
+    <circle cx="36" cy="36" r="4.5" fill="var(--ldr,#6366f1)" opacity=".85">
+      <animate attributeName="r" values="3.5;6;3.5" dur="1.4s" repeatCount="indefinite" calcMode="spline" keySplines=".4 0 .6 1;.4 0 .6 1"/>
+      <animate attributeName="opacity" values=".55;1;.55" dur="1.4s" repeatCount="indefinite"/>
+    </circle>
+  </svg>
+  ${siteTitle ? `<span class="ldr-title">${siteTitle.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>` : ''}
+</div>
+<script id="__craft_loader_script__">(function(){
+  var el=document.getElementById('__craft_loader__');
+  if(!el)return;
+  // Adapt overlay background + spinner color to the site's palette at runtime
+  function adapt(){
+    try{
+      var rs=getComputedStyle(document.documentElement);
+      var bs=getComputedStyle(document.body);
+      // Try common CSS variable names for primary/accent color
+      var cc=['--primary','--color-primary','--accent','--brand','--brand-color','--main-color','--theme-color'];
+      var ldrColor='';
+      for(var i=0;i<cc.length;i++){var v=rs.getPropertyValue(cc[i]).trim();if(v&&v.length>2){ldrColor=v;break;}}
+      if(ldrColor)el.style.setProperty('--ldr',ldrColor);
+      // Match overlay bg to body background
+      var bg=bs.backgroundColor;
+      if(bg&&bg!=='rgba(0, 0, 0, 0)'&&bg!=='transparent'){
+        el.style.background=bg;
+        // Pick contrasting text/spinner color if bg is dark
+        var rgb=bg.match(/\\d+/g);
+        if(rgb&&rgb.length>=3){
+          var lum=(parseInt(rgb[0])*299+parseInt(rgb[1])*587+parseInt(rgb[2])*114)/1000;
+          var titleEl=el.querySelector('.ldr-title');
+          if(lum<80){if(!ldrColor)el.style.setProperty('--ldr','rgba(255,255,255,.85)');if(titleEl)(titleEl as HTMLElement).style.color='rgba(255,255,255,.5)';}
+        }
+      }
+    }catch(e){}
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',adapt);}else{adapt();}
+  // Hide on window.load; fallback at 9 s
+  function hide(){el.classList.add('hide');setTimeout(function(){if(el.parentNode)el.parentNode.removeChild(el);var s=document.getElementById('__craft_loader_style__'),sc=document.getElementById('__craft_loader_script__');if(s)s.remove();if(sc)sc.remove();},650);}
+  window.addEventListener('load',hide);
+  setTimeout(hide,9000);
+})();</script>`;
+
+  return html.replace(/<\/body>/i, loaderHtml + '\n</body>');
+}
+
 function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>): string {
   const first = texts[0] || { title: "", sub: "" };
   const tid = "pnd" + Math.random().toString(36).slice(2, 8);
@@ -2265,6 +2344,11 @@ ${designAnalysis}
         });
       }
 
+      // Inject loading overlay into all interactive-mode sites (and any new site with video/images)
+      if (interactiveMode || hasScrollMarkers) {
+        immediateHtml = injectLoadingOverlay(immediateHtml);
+      }
+
       await storage.updateProject(project.id, { generatedCode: immediateHtml });
       await storage.createProjectMessage({
         projectId: project.id,
@@ -2293,7 +2377,9 @@ ${designAnalysis}
           try {
             console.log(`[BG ANIM] Starting for project ${project.id}`);
             const scrollResult = await resolveScrollAnimMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl, interactiveStyle);
-            const animatedCode = bgFilesMap.get("index.html") ?? immediateHtml;
+            let animatedCode = bgFilesMap.get("index.html") ?? immediateHtml;
+            // Re-inject the loading overlay into the now-animated version
+            animatedCode = injectLoadingOverlay(animatedCode);
             await storage.updateProject(project.id, { generatedCode: animatedCode });
             for (const f of secondaryForGen) {
               if (f.filename === "index.html") continue;
