@@ -402,6 +402,10 @@ export default function EditorPage() {
     }
 
     setIsGenerating(true);
+    // Start each generation fresh: drop any stale blob `src` (it would otherwise
+    // override `srcDoc` and freeze the preview) and cancel a leftover anim poll.
+    if (iframeRef.current) iframeRef.current.removeAttribute("src");
+    if (animPollRef.current) { clearInterval(animPollRef.current); animPollRef.current = null; }
     setStreamingReply("");
     setStreamedCode("");
     setPrompt("");
@@ -440,6 +444,7 @@ export default function EditorPage() {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, 100);
 
+    let waitingForAnim = false;
     try {
       const isMockupActive = injectedImages ? true : mockupMode;
       const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance, mockupMode: isMockupActive && images.length > 0 };
@@ -567,17 +572,40 @@ export default function EditorPage() {
             if (data.newBalance !== undefined) {
               queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
             }
-            // Animation is still rendering in the background — poll until it's ready
-            if (data.animPending) {
-              toast({ title: "🎬 Видеоанимация генерируется", description: "Идёт создание видео (~2–10 мин). Сайт уже готов — прокрутите вниз. Превью обновится автоматически." });
+            // Animation is still rendering in the background — keep the loading
+            // screen up (don't reveal the site yet) and poll until it's fully ready.
+            if (data.animPending && (targetCode || "").includes('data-scroll-anim-pending="1"')) {
+              waitingForAnim = true;
+              setGenerationStatus("Создаём видеоанимацию... (2–10 мин)");
               if (animPollRef.current) clearInterval(animPollRef.current);
               const pollStart = Date.now();
-              const POLL_INTERVAL = 15000;
-              const POLL_TIMEOUT = 50 * 60 * 1000; // 50 min
+              const POLL_INTERVAL = 12000;
+              const POLL_TIMEOUT = 20 * 60 * 1000; // 20 min hard cap
+              const finishAnim = (rawCode: string) => {
+                clearInterval(animPollRef.current!);
+                animPollRef.current = null;
+                setGenerationStatus(null);
+                // Never reveal the dark "video pending" placeholder — strip it if it's
+                // still present (only happens on the timeout fallback path).
+                const code = (rawCode || "").replace(/<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g, "");
+                if (code) {
+                  setStreamedCode(code);
+                  if (iframeRef.current) {
+                    const blob = new Blob([getEditableCode(code)], { type: "text/html" });
+                    iframeRef.current.src = URL.createObjectURL(blob);
+                  }
+                }
+                setIsGenerating(false);
+                queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+              };
               animPollRef.current = setInterval(async () => {
                 if (Date.now() - pollStart > POLL_TIMEOUT) {
-                  clearInterval(animPollRef.current!);
-                  animPollRef.current = null;
+                  // Give up waiting — reveal whatever is in the DB so we never hang forever
+                  try {
+                    const resp = await fetch(`/api/projects/${projectId}`, { credentials: "include" });
+                    const proj = resp.ok ? await resp.json() : null;
+                    finishAnim(proj?.generatedCode || "");
+                  } catch { finishAnim(""); }
                   return;
                 }
                 try {
@@ -586,16 +614,8 @@ export default function EditorPage() {
                   const proj = await resp.json();
                   const code: string = proj?.generatedCode || "";
                   if (code && !code.includes('data-scroll-anim-pending="1"')) {
-                    clearInterval(animPollRef.current!);
-                    animPollRef.current = null;
-                    setStreamedCode(code);
-                    // Force iframe reload — srcDoc is ignored when src blob-URL is still set
-                    if (iframeRef.current) {
-                      const blob = new Blob([code], { type: "text/html" });
-                      iframeRef.current.src = URL.createObjectURL(blob);
-                    }
-                    queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
-                    toast({ title: "✅ Видеоанимация готова!", description: "Превью обновлено." });
+                    finishAnim(code);
+                    toast({ title: "✅ Сайт готов!", description: "Видеоанимация встроена." });
                   }
                 } catch {}
               }, POLL_INTERVAL);
@@ -615,7 +635,9 @@ export default function EditorPage() {
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
     } finally {
-      setIsGenerating(false);
+      // Keep the loading screen up while the video animation is still rendering —
+      // the poll loop will flip this off once the full site is ready.
+      if (!waitingForAnim) setIsGenerating(false);
     }
   }, [prompt, projectId, attachedImages, attachedVideos, attachedModels, attachedAudios, mockupMode, activeFile, toast, selectedElement]);
 
@@ -2580,7 +2602,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                          <circle cx="86" cy="96" r="2" fill="#4f46e5" opacity="0.6"/>
                        </g>
                      </svg>
-                     <p className="mt-4 text-sm font-semibold tracking-wide" style={{ color: '#818cf8' }}>Генерируем сайт...</p>
+                     <p className="mt-4 text-sm font-semibold tracking-wide" style={{ color: '#818cf8' }}>{generationStatus || "Генерируем сайт..."}</p>
                      <div className="flex gap-1.5 mt-3">
                        {[0,1,2].map(i => (
                          <div key={i} className="w-1.5 h-1.5 rounded-full bg-indigo-400" style={{ animation: `bounce 1.2s ${i * 0.2}s infinite ease-in-out` }}/>
