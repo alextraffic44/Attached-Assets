@@ -78,23 +78,33 @@ async function generateGptImage(
   aspectRatio: string,
   shouldStop: () => boolean = () => false,
 ): Promise<string | null> {
-  const MAX_ATTEMPTS = 5;
-  const RETRY_DELAYS = [4000, 8000, 15000, 20000]; // backoff between attempts
+  // More attempts since explicit-fail retries are near-instant (2 s each)
+  const MAX_ATTEMPTS = 7;
+  // Used only after a timeout — API was busy, back off gradually
+  const TIMEOUT_RETRY_DELAYS = [3000, 6000, 12000, 20000, 20000, 20000];
+  // Used after an explicit API error — recreate the task quickly
+  const FAIL_RETRY_DELAY = 2000;
+
+  let lastFailedExplicitly = false;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (shouldStop()) return null;
     if (attempt > 0) {
-      const delay = RETRY_DELAYS[attempt - 1] ?? 15000;
-      console.log(`[GENIMG] retry attempt ${attempt + 1}/${MAX_ATTEMPTS}, waiting ${delay}ms...`);
+      const delay = lastFailedExplicitly
+        ? FAIL_RETRY_DELAY
+        : (TIMEOUT_RETRY_DELAYS[attempt - 1] ?? 20000);
+      const reason = lastFailedExplicitly ? "explicit fail → fast retry" : "timeout → backoff";
+      console.log(`[GENIMG] attempt ${attempt + 1}/${MAX_ATTEMPTS} (${reason}), waiting ${delay}ms...`);
       await new Promise((r) => setTimeout(r, delay));
       if (shouldStop()) return null;
     }
+    lastFailedExplicitly = false; // reset for this attempt
 
     try {
       // --- Step 1: create task (retry create up to 3x on 5xx/network err) ---
       let createBody: any = null;
       for (let cr = 0; cr < 3; cr++) {
-        if (cr > 0) await new Promise((r) => setTimeout(r, 4000));
+        if (cr > 0) await new Promise((r) => setTimeout(r, 3000));
         try {
           const createResp = await fetch(NANO_BANANA_CREATE_URL, {
             method: "POST",
@@ -118,10 +128,11 @@ async function generateGptImage(
 
       if (!createBody || createBody.code !== 200 || !createBody.data?.taskId) {
         console.warn(`[GENIMG] create failed (attempt ${attempt + 1}):`, createBody?.msg);
-        continue; // try full attempt again
+        lastFailedExplicitly = true; // create rejected → fast retry
+        continue;
       }
 
-      // --- Step 2: poll for result (up to 3 min per task) ---
+      // --- Step 2: poll until done or 3-min per-task deadline ---
       const taskId = createBody.data.taskId;
       const deadline = Date.now() + 180000;
       let taskFailed = false;
@@ -143,25 +154,29 @@ async function generateGptImage(
         if (state === "success") {
           const result = JSON.parse(statusBody.data.resultJson);
           const urls = result.resultUrls || [];
-          if (!urls[0]) { taskFailed = true; break; }
+          if (!urls[0]) { taskFailed = true; lastFailedExplicitly = true; break; }
           const imgResp = await fetch(urls[0]);
-          if (!imgResp.ok) { taskFailed = true; break; }
+          if (!imgResp.ok) { taskFailed = true; lastFailedExplicitly = true; break; }
           const buf = Buffer.from(await imgResp.arrayBuffer());
           return await uploadToObjectStorage(buf, "image/jpeg", "jpg");
         }
         if (state === "fail" || state === "failed" || state === "error") {
+          // KIE returned explicit error — recreate task quickly
           console.warn(`[GENIMG] task failed (attempt ${attempt + 1}):`, statusBody.data?.failMsg);
           taskFailed = true;
+          lastFailedExplicitly = true;
           break;
         }
       }
       if (!taskFailed) {
+        // Deadline exceeded without a fail/success signal — API is slow, back off
         console.warn(`[GENIMG] task timed out (attempt ${attempt + 1})`);
+        // lastFailedExplicitly stays false → TIMEOUT_RETRY_DELAYS applied next iteration
       }
-      // loop → retry
+      // fall through to next attempt
     } catch (e: any) {
       console.warn(`[GENIMG] error (attempt ${attempt + 1}):`, e?.message || e);
-      // loop → retry
+      lastFailedExplicitly = true; // unexpected exception → fast retry
     }
   }
 
