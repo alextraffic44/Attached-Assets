@@ -163,7 +163,7 @@ async function generateScrollFrames(
   // Step 0 — generate a cinematic still image to anchor the video
   const stillUrl = await generateStillForVideo(videoPrompt, shouldStop);
   if (!stillUrl) { console.warn("[SCROLLANIM] aborting: no still image"); return []; }
-  if (shouldStop()) return [];
+  if (shouldStop()) { console.warn("[SCROLLANIM] aborted by shouldStop() after still image"); return []; }
 
   const animPrompt =
     `${videoPrompt.trim()}. Smooth slow cinematic camera motion, gentle natural atmospheric movement, ` +
@@ -236,7 +236,10 @@ async function generateScrollFrames(
     // taskFailed === true → continue to next videoAttempt
   }
 
-  if (!mp4Url) { console.warn("[SCROLLANIM] video generation failed after all attempts"); return []; }
+  if (!mp4Url) {
+    console.warn("[SCROLLANIM] video generation failed after all attempts or deadline exceeded");
+    return [];
+  }
 
   // Step 3 — download mp4 to a temp dir
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrollanim-"));
@@ -2057,7 +2060,10 @@ ${designAnalysis}
       const genRunKey = idempotencyKey || `gen-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
       const genImgResult = await resolveGenImgMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => clientGone);
       // Generate scroll-bound animations for any {{SCROLLANIM:...}} markers (Интерактивный режим)
-      const scrollResult = await resolveScrollAnimMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => clientGone);
+      // NOTE: intentionally NOT passing clientGone — animation must complete and be saved even if
+      // the SSE connection drops mid-generation (proxy timeout, browser close).
+      // The phaseDeadline inside resolveScrollAnimMarkers provides the hard time limit.
+      const scrollResult = await resolveScrollAnimMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => false);
       mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
       for (const f of secondaryForGen) {
         if (f.filename === "index.html") continue;
