@@ -1656,37 +1656,48 @@ export async function registerRoutes(
         const isSplitLayout = interactiveStyle === "split";
         const hasProductImage = !!absoluteProductImageUrl;
         if (isSplitLayout) {
-          systemContent += `\n\n═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — СПЛИТ» — ПРОДУКТ СПРАВА + ТЕКСТ СЛЕВА ═══
-Этот сайт использует кинематографичную Hero-анимацию «Сплит»: видео с продуктом СПРАВА, текст СЛЕВА на однотонном фоне.
+          systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
+═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — СПЛИТ» ═══
+Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
 
-ПРАВИЛА:
-1. НЕ создавай отдельную Hero-секцию. Маркер SCROLLANIM — это И ЕСТЬ Hero (полноэкранный).
-2. ПЕРВЫМ ЭЛЕМЕНТОМ после <header> вставь РОВНО ОДИН маркер:
-   {{SCROLLANIM:<видео-промпт>|<Заголовок1>::<Подзаголовок1>||<Заголовок2>::<Подзаголовок2>||<Заголовок3>::<Подзаголовок3>}}
-3. ВИДЕО-ПРОМПТ обязан описывать: ПРОДУКТ НА ПРАВОЙ СТОРОНЕ кадра, ЛЕВЫЕ 55% кадра — ЧИСТЫЙ ОДНОТОННЫЙ ФОН (белый/бежевый/пастельный в тон теме). Формат: "${hasProductImage ? "product displayed on right side of frame, rotating slowly" : "ОПИСАНИЕ ПРОДУКТА on right side of frame, rotating slowly"}, left side clean solid [COLOR] background, no shadows crossing into left side, soft studio lighting, cinematic, no text". Примеры:
-   - Крем: "luxury skincare cream jar on right side, slow 360 rotation, left two-thirds pure ivory background, cinematic"
-   - Часы: "elegant watch on right side of frame, gears detail, left area soft cream background, cinematic"
-   - Кофе: "coffee cup with steam on right, coffee beans, left side warm beige solid background, cinematic"
-4. Тексты (РОВНО 3 пары) — НА РУССКОМ, короткие и продающие. Появляются по очереди СЛЕВА на однотонном фоне по мере скролла.
-5. ⚠️ НЕ пиши код canvas сам — маркер заменяется автоматически.
-6. Секции ПОСЛЕ маркера: преимущества, отзывы, CTA, форма, футер.
+ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
+→ СРАЗУ после закрывающего тега </header> (на отдельной строке, ДО любых других секций) вставь:
+{{SCROLLANIM:ВИДЕО-ПРОМПТ|Заголовок1::Подзаголовок1||Заголовок2::Подзаголовок2||Заголовок3::Подзаголовок3}}
+
+Формат ВИДЕО-ПРОМПТА для сплит-режима:
+"${hasProductImage ? "product on right side of frame, slow 360 rotation" : "PRODUCT_NAME on right side of frame, slow 360 rotation"}, left side clean solid [light/beige/cream] background, soft studio lighting, cinematic, no text, no watermark"
+Примеры:
+- "luxury glass water bottle on right side, slow rotation, left side pure white background, cinematic"
+- "premium skincare cream jar on right side, slow 360 rotation, left side warm ivory background, cinematic"
+
+Тексты — РОВНО 3 пары на РУССКОМ (Заголовок::Подзаголовок), короткие и продающие.
+
+⚠️ НЕ пиши <section> или Hero-раздел ДО этого маркера. Маркер И ЕСТЬ Hero.
+⚠️ НЕ создавай canvas-код вручную. Маркер заменяется автоматически системой.
+⚠️ После маркера — обычные секции: преимущества, отзывы, CTA, форма, футер.
+🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
 ═══ КОНЕЦ СПЛИТ-РЕЖИМА ═══\n`;
         } else {
-          systemContent += `\n\n═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ» — КИНЕМАТОГРАФИЧНАЯ СКРОЛЛ-АНИМАЦИЯ ═══
-Этот сайт ОБЯЗАН начинаться с полноэкранной скролл-анимации ("3D Sexy Scroll"): объект/продукт по теме сайта плавно движется и трансформируется по мере прокрутки, поверх него появляются и исчезают текстовые блоки. Это ЯВЛЯЕТСЯ Hero-секцией сайта.
+          systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
+═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ» — СКРОЛЛ-АНИМАЦИЯ ═══
+Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
 
-ПРАВИЛА:
-1. НЕ создавай отдельную Hero-секцию с обычным текстом/изображением. Маркер SCROLLANIM — это И ЕСТЬ Hero.
-2. ПЕРВЫМ ЭЛЕМЕНТОМ после <header> (или сразу после <body>, если нет header) вставь РОВНО ОДИН маркер на отдельной строке:
-   {{SCROLLANIM:<видео-промпт НА АНГЛИЙСКОМ>|<Заголовок1>::<Подзаголовок1>||<Заголовок2>::<Подзаголовок2>||<Заголовок3>::<Подзаголовок3>}}
-3. Видео-промпт (на английском) описывает кинематографичную сцену по теме сайта на ЧИСТОМ БЕЛОМ ФОНЕ для бесшовной интеграции. Примеры:
-   - Часовой магазин: "luxury mechanical watch slowly rotating, exploded view of gears floating apart, macro detail, cinematic"
-   - Кофейня: "elegant cup of coffee with swirling cream, slow 360 rotation, coffee beans floating, cinematic"
-   - Авто: "sports car slowly rotating, sleek reflections, dramatic studio lighting, cinematic"
-   НЕ упоминай фон/освещение — это добавится автоматически.
-4. Тексты (РОВНО 3 пары "Заголовок::Подзаголовок") — НА РУССКОМ, короткие и продающие. Это главные тезисы сайта — они появляются и плавно исчезают по мере скролла поверх видео.
-5. ⚠️ НЕ пиши код canvas/анимации/кадров сам — маркер автоматически заменяется готовым полноэкранным интерактивным блоком.
-6. Секции ПОСЛЕ маркера: преимущества, отзывы, CTA, форма, футер — как обычно.
+ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
+→ СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
+{{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|Заголовок1::Подзаголовок1||Заголовок2::Подзаголовок2||Заголовок3::Подзаголовок3}}
+
+VIDEO_PROMPT (на английском) — кинематографичная сцена по теме сайта:
+- Вода/напиток: "premium glass water bottle slowly rotating 360, cinematic macro"
+- Крем/косметика: "luxury skincare jar slowly rotating, soft studio light, macro detail, cinematic"
+- Часы: "luxury mechanical watch slowly rotating, exploded gears floating, cinematic"
+- Кофе: "elegant coffee cup with swirling cream, slow rotation, cinematic"
+- Еда: "gourmet dish slowly rotating, steam rising, cinematic macro"
+
+Тексты — РОВНО 3 пары на РУССКОМ (Заголовок::Подзаголовок), короткие и продающие.
+
+⚠️ НЕ пиши <section> или Hero-раздел ДО этого маркера. Маркер И ЕСТЬ Hero.
+⚠️ НЕ создавай canvas-код вручную. Маркер заменяется автоматически системой.
+🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
 ═══ КОНЕЦ ИНТЕРАКТИВНОГО РЕЖИМА ═══\n`;
         }
       }
@@ -2312,6 +2323,35 @@ ${designAnalysis}
       const genRunKey = idempotencyKey || `gen-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
       const genImgResult = await resolveGenImgMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => clientGone);
       mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
+
+      // ── Auto-inject SCROLLANIM if interactive mode but AI missed the marker ──
+      if (interactiveMode && isNewSite && !mainHtmlCode.includes("{{SCROLLANIM:")) {
+        const rawPrompt = typeof prompt === "string" ? prompt : "";
+        const isSplitAuto = interactiveStyle === "split";
+        const firstWords = rawPrompt.replace(/[`'"]/g, "").slice(0, 100);
+        let videoPromptAuto: string;
+        let textsAuto: string;
+        if (isSplitAuto) {
+          videoPromptAuto = absoluteProductImageUrl
+            ? "product on right side of frame, slow 360 rotation, left side clean solid white background, soft studio lighting, cinematic, no text"
+            : `${firstWords.slice(0, 70)} product on right side, rotating slowly, left side clean solid white background, soft studio lighting, cinematic`;
+          textsAuto = "Познакомьтесь с нами::Откройте для себя наш продукт||Качество и стиль::Только лучшее для вас||Начните сейчас::Сделайте первый шаг";
+        } else {
+          videoPromptAuto = absoluteProductImageUrl
+            ? "premium product slowly rotating 360 degrees, studio lighting, clean white background, cinematic macro detail"
+            : `${firstWords.slice(0, 70)} slowly rotating, clean white background, studio lighting, cinematic`;
+          textsAuto = "Добро пожаловать::Откройте что-то новое||Наше качество::Только лучшее||Начните прямо сейчас::Попробуйте сегодня";
+        }
+        const markerAuto = `\n{{SCROLLANIM:${videoPromptAuto}|${textsAuto}}}\n`;
+        if (mainHtmlCode.includes("</header>")) {
+          mainHtmlCode = mainHtmlCode.replace("</header>", `</header>${markerAuto}`);
+        } else if (/<body[^>]*>/i.test(mainHtmlCode)) {
+          mainHtmlCode = mainHtmlCode.replace(/<body[^>]*>/i, (m) => `${m}${markerAuto}`);
+        } else {
+          mainHtmlCode = markerAuto + mainHtmlCode;
+        }
+        console.log(`[SCROLLANIM] Auto-injected marker (AI missed it). Style: ${interactiveStyle}`);
+      }
 
       // ── Scroll animation: fire-and-forget approach ───────────────────────────
       // Replace {{SCROLLANIM:...}} markers with a beautiful "pending" placeholder
