@@ -110,57 +110,74 @@ async function generateScrollFrames(
     `${videoPrompt.trim()}. Clean seamless pure white background (#ffffff), bright studio lighting, ` +
     `smooth slow cinematic camera motion, no text, no captions, no watermark, high detail, photorealistic.`;
 
-  // Step 1 — create the video task (retry transient failures)
-  let taskId: string | null = null;
-  for (let attempt = 0; attempt < 3 && !taskId; attempt++) {
-    if (shouldStop()) return [];
-    if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
-    try {
-      const resp = await fetch(NANO_BANANA_CREATE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({
-          model: KLING_VIDEO_MODEL,
-          input: { prompt: fullPrompt, duration: SCROLL_VIDEO_DURATION, aspect_ratio: "16:9", resolution: "1080p" },
-        }),
-      });
-      const body: any = await resp.json().catch(() => null);
-      if (body?.code === 200 && body?.data?.taskId) taskId = body.data.taskId;
-      else console.warn("[SCROLLANIM] create task failed:", body?.msg || body?.code);
-    } catch (e: any) {
-      console.warn("[SCROLLANIM] create task network error:", e?.message);
-    }
-  }
-  if (!taskId) return [];
-
-  // Step 2 — poll for completion (Kling video can take up to 35 min in queue)
-  const deadline = Date.now() + 2400000; // 40 min cap
+  // Overall deadline shared across all retry attempts
+  const deadline = Date.now() + 2400000; // 40 min cap (Kling can take up to 35 min)
+  const MAX_VIDEO_ATTEMPTS = 3; // retry on API failure (e.g. upstream timeout)
   let mp4Url: string | null = null;
-  while (Date.now() < deadline) {
-    if (shouldStop()) return [];
-    await new Promise(r => setTimeout(r, 5000));
-    try {
-      const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
-        headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
-      });
-      const body: any = await resp.json().catch(() => null);
-      if (!body || body.code !== 200 || !body.data) continue;
-      const state = body.data.state;
-      if (state === "success") {
-        let result: any = {};
-        try { result = JSON.parse(body.data.resultJson || "{}"); } catch {}
-        mp4Url = (result.resultUrls || [])[0] || null;
-        break;
-      }
-      if (state === "fail" || state === "failed" || state === "error") {
-        console.warn("[SCROLLANIM] video task failed:", body.data.failMsg || body.data.failCode);
-        return [];
-      }
-    } catch (e: any) {
-      console.warn("[SCROLLANIM] poll error:", e?.message);
+
+  for (let videoAttempt = 0; videoAttempt < MAX_VIDEO_ATTEMPTS; videoAttempt++) {
+    if (shouldStop() || Date.now() >= deadline) break;
+    if (videoAttempt > 0) {
+      console.log(`[SCROLLANIM] retrying video task (attempt ${videoAttempt + 1}/${MAX_VIDEO_ATTEMPTS})...`);
+      await new Promise(r => setTimeout(r, 5000));
     }
+
+    // Step 1 — create the video task
+    let taskId: string | null = null;
+    for (let attempt = 0; attempt < 3 && !taskId; attempt++) {
+      if (shouldStop() || Date.now() >= deadline) break;
+      if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
+      try {
+        const resp = await fetch(NANO_BANANA_CREATE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
+          body: JSON.stringify({
+            model: KLING_VIDEO_MODEL,
+            input: { prompt: fullPrompt, duration: SCROLL_VIDEO_DURATION, aspect_ratio: "16:9", resolution: "1080p" },
+          }),
+        });
+        const body: any = await resp.json().catch(() => null);
+        if (body?.code === 200 && body?.data?.taskId) taskId = body.data.taskId;
+        else console.warn("[SCROLLANIM] create task failed:", body?.msg || body?.code);
+      } catch (e: any) {
+        console.warn("[SCROLLANIM] create task network error:", e?.message);
+      }
+    }
+    if (!taskId) continue; // next video attempt
+
+    // Step 2 — poll for completion (Kling video can take up to 35 min in queue)
+    let taskFailed = false;
+    while (Date.now() < deadline) {
+      if (shouldStop()) return [];
+      await new Promise(r => setTimeout(r, 5000));
+      try {
+        const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
+          headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
+        });
+        const body: any = await resp.json().catch(() => null);
+        if (!body || body.code !== 200 || !body.data) continue;
+        const state = body.data.state;
+        if (state === "success") {
+          let result: any = {};
+          try { result = JSON.parse(body.data.resultJson || "{}"); } catch {}
+          mp4Url = (result.resultUrls || [])[0] || null;
+          break;
+        }
+        if (state === "fail" || state === "failed" || state === "error") {
+          console.warn(`[SCROLLANIM] video task failed (attempt ${videoAttempt + 1}):`, body.data.failMsg || body.data.failCode);
+          taskFailed = true;
+          break; // break poll loop → outer loop will retry
+        }
+      } catch (e: any) {
+        console.warn("[SCROLLANIM] poll error:", e?.message);
+      }
+    }
+    if (mp4Url) break;           // success — exit retry loop
+    if (!taskFailed) break;      // timeout (deadline exceeded) — no point retrying
+    // taskFailed === true → continue to next videoAttempt
   }
-  if (!mp4Url) { console.warn("[SCROLLANIM] video generation timed out"); return []; }
+
+  if (!mp4Url) { console.warn("[SCROLLANIM] video generation failed after all attempts"); return []; }
 
   // Step 3 — download mp4 to a temp dir
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrollanim-"));
