@@ -819,7 +819,12 @@ async function resolveScrollAnimMarkers(
       }
       try { res.write(`data: ${JSON.stringify({ status: "Готовлю кадр товара на однотонном фоне..." })}\n\n`); } catch {}
       referenceStill = (await generateProductStill(productImageUrl, layout, () => isAborted() || Date.now() >= phaseDeadline, creativeConcept?.stillAddition)) || undefined;
-      if (!referenceStill) console.warn("[SCROLLANIM] product-still failed — falling back to text-to-image still (solid bg preserved)");
+      if (!referenceStill) {
+        // gpt-image-2 failed all retries — fall back to the raw uploaded product photo
+        // so Kling still animates the REAL product rather than a generic text-to-image still.
+        console.warn("[SCROLLANIM] product-still failed — using raw product photo as Kling source (real product preserved, bg may not be clean)");
+        referenceStill = productImageUrl;
+      }
     }
 
     // Keep the SSE connection alive with periodic status pings while video renders
@@ -1114,7 +1119,8 @@ async function resolveGenImgMarkers(
 
 type KieContentItem =
   | { type: "input_text"; text: string }
-  | { type: "input_image"; image_url: string };
+  | { type: "input_image"; image_url: string }
+  | { type: "input_image_inline"; base64: string; mime_type: string };
 
 type KieMessage = { role: "user" | "assistant" | "developer" | "system"; content: KieContentItem[] };
 
@@ -1201,11 +1207,14 @@ async function* geminiGenerateStream(
   for (const msg of messages) {
     if (msg.role === "developer" || msg.role === "system") continue;
     const role = msg.role === "assistant" ? "model" : "user";
-    const parts = msg.content.map((c: any) => {
+    const parts = msg.content.map((c: any): any => {
       if (c.type === "input_text") return { text: c.text };
-      if (c.type === "input_image") return { text: `[Image URL: ${c.image_url}]` };
-      return { text: "" };
-    }).filter((p: any) => p.text);
+      // Base64 inline image → Gemini inline_data (the model actually sees the pixels)
+      if (c.type === "input_image_inline") return { inline_data: { mime_type: c.mime_type, data: c.base64 } };
+      // URL-only image → file_data (KIE Gemini proxy fetches the URL for Gemini)
+      if (c.type === "input_image") return { file_data: { mime_type: "image/jpeg", file_uri: c.image_url } };
+      return null;
+    }).filter(Boolean);
     if (parts.length > 0) contents.push({ role, parts });
   }
 
@@ -2288,14 +2297,38 @@ ${designAnalysis}
       }
 
       const userContent: KieContentItem[] = [];
+      let imgIdx = 0;
       for (const item of inputContent) {
         if ((item as any).type === "text") {
           userContent.push({ type: "input_text", text: (item as any).text });
         } else if ((item as any).type === "image") {
-          const relUrl = savedImageUrls[userContent.filter(c => c.type === "input_image").length] || "";
-          if (relUrl) {
-            userContent.push({ type: "input_image", image_url: `${baseUrl}${relUrl}` });
+          const imgB64: string | undefined = (item as any).data;
+          const imgMime: string = (item as any).mime_type || "image/jpeg";
+          if (useGemini && imgB64) {
+            // For the Gemini path: send actual bytes so the model can see the image
+            userContent.push({ type: "input_image_inline", base64: imgB64, mime_type: imgMime });
+          } else {
+            const relUrl = savedImageUrls[imgIdx] || "";
+            if (relUrl) userContent.push({ type: "input_image", image_url: `${baseUrl}${relUrl}` });
           }
+          imgIdx++;
+        }
+      }
+
+      // For interactive split-mode sites: inject the uploaded product photo directly
+      // into the Gemini message so the model can see the actual product and write a
+      // product-specific {{SCROLLANIM:...}} video prompt and accurate alt-texts.
+      if (useGemini && absoluteProductImageUrl) {
+        const productImg = await fetchProductImageForVision(absoluteProductImageUrl);
+        if (productImg) {
+          userContent.push({
+            type: "input_text",
+            text: "⬇ ФОТО РЕАЛЬНОГО ТОВАРА (загружено для Hero-анимации в split-режиме). Внимательно изучи: форму, упаковку, цвета, текст на этикетке, стиль продукта. Используй это при создании: (1) точного описания товара в видео-промпте {{SCROLLANIM:...}} — укажи, что именно это за продукт и его ключевые визуальные особенности; (2) alt-текстов и подписей; (3) общей цветовой палитры и стиля сайта.",
+          });
+          userContent.push({ type: "input_image_inline", base64: productImg.base64, mime_type: productImg.mimeType });
+          console.log(`[KIE] Product image injected into Gemini message (${productImg.mimeType}, ${Math.round(productImg.base64.length * 0.75 / 1024)}KB)`);
+        } else {
+          console.warn("[KIE] Could not load product image for Gemini injection — prompt will be text-only for product");
         }
       }
 

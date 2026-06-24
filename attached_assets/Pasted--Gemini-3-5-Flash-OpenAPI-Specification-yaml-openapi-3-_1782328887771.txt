@@ -1,0 +1,529 @@
+# Gemini 3.5 Flash
+
+## OpenAPI Specification
+
+```yaml
+openapi: 3.0.1
+info:
+  title: ''
+  description: ''
+  version: 1.0.0
+paths:
+  /gemini/v1/models/gemini-3-5-flash:streamGenerateContent:
+    post:
+      summary: Gemini 3.5 Flash
+      deprecated: false
+      description: >-
+        ### Streaming Support
+
+
+        The Gemini endpoint returns streaming chunks from
+        `streamGenerateContent`. Function calling responses appear in
+        `candidates[].content.parts[].functionCall`.
+
+
+        **Streaming Response Format:**
+
+        - Content-Type: `text/event-stream` or provider stream chunks
+
+        - Function calls are returned inside `parts[].functionCall`
+
+        - Thinking output may be reflected through `thoughtSignature` and usage
+        metadata
+
+
+        ## Features
+
+
+        - Standard chat with `contents`.
+
+        - Google Search grounding with `googleSearch`.
+
+        - Function calling with `functionDeclarations`.
+
+        - Thinking configuration with `generationConfig.thinkingConfig`.
+
+
+        ## Request Notes
+
+
+        - Use `contents` as the primary conversation input.
+
+        - Use `tools.googleSearch` to enable Google Search grounding.
+
+        - Use `tools.functionDeclarations` to define callable functions.
+
+        - Use `generationConfig.thinkingConfig` to control thoughts output and
+        thinking level.
+
+
+        ## Authentication
+
+
+        Use the auth configuration for `X-Goog-Api-Key`. Do not add it as a
+        regular request parameter.
+      operationId: gemini_3.5_flash
+      tags:
+        - docs/en/Market/Chat  Models/Gemini
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contents:
+                  type: array
+                  description: Conversation input for Gemini.
+                  items:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                        enum:
+                          - user
+                          - model
+                        description: Content role.
+                        examples:
+                          - user
+                      parts:
+                        type: array
+                        description: >-
+                          Content parts. Use text, inline_data, or
+                          provider-specific blocks.
+                        items:
+                          oneOf:
+                            - type: object
+                              properties:
+                                text:
+                                  type: string
+                                  description: Plain text input.
+                                  examples:
+                                    - What is the weather in Beijing today?
+                              x-apidog-orders:
+                                - text
+                            - type: object
+                              properties:
+                                inline_data:
+                                  type: object
+                                  description: Inline binary payload.
+                                  properties:
+                                    mime_type:
+                                      type: string
+                                      examples:
+                                        - image/jpeg
+                                    data:
+                                      type: string
+                                      description: Base64 content.
+                                  x-apidog-orders:
+                                    - mime_type
+                                    - data
+                              x-apidog-orders:
+                                - inline_data
+                            - type: object
+                              properties:
+                                file_data:
+                                  type: object
+                                  properties:
+                                    mime_type:
+                                      type: string
+                                      description: file mime type
+                                    file_uri:
+                                      type: string
+                                  x-apidog-orders:
+                                    - mime_type
+                                    - file_uri
+                              x-apidog-orders:
+                                - file_data
+                    required:
+                      - role
+                      - parts
+                    x-apidog-orders:
+                      - role
+                      - parts
+                  minItems: 1
+                tools:
+                  type: array
+                  description: >-
+                    Optional Gemini tools. Supports googleSearch and
+                    functionDeclarations.
+                  items:
+                    oneOf:
+                      - type: object
+                        properties:
+                          googleSearch:
+                            type: object
+                            description: Google Search grounding tool.
+                            additionalProperties: false
+                            x-apidog-orders: []
+                        x-apidog-orders:
+                          - googleSearch
+                      - type: object
+                        properties:
+                          functionDeclarations:
+                            type: array
+                            description: Function declaration list.
+                            items:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                  description: Function name.
+                                  examples:
+                                    - get_weather_forecast
+                                description:
+                                  type: string
+                                  description: Function description.
+                                  examples:
+                                    - >-
+                                      Get the weather forecast for a given
+                                      location
+                                parameters:
+                                  type: object
+                                  description: Function parameter schema.
+                                  properties:
+                                    type:
+                                      type: string
+                                      examples:
+                                        - OBJECT
+                                    properties:
+                                      type: object
+                                      additionalProperties: true
+                                      x-apidog-orders: []
+                                    required:
+                                      type: array
+                                      items:
+                                        type: string
+                                  x-apidog-orders:
+                                    - type
+                                    - properties
+                                    - required
+                                  examples:
+                                    - type: OBJECT
+                                      properties:
+                                        location:
+                                          type: STRING
+                                          description: The city name, e.g. Beijing
+                                      required:
+                                        - location
+                              required:
+                                - name
+                                - description
+                                - parameters
+                              x-apidog-orders:
+                                - name
+                                - description
+                                - parameters
+                        x-apidog-orders:
+                          - functionDeclarations
+                generationConfig:
+                  type: object
+                  description: Generation configuration.
+                  properties:
+                    thinkingConfig:
+                      type: object
+                      description: Thinking configuration.
+                      properties:
+                        includeThoughts:
+                          type: boolean
+                          description: Whether to include thought output.
+                          examples:
+                            - true
+                        thinkingLevel:
+                          type: string
+                          enum:
+                            - low
+                            - high
+                          description: Thinking level.
+                          examples:
+                            - high
+                      x-apidog-orders:
+                        - includeThoughts
+                        - thinkingLevel
+                  x-apidog-orders:
+                    - thinkingConfig
+                stream:
+                  type: boolean
+                  description: If set to true, the provider returns stream chunks.
+                  default: true
+              required:
+                - contents
+              x-apidog-orders:
+                - stream
+                - contents
+                - tools
+                - generationConfig
+              examples:
+                - stream: true
+                  contents:
+                    - role: user
+                      parts:
+                        - text: What is the weather in Beijing today?
+                  tools:
+                    - functionDeclarations:
+                        - name: get_weather_forecast
+                          description: Get the weather forecast for a given location
+                          parameters:
+                            type: OBJECT
+                            properties:
+                              location:
+                                type: STRING
+                                description: The city name, e.g. Beijing
+                            required:
+                              - location
+                  generationConfig:
+                    thinkingConfig:
+                      includeThoughts: true
+                      thinkingLevel: high
+            example:
+              stream: true
+              contents:
+                - role: user
+                  parts:
+                    - text: What is the weather in Beijing today?
+              tools:
+                - functionDeclarations:
+                    - name: get_weather_forecast
+                      description: Get the weather forecast for a given location
+                      parameters:
+                        type: OBJECT
+                        properties:
+                          location:
+                            type: STRING
+                            description: The city name, e.g. Beijing
+                        required:
+                          - location
+              generationConfig:
+                thinkingConfig:
+                  includeThoughts: true
+                  thinkingLevel: high
+      responses:
+        '200':
+          description: Request successful.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  candidates:
+                    type: array
+                    description: Candidate results
+                    items:
+                      type: object
+                      properties:
+                        content:
+                          type: object
+                          properties:
+                            role:
+                              type: string
+                              examples:
+                                - model
+                            parts:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  functionCall:
+                                    type: object
+                                    description: Function call payload
+                                    properties:
+                                      args:
+                                        type: object
+                                        description: Function arguments
+                                        additionalProperties: true
+                                        x-apidog-orders: []
+                                        properties: {}
+                                      name:
+                                        type: string
+                                        description: Function name
+                                        examples:
+                                          - get_weather_forecast
+                                      id:
+                                        type: string
+                                        description: Function call identifier
+                                        examples:
+                                          - gp737npz
+                                    x-apidog-orders:
+                                      - args
+                                      - name
+                                      - id
+                                  thoughtSignature:
+                                    type: string
+                                    description: Thought signature
+                                    examples:
+                                      - Es8CCswCAb4example
+                                  text:
+                                    type: string
+                                    description: Text output
+                                x-apidog-orders:
+                                  - functionCall
+                                  - thoughtSignature
+                                  - text
+                          x-apidog-orders:
+                            - role
+                            - parts
+                        finishReason:
+                          type: string
+                          description: Candidate finish reason
+                          examples:
+                            - STOP
+                      x-apidog-orders:
+                        - content
+                        - finishReason
+                  modelVersion:
+                    type: string
+                    description: Returned model version
+                    examples:
+                      - gemini-3-flash
+                  usageMetadata:
+                    type: object
+                    description: Token usage metadata
+                    properties:
+                      candidatesTokenCount:
+                        type: integer
+                        examples:
+                          - 18
+                      thoughtsTokenCount:
+                        type: integer
+                        examples:
+                          - 55
+                      totalTokenCount:
+                        type: integer
+                        examples:
+                          - 325
+                      promptTokenCount:
+                        type: integer
+                        examples:
+                          - 252
+                    x-apidog-orders:
+                      - candidatesTokenCount
+                      - thoughtsTokenCount
+                      - totalTokenCount
+                      - promptTokenCount
+                  credits_consumed:
+                    type: number
+                    description: Credits consumed by the request
+                    examples:
+                      - 0.01
+                  responseId:
+                    type: string
+                    description: Unique response identifier
+                    examples:
+                      - xRS0aZC5BNHVz7IPuaO42Qk
+                x-apidog-orders:
+                  - candidates
+                  - modelVersion
+                  - usageMetadata
+                  - credits_consumed
+                  - responseId
+              example:
+                candidates:
+                  - content:
+                      role: model
+                      parts:
+                        - functionCall:
+                            args:
+                              location: Beijing
+                            name: get_weather_forecast
+                            id: gp737npz
+                          thoughtSignature: Es8CCswCAb4example
+                    finishReason: STOP
+                modelVersion: gemini-3-5-flash
+                usageMetadata:
+                  candidatesTokenCount: 18
+                  thoughtsTokenCount: 55
+                  totalTokenCount: 325
+                  promptTokenCount: 252
+                credits_consumed: 0.01
+                responseId: xRS0aZC5BNHVz7IPuaO42Qk
+          headers: {}
+          x-apidog-name: ''
+        '400':
+          description: Bad Request - Invalid request parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        examples:
+                          - Invalid request parameters
+                      type:
+                        type: string
+                        examples:
+                          - invalid_request_error
+                    x-apidog-orders:
+                      - message
+                      - type
+                x-apidog-orders:
+                  - error
+          headers: {}
+          x-apidog-name: ''
+        '401':
+          description: Unauthorized - Invalid or missing API key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        examples:
+                          - Invalid or missing API key
+                      type:
+                        type: string
+                        examples:
+                          - authentication_error
+                    x-apidog-orders:
+                      - message
+                      - type
+                x-apidog-orders:
+                  - error
+          headers: {}
+          x-apidog-name: ''
+      security: []
+      x-apidog-folder: docs/en/Market/Chat  Models/Gemini
+      x-apidog-status: released
+      x-run-in-apidog: https://app.apidog.com/web/project/1184766/apis/api-36606599-run
+components:
+  schemas: {}
+  securitySchemes:
+    BearerAuth:
+      type: bearer
+      scheme: bearer
+      bearerFormat: API Key
+      description: >-
+        All API requests require a Bearer Token. Add the header `Authorization:
+        Bearer YOUR_API_KEY` to authenticate requests.
+    BearerAuth1:
+      type: bearer
+      scheme: bearer
+      bearerFormat: API Key
+      description: >-
+        所有 API 请求都需要 Bearer Token。请在请求头中添加 `Authorization: Bearer YOUR_API_KEY`
+        进行身份验证。
+servers:
+  - url: https://api.kie.ai
+    description: 正式环境
+security:
+  - BearerAuth: []
+    x-apidog:
+      schemeGroups:
+        - id: kn8M4YUlc5i0A0179ezwx
+          schemeIds:
+            - BearerAuth
+      required: true
+      use:
+        id: kn8M4YUlc5i0A0179ezwx
+      scopes:
+        kn8M4YUlc5i0A0179ezwx:
+          BearerAuth: []
+
+```
