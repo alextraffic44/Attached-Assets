@@ -133,8 +133,8 @@ async function generateScrollFrames(
   }
   if (!taskId) return [];
 
-  // Step 2 — poll for completion (video generation is slow)
-  const deadline = Date.now() + 300000; // 5 min cap
+  // Step 2 — poll for completion (video generation is slow; Kling turbo takes 6-10 min)
+  const deadline = Date.now() + 720000; // 12 min cap
   let mp4Url: string | null = null;
   while (Date.now() < deadline) {
     if (shouldStop()) return [];
@@ -340,11 +340,11 @@ async function resolveScrollAnimMarkers(
   if (entries.length === 0) { return { generated: 0, creditsUsed: 0 }; }
 
   const planned = entries.slice(0, 2); // at most 2 scroll blocks per site
-  const phaseDeadline = Date.now() + 360000; // 6 min total budget
+  const phaseDeadline = Date.now() + 900000; // 15 min total budget (Kling turbo = 6-10 min)
 
   for (const [raw, parsed] of planned) {
     if (isAborted() || Date.now() >= phaseDeadline) break;
-    try { res.write(`data: ${JSON.stringify({ status: "Создаю анимацию прокрутки (рендер видео, до 2 минут)..." })}\n\n`); } catch {}
+    try { res.write(`data: ${JSON.stringify({ status: "Рендерю видео для анимации прокрутки (до 8 минут)..." })}\n\n`); } catch {}
 
     let billed = false;
     if (userId) {
@@ -354,7 +354,18 @@ async function resolveScrollAnimMarkers(
       billed = !ded.alreadyProcessed;
     }
 
-    const frames = await generateScrollFrames(parsed.videoPrompt, () => isAborted() || Date.now() >= phaseDeadline);
+    // Keep the SSE connection alive with periodic status pings while video renders
+    const keepAliveInterval = setInterval(() => {
+      try { res.write(`data: ${JSON.stringify({ status: "Рендерю видео для анимации прокрутки (ожидаю результат от KIE)..." })}\n\n`); } catch {}
+    }, 20000);
+
+    let frames: string[] = [];
+    try {
+      frames = await generateScrollFrames(parsed.videoPrompt, () => isAborted() || Date.now() >= phaseDeadline);
+    } finally {
+      clearInterval(keepAliveInterval);
+    }
+
     if (frames.length >= 8) {
       replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts));
       generated++;
