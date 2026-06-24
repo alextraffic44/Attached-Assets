@@ -1504,7 +1504,7 @@ export async function registerRoutes(
           absoluteProductImageUrl = `${proto}://${host}${interactiveProductImageUrl}`;
         }
       }
-      const useGemini = agentVersion === "v2";
+      const useGemini = agentVersion === "v2" || !!interactiveMode;
       const leadFormEnabled = leadForm !== false && leadForm !== "0" && leadForm !== 0;
       const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
         Array.isArray(images) && images.length > 0 ? images 
