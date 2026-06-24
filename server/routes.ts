@@ -289,8 +289,8 @@ async function generateScrollFrames(
     await new Promise<void>((resolve, reject) => {
       ffmpeg(videoPath)
         .outputOptions([
-          "-vf", `fps=${fps},scale=${SCROLL_FRAME_WIDTH}:-2:flags=lanczos`,
-          "-q:v", "2",
+          "-vf", `fps=${fps}`,
+          "-q:v", "1",
         ])
         .output(path.join(framesDir, "frame_%04d.jpg"))
         .on("end", () => { console.log("[SCROLLANIM] ffmpeg done"); resolve(); })
@@ -313,7 +313,7 @@ async function generateScrollFrames(
     for (const f of files) {
       if (shouldStop()) break;
       const raw = fs.readFileSync(path.join(framesDir, f));
-      const webp = await sharp(raw).webp({ quality: 72, effort: 4 }).toBuffer();
+      const webp = await sharp(raw).webp({ quality: 92 }).toBuffer();
       const url = await uploadToObjectStorage(webp, "image/webp", "webp");
       urls.push(url);
     }
@@ -361,15 +361,15 @@ ${layers}
   </div>
 </section>
 <style>
-  .${cid}-scroll{position:relative;height:${scrollVh}vh;background:#fff;}
-  .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#fff;}
-  .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
-  .${cid}-veil{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 78% 78% at 50% 50%, rgba(255,255,255,0) 42%, rgba(255,255,255,0.6) 100%);}
-  .${cid}-overlays{position:absolute;inset:0;pointer-events:none;}
-  .${cid}-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(820px,86vw);text-align:center;opacity:0;will-change:opacity,transform;-webkit-mask-image:radial-gradient(ellipse 86% 92% at 50% 50%, #000 50%, transparent 100%);mask-image:radial-gradient(ellipse 86% 92% at 50% 50%, #000 50%, transparent 100%);}
-  .${cid}-text::before{content:"";position:absolute;inset:-32% -26%;z-index:-1;background:radial-gradient(ellipse at center, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.55) 45%, rgba(255,255,255,0) 72%);filter:blur(8px);}
-  .${cid}-text h2{margin:0 0 .5em;font-size:clamp(2rem,5.5vw,4.25rem);font-weight:800;letter-spacing:-0.03em;line-height:1.05;color:#0a0a0a;}
-  .${cid}-text p{margin:0 auto;max-width:620px;font-size:clamp(1rem,2vw,1.3rem);line-height:1.6;color:#3a3a3a;}
+  .${cid}-scroll{position:relative;height:${scrollVh}vh;margin:0;padding:0;background:#000;}
+  .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#000;}
+  .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;}
+  .${cid}-veil{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 78% 78% at 50% 50%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.25) 100%);}
+  .${cid}-overlays{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;}
+  .${cid}-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(860px,88vw);text-align:center;opacity:0;will-change:opacity,transform;}
+  .${cid}-text::before{content:"";position:absolute;inset:-40% -30%;z-index:-1;background:radial-gradient(ellipse at center,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.25) 50%,rgba(0,0,0,0) 72%);filter:blur(12px);}
+  .${cid}-text h2{margin:0 0 .4em;font-size:clamp(2.2rem,6vw,5rem);font-weight:800;letter-spacing:-0.03em;line-height:1.05;color:#fff;text-shadow:0 2px 32px rgba(0,0,0,0.5);}
+  .${cid}-text p{margin:0 auto;max-width:640px;font-size:clamp(1rem,2.2vw,1.4rem);line-height:1.6;color:rgba(255,255,255,0.88);text-shadow:0 1px 16px rgba(0,0,0,0.4);}
 </style>
 <script>
 (function(){
@@ -1486,21 +1486,20 @@ export async function registerRoutes(
       }
       if (interactiveMode && isNewSite) {
         systemContent += `\n\n═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ» — КИНЕМАТОГРАФИЧНАЯ СКРОЛЛ-АНИМАЦИЯ ═══
-Этот сайт ОБЯЗАН содержать эффектную скролл-анимацию ("3D Sexy Scroll"): объект/продукт по теме сайта плавно вращается и трансформируется по мере прокрутки, поверх него появляются и исчезают текстовые блоки.
+Этот сайт ОБЯЗАН начинаться с полноэкранной скролл-анимации ("3D Sexy Scroll"): объект/продукт по теме сайта плавно движется и трансформируется по мере прокрутки, поверх него появляются и исчезают текстовые блоки. Это ЯВЛЯЕТСЯ Hero-секцией сайта.
 
 ПРАВИЛА:
-1. Сначала создай впечатляющую Hero-секцию по теме сайта (как обычно).
-2. СРАЗУ ПОД Hero-секцией (первым блоком после неё) вставь РОВНО ОДИН маркер на отдельной строке в таком формате:
+1. НЕ создавай отдельную Hero-секцию с обычным текстом/изображением. Маркер SCROLLANIM — это И ЕСТЬ Hero.
+2. ПЕРВЫМ ЭЛЕМЕНТОМ после <header> (или сразу после <body>, если нет header) вставь РОВНО ОДИН маркер на отдельной строке:
    {{SCROLLANIM:<видео-промпт НА АНГЛИЙСКОМ>|<Заголовок1>::<Подзаголовок1>||<Заголовок2>::<Подзаголовок2>||<Заголовок3>::<Подзаголовок3>}}
 3. Видео-промпт (на английском) описывает кинематографичную сцену по теме сайта на ЧИСТОМ БЕЛОМ ФОНЕ для бесшовной интеграции. Примеры:
    - Часовой магазин: "luxury mechanical watch slowly rotating, exploded view of gears floating apart, macro detail, cinematic"
-   - Кофейня: "elegant cup of coffee with swirling steam, slow 360 rotation, coffee beans floating, cinematic"
+   - Кофейня: "elegant cup of coffee with swirling cream, slow 360 rotation, coffee beans floating, cinematic"
    - Авто: "sports car slowly rotating, sleek reflections, dramatic studio lighting, cinematic"
    НЕ упоминай фон/освещение — это добавится автоматически.
-4. Тексты (РОВНО 3 пары "Заголовок::Подзаголовок") — НА РУССКОМ, короткие и продающие. Они появляются и плавно исчезают по мере скролла.
-5. ⚠️ НЕ пиши код canvas/анимации/кадров сам — маркер автоматически заменяется готовым интерактивным блоком на белом фоне.
-6. Секции непосредственно ДО и ПОСЛЕ маркера делай на светлом/белом фоне, чтобы переход к анимации был бесшовным.
-7. Продолжи остальные секции сайта ПОД маркером как обычно (преимущества, отзывы, CTA, форма, футер).
+4. Тексты (РОВНО 3 пары "Заголовок::Подзаголовок") — НА РУССКОМ, короткие и продающие. Это главные тезисы сайта — они появляются и плавно исчезают по мере скролла поверх видео.
+5. ⚠️ НЕ пиши код canvas/анимации/кадров сам — маркер автоматически заменяется готовым полноэкранным интерактивным блоком.
+6. Секции ПОСЛЕ маркера: преимущества, отзывы, CTA, форма, футер — как обычно.
 ═══ КОНЕЦ ИНТЕРАКТИВНОГО РЕЖИМА ═══\n`;
       }
       if (seoH1 && typeof seoH1 === "string" && seoH1.trim()) {
