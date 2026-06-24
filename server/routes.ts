@@ -335,6 +335,20 @@ async function generateScrollFrames(
 }
 
 // Static, non-animated fallback so a page never ships a broken {{SCROLLANIM}} marker.
+function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>): string {
+  const first = texts[0] || { title: "", sub: "" };
+  const tid = "pnd" + Math.random().toString(36).slice(2, 8);
+  return `<section data-scroll-anim-pending="1" style="position:relative;height:100vh;min-height:600px;background:linear-gradient(135deg,#0a0a0a 0%,#1a1a2e 50%,#0a0a0a 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+<style>@keyframes ${tid}-spin{to{transform:rotate(360deg)}}@keyframes ${tid}-pulse{0%,100%{opacity:.35}50%{opacity:1}}</style>
+<div style="text-align:center;color:#fff;z-index:2;padding:40px;">
+  ${first.title ? `<h2 style="font-size:clamp(1.8rem,5vw,3.5rem);font-weight:800;margin:0 0 .4em;opacity:.9;letter-spacing:-0.03em;">${csaEsc(first.title)}</h2>` : ""}
+  ${first.sub ? `<p style="font-size:clamp(1rem,2vw,1.3rem);color:rgba(255,255,255,.6);margin:0 0 2rem;max-width:600px;">${csaEsc(first.sub)}</p>` : ""}
+  <div style="width:48px;height:48px;border:3px solid rgba(255,255,255,.12);border-top-color:rgba(255,255,255,.8);border-radius:50%;margin:0 auto 1.2rem;animation:${tid}-spin 1s linear infinite;"></div>
+  <p style="font-size:.8rem;color:rgba(255,255,255,.35);letter-spacing:.1em;text-transform:uppercase;animation:${tid}-pulse 2s ease-in-out infinite;">Видеоанимация генерируется...</p>
+</div>
+</section>`;
+}
+
 function scrollAnimFallbackHtml(texts: Array<{ title: string; sub: string }>): string {
   const blocks = texts.map(t => `
       <div style="max-width:680px;margin:0 auto 3.5rem;">
@@ -2218,20 +2232,28 @@ ${designAnalysis}
       }
       const genRunKey = idempotencyKey || `gen-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
       const genImgResult = await resolveGenImgMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => clientGone);
-      // Generate scroll-bound animations for any {{SCROLLANIM:...}} markers (Интерактивный режим)
-      // NOTE: intentionally NOT passing clientGone — animation must complete and be saved even if
-      // the SSE connection drops mid-generation (proxy timeout, browser close).
-      // The phaseDeadline inside resolveScrollAnimMarkers provides the hard time limit.
-      const scrollResult = await resolveScrollAnimMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => false, absoluteProductImageUrl, interactiveStyle);
       mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
-      for (const f of secondaryForGen) {
-        if (f.filename === "index.html") continue;
-        const updatedCode = genFilesMap.get(f.filename);
-        if (updatedCode !== undefined && updatedCode !== f.code) {
-          await storage.upsertProjectFile({ projectId: project.id, filename: f.filename, code: updatedCode });
-        }
+
+      // ── Scroll animation: fire-and-forget approach ───────────────────────────
+      // Replace {{SCROLLANIM:...}} markers with a beautiful "pending" placeholder
+      // and deliver the site to the client immediately. The actual video + ffmpeg
+      // pipeline runs in the background and writes the final code to the DB once
+      // ready. The client polls for completion and auto-updates the preview.
+      const hasScrollMarkers = mainHtmlCode.includes("{{SCROLLANIM:");
+      let immediateHtml = mainHtmlCode;
+      if (hasScrollMarkers) {
+        immediateHtml = mainHtmlCode.replace(/\{\{SCROLLANIM:([\s\S]+?)\}\}/g, (_full, inner) => {
+          const pipe = (inner as string).indexOf("|");
+          const textPart = pipe === -1 ? "" : (inner as string).slice(pipe + 1);
+          const texts = textPart.split("||").map((seg: string) => {
+            const [title, sub] = seg.split("::");
+            return { title: (title || "").trim(), sub: (sub || "").trim() };
+          }).filter((t: { title: string; sub: string }) => t.title || t.sub);
+          return scrollAnimPendingHtml(texts.length ? texts : [{ title: "", sub: "" }]);
+        });
       }
 
+      // Version history (save previous code before overwrite)
       if (project.generatedCode && project.generatedCode.trim()) {
         const currentFiles = await storage.getProjectFiles(project.id);
         const filesSnapshot = currentFiles.map(f => ({ filename: f.filename, code: f.code }));
@@ -2243,20 +2265,64 @@ ${designAnalysis}
         });
       }
 
-      await storage.updateProject(project.id, { generatedCode: mainHtmlCode });
+      await storage.updateProject(project.id, { generatedCode: immediateHtml });
       await storage.createProjectMessage({
         projectId: project.id,
         role: "model",
         content: aiTextReply || "Сайт обновлён",
       });
 
+      // Deliver to client immediately (no waiting for video)
       const allFiles = await storage.getProjectFiles(project.id);
-      const editedFileCode = editingFile !== "index.html" ? allFiles.find(f => f.filename === editingFile)?.code : mainHtmlCode;
-      const totalCreditsUsed = GENERATION_COST + genImgResult.creditsUsed + scrollResult.creditsUsed;
+      const editedFileCode = editingFile !== "index.html" ? allFiles.find(f => f.filename === editingFile)?.code : immediateHtml;
       const freshUser = user?.id ? await storage.getUser(user.id) : null;
-      const finalBalance = freshUser?.credits ?? (genDeduction.newBalance - genImgResult.creditsUsed - scrollResult.creditsUsed);
-      res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, editedFile: editingFile, editedCode: editedFileCode || mainHtmlCode, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })), imagesGenerated: genImgResult.generated, creditsUsed: totalCreditsUsed, newBalance: finalBalance })}\n\n`);
+      const immediateCreditsUsed = GENERATION_COST + genImgResult.creditsUsed;
+      const immediateBalance = freshUser?.credits ?? (genDeduction.newBalance - genImgResult.creditsUsed);
+      res.write(`data: ${JSON.stringify({ done: true, code: immediateHtml, editedFile: editingFile, editedCode: editedFileCode || immediateHtml, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })), imagesGenerated: genImgResult.generated, creditsUsed: immediateCreditsUsed, newBalance: immediateBalance, animPending: hasScrollMarkers })}\n\n`);
       res.end();
+
+      // ── Background: resolve animation markers, then update DB ─────────────
+      if (hasScrollMarkers) {
+        const bgFilesMap = new Map<string, string>();
+        bgFilesMap.set("index.html", mainHtmlCode); // original — still has {{SCROLLANIM}} markers
+        for (const f of secondaryForGen) {
+          if (f.filename !== "index.html") bgFilesMap.set(f.filename, f.code);
+        }
+        const noopRes = { write: () => {}, end: () => {} };
+        (async () => {
+          try {
+            console.log(`[BG ANIM] Starting for project ${project.id}`);
+            const scrollResult = await resolveScrollAnimMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl, interactiveStyle);
+            const animatedCode = bgFilesMap.get("index.html") ?? immediateHtml;
+            await storage.updateProject(project.id, { generatedCode: animatedCode });
+            for (const f of secondaryForGen) {
+              if (f.filename === "index.html") continue;
+              const upd = bgFilesMap.get(f.filename);
+              if (upd !== undefined && upd !== f.code) {
+                await storage.upsertProjectFile({ projectId: project.id, filename: f.filename, code: upd });
+              }
+            }
+            console.log(`[BG ANIM] Done for project ${project.id} — frames: ${scrollResult.generated}, credits: ${scrollResult.creditsUsed}`);
+            // Deduct remaining animation credits from user balance (idempotent)
+            // (resolveScrollAnimMarkers already handles its own deduction)
+          } catch (bgErr) {
+            console.error(`[BG ANIM] Error for project ${project.id}:`, bgErr);
+            // On failure: replace pending placeholder with static fallback
+            try {
+              const fallbackCode = immediateHtml.replace(/<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g, () => {
+                const pipe = mainHtmlCode.match(/\{\{SCROLLANIM:[\s\S]+?\}\}/)?.[0];
+                if (!pipe) return "";
+                const inner = pipe.slice(13, -2);
+                const pipeIdx = inner.indexOf("|");
+                const textPart = pipeIdx === -1 ? "" : inner.slice(pipeIdx + 1);
+                const texts = textPart.split("||").map((seg: string) => { const [t, s] = seg.split("::"); return { title: (t||"").trim(), sub: (s||"").trim() }; });
+                return scrollAnimFallbackHtml(texts);
+              });
+              await storage.updateProject(project.id, { generatedCode: fallbackCode });
+            } catch {}
+          }
+        })();
+      }
     } catch (err: any) {
       console.error("Generation error:", err?.message || err);
       const errMsg = (err?.message?.includes("503") || err?.message?.includes("UNAVAILABLE") || err?.message?.includes("high demand"))

@@ -234,6 +234,7 @@ export default function EditorPage() {
   const [domainNameservers, setDomainNameservers] = useState<string[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const animPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: project, isLoading: projectLoading } = useQuery<Project>({
     queryKey: ["/api/projects", projectId],
@@ -327,6 +328,10 @@ export default function EditorPage() {
   useEffect(() => {
     if (showCode) setEditableCode(currentCode || "");
   }, [showCode, currentCode]);
+
+  useEffect(() => {
+    return () => { if (animPollRef.current) clearInterval(animPollRef.current); };
+  }, []);
 
   const handleAddPage = useCallback(async () => {
     let name = newPageName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
@@ -561,6 +566,34 @@ export default function EditorPage() {
             queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
             if (data.newBalance !== undefined) {
               queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
+            }
+            // Animation is still rendering in the background — poll until it's ready
+            if (data.animPending) {
+              toast({ title: "🎬 Видеоанимация генерируется", description: "Сайт уже готов. Анимация встроится автоматически через 10–35 минут." });
+              if (animPollRef.current) clearInterval(animPollRef.current);
+              const pollStart = Date.now();
+              const POLL_INTERVAL = 15000;
+              const POLL_TIMEOUT = 50 * 60 * 1000; // 50 min
+              animPollRef.current = setInterval(async () => {
+                if (Date.now() - pollStart > POLL_TIMEOUT) {
+                  clearInterval(animPollRef.current!);
+                  animPollRef.current = null;
+                  return;
+                }
+                try {
+                  const resp = await fetch(`/api/projects/${projectId}`, { credentials: "include" });
+                  if (!resp.ok) return;
+                  const proj = await resp.json();
+                  const code: string = proj?.generatedCode || "";
+                  if (code && !code.includes('data-scroll-anim-pending="1"')) {
+                    clearInterval(animPollRef.current!);
+                    animPollRef.current = null;
+                    setStreamedCode(code);
+                    queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+                    toast({ title: "✅ Видеоанимация готова!", description: "Превью обновлено." });
+                  }
+                } catch {}
+              }, POLL_INTERVAL);
             }
           }
           if (data.error) {
