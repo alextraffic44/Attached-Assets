@@ -91,11 +91,22 @@ async function ensureFfmpegPath(ffmpeg: any): Promise<void> {
   if (_ffmpegPathResolved) return;
   _ffmpegPathResolved = true;
   try {
+    // Prefer bundled binary from ffmpeg-static (works in deployed env where PATH has no ffmpeg)
+    const ffmpegStatic = await import("ffmpeg-static").catch(() => null);
+    const staticPath: string | null = (ffmpegStatic as any)?.default ?? (ffmpegStatic as any) ?? null;
+    if (staticPath && typeof staticPath === "string") {
+      ffmpeg.setFfmpegPath(staticPath);
+      console.log(`[SCROLLANIM] ffmpeg path (static): ${staticPath}`);
+      return;
+    }
+  } catch {}
+  try {
+    // Fallback: find ffmpeg in PATH (dev environment)
     const { execSync } = await import("child_process");
     const p = execSync("which ffmpeg").toString().trim();
-    if (p) ffmpeg.setFfmpegPath(p);
+    if (p) { ffmpeg.setFfmpegPath(p); console.log(`[SCROLLANIM] ffmpeg path (which): ${p}`); }
   } catch {
-    /* fall back to PATH auto-detection */
+    console.warn("[SCROLLANIM] ffmpeg binary not found via ffmpeg-static or which");
   }
 }
 
