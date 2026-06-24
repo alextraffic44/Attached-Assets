@@ -72,14 +72,13 @@ const AUTO_IMAGE_COST = 15;
 const MAX_AUTO_IMAGES = 6;
 
 // ─────────────────────────── Scroll Animation (Интерактивный режим) ───────────────────────────
-// Generate a short white-background video via KIE Kling, slice it into compressed WebP frames,
-// store each frame in object storage, and build a self-contained scroll-bound Canvas animation
-// block. Mirrors the {{GENIMG:...}} marker system with {{SCROLLANIM:videoPrompt|T::S||T::S}}.
+// Generate a short video via Gemini Veo 2 (text-to-video or image-to-video),
+// slice into compressed WebP frames, store in object storage, build scroll-bound Canvas block.
+// Mirrors the {{GENIMG:...}} marker system with {{SCROLLANIM:videoPrompt|T::S||T::S}}.
 const SCROLL_ANIM_COST = 120;
-const SCROLL_FRAME_COUNT = 90;     // target frames extracted from a 5s clip (~18fps)
+const SCROLL_FRAME_COUNT = 90;     // target frames extracted from the clip (~18fps)
 const SCROLL_FRAME_WIDTH = 1280;   // downscale width for web delivery
-const SCROLL_VIDEO_DURATION = 5;   // seconds
-const KLING_IMG2VID_MODEL = "kling/v3-turbo-image-to-video";
+const SCROLL_VIDEO_DURATION = 8;   // seconds (Veo 2 minimum)
 
 function csaEsc(s: string): string {
   return String(s)
@@ -110,62 +109,9 @@ async function ensureFfmpegPath(ffmpeg: any): Promise<void> {
   }
 }
 
-// Step 0 helper: generate a cinematic still image for use as the video source frame.
-// Returns the raw public CDN URL from KIE (NOT re-uploaded) so Kling can fetch it.
-async function generateStillForVideo(
-  scenePrompt: string,
-  shouldStop: () => boolean = () => false,
-): Promise<string | null> {
-  if (!KIE_API_KEY) return null;
-  const imagePrompt =
-    `${scenePrompt.trim()}. Cinematic wide-angle still frame, photorealistic, beautiful dramatic ` +
-    `composition, pure white seamless studio background, bright even lighting, no text, no watermark, ` +
-    `ultra-high detail, 16:9 aspect ratio.`;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (shouldStop()) return null;
-    if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
-    let taskId: string | null = null;
-    try {
-      const resp = await fetch(NANO_BANANA_CREATE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({ model: "nano-banana-2", input: { prompt: imagePrompt, aspect_ratio: "16:9", resolution: "2K" } }),
-      });
-      const body: any = await resp.json().catch(() => null);
-      if (body?.code === 200 && body?.data?.taskId) taskId = body.data.taskId;
-      else { console.warn("[SCROLLANIM] still-image create failed:", body?.msg); continue; }
-    } catch (e: any) { console.warn("[SCROLLANIM] still-image create error:", e?.message); continue; }
-    const imgDeadline = Date.now() + 180000; // 3 min per attempt
-    while (Date.now() < imgDeadline) {
-      if (shouldStop()) return null;
-      await new Promise(r => setTimeout(r, 4000));
-      try {
-        const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
-          headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
-        });
-        const body: any = await resp.json().catch(() => null);
-        if (!body || body.code !== 200 || !body.data) continue;
-        const state = body.data.state;
-        if (state === "success") {
-          const result = JSON.parse(body.data.resultJson || "{}");
-          const url = (result.resultUrls || [])[0] || null;
-          if (url) { console.log(`[SCROLLANIM] still image ready: ${url}`); return url; }
-          break;
-        }
-        if (state === "fail" || state === "failed" || state === "error") {
-          console.warn(`[SCROLLANIM] still-image task failed (attempt ${attempt + 1}):`, body.data?.failMsg);
-          break;
-        }
-      } catch (e: any) { console.warn("[SCROLLANIM] still-image poll error:", e?.message); }
-    }
-  }
-  console.warn("[SCROLLANIM] still-image generation failed after all attempts");
-  return null;
-}
-
-// Create a 5s image-to-video on KIE Kling, poll until ready, slice into WebP frames,
+// Create a video via Gemini Veo 2 (text-to-video or image-to-video), slice into WebP frames,
 // upload each to object storage. Returns ordered "/objects/..." URLs (or [] on failure).
-// If referenceStillUrl is provided, it is used directly (skips nano-banana-2 still generation).
+// If referenceStillUrl is provided (user's product photo), it is sent as image-to-video reference.
 async function generateScrollFrames(
   videoPrompt: string,
   shouldStop: () => boolean = () => false,
