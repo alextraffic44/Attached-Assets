@@ -204,22 +204,32 @@ async function generateScrollFrames(
     }
     if (!taskId) continue; // next video attempt
 
+    console.log(`[SCROLLANIM] video task created (attempt ${videoAttempt + 1}): ${taskId}`);
+
     // Step 2 — poll for completion (Kling video can take up to 35 min in queue)
     let taskFailed = false;
+    let pollCount = 0;
     while (Date.now() < deadline) {
       if (shouldStop()) return [];
       await new Promise(r => setTimeout(r, 5000));
+      pollCount++;
       try {
         const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
           headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
         });
         const body: any = await resp.json().catch(() => null);
-        if (!body || body.code !== 200 || !body.data) continue;
+        if (!body || body.code !== 200 || !body.data) { console.log(`[SCROLLANIM] poll #${pollCount}: no data`); continue; }
         const state = body.data.state;
+        if (pollCount <= 3 || pollCount % 10 === 0) console.log(`[SCROLLANIM] poll #${pollCount} state=${state}`);
         if (state === "success") {
+          console.log(`[SCROLLANIM] task success, resultJson=${JSON.stringify(body.data.resultJson)?.slice(0, 200)}`);
           let result: any = {};
-          try { result = JSON.parse(body.data.resultJson || "{}"); } catch {}
+          const rj = body.data.resultJson;
+          try { result = typeof rj === "string" ? JSON.parse(rj) : (rj || {}); } catch (parseErr: any) {
+            console.warn("[SCROLLANIM] resultJson parse error:", parseErr?.message, "raw:", String(rj).slice(0, 200));
+          }
           mp4Url = (result.resultUrls || [])[0] || null;
+          console.log(`[SCROLLANIM] mp4Url=${mp4Url}`);
           break;
         }
         if (state === "fail" || state === "failed" || state === "error") {
@@ -246,10 +256,13 @@ async function generateScrollFrames(
   const videoPath = path.join(tmpDir, "src.mp4");
   const framesDir = path.join(tmpDir, "frames");
   try {
+    console.log(`[SCROLLANIM] downloading mp4: ${mp4Url}`);
     const vresp = await fetch(mp4Url);
     if (!vresp.ok) throw new Error(`download HTTP ${vresp.status}`);
-    fs.writeFileSync(videoPath, Buffer.from(await vresp.arrayBuffer()));
+    const mp4Buf = Buffer.from(await vresp.arrayBuffer());
+    fs.writeFileSync(videoPath, mp4Buf);
     fs.mkdirSync(framesDir, { recursive: true });
+    console.log(`[SCROLLANIM] mp4 downloaded: ${mp4Buf.length} bytes → ${videoPath}`);
   } catch (e: any) {
     console.warn("[SCROLLANIM] mp4 download failed:", e?.message);
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
@@ -261,6 +274,7 @@ async function generateScrollFrames(
     const ffmpeg = (await import("fluent-ffmpeg")).default as any;
     await ensureFfmpegPath(ffmpeg);
     const fps = Math.max(8, Math.round(SCROLL_FRAME_COUNT / SCROLL_VIDEO_DURATION));
+    console.log(`[SCROLLANIM] starting ffmpeg: fps=${fps}, input=${videoPath}, output=${framesDir}/frame_%04d.jpg`);
     await new Promise<void>((resolve, reject) => {
       ffmpeg(videoPath)
         .outputOptions([
@@ -268,10 +282,12 @@ async function generateScrollFrames(
           "-q:v", "2",
         ])
         .output(path.join(framesDir, "frame_%04d.jpg"))
-        .on("end", () => resolve())
+        .on("end", () => { console.log("[SCROLLANIM] ffmpeg done"); resolve(); })
         .on("error", (err: any) => reject(err))
         .run();
     });
+    const frameFiles = fs.readdirSync(framesDir).filter(f => /\.jpg$/i.test(f));
+    console.log(`[SCROLLANIM] ffmpeg extracted ${frameFiles.length} frames`);
   } catch (e: any) {
     console.warn("[SCROLLANIM] ffmpeg extraction failed:", e?.message);
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
