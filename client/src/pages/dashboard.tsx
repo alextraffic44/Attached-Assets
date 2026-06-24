@@ -261,9 +261,12 @@ export default function DashboardPage() {
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImage, setPhotoImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
+  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split">("parallax");
+  const [interactiveProductImage, setInteractiveProductImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const [tourStep, setTourStep] = useState(-1);
   const [activeTour, setActiveTour] = useState<TourStep[] | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const interactiveProductImgRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -317,7 +320,7 @@ export default function DashboardPage() {
       const prompt = selectedMode === "photo"
         ? (description || "Воссоздай дизайн с загруженного скриншота")
         : description || title;
-      const interactiveParam = selectedMode === "interactive" ? "&interactive=1" : "";
+      const interactiveParam = selectedMode === "interactive" ? `&interactive=1&istyle=${interactiveStyle}` : "";
       const enhancedParam = isEnhanced ? "&enhanced=1" : "";
       const researchParam = researchData ? `&research=${encodeURIComponent(researchData)}` : "";
       const multiPageParam = (multiPageEnabled && pageNames.filter(p => p.trim()).length > 0)
@@ -346,7 +349,23 @@ export default function DashboardPage() {
           return;
         }
       }
-      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${interactiveParam}${enhancedParam}${researchParam}${multiPageParam}${seoParam}${leadFormParam}${agentParam}${mockupParam}`);
+      let iProductParam = "";
+      if (selectedMode === "interactive" && interactiveProductImage) {
+        try {
+          const uploadResp = await fetch("/api/upload-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ base64: interactiveProductImage.base64, mimeType: interactiveProductImage.mimeType, name: "product-ref" }),
+            credentials: "include",
+          });
+          const uploadData = await uploadResp.json();
+          if (!uploadResp.ok) throw new Error(uploadData.message);
+          iProductParam = `&iproductUrl=${encodeURIComponent(uploadData.url)}`;
+        } catch (e: any) {
+          console.error("Failed to upload product image:", e);
+        }
+      }
+      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${interactiveParam}${enhancedParam}${researchParam}${multiPageParam}${seoParam}${leadFormParam}${agentParam}${mockupParam}${iProductParam}`);
     },
   });
 
@@ -803,7 +822,118 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex flex-col gap-3">
-                      {selectedMode === "photo" ? (
+                      {selectedMode === "interactive" ? (
+                        <div className="flex flex-col gap-3 flex-1">
+                          {/* Style picker */}
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Стиль анимации</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              {
+                                id: "parallax" as const,
+                                label: "Параллакс",
+                                desc: "Видео на весь экран, текст поверх",
+                                icon: (
+                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
+                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
+                                    <rect x="4" y="10" width="32" height="3" rx="1.5" fill="currentColor" opacity="0.4"/>
+                                    <rect x="10" y="16" width="20" height="2" rx="1" fill="currentColor" opacity="0.25"/>
+                                    <circle cx="20" cy="7" r="3" fill="currentColor" opacity="0.5"/>
+                                  </svg>
+                                ),
+                              },
+                              {
+                                id: "split" as const,
+                                label: "Сплит",
+                                desc: "Текст слева, продукт справа",
+                                icon: (
+                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
+                                    <rect x="0" y="0" width="18" height="28" rx="4" fill="currentColor" opacity="0.08"/>
+                                    <rect x="22" y="0" width="18" height="28" rx="4" fill="currentColor" opacity="0.15"/>
+                                    <rect x="3" y="10" width="12" height="2" rx="1" fill="currentColor" opacity="0.5"/>
+                                    <rect x="3" y="14" width="9" height="1.5" rx="0.75" fill="currentColor" opacity="0.3"/>
+                                    <circle cx="31" cy="14" r="5" fill="currentColor" opacity="0.4"/>
+                                  </svg>
+                                ),
+                              },
+                            ].map(s => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => setInteractiveStyle(s.id)}
+                                className="flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all"
+                                style={{
+                                  border: interactiveStyle === s.id ? '1.5px solid rgba(20,184,166,0.5)' : '1.5px solid rgba(0,0,0,0.07)',
+                                  background: interactiveStyle === s.id ? 'rgba(20,184,166,0.07)' : 'rgba(0,0,0,0.02)',
+                                  color: interactiveStyle === s.id ? '#0d9488' : '#86868B',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {s.icon}
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, lineHeight: 1.2 }}>{s.label}</span>
+                                <span style={{ fontSize: '0.62rem', opacity: 0.7, lineHeight: 1.3, textAlign: 'center' }}>{s.desc}</span>
+                              </button>
+                            ))}
+                          </div>
+                          {/* Product photo upload (optional) */}
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4, marginTop: 4 }}>
+                            Фото продукта <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#aaa' }}>(необязательно)</span>
+                          </div>
+                          <input
+                            ref={interactiveProductImgRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 10 * 1024 * 1024) {
+                                toast({ title: "Файл слишком большой", description: "Максимум 10 МБ", variant: "destructive" });
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const dataUrl = reader.result as string;
+                                const base64 = dataUrl.split(",")[1];
+                                setInteractiveProductImage({ base64, mimeType: file.type || "image/jpeg", preview: dataUrl });
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                          {interactiveProductImage ? (
+                            <div className="relative rounded-xl overflow-hidden flex-1" style={{ border: '1px solid rgba(20,184,166,0.3)', background: 'rgba(20,184,166,0.04)', minHeight: 80 }}>
+                              <img src={interactiveProductImage.preview} alt="Продукт" className="w-full h-full object-contain" style={{ maxHeight: 110 }} />
+                              <button
+                                type="button"
+                                onClick={() => { setInteractiveProductImage(null); if (interactiveProductImgRef.current) interactiveProductImgRef.current.value = ''; }}
+                                className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full"
+                                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer' }}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                              <div className="absolute bottom-2 left-2 px-2 py-1 rounded-md" style={{ background: 'rgba(13,148,136,0.85)', backdropFilter: 'blur(8px)' }}>
+                                <span className="text-white text-[10px] font-semibold flex items-center gap-1">
+                                  <ImageIcon className="w-3 h-3" /> Фото загружено
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => interactiveProductImgRef.current?.click()}
+                              className="flex flex-col items-center justify-center gap-2 rounded-xl transition-all hover:border-teal-400 flex-1"
+                              style={{ border: '2px dashed rgba(20,184,166,0.3)', background: 'rgba(20,184,166,0.02)', minHeight: 80, cursor: 'pointer' }}
+                            >
+                              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(20,184,166,0.08)' }}>
+                                <Upload className="w-4 h-4" style={{ color: '#0d9488' }} />
+                              </div>
+                              <div className="text-center">
+                                <p className="text-xs font-semibold" style={{ color: '#0d9488' }}>Загрузить фото продукта</p>
+                                <p className="text-[10px] mt-0.5" style={{ color: '#5eead4' }}>PNG, JPG до 10 МБ — AI оживит его</p>
+                              </div>
+                            </button>
+                          )}
+                        </div>
+                      ) : selectedMode === "photo" ? (
                         <div className="flex flex-col gap-3 flex-1">
                           <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Скриншот / макет</div>
                           <input

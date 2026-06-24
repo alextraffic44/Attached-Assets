@@ -165,14 +165,22 @@ async function generateStillForVideo(
 
 // Create a 5s image-to-video on KIE Kling, poll until ready, slice into WebP frames,
 // upload each to object storage. Returns ordered "/objects/..." URLs (or [] on failure).
+// If referenceStillUrl is provided, it is used directly (skips nano-banana-2 still generation).
 async function generateScrollFrames(
   videoPrompt: string,
   shouldStop: () => boolean = () => false,
+  referenceStillUrl?: string,
 ): Promise<string[]> {
   if (!KIE_API_KEY) { console.warn("[SCROLLANIM] missing KIE_API_KEY"); return []; }
 
-  // Step 0 — generate a cinematic still image to anchor the video
-  const stillUrl = await generateStillForVideo(videoPrompt, shouldStop);
+  // Step 0 — get a cinematic still image to anchor the video
+  let stillUrl: string | null = null;
+  if (referenceStillUrl) {
+    stillUrl = referenceStillUrl;
+    console.log(`[SCROLLANIM] using provided reference still: ${stillUrl}`);
+  } else {
+    stillUrl = await generateStillForVideo(videoPrompt, shouldStop);
+  }
   if (!stillUrl) { console.warn("[SCROLLANIM] aborting: no still image"); return []; }
   if (shouldStop()) { console.warn("[SCROLLANIM] aborted by shouldStop() after still image"); return []; }
 
@@ -337,9 +345,11 @@ function scrollAnimFallbackHtml(texts: Array<{ title: string; sub: string }>): s
 }
 
 // Build a self-contained scroll-bound Canvas animation block (section + style + script).
-function buildScrollAnimHtml(frames: string[], texts: Array<{ title: string; sub: string }>): string {
+// layout: "parallax" (default) — full-screen centered text; "split" — text on left, product on right.
+function buildScrollAnimHtml(frames: string[], texts: Array<{ title: string; sub: string }>, layout: "parallax" | "split" = "parallax"): string {
   const cid = "csa" + Math.random().toString(36).slice(2, 8);
   const framesJson = JSON.stringify(frames).replace(/'/g, "&#39;");
+  const isSplit = layout === "split";
   const layers = texts.map((t, i) => {
     const seg = 1 / Math.max(1, texts.length);
     const dIn = (i * seg + seg * 0.12).toFixed(3);
@@ -350,8 +360,11 @@ function buildScrollAnimHtml(frames: string[], texts: Array<{ title: string; sub
       </div>`;
   }).join("\n");
   const scrollVh = Math.max(300, Math.min(560, texts.length * 130 + 180));
-  return `
-<section class="${cid}-scroll" data-frames='${framesJson}'>
+
+  // ── Parallax (full-screen) layout ──────────────────────────────────────────
+  if (!isSplit) {
+    return `
+<section class="${cid}-scroll" data-frames='${framesJson}' data-layout="parallax">
   <div class="${cid}-sticky">
     <canvas class="${cid}-canvas"></canvas>
     <div class="${cid}-veil"></div>
@@ -363,9 +376,9 @@ ${layers}
 <style>
   .${cid}-scroll{position:relative;height:${scrollVh}vh;margin:0;padding:0;background:#000;}
   .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#000;}
-  .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;}
-  .${cid}-veil{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 78% 78% at 50% 50%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.25) 100%);}
-  .${cid}-overlays{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;}
+  .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .${cid}-veil{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 78% 78% at 50% 50%,rgba(0,0,0,0) 42%,rgba(0,0,0,0.25) 100%);}
+  .${cid}-overlays{position:absolute;inset:0;pointer-events:none;}
   .${cid}-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(860px,88vw);text-align:center;opacity:0;will-change:opacity,transform;}
   .${cid}-text::before{content:"";position:absolute;inset:-40% -30%;z-index:-1;background:radial-gradient(ellipse at center,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.25) 50%,rgba(0,0,0,0) 72%);filter:blur(12px);}
   .${cid}-text h2{margin:0 0 .4em;font-size:clamp(2.2rem,6vw,5rem);font-weight:800;letter-spacing:-0.03em;line-height:1.05;color:#fff;text-shadow:0 2px 32px rgba(0,0,0,0.5);}
@@ -397,6 +410,54 @@ ${layers}
   });
 })();
 </script>`;
+  }
+
+  // ── Split layout: video right, text left on solid background area ──────────
+  return `
+<section class="${cid}-scroll" data-frames='${framesJson}' data-layout="split">
+  <div class="${cid}-sticky">
+    <canvas class="${cid}-canvas"></canvas>
+    <div class="${cid}-panel">
+${layers}
+    </div>
+  </div>
+</section>
+<style>
+  .${cid}-scroll{position:relative;height:${scrollVh}vh;margin:0;padding:0;background:#f8f7f4;}
+  .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#f8f7f4;}
+  .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .${cid}-panel{position:absolute;top:0;left:0;width:48%;height:100%;pointer-events:none;display:flex;align-items:center;padding:0 clamp(32px,5vw,80px);}
+  .${cid}-text{position:absolute;left:clamp(32px,5vw,80px);top:50%;transform:translateY(-50%);width:min(46vw,560px);text-align:left;opacity:0;will-change:opacity,transform;}
+  .${cid}-text h2{margin:0 0 .5em;font-size:clamp(1.8rem,4vw,3.8rem);font-weight:800;letter-spacing:-0.035em;line-height:1.05;color:#1D1D1F;}
+  .${cid}-text p{margin:0;max-width:480px;font-size:clamp(0.9rem,1.8vw,1.2rem);line-height:1.65;color:#555;}
+  @media(max-width:700px){.${cid}-panel{width:100%;background:linear-gradient(to top,rgba(248,247,244,0.95) 60%,rgba(248,247,244,0) 100%);bottom:0;top:auto;height:42%;align-items:flex-start;padding:16px 20px;} .${cid}-text{position:relative;top:auto;left:auto;transform:none;width:100%;text-align:center;} .${cid}-text h2{font-size:clamp(1.4rem,6vw,2rem);} .${cid}-text p{font-size:0.85rem;}}
+</style>
+<script>
+(function(){
+  var roots=document.querySelectorAll('.${cid}-scroll');
+  roots.forEach(function(root){
+    if(root.__csaInit)return; root.__csaInit=true;
+    var frames; try{frames=JSON.parse(root.getAttribute('data-frames')||'[]');}catch(e){frames=[];}
+    if(!frames.length)return;
+    var sticky=root.querySelector('.${cid}-sticky');
+    var canvas=root.querySelector('.${cid}-canvas');
+    var ctx=canvas.getContext('2d');
+    var texts=[].slice.call(root.querySelectorAll('.${cid}-text'));
+    var imgs=new Array(frames.length),cur=-1;
+    var dpr=Math.min(window.devicePixelRatio||1,2);
+    function cover(img){var cw=sticky.clientWidth,ch=sticky.clientHeight,iw=img.naturalWidth,ih=img.naturalHeight;if(!iw||!ih)return;var s=Math.max(cw/iw,ch/ih),dw=iw*s,dh=ih*s,dx=(cw-dw)/2,dy=(ch-dh)/2;ctx.clearRect(0,0,cw,ch);ctx.drawImage(img,dx,dy,dw,dh);}
+    function paint(i){i=Math.max(0,Math.min(frames.length-1,i));var im=imgs[i];if(im&&im.complete&&im.naturalWidth){cover(im);cur=i;}}
+    function resize(){var w=sticky.clientWidth,h=sticky.clientHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);paint(cur<0?0:cur);}
+    frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0)paint(0);};im.onerror=function(){};im.src=src;imgs[idx]=im;});
+    function prog(){var r=root.getBoundingClientRect();var t=root.offsetHeight-window.innerHeight;var p=t>0?(-r.top)/t:0;return p<0?0:p>1?1:p;}
+    var ticking=false;
+    function onScroll(){if(ticking)return;ticking=true;requestAnimationFrame(function(){var p=prog();var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);texts.forEach(function(el){var a=parseFloat(el.getAttribute('data-in'))||0;var b=parseFloat(el.getAttribute('data-out'))||1;var mid=(a+b)/2,half=Math.max(0.0001,(b-a)/2);var d=Math.abs(p-mid);var op=d>half?0:1-d/half;op=Math.max(0,Math.min(1,op*1.5));el.style.opacity=op.toFixed(3);el.style.transform='translateY(calc(-50% + '+((1-op)*24)+'px))';});ticking=false;});}
+    window.addEventListener('scroll',onScroll,{passive:true});
+    window.addEventListener('resize',resize);
+    resize();onScroll();
+  });
+})();
+</script>`;
 }
 
 // Scan files for {{SCROLLANIM:...}} markers, generate the animation, and bake the result in.
@@ -408,6 +469,8 @@ async function resolveScrollAnimMarkers(
   runKey: string,
   res: any,
   isAborted: () => boolean = () => false,
+  productImageUrl?: string,
+  interactiveStyle?: string,
 ): Promise<{ generated: number; creditsUsed: number }> {
   const RE = /\{\{SCROLLANIM:([\s\S]+?)\}\}/g;
   const markers = new Map<string, { videoPrompt: string; texts: Array<{ title: string; sub: string }> }>();
@@ -467,13 +530,14 @@ async function resolveScrollAnimMarkers(
 
     let frames: string[] = [];
     try {
-      frames = await generateScrollFrames(parsed.videoPrompt, () => isAborted() || Date.now() >= phaseDeadline);
+      frames = await generateScrollFrames(parsed.videoPrompt, () => isAborted() || Date.now() >= phaseDeadline, productImageUrl);
     } finally {
       clearInterval(keepAliveInterval);
     }
 
+    const layout = interactiveStyle === "split" ? "split" : "parallax";
     if (frames.length >= 8) {
-      replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts));
+      replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts, layout));
       generated++;
       if (billed) creditsUsed += SCROLL_ANIM_COST;
       try { res.write(`data: ${JSON.stringify({ status: `Анимация готова (${frames.length} кадров)` })}\n\n`); } catch {}
@@ -1428,7 +1492,18 @@ export async function registerRoutes(
 
       const GENERATION_COST = 100;
 
-      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, imageUrls, videoUrls, modelUrls, audioUrls, leadForm, agentVersion, interactiveMode } = req.body;
+      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, imageUrls, videoUrls, modelUrls, audioUrls, leadForm, agentVersion, interactiveMode, interactiveStyle, interactiveProductImageUrl } = req.body;
+      // Make product image URL absolute so external services (Kling) can fetch it
+      let absoluteProductImageUrl: string | undefined = undefined;
+      if (interactiveProductImageUrl && typeof interactiveProductImageUrl === "string") {
+        if (interactiveProductImageUrl.startsWith("http")) {
+          absoluteProductImageUrl = interactiveProductImageUrl;
+        } else {
+          const proto = req.protocol;
+          const host = req.get("host") || "";
+          absoluteProductImageUrl = `${proto}://${host}${interactiveProductImageUrl}`;
+        }
+      }
       const useGemini = agentVersion === "v2";
       const leadFormEnabled = leadForm !== false && leadForm !== "0" && leadForm !== 0;
       const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
@@ -1485,7 +1560,26 @@ export async function registerRoutes(
         systemContent += `\n\n⚠️ ОДНОСТРАНИЧНЫЙ РЕЖИМ: Создай ОДИН файл index.html. ЗАПРЕЩЕНО использовать маркеры --- FILE: --- или разбивать на несколько файлов. Весь сайт — один HTML-документ.`;
       }
       if (interactiveMode && isNewSite) {
-        systemContent += `\n\n═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ» — КИНЕМАТОГРАФИЧНАЯ СКРОЛЛ-АНИМАЦИЯ ═══
+        const isSplitLayout = interactiveStyle === "split";
+        const hasProductImage = !!absoluteProductImageUrl;
+        if (isSplitLayout) {
+          systemContent += `\n\n═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — СПЛИТ» — ПРОДУКТ СПРАВА + ТЕКСТ СЛЕВА ═══
+Этот сайт использует кинематографичную Hero-анимацию «Сплит»: видео с продуктом СПРАВА, текст СЛЕВА на однотонном фоне.
+
+ПРАВИЛА:
+1. НЕ создавай отдельную Hero-секцию. Маркер SCROLLANIM — это И ЕСТЬ Hero (полноэкранный).
+2. ПЕРВЫМ ЭЛЕМЕНТОМ после <header> вставь РОВНО ОДИН маркер:
+   {{SCROLLANIM:<видео-промпт>|<Заголовок1>::<Подзаголовок1>||<Заголовок2>::<Подзаголовок2>||<Заголовок3>::<Подзаголовок3>}}
+3. ВИДЕО-ПРОМПТ обязан описывать: ПРОДУКТ НА ПРАВОЙ СТОРОНЕ кадра, ЛЕВЫЕ 55% кадра — ЧИСТЫЙ ОДНОТОННЫЙ ФОН (белый/бежевый/пастельный в тон теме). Формат: "${hasProductImage ? "product displayed on right side of frame, rotating slowly" : "ОПИСАНИЕ ПРОДУКТА on right side of frame, rotating slowly"}, left side clean solid [COLOR] background, no shadows crossing into left side, soft studio lighting, cinematic, no text". Примеры:
+   - Крем: "luxury skincare cream jar on right side, slow 360 rotation, left two-thirds pure ivory background, cinematic"
+   - Часы: "elegant watch on right side of frame, gears detail, left area soft cream background, cinematic"
+   - Кофе: "coffee cup with steam on right, coffee beans, left side warm beige solid background, cinematic"
+4. Тексты (РОВНО 3 пары) — НА РУССКОМ, короткие и продающие. Появляются по очереди СЛЕВА на однотонном фоне по мере скролла.
+5. ⚠️ НЕ пиши код canvas сам — маркер заменяется автоматически.
+6. Секции ПОСЛЕ маркера: преимущества, отзывы, CTA, форма, футер.
+═══ КОНЕЦ СПЛИТ-РЕЖИМА ═══\n`;
+        } else {
+          systemContent += `\n\n═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ» — КИНЕМАТОГРАФИЧНАЯ СКРОЛЛ-АНИМАЦИЯ ═══
 Этот сайт ОБЯЗАН начинаться с полноэкранной скролл-анимации ("3D Sexy Scroll"): объект/продукт по теме сайта плавно движется и трансформируется по мере прокрутки, поверх него появляются и исчезают текстовые блоки. Это ЯВЛЯЕТСЯ Hero-секцией сайта.
 
 ПРАВИЛА:
@@ -1501,6 +1595,7 @@ export async function registerRoutes(
 5. ⚠️ НЕ пиши код canvas/анимации/кадров сам — маркер автоматически заменяется готовым полноэкранным интерактивным блоком.
 6. Секции ПОСЛЕ маркера: преимущества, отзывы, CTA, форма, футер — как обычно.
 ═══ КОНЕЦ ИНТЕРАКТИВНОГО РЕЖИМА ═══\n`;
+        }
       }
       if (seoH1 && typeof seoH1 === "string" && seoH1.trim()) {
         const h2List = seoH2s && typeof seoH2s === "string"
@@ -2089,7 +2184,7 @@ ${designAnalysis}
       // NOTE: intentionally NOT passing clientGone — animation must complete and be saved even if
       // the SSE connection drops mid-generation (proxy timeout, browser close).
       // The phaseDeadline inside resolveScrollAnimMarkers provides the hard time limit.
-      const scrollResult = await resolveScrollAnimMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => false);
+      const scrollResult = await resolveScrollAnimMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => false, absoluteProductImageUrl, interactiveStyle);
       mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
       for (const f of secondaryForGen) {
         if (f.filename === "index.html") continue;
