@@ -445,6 +445,8 @@ export default function EditorPage() {
     }, 100);
 
     let waitingForAnim = false;
+    let gotFinalCode = false;
+    let errorShown = false;
     try {
       const isMockupActive = injectedImages ? true : mockupMode;
       const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance, mockupMode: isMockupActive && images.length > 0 };
@@ -565,7 +567,7 @@ export default function EditorPage() {
             setGenerationStatus(null);
             const targetFile = data.editedFile || activeFile || "index.html";
             const targetCode = targetFile === "index.html" ? data.code : (data.editedCode || data.code);
-            if (targetCode) setStreamedCode(targetCode);
+            if (targetCode) { setStreamedCode(targetCode); gotFinalCode = true; }
             setActiveFile(targetFile);
             queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
             queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
@@ -622,6 +624,7 @@ export default function EditorPage() {
             }
           }
           if (data.error) {
+            errorShown = true;
             toast({ title: "Ошибка генерации", description: data.error, variant: "destructive" });
           }
         }
@@ -633,11 +636,25 @@ export default function EditorPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
     } catch (err: any) {
+      errorShown = true;
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
     } finally {
       // Keep the loading screen up while the video animation is still rendering —
       // the poll loop will flip this off once the full site is ready.
       if (!waitingForAnim) setIsGenerating(false);
+      // If the stream ended without ever delivering the final code (server restart,
+      // 503, dropped connection, etc.), never leave the preview frozen on the
+      // half-streamed custom preloader. Drop the partial buffer so the preview falls
+      // back to the saved code (blank for a brand-new project, or the previous
+      // version for an edit) and make sure the user is told to retry.
+      if (!gotFinalCode && !waitingForAnim) {
+        setStreamedCode("");
+        setStreamingReply("");
+        setGenerationStatus(null);
+        if (!errorShown) {
+          toast({ title: "Генерация прервалась", description: "Похоже, соединение прервалось. Попробуйте сгенерировать ещё раз.", variant: "destructive" });
+        }
+      }
     }
   }, [prompt, projectId, attachedImages, attachedVideos, attachedModels, attachedAudios, mockupMode, activeFile, toast, selectedElement]);
 
