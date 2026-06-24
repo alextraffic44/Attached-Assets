@@ -303,7 +303,7 @@ async function resolveScrollAnimMarkers(
   res: any,
   isAborted: () => boolean = () => false,
 ): Promise<{ generated: number; creditsUsed: number }> {
-  const RE = /\{\{SCROLLANIM:([^}]+)\}\}/g;
+  const RE = /\{\{SCROLLANIM:([\s\S]+?)\}\}/g;
   const markers = new Map<string, { videoPrompt: string; texts: Array<{ title: string; sub: string }> }>();
   for (const code of Array.from(filesMap.values())) {
     let m: RegExpExecArray | null; RE.lastIndex = 0;
@@ -328,7 +328,7 @@ async function resolveScrollAnimMarkers(
 
   const finalize = () => {
     for (const [filename, code] of Array.from(filesMap.entries())) {
-      const newCode = code.replace(/\{\{SCROLLANIM:([^}]+)\}\}/g, (_full, inner) => {
+      const newCode = code.replace(/\{\{SCROLLANIM:([\s\S]+?)\}\}/g, (_full, inner) => {
         const key = String(inner).trim();
         return replaceMap.get(key) ?? scrollAnimFallbackHtml(markers.get(key)?.texts || []);
       });
