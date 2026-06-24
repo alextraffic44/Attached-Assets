@@ -399,7 +399,7 @@ function injectLoadingOverlay(html: string): string {
         if(rgb&&rgb.length>=3){
           var lum=(parseInt(rgb[0])*299+parseInt(rgb[1])*587+parseInt(rgb[2])*114)/1000;
           var titleEl=el.querySelector('.ldr-title');
-          if(lum<80){if(!ldrColor)el.style.setProperty('--ldr','rgba(255,255,255,.85)');if(titleEl)(titleEl as HTMLElement).style.color='rgba(255,255,255,.5)';}
+          if(lum<80){if(!ldrColor)el.style.setProperty('--ldr','rgba(255,255,255,.85)');if(titleEl)titleEl.style.color='rgba(255,255,255,.5)';}
         }
       }
     }catch(e){}
