@@ -28,8 +28,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
     },
-    staleTime: 0,
-    refetchOnWindowFocus: true,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
     retry: false,
   });
 
@@ -49,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await apiRequest("POST", "/api/auth/logout");
     queryClient.setQueryData(["/api/auth/user"], null);
     queryClient.clear();
+    try { localStorage.removeItem("craft_projects_cache"); } catch {}
   }, []);
 
   return (

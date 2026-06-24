@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -297,9 +297,23 @@ export default function DashboardPage() {
   const [mockupPrompt, setMockupPrompt] = useState("");
   const [mockupGenerating, setMockupGenerating] = useState(false);
 
-  const { data: userProjects = [], isLoading } = useQuery<Project[]>({
+  const cachedProjects = useMemo<Project[] | undefined>(() => {
+    try {
+      const raw = localStorage.getItem("craft_projects_cache");
+      return raw ? JSON.parse(raw) : undefined;
+    } catch { return undefined; }
+  }, []);
+
+  const { data: userProjects = [], isLoading, isFetching } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
+    placeholderData: cachedProjects,
   });
+
+  useEffect(() => {
+    if (userProjects.length > 0 && !isFetching) {
+      try { localStorage.setItem("craft_projects_cache", JSON.stringify(userProjects)); } catch {}
+    }
+  }, [userProjects, isFetching]);
 
   const { data: unreadData } = useQuery<{ count: number }>({
     queryKey: ["/api/leads/unread-count"],
@@ -558,7 +572,9 @@ export default function DashboardPage() {
 
         {isLoading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1,2,3].map(i => <div key={i} className="h-72 rounded-[2rem] animate-pulse" style={{ background: 'rgba(0,0,0,0.04)' }} />)}
+            {Array.from({ length: cachedProjects?.length || 3 }).map((_, i) => (
+              <div key={i} className="rounded-[2rem] animate-pulse" style={{ height: 280, background: 'rgba(0,0,0,0.04)' }} />
+            ))}
           </div>
         ) : userProjects.length === 0 ? (
           <GlassCard className="flex flex-col items-center justify-center py-32 text-center space-y-8">
