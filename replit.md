@@ -15,6 +15,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - **Deep Research**: Gemini Interactions API with deep-research-pro-preview-12-2025 agent (10 tokens, optional toggle)
 - **AI Images**: GPT Image-2 (primary) via KIE API (model `gpt-image-2-text-to-image`, 2K resolution, 15 tokens); falls back to Nano Banana 2 on creation error or when reference images provided (gpt-image-2 is text-to-image only)
 - **AI 3D Models**: Hunyuan3D V3 via WaveSpeed API (WAVESPEED_API_KEY env var, image-to-3D, GLB output, 100 tokens)
+- **Интерактивный режим (3D Sexy Scroll)**: dashboard start option that auto-generates a cinematic scroll-bound animation. Backend renders a 5s white-bg video via KIE `kling/v3-turbo-text-to-video`, slices it with fluent-ffmpeg into ~90 WebP frames (sharp) stored in Object Storage, then injects a self-contained Canvas section that paints frames bound to scroll progress with fade-in/out text layers. 120 tokens per animation. Mirrors the {{GENIMG}} marker system via `{{SCROLLANIM:videoPrompt|T1::S1||T2::S2||T3::S3}}`, auto-injected right under the Hero. Every marker is always finalized (static text fallback on failure/out-of-credits — no marker ever leaks). Helpers in `server/routes.ts`: `generateScrollFrames`, `buildScrollAnimHtml`, `scrollAnimFallbackHtml`, `resolveScrollAnimMarkers`.
 - **Generations Library**: Button in editor header shows all project's generated images and 3D models; items can be added to chat or deleted
 - **Auto-save to Object Storage**: Generated images (Nano Banana) are automatically downloaded from CDN, re-uploaded to Object Storage, and saved to project_images; 3D models also auto-saved on download
 - **Gemini Retry**: Auto-retry on 503/429 errors (up to 3 attempts with 3/6/9s delays)
@@ -46,6 +47,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 
 ## Key Features
 - Text-to-website generation via Gemini 3.1 Pro with premium design system prompt
+- "Интерактивный" start mode: auto-generated scroll-bound Canvas animation ("3D Sexy Scroll") injected under the Hero (KIE video → ffmpeg frames → Object Storage → Canvas)
 - Auto web research before first generation (Google Search grounding, 7+ sources)
 - High-end design output: Awwwards-level quality with scroll animations, glassmorphism, noise textures, deep shadows
 - Photo/screenshot to website (Vision API)
@@ -67,6 +69,10 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `POST /api/images/generate` — Create Nano Banana image task (prompt, imageSize, outputFormat)
 - `GET /api/images/status/:taskId` — Poll task status (waiting/success/fail)
 - `POST /api/projects/:id/insert-image` — Insert image URL into project code (modes: replace-first-placeholder, replace-all-placeholders, append)
+
+## API Endpoints (Интерактивный / Scroll Animation)
+- Auto path: send `interactiveMode: true` to `POST /api/projects/:id/generate` (set via dashboard "Интерактивный" card → `?interactive=1`); the model emits a `{{SCROLLANIM:...}}` marker that `resolveScrollAnimMarkers` resolves after `resolveGenImgMarkers` (max 2 blocks/site, 120 tokens each, idempotency-keyed deduct + refund-on-failure)
+- `POST /api/generate-scroll-assets` — Standalone: { prompt, idempotencyKey } → renders video, slices frames, returns { frames, count, creditsUsed, newBalance } (120 tokens; refunds only when actually billed, never on idempotent replay)
 
 ## API Endpoints (3D Models)
 - `POST /api/3d/generate` — Create WaveSpeed 3D task (imageUrl, enablePbr, generateType, faceCount) — 20 tokens

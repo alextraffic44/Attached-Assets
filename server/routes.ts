@@ -12,6 +12,7 @@ import { rateLimit, userOrIpKey } from "./rate-limit";
 import { assertPublicHttpUrl } from "./url-guard";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import crypto from "crypto";
 
 // Rate limiters (in-memory, single-instance)
@@ -69,6 +70,304 @@ const KIE_GEMINI_URL = "https://api.kie.ai/gemini/v1/models/gemini-3-5-flash:str
 
 const AUTO_IMAGE_COST = 15;
 const MAX_AUTO_IMAGES = 6;
+
+// ─────────────────────────── Scroll Animation (Интерактивный режим) ───────────────────────────
+// Generate a short white-background video via KIE Kling, slice it into compressed WebP frames,
+// store each frame in object storage, and build a self-contained scroll-bound Canvas animation
+// block. Mirrors the {{GENIMG:...}} marker system with {{SCROLLANIM:videoPrompt|T::S||T::S}}.
+const SCROLL_ANIM_COST = 120;
+const SCROLL_FRAME_COUNT = 90;     // target frames extracted from a 5s clip (~18fps)
+const SCROLL_FRAME_WIDTH = 1280;   // downscale width for web delivery
+const SCROLL_VIDEO_DURATION = 5;   // seconds
+const KLING_VIDEO_MODEL = "kling/v3-turbo-text-to-video";
+
+function csaEsc(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+let _ffmpegPathResolved = false;
+async function ensureFfmpegPath(ffmpeg: any): Promise<void> {
+  if (_ffmpegPathResolved) return;
+  _ffmpegPathResolved = true;
+  try {
+    const { execSync } = await import("child_process");
+    const p = execSync("which ffmpeg").toString().trim();
+    if (p) ffmpeg.setFfmpegPath(p);
+  } catch {
+    /* fall back to PATH auto-detection */
+  }
+}
+
+// Create a 5s white-bg video on KIE, poll until ready, slice into WebP frames,
+// upload each to object storage. Returns ordered "/objects/..." URLs (or [] on failure).
+async function generateScrollFrames(
+  videoPrompt: string,
+  shouldStop: () => boolean = () => false,
+): Promise<string[]> {
+  if (!KIE_API_KEY) { console.warn("[SCROLLANIM] missing KIE_API_KEY"); return []; }
+  const fullPrompt =
+    `${videoPrompt.trim()}. Clean seamless pure white background (#ffffff), bright studio lighting, ` +
+    `smooth slow cinematic camera motion, no text, no captions, no watermark, high detail, photorealistic.`;
+
+  // Step 1 — create the video task (retry transient failures)
+  let taskId: string | null = null;
+  for (let attempt = 0; attempt < 3 && !taskId; attempt++) {
+    if (shouldStop()) return [];
+    if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
+    try {
+      const resp = await fetch(NANO_BANANA_CREATE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
+        body: JSON.stringify({
+          model: KLING_VIDEO_MODEL,
+          input: { prompt: fullPrompt, duration: SCROLL_VIDEO_DURATION, aspect_ratio: "16:9", resolution: "1080p" },
+        }),
+      });
+      const body: any = await resp.json().catch(() => null);
+      if (body?.code === 200 && body?.data?.taskId) taskId = body.data.taskId;
+      else console.warn("[SCROLLANIM] create task failed:", body?.msg || body?.code);
+    } catch (e: any) {
+      console.warn("[SCROLLANIM] create task network error:", e?.message);
+    }
+  }
+  if (!taskId) return [];
+
+  // Step 2 — poll for completion (video generation is slow)
+  const deadline = Date.now() + 300000; // 5 min cap
+  let mp4Url: string | null = null;
+  while (Date.now() < deadline) {
+    if (shouldStop()) return [];
+    await new Promise(r => setTimeout(r, 5000));
+    try {
+      const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
+        headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
+      });
+      const body: any = await resp.json().catch(() => null);
+      if (!body || body.code !== 200 || !body.data) continue;
+      const state = body.data.state;
+      if (state === "success") {
+        let result: any = {};
+        try { result = JSON.parse(body.data.resultJson || "{}"); } catch {}
+        mp4Url = (result.resultUrls || [])[0] || null;
+        break;
+      }
+      if (state === "fail" || state === "failed" || state === "error") {
+        console.warn("[SCROLLANIM] video task failed:", body.data.failMsg || body.data.failCode);
+        return [];
+      }
+    } catch (e: any) {
+      console.warn("[SCROLLANIM] poll error:", e?.message);
+    }
+  }
+  if (!mp4Url) { console.warn("[SCROLLANIM] video generation timed out"); return []; }
+
+  // Step 3 — download mp4 to a temp dir
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrollanim-"));
+  const videoPath = path.join(tmpDir, "src.mp4");
+  const framesDir = path.join(tmpDir, "frames");
+  try {
+    const vresp = await fetch(mp4Url);
+    if (!vresp.ok) throw new Error(`download HTTP ${vresp.status}`);
+    fs.writeFileSync(videoPath, Buffer.from(await vresp.arrayBuffer()));
+    fs.mkdirSync(framesDir, { recursive: true });
+  } catch (e: any) {
+    console.warn("[SCROLLANIM] mp4 download failed:", e?.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    return [];
+  }
+
+  // Step 4 — extract frames with ffmpeg
+  try {
+    const ffmpeg = (await import("fluent-ffmpeg")).default as any;
+    await ensureFfmpegPath(ffmpeg);
+    const fps = Math.max(8, Math.round(SCROLL_FRAME_COUNT / SCROLL_VIDEO_DURATION));
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(videoPath)
+        .outputOptions([
+          "-vf", `fps=${fps},scale=${SCROLL_FRAME_WIDTH}:-2:flags=lanczos`,
+          "-q:v", "2",
+        ])
+        .output(path.join(framesDir, "frame_%04d.jpg"))
+        .on("end", () => resolve())
+        .on("error", (err: any) => reject(err))
+        .run();
+    });
+  } catch (e: any) {
+    console.warn("[SCROLLANIM] ffmpeg extraction failed:", e?.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    return [];
+  }
+
+  // Step 5 — compress each frame to WebP and upload to object storage
+  const urls: string[] = [];
+  try {
+    const sharp = (await import("sharp")).default as any;
+    const files = fs.readdirSync(framesDir).filter(f => /\.jpg$/i.test(f)).sort();
+    for (const f of files) {
+      if (shouldStop()) break;
+      const raw = fs.readFileSync(path.join(framesDir, f));
+      const webp = await sharp(raw).webp({ quality: 72, effort: 4 }).toBuffer();
+      const url = await uploadToObjectStorage(webp, "image/webp", "webp");
+      urls.push(url);
+    }
+  } catch (e: any) {
+    console.warn("[SCROLLANIM] frame processing failed:", e?.message);
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+  console.log(`[SCROLLANIM] produced ${urls.length} frames`);
+  return urls;
+}
+
+// Static, non-animated fallback so a page never ships a broken {{SCROLLANIM}} marker.
+function scrollAnimFallbackHtml(texts: Array<{ title: string; sub: string }>): string {
+  const blocks = texts.map(t => `
+      <div style="max-width:680px;margin:0 auto 3.5rem;">
+        ${t.title ? `<h2 style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;letter-spacing:-0.03em;color:#0a0a0a;margin:0 0 .5em;line-height:1.1;">${csaEsc(t.title)}</h2>` : ""}
+        ${t.sub ? `<p style="font-size:clamp(1rem,2vw,1.25rem);line-height:1.7;color:#444;margin:0;">${csaEsc(t.sub)}</p>` : ""}
+      </div>`).join("");
+  return `<section style="background:#fff;padding:clamp(60px,12vw,160px) 6%;text-align:center;">${blocks}</section>`;
+}
+
+// Build a self-contained scroll-bound Canvas animation block (section + style + script).
+function buildScrollAnimHtml(frames: string[], texts: Array<{ title: string; sub: string }>): string {
+  const cid = "csa" + Math.random().toString(36).slice(2, 8);
+  const framesJson = JSON.stringify(frames).replace(/'/g, "&#39;");
+  const layers = texts.map((t, i) => {
+    const seg = 1 / Math.max(1, texts.length);
+    const dIn = (i * seg + seg * 0.12).toFixed(3);
+    const dOut = (i * seg + seg * 0.88).toFixed(3);
+    return `      <div class="${cid}-text" data-in="${dIn}" data-out="${dOut}">
+        ${t.title ? `<h2>${csaEsc(t.title)}</h2>` : ""}
+        ${t.sub ? `<p>${csaEsc(t.sub)}</p>` : ""}
+      </div>`;
+  }).join("\n");
+  const scrollVh = Math.max(300, Math.min(560, texts.length * 130 + 180));
+  return `
+<section class="${cid}-scroll" data-frames='${framesJson}'>
+  <div class="${cid}-sticky">
+    <canvas class="${cid}-canvas"></canvas>
+    <div class="${cid}-veil"></div>
+    <div class="${cid}-overlays">
+${layers}
+    </div>
+  </div>
+</section>
+<style>
+  .${cid}-scroll{position:relative;height:${scrollVh}vh;background:#fff;}
+  .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#fff;}
+  .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .${cid}-veil{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 78% 78% at 50% 50%, rgba(255,255,255,0) 42%, rgba(255,255,255,0.6) 100%);}
+  .${cid}-overlays{position:absolute;inset:0;pointer-events:none;}
+  .${cid}-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(820px,86vw);text-align:center;opacity:0;will-change:opacity,transform;-webkit-mask-image:radial-gradient(ellipse 86% 92% at 50% 50%, #000 50%, transparent 100%);mask-image:radial-gradient(ellipse 86% 92% at 50% 50%, #000 50%, transparent 100%);}
+  .${cid}-text::before{content:"";position:absolute;inset:-32% -26%;z-index:-1;background:radial-gradient(ellipse at center, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.55) 45%, rgba(255,255,255,0) 72%);filter:blur(8px);}
+  .${cid}-text h2{margin:0 0 .5em;font-size:clamp(2rem,5.5vw,4.25rem);font-weight:800;letter-spacing:-0.03em;line-height:1.05;color:#0a0a0a;}
+  .${cid}-text p{margin:0 auto;max-width:620px;font-size:clamp(1rem,2vw,1.3rem);line-height:1.6;color:#3a3a3a;}
+</style>
+<script>
+(function(){
+  var roots=document.querySelectorAll('.${cid}-scroll');
+  roots.forEach(function(root){
+    if(root.__csaInit)return; root.__csaInit=true;
+    var frames; try{frames=JSON.parse(root.getAttribute('data-frames')||'[]');}catch(e){frames=[];}
+    if(!frames.length)return;
+    var sticky=root.querySelector('.${cid}-sticky');
+    var canvas=root.querySelector('.${cid}-canvas');
+    var ctx=canvas.getContext('2d');
+    var texts=[].slice.call(root.querySelectorAll('.${cid}-text'));
+    var imgs=new Array(frames.length),cur=-1;
+    var dpr=Math.min(window.devicePixelRatio||1,2);
+    function cover(img){var cw=sticky.clientWidth,ch=sticky.clientHeight,iw=img.naturalWidth,ih=img.naturalHeight;if(!iw||!ih)return;var s=Math.max(cw/iw,ch/ih),dw=iw*s,dh=ih*s,dx=(cw-dw)/2,dy=(ch-dh)/2;ctx.clearRect(0,0,cw,ch);ctx.drawImage(img,dx,dy,dw,dh);}
+    function paint(i){i=Math.max(0,Math.min(frames.length-1,i));var im=imgs[i];if(im&&im.complete&&im.naturalWidth){cover(im);cur=i;}}
+    function resize(){var w=sticky.clientWidth,h=sticky.clientHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);paint(cur<0?0:cur);}
+    frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0)paint(0);};im.onerror=function(){};im.src=src;imgs[idx]=im;});
+    function prog(){var r=root.getBoundingClientRect();var t=root.offsetHeight-window.innerHeight;var p=t>0?(-r.top)/t:0;return p<0?0:p>1?1:p;}
+    var ticking=false;
+    function onScroll(){if(ticking)return;ticking=true;requestAnimationFrame(function(){var p=prog();var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);texts.forEach(function(el){var a=parseFloat(el.getAttribute('data-in'))||0;var b=parseFloat(el.getAttribute('data-out'))||1;var mid=(a+b)/2,half=Math.max(0.0001,(b-a)/2);var d=Math.abs(p-mid);var op=d>half?0:1-d/half;op=Math.max(0,Math.min(1,op*1.5));el.style.opacity=op.toFixed(3);el.style.transform='translate(-50%,calc(-50% + '+((1-op)*34)+'px))';});ticking=false;});}
+    window.addEventListener('scroll',onScroll,{passive:true});
+    window.addEventListener('resize',resize);
+    resize();onScroll();
+  });
+})();
+</script>`;
+}
+
+// Scan files for {{SCROLLANIM:...}} markers, generate the animation, and bake the result in.
+// No marker ever survives — failures degrade to a static text section.
+async function resolveScrollAnimMarkers(
+  filesMap: Map<string, string>,
+  projectId: number,
+  userId: number | undefined,
+  runKey: string,
+  res: any,
+  isAborted: () => boolean = () => false,
+): Promise<{ generated: number; creditsUsed: number }> {
+  const RE = /\{\{SCROLLANIM:([^}]+)\}\}/g;
+  const markers = new Map<string, { videoPrompt: string; texts: Array<{ title: string; sub: string }> }>();
+  for (const code of Array.from(filesMap.values())) {
+    let m: RegExpExecArray | null; RE.lastIndex = 0;
+    while ((m = RE.exec(code)) !== null) {
+      const raw = m[1].trim();
+      if (markers.has(raw)) continue;
+      const pipe = raw.indexOf("|");
+      const videoPrompt = (pipe === -1 ? raw : raw.slice(0, pipe)).trim();
+      const textPart = pipe === -1 ? "" : raw.slice(pipe + 1);
+      const texts = textPart.split("||").map(seg => {
+        const [title, sub] = seg.split("::");
+        return { title: (title || "").trim(), sub: (sub || "").trim() };
+      }).filter(t => t.title || t.sub);
+      if (texts.length === 0) texts.push({ title: "", sub: "" });
+      markers.set(raw, { videoPrompt, texts });
+    }
+  }
+
+  const replaceMap = new Map<string, string>();
+  let generated = 0;
+  let creditsUsed = 0;
+
+  const finalize = () => {
+    for (const [filename, code] of Array.from(filesMap.entries())) {
+      const newCode = code.replace(/\{\{SCROLLANIM:([^}]+)\}\}/g, (_full, inner) => {
+        const key = String(inner).trim();
+        return replaceMap.get(key) ?? scrollAnimFallbackHtml(markers.get(key)?.texts || []);
+      });
+      filesMap.set(filename, newCode);
+    }
+  };
+
+  const entries = Array.from(markers.entries());
+  if (entries.length === 0) { return { generated: 0, creditsUsed: 0 }; }
+
+  const planned = entries.slice(0, 2); // at most 2 scroll blocks per site
+  const phaseDeadline = Date.now() + 360000; // 6 min total budget
+
+  for (const [raw, parsed] of planned) {
+    if (isAborted() || Date.now() >= phaseDeadline) break;
+    try { res.write(`data: ${JSON.stringify({ status: "Создаю анимацию прокрутки (рендер видео, до 2 минут)..." })}\n\n`); } catch {}
+
+    let billed = false;
+    if (userId) {
+      const ikey = `scroll-anim-${projectId}-${runKey}-${crypto.createHash("md5").update(raw).digest("hex").slice(0, 8)}`;
+      const ded = await storage.deductCredits(userId, SCROLL_ANIM_COST, "scroll-anim", ikey);
+      if (!ded.success) break; // out of credits → leave for static fallback
+      billed = !ded.alreadyProcessed;
+    }
+
+    const frames = await generateScrollFrames(parsed.videoPrompt, () => isAborted() || Date.now() >= phaseDeadline);
+    if (frames.length >= 8) {
+      replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts));
+      generated++;
+      if (billed) creditsUsed += SCROLL_ANIM_COST;
+      try { res.write(`data: ${JSON.stringify({ status: `Анимация готова (${frames.length} кадров)` })}\n\n`); } catch {}
+    } else if (billed && userId) {
+      try { await storage.refundCredits(userId, SCROLL_ANIM_COST); } catch {}
+    }
+  }
+
+  finalize();
+  return { generated, creditsUsed };
+}
 
 // Low-level: create a GPT Image 2 task on KIE, poll until ready, download and
 // store in object storage. Returns the "/objects/..." URL or null on failure.
@@ -1012,7 +1311,7 @@ export async function registerRoutes(
 
       const GENERATION_COST = 100;
 
-      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, imageUrls, videoUrls, modelUrls, audioUrls, leadForm, agentVersion } = req.body;
+      const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, imageUrls, videoUrls, modelUrls, audioUrls, leadForm, agentVersion, interactiveMode } = req.body;
       const useGemini = agentVersion === "v2";
       const leadFormEnabled = leadForm !== false && leadForm !== "0" && leadForm !== 0;
       const imageArray: Array<{base64: string, mimeType: string, fileName?: string}> = 
@@ -1067,6 +1366,25 @@ export async function registerRoutes(
         systemContent += `\n\n═══ СТРУКТУРА САЙТА ═══\nСоздай МНОГОСТРАНИЧНЫЙ сайт. ОБЯЗАТЕЛЬНО сгенерируй ВСЕ перечисленные страницы:\n- index.html (главная)\n- ${fileNames.join("\n- ")}\nКаждая страница — полный отдельный HTML-документ. В навигации всех страниц должны быть ссылки на ВСЕ страницы. Используй формат --- FILE: имя.html --- для каждого файла.\n\n⚠️ HEADER/FOOTER: Сначала создай полный <header> и <footer> для index.html, затем СКОПИРУЙ ИХ ДОСЛОВНО во все остальные файлы. Все кнопки, ссылки и стили навбара и футера должны быть ИДЕНТИЧНЫ на каждой странице. Отличается только класс/стиль активной ссылки.\n═══ КОНЕЦ СТРУКТУРЫ ═══\n`;
       } else {
         systemContent += `\n\n⚠️ ОДНОСТРАНИЧНЫЙ РЕЖИМ: Создай ОДИН файл index.html. ЗАПРЕЩЕНО использовать маркеры --- FILE: --- или разбивать на несколько файлов. Весь сайт — один HTML-документ.`;
+      }
+      if (interactiveMode && isNewSite) {
+        systemContent += `\n\n═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ» — КИНЕМАТОГРАФИЧНАЯ СКРОЛЛ-АНИМАЦИЯ ═══
+Этот сайт ОБЯЗАН содержать эффектную скролл-анимацию ("3D Sexy Scroll"): объект/продукт по теме сайта плавно вращается и трансформируется по мере прокрутки, поверх него появляются и исчезают текстовые блоки.
+
+ПРАВИЛА:
+1. Сначала создай впечатляющую Hero-секцию по теме сайта (как обычно).
+2. СРАЗУ ПОД Hero-секцией (первым блоком после неё) вставь РОВНО ОДИН маркер на отдельной строке в таком формате:
+   {{SCROLLANIM:<видео-промпт НА АНГЛИЙСКОМ>|<Заголовок1>::<Подзаголовок1>||<Заголовок2>::<Подзаголовок2>||<Заголовок3>::<Подзаголовок3>}}
+3. Видео-промпт (на английском) описывает кинематографичную сцену по теме сайта на ЧИСТОМ БЕЛОМ ФОНЕ для бесшовной интеграции. Примеры:
+   - Часовой магазин: "luxury mechanical watch slowly rotating, exploded view of gears floating apart, macro detail, cinematic"
+   - Кофейня: "elegant cup of coffee with swirling steam, slow 360 rotation, coffee beans floating, cinematic"
+   - Авто: "sports car slowly rotating, sleek reflections, dramatic studio lighting, cinematic"
+   НЕ упоминай фон/освещение — это добавится автоматически.
+4. Тексты (РОВНО 3 пары "Заголовок::Подзаголовок") — НА РУССКОМ, короткие и продающие. Они появляются и плавно исчезают по мере скролла.
+5. ⚠️ НЕ пиши код canvas/анимации/кадров сам — маркер автоматически заменяется готовым интерактивным блоком на белом фоне.
+6. Секции непосредственно ДО и ПОСЛЕ маркера делай на светлом/белом фоне, чтобы переход к анимации был бесшовным.
+7. Продолжи остальные секции сайта ПОД маркером как обычно (преимущества, отзывы, CTA, форма, футер).
+═══ КОНЕЦ ИНТЕРАКТИВНОГО РЕЖИМА ═══\n`;
       }
       if (seoH1 && typeof seoH1 === "string" && seoH1.trim()) {
         const h2List = seoH2s && typeof seoH2s === "string"
@@ -1651,6 +1969,8 @@ ${designAnalysis}
       }
       const genRunKey = idempotencyKey || `gen-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
       const genImgResult = await resolveGenImgMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => clientGone);
+      // Generate scroll-bound animations for any {{SCROLLANIM:...}} markers (Интерактивный режим)
+      const scrollResult = await resolveScrollAnimMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => clientGone);
       mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
       for (const f of secondaryForGen) {
         if (f.filename === "index.html") continue;
@@ -1680,9 +2000,9 @@ ${designAnalysis}
 
       const allFiles = await storage.getProjectFiles(project.id);
       const editedFileCode = editingFile !== "index.html" ? allFiles.find(f => f.filename === editingFile)?.code : mainHtmlCode;
-      const totalCreditsUsed = GENERATION_COST + genImgResult.creditsUsed;
+      const totalCreditsUsed = GENERATION_COST + genImgResult.creditsUsed + scrollResult.creditsUsed;
       const freshUser = user?.id ? await storage.getUser(user.id) : null;
-      const finalBalance = freshUser?.credits ?? (genDeduction.newBalance - genImgResult.creditsUsed);
+      const finalBalance = freshUser?.credits ?? (genDeduction.newBalance - genImgResult.creditsUsed - scrollResult.creditsUsed);
       res.write(`data: ${JSON.stringify({ done: true, code: mainHtmlCode, editedFile: editingFile, editedCode: editedFileCode || mainHtmlCode, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })), imagesGenerated: genImgResult.generated, creditsUsed: totalCreditsUsed, newBalance: finalBalance })}\n\n`);
       res.end();
     } catch (err: any) {
@@ -1704,6 +2024,49 @@ ${designAnalysis}
       } else {
         res.status(500).json({ message: errMsg });
       }
+    }
+  });
+
+  // Standalone scroll-animation generator (Интерактивный режим): renders a white-bg
+  // video, slices it into WebP frames in object storage, returns the ordered frame URLs.
+  app.post("/api/generate-scroll-assets", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { prompt, idempotencyKey } = req.body;
+      if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+        return res.status(400).json({ message: "Промпт обязателен" });
+      }
+
+      const saIkey = idempotencyKey || `scroll-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      const deduction = await storage.deductCredits(user.id, SCROLL_ANIM_COST, "scroll-anim", saIkey);
+      if (!deduction.success) {
+        return res.status(402).json({ message: `Недостаточно токенов. Нужно ${SCROLL_ANIM_COST}, у вас ${deduction.newBalance}`, newBalance: deduction.newBalance });
+      }
+      // Only credits actually deducted this request may be refunded; an idempotent
+      // replay (alreadyProcessed) charged nothing, so it must never trigger a refund.
+      const billed = !deduction.alreadyProcessed;
+
+      let clientGone = false;
+      req.on("close", () => { clientGone = true; });
+
+      let frames: string[] = [];
+      try {
+        frames = await generateScrollFrames(prompt, () => clientGone);
+      } catch (genErr: any) {
+        if (billed) { try { await storage.refundCredits(user.id, SCROLL_ANIM_COST); } catch {} }
+        console.error("Scroll frame generation error:", genErr?.message || genErr);
+        return res.status(502).json({ message: "Не удалось сгенерировать анимацию. Токены возвращены." });
+      }
+      if (frames.length < 8) {
+        if (billed) { try { await storage.refundCredits(user.id, SCROLL_ANIM_COST); } catch {} }
+        return res.status(502).json({ message: "Не удалось сгенерировать анимацию. Токены возвращены." });
+      }
+
+      const freshUser = await storage.getUser(user.id);
+      res.json({ frames, count: frames.length, creditsUsed: billed ? SCROLL_ANIM_COST : 0, newBalance: freshUser?.credits ?? deduction.newBalance });
+    } catch (err: any) {
+      console.error("Scroll assets error:", err?.message || err);
+      res.status(500).json({ message: `Ошибка генерации анимации: ${err?.message?.substring(0, 150) || "неизвестная ошибка"}` });
     }
   });
 
@@ -2365,6 +2728,8 @@ ${designAnalysis}
       const mediaRegexes = [
         /(?:src|href|poster)\s*=\s*["'](\/(?:objects|uploads)\/[^"']+)["']/gi,
         /url\(\s*['"]?(\/(?:objects|uploads)\/[^"')]+?)['"]?\s*\)/gi,
+        // Bare media URLs anywhere (e.g. scroll-animation frame arrays in data-frames / JS)
+        /(\/(?:objects|uploads)\/[A-Za-z0-9._\/-]+?\.(?:webp|jpe?g|png|gif|avif|svg|mp4|webm|mov|ogg|glb|gltf))/gi,
       ];
       for (const rx of mediaRegexes) {
         let mm: RegExpExecArray | null;

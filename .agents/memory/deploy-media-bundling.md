@@ -21,6 +21,11 @@ images/video/audio (stored in object storage and served at `/objects/...`) broke
 deploy. The fix is ONE unified bundler covering all media types, not per-type blocks.
 
 **How to apply:** Any new media kind added to the chat-attach flow is automatically
-covered as long as it ends up referenced via `/objects/` or `/uploads/`. Absolute
-same-origin URLs (e.g. `https://craft-ai.ru/objects/...`) are NOT currently bundled —
+covered as long as it ends up referenced via `/objects/` or `/uploads/`. The scan now has
+THREE regexes: `src|href|poster` attrs, CSS `url(...)`, AND a bare-URL regex matching any
+`/objects//uploads/` path ending in a known media extension — the last one is what catches
+frame URLs embedded in non-standard places like the scroll-animation `data-frames='[...]'`
+JSON array. Any NEW way of embedding a media URL (custom data-attr, inline JS string, JSON
+blob) must end in a recognized extension or it won't be bundled — verify after adding it.
+Absolute same-origin URLs (e.g. `https://craft-ai.ru/objects/...`) are still NOT bundled —
 add them to the scan regex if a path can produce absolute URLs.

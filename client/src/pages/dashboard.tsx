@@ -97,7 +97,7 @@ interface TourStep {
 const CHOOSE_TOUR_STEPS: TourStep[] = [
   { target: '[data-tour="mode-photo"]', title: "По фото", text: "Загрузите скриншот или макет — ИИ воссоздаст его в виде HTML/CSS/JS сайта.", position: "bottom" },
   { target: '[data-tour="mode-prompt"]', title: "По описанию", text: "Просто напишите текстом, что вам нужно — ИИ сделает сайт по вашему описанию.", position: "bottom" },
-  { target: '[data-tour="mode-template"]', title: "Промт + Шаблон", text: "Выберите готовую структуру и стиль, затем добавьте свои детали.", position: "bottom" },
+  { target: '[data-tour="mode-interactive"]', title: "Интерактивный", text: "Сайт с кинематографичной анимацией, которая разворачивается по мере прокрутки.", position: "bottom" },
 ];
 
 const PHOTO_TOUR_STEPS: TourStep[] = [
@@ -238,7 +238,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createStep, setCreateStep] = useState<"choose" | "templates" | "details">("choose");
-  const [selectedMode, setSelectedMode] = useState<"prompt" | "template" | "photo">("prompt");
+  const [selectedMode, setSelectedMode] = useState<"prompt" | "interactive" | "photo">("prompt");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -314,14 +314,10 @@ export default function DashboardPage() {
     onSuccess: async (project: Project) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       setShowCreateModal(false);
-      const styleRef = selectedStyleTemplate
-        ? `\n\nИспользуй следующий UI-компонент как эталон стиля для всего сайта — перенеси его цветовую схему, типографику, тени, анимации и визуальный характер на ВСЕ элементы сайта. НЕ вставляй этот компонент буквально, а вдохновляйся его стилем:\n\nHTML компонента:\n${selectedStyleTemplate.html}\n\nCSS компонента:\n${selectedStyleTemplate.css}`
-        : "";
-      const prompt = selectedMode === "template"
-        ? `Создай сайт: ${description || title}.${styleRef}`
-        : selectedMode === "photo"
-          ? (description || "Воссоздай дизайн с загруженного скриншота")
-          : description || title;
+      const prompt = selectedMode === "photo"
+        ? (description || "Воссоздай дизайн с загруженного скриншота")
+        : description || title;
+      const interactiveParam = selectedMode === "interactive" ? "&interactive=1" : "";
       const enhancedParam = isEnhanced ? "&enhanced=1" : "";
       const researchParam = researchData ? `&research=${encodeURIComponent(researchData)}` : "";
       const multiPageParam = (multiPageEnabled && pageNames.filter(p => p.trim()).length > 0)
@@ -350,7 +346,7 @@ export default function DashboardPage() {
           return;
         }
       }
-      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${enhancedParam}${researchParam}${multiPageParam}${seoParam}${leadFormParam}${agentParam}${mockupParam}`);
+      setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${interactiveParam}${enhancedParam}${researchParam}${multiPageParam}${seoParam}${leadFormParam}${agentParam}${mockupParam}`);
     },
   });
 
@@ -652,15 +648,16 @@ export default function DashboardPage() {
                       ),
                     },
                     {
-                      m: "template",
-                      t: "Промт + Шаблон",
-                      d: "Выберите структуру и детали",
+                      m: "interactive",
+                      t: "Интерактивный",
+                      d: "Сайт с анимацией при скролле",
                       icon: (
                         <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
                           <g className="transition-transform duration-500 origin-center group-hover:scale-110">
-                            <path d="M12 22L2 17L12 12L22 17L12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-300 transition-transform duration-500 group-hover:translate-y-[3px]" />
-                            <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400" />
-                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-600 transition-all duration-500 group-hover:-translate-y-[3px] group-hover:fill-indigo-50" />
+                            <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2" className="text-teal-500" />
+                            <path d="M10 8.5L15.5 12L10 15.5V8.5Z" fill="currentColor" className="text-teal-600 transition-transform duration-500 group-hover:translate-x-[2px]" />
+                            <path d="M3 9H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75" />
+                            <path d="M3 15H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-150" />
                           </g>
                         </svg>
                       ),
@@ -692,7 +689,7 @@ export default function DashboardPage() {
                       style={{ padding: '2rem 1.5rem', borderRadius: 20, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', minHeight: 180 }}
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.12)'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.06)'; }}
-                      onClick={() => { setSelectedMode(x.m as any); setCreateStep(x.m === "template" ? "templates" : "details"); }}
+                      onClick={() => { setSelectedMode(x.m as any); setCreateStep("details"); }}
                     >
                       <div className="flex items-center justify-center mb-4" style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         {x.icon}
@@ -1041,7 +1038,7 @@ export default function DashboardPage() {
                     <button
                       className="h-10 font-semibold transition-all text-sm"
                       style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, color: '#86868B', cursor: 'pointer' }}
-                      onClick={() => { setCreateStep(selectedMode === "template" ? "templates" : "choose"); setIsEnhanced(false); }}
+                      onClick={() => { setCreateStep("choose"); setIsEnhanced(false); }}
                     >
                       ← Назад
                     </button>

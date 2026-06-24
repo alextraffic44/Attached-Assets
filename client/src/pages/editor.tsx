@@ -282,6 +282,7 @@ export default function EditorPage() {
     const initialSeoH1 = urlParams.get("seoh1") || "";
     const initialSeoH2s = urlParams.get("seoh2s") || "";
     const initialLeadForm = urlParams.get("leadform") !== "0";
+    const initialInteractive = urlParams.get("interactive") === "1";
     const isMockup = urlParams.get("mockup") === "1";
     const mockupUrl = urlParams.get("mockupUrl") || "";
     if (initialPrompt && !project?.generatedCode && messages.length === 0) {
@@ -309,7 +310,7 @@ export default function EditorPage() {
         }
         setPrompt(initialPrompt);
         if (!isMockup || mockupImages) {
-          setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch, initialMultiPages, initialSeoH1, initialSeoH2s, mockupImages, initialLeadForm), 500);
+          setTimeout(() => handleGenerate(initialPrompt, enhanced, initialResearch, initialMultiPages, initialSeoH1, initialSeoH2s, mockupImages, initialLeadForm, initialInteractive), 500);
         }
       };
       initMockup();
@@ -371,7 +372,7 @@ export default function EditorPage() {
     }
   }, [newPageName, newPageTitle, projectId, allFiles, project, toast]);
 
-  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string, multiPagesData?: string, seoH1Data?: string, seoH2sData?: string, injectedImages?: Array<{base64: string, mimeType: string, preview: string | null, fileName: string, url?: string}>, leadFormEnabled?: boolean) => {
+  const handleGenerate = useCallback(async (customPrompt?: string, skipEnhance?: boolean, deepResearchData?: string, multiPagesData?: string, seoH1Data?: string, seoH2sData?: string, injectedImages?: Array<{base64: string, mimeType: string, preview: string | null, fileName: string, url?: string}>, leadFormEnabled?: boolean, interactiveMode?: boolean) => {
     let text = customPrompt || prompt;
     const effectiveImages = injectedImages || attachedImages;
     const effectiveVideos = attachedVideos.filter(v => !v.uploading && v.url);
@@ -462,6 +463,9 @@ export default function EditorPage() {
       }
       if (agentVersion === "v2") {
         bodyData.agentVersion = "v2";
+      }
+      if (interactiveMode) {
+        bodyData.interactiveMode = true;
       }
       const response = await fetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
