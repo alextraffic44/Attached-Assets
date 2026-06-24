@@ -79,7 +79,7 @@ const SCROLL_ANIM_COST = 120;
 const SCROLL_FRAME_COUNT = 90;     // target frames extracted from a 5s clip (~18fps)
 const SCROLL_FRAME_WIDTH = 1280;   // downscale width for web delivery
 const SCROLL_VIDEO_DURATION = 5;   // seconds
-const KLING_VIDEO_MODEL = "kling/v3-turbo-text-to-video";
+const KLING_IMG2VID_MODEL = "kling/v3-turbo-image-to-video";
 
 function csaEsc(s: string): string {
   return String(s)
@@ -99,18 +99,77 @@ async function ensureFfmpegPath(ffmpeg: any): Promise<void> {
   }
 }
 
-// Create a 5s white-bg video on KIE, poll until ready, slice into WebP frames,
+// Step 0 helper: generate a cinematic still image for use as the video source frame.
+// Returns the raw public CDN URL from KIE (NOT re-uploaded) so Kling can fetch it.
+async function generateStillForVideo(
+  scenePrompt: string,
+  shouldStop: () => boolean = () => false,
+): Promise<string | null> {
+  if (!KIE_API_KEY) return null;
+  const imagePrompt =
+    `${scenePrompt.trim()}. Cinematic wide-angle still frame, photorealistic, beautiful dramatic ` +
+    `composition, pure white seamless studio background, bright even lighting, no text, no watermark, ` +
+    `ultra-high detail, 16:9 aspect ratio.`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (shouldStop()) return null;
+    if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
+    let taskId: string | null = null;
+    try {
+      const resp = await fetch(NANO_BANANA_CREATE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
+        body: JSON.stringify({ model: "nano-banana-2", input: { prompt: imagePrompt, aspect_ratio: "16:9", resolution: "2K" } }),
+      });
+      const body: any = await resp.json().catch(() => null);
+      if (body?.code === 200 && body?.data?.taskId) taskId = body.data.taskId;
+      else { console.warn("[SCROLLANIM] still-image create failed:", body?.msg); continue; }
+    } catch (e: any) { console.warn("[SCROLLANIM] still-image create error:", e?.message); continue; }
+    const imgDeadline = Date.now() + 180000; // 3 min per attempt
+    while (Date.now() < imgDeadline) {
+      if (shouldStop()) return null;
+      await new Promise(r => setTimeout(r, 4000));
+      try {
+        const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
+          headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
+        });
+        const body: any = await resp.json().catch(() => null);
+        if (!body || body.code !== 200 || !body.data) continue;
+        const state = body.data.state;
+        if (state === "success") {
+          const result = JSON.parse(body.data.resultJson || "{}");
+          const url = (result.resultUrls || [])[0] || null;
+          if (url) { console.log(`[SCROLLANIM] still image ready: ${url}`); return url; }
+          break;
+        }
+        if (state === "fail" || state === "failed" || state === "error") {
+          console.warn(`[SCROLLANIM] still-image task failed (attempt ${attempt + 1}):`, body.data?.failMsg);
+          break;
+        }
+      } catch (e: any) { console.warn("[SCROLLANIM] still-image poll error:", e?.message); }
+    }
+  }
+  console.warn("[SCROLLANIM] still-image generation failed after all attempts");
+  return null;
+}
+
+// Create a 5s image-to-video on KIE Kling, poll until ready, slice into WebP frames,
 // upload each to object storage. Returns ordered "/objects/..." URLs (or [] on failure).
 async function generateScrollFrames(
   videoPrompt: string,
   shouldStop: () => boolean = () => false,
 ): Promise<string[]> {
   if (!KIE_API_KEY) { console.warn("[SCROLLANIM] missing KIE_API_KEY"); return []; }
-  const fullPrompt =
-    `${videoPrompt.trim()}. Clean seamless pure white background (#ffffff), bright studio lighting, ` +
-    `smooth slow cinematic camera motion, no text, no captions, no watermark, high detail, photorealistic.`;
 
-  // Overall deadline shared across all retry attempts
+  // Step 0 — generate a cinematic still image to anchor the video
+  const stillUrl = await generateStillForVideo(videoPrompt, shouldStop);
+  if (!stillUrl) { console.warn("[SCROLLANIM] aborting: no still image"); return []; }
+  if (shouldStop()) return [];
+
+  const animPrompt =
+    `${videoPrompt.trim()}. Smooth slow cinematic camera motion, gentle natural atmospheric movement, ` +
+    `subtle depth and parallax, pure white background maintained, no text, no captions, no watermark.`;
+
+  // Overall deadline shared across all retry attempts (still image time already consumed)
   const deadline = Date.now() + 2400000; // 40 min cap (Kling can take up to 35 min)
   const MAX_VIDEO_ATTEMPTS = 3; // retry on API failure (e.g. upstream timeout)
   let mp4Url: string | null = null;
@@ -122,7 +181,7 @@ async function generateScrollFrames(
       await new Promise(r => setTimeout(r, 5000));
     }
 
-    // Step 1 — create the video task
+    // Step 1 — create the image-to-video task
     let taskId: string | null = null;
     for (let attempt = 0; attempt < 3 && !taskId; attempt++) {
       if (shouldStop() || Date.now() >= deadline) break;
@@ -132,8 +191,8 @@ async function generateScrollFrames(
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
           body: JSON.stringify({
-            model: KLING_VIDEO_MODEL,
-            input: { prompt: fullPrompt, duration: SCROLL_VIDEO_DURATION, aspect_ratio: "16:9", resolution: "1080p" },
+            model: KLING_IMG2VID_MODEL,
+            input: { prompt: animPrompt, image_urls: [stillUrl], duration: SCROLL_VIDEO_DURATION, resolution: "1080p" },
           }),
         });
         const body: any = await resp.json().catch(() => null);
