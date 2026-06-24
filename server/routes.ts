@@ -334,84 +334,60 @@ async function generateScrollFrames(
   return urls;
 }
 
-// Static, non-animated fallback so a page never ships a broken {{SCROLLANIM}} marker.
-// Injects a branded SVG loading overlay that fades out once all resources are
-// loaded. Content stays in the DOM (SEO-safe); overlay is a fixed layer on top.
+// Ensure a video-anim site has a preloader (covers the page until the scroll
+// frames are actually painted) and ALWAYS attach the reliable hide script.
+// If the AI already authored a bespoke, on-brand preloader (id="site-preloader"),
+// we keep its visuals and only wire up hiding. Otherwise we inject a neutral,
+// palette-adaptive fallback so a loader is never missing.
 function injectLoadingOverlay(html: string): string {
   // Only inject into full HTML documents
   if (!html.includes('<body') || !html.includes('</body>')) return html;
-  // Skip if already injected
-  if (html.includes('__craft_loader__')) return html;
+  // Skip if our hide script is already present
+  if (html.includes('__craft_loader_hide__')) return html;
 
-  // Extract page title for branded feel
-  const titleM = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const siteTitle = titleM ? titleM[1].replace(/<[^>]+>/g, '').trim().slice(0, 50) : '';
+  const hasCustom = /id\s*=\s*["']site-preloader["']/i.test(html);
 
-  const loaderHtml = `
-<!-- SEO-safe page-load overlay: content is in DOM, this fixed overlay sits on top -->
+  let visual = '';
+  if (!hasCustom) {
+    // Neutral fallback loader (only used when the AI omitted a custom one)
+    const titleM = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const siteTitle = titleM ? titleM[1].replace(/<[^>]+>/g, '').trim().slice(0, 50) : '';
+    visual = `
 <style id="__craft_loader_style__">
-#__craft_loader__{position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity .55s cubic-bezier(.4,0,.2,1),visibility .55s;background:#fff;}
-#__craft_loader__.hide{opacity:0;visibility:hidden;pointer-events:none;}
-#__craft_loader__ svg{overflow:visible;}
-#__craft_loader__ .ldr-title{font-family:system-ui,-apple-system,sans-serif;font-size:13px;letter-spacing:.08em;opacity:.45;color:inherit;user-select:none;}
+#site-preloader{position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:#0b0f19;transition:opacity .55s cubic-bezier(.4,0,.2,1),visibility .55s;}
+#site-preloader .ldr-title{font-family:system-ui,-apple-system,sans-serif;font-size:13px;letter-spacing:.08em;opacity:.45;color:rgba(255,255,255,.5);user-select:none;}
 </style>
-<div id="__craft_loader__" role="progressbar" aria-label="Загрузка страницы" aria-hidden="true">
+<div id="site-preloader" role="progressbar" aria-label="Загрузка страницы" aria-hidden="true">
   <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <!-- Outer track -->
-    <circle cx="36" cy="36" r="30" stroke="var(--ldr,#6366f1)" stroke-opacity=".12" stroke-width="3.5"/>
-    <!-- Outer arc — CW -->
-    <path d="M36 6 A30 30 0 0 1 62.39 51" stroke="var(--ldr,#6366f1)" stroke-width="3.5" stroke-linecap="round" opacity=".9">
-      <animateTransform attributeName="transform" type="rotate" from="0 36 36" to="360 36 36" dur="1.15s" repeatCount="indefinite"/>
-    </path>
-    <!-- Middle track -->
-    <circle cx="36" cy="36" r="18" stroke="var(--ldr,#6366f1)" stroke-opacity=".08" stroke-width="3"/>
-    <!-- Middle arc — CCW -->
-    <path d="M36 18 A18 18 0 0 0 54 36" stroke="var(--ldr,#6366f1)" stroke-width="3" stroke-linecap="round" opacity=".6">
-      <animateTransform attributeName="transform" type="rotate" from="0 36 36" to="-360 36 36" dur="0.85s" repeatCount="indefinite"/>
-    </path>
-    <!-- Centre dot -->
-    <circle cx="36" cy="36" r="4.5" fill="var(--ldr,#6366f1)" opacity=".85">
-      <animate attributeName="r" values="3.5;6;3.5" dur="1.4s" repeatCount="indefinite" calcMode="spline" keySplines=".4 0 .6 1;.4 0 .6 1"/>
-      <animate attributeName="opacity" values=".55;1;.55" dur="1.4s" repeatCount="indefinite"/>
-    </circle>
+    <circle cx="36" cy="36" r="30" stroke="var(--ldr,#6366f1)" stroke-opacity=".15" stroke-width="3.5"/>
+    <path d="M36 6 A30 30 0 0 1 62.39 51" stroke="var(--ldr,#6366f1)" stroke-width="3.5" stroke-linecap="round" opacity=".9"><animateTransform attributeName="transform" type="rotate" from="0 36 36" to="360 36 36" dur="1.15s" repeatCount="indefinite"/></path>
+    <circle cx="36" cy="36" r="4.5" fill="var(--ldr,#6366f1)" opacity=".85"><animate attributeName="r" values="3.5;6;3.5" dur="1.4s" repeatCount="indefinite"/><animate attributeName="opacity" values=".55;1;.55" dur="1.4s" repeatCount="indefinite"/></circle>
   </svg>
   ${siteTitle ? `<span class="ldr-title">${siteTitle.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>` : ''}
 </div>
-<script id="__craft_loader_script__">(function(){
-  var el=document.getElementById('__craft_loader__');
-  if(!el)return;
-  // Adapt overlay background + spinner color to the site's palette at runtime
-  function adapt(){
-    try{
-      var rs=getComputedStyle(document.documentElement);
-      var bs=getComputedStyle(document.body);
-      // Try common CSS variable names for primary/accent color
-      var cc=['--primary','--color-primary','--accent','--brand','--brand-color','--main-color','--theme-color'];
-      var ldrColor='';
-      for(var i=0;i<cc.length;i++){var v=rs.getPropertyValue(cc[i]).trim();if(v&&v.length>2){ldrColor=v;break;}}
-      if(ldrColor)el.style.setProperty('--ldr',ldrColor);
-      // Match overlay bg to body background
-      var bg=bs.backgroundColor;
-      if(bg&&bg!=='rgba(0, 0, 0, 0)'&&bg!=='transparent'){
-        el.style.background=bg;
-        // Pick contrasting text/spinner color if bg is dark
-        var rgb=bg.match(/\\d+/g);
-        if(rgb&&rgb.length>=3){
-          var lum=(parseInt(rgb[0])*299+parseInt(rgb[1])*587+parseInt(rgb[2])*114)/1000;
-          var titleEl=el.querySelector('.ldr-title');
-          if(lum<80){if(!ldrColor)el.style.setProperty('--ldr','rgba(255,255,255,.85)');if(titleEl)titleEl.style.color='rgba(255,255,255,.5)';}
-        }
-      }
-    }catch(e){}
-  }
+<script id="__craft_loader_adapt__">(function(){
+  var el=document.getElementById('site-preloader');if(!el)return;
+  function adapt(){try{var rs=getComputedStyle(document.documentElement);var bs=getComputedStyle(document.body);var cc=['--primary','--color-primary','--accent','--brand','--brand-color','--main-color','--theme-color'];var ldrColor='';for(var i=0;i<cc.length;i++){var v=rs.getPropertyValue(cc[i]).trim();if(v&&v.length>2){ldrColor=v;break;}}if(ldrColor)el.style.setProperty('--ldr',ldrColor);var bg=bs.backgroundColor;if(bg&&bg!=='rgba(0, 0, 0, 0)'&&bg!=='transparent'){el.style.background=bg;var rgb=bg.match(/\\d+/g);if(rgb&&rgb.length>=3){var lum=(parseInt(rgb[0])*299+parseInt(rgb[1])*587+parseInt(rgb[2])*114)/1000;var titleEl=el.querySelector('.ldr-title');if(lum>=128){if(!ldrColor)el.style.setProperty('--ldr','#111');if(titleEl)titleEl.style.color='rgba(0,0,0,.45)';}}}}catch(e){}}
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',adapt);}else{adapt();}
-  // Hide on window.load; fallback at 9 s
-  function hide(){el.classList.add('hide');setTimeout(function(){if(el.parentNode)el.parentNode.removeChild(el);var s=document.getElementById('__craft_loader_style__'),sc=document.getElementById('__craft_loader_script__');if(s)s.remove();if(sc)sc.remove();},650);}
-  window.addEventListener('load',hide);
-  setTimeout(hide,9000);
+})();</script>`;
+  }
+
+  // Reliable hide: wait for the scroll-anim's first painted frame (craft:anim-ready)
+  // on video pages; otherwise hide on window.load. Generous hard-timeout fallback so
+  // the preloader can never get stuck covering the site.
+  const hideScript = `
+<script id="__craft_loader_hide__">(function(){
+  var el=document.getElementById('site-preloader');if(!el)return;
+  var done=false;
+  function hide(){if(done)return;done=true;if(!el.style.transition)el.style.transition='opacity .6s ease,visibility .6s';el.style.opacity='0';el.style.visibility='hidden';el.style.pointerEvents='none';setTimeout(function(){if(el.parentNode)el.parentNode.removeChild(el);var s=document.getElementById('__craft_loader_style__');if(s)s.remove();},700);}
+  var hasAnim=!!document.querySelector('[data-frames]');
+  if(window.__craftAnimReady){hide();return;}
+  window.addEventListener('craft:anim-ready',hide);
+  if(hasAnim){setTimeout(hide,15000);}
+  else{if(document.readyState==='complete'){hide();}else{window.addEventListener('load',function(){setTimeout(hide,300);});}setTimeout(hide,9000);}
 })();</script>`;
 
-  return html.replace(/<\/body>/i, loaderHtml + '\n</body>');
+  return html.replace(/<\/body>/i, visual + hideScript + '\n</body>');
 }
 
 function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>): string {
@@ -507,7 +483,7 @@ ${layers}
     function cover(img){var cw=sticky.clientWidth,ch=sticky.clientHeight,iw=img.naturalWidth,ih=img.naturalHeight;if(!iw||!ih)return;var s=Math.max(cw/iw,ch/ih),dw=iw*s,dh=ih*s,dx=(cw-dw)/2,dy=(ch-dh)/2;ctx.clearRect(0,0,cw,ch);ctx.drawImage(img,dx,dy,dw,dh);}
     function paint(i){i=Math.max(0,Math.min(frames.length-1,i));var im=imgs[i];if(im&&im.complete&&im.naturalWidth){cover(im);cur=i;}}
     function resize(){var w=sticky.clientWidth,h=sticky.clientHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);paint(cur<0?0:cur);}
-    frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0)paint(0);};im.onerror=function(){};im.src=src;imgs[idx]=im;});
+    frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0){paint(0);try{if(document.querySelector('[data-frames]')===root){window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));}}catch(e){}}};im.onerror=function(){};im.src=src;imgs[idx]=im;});
     function prog(){var r=root.getBoundingClientRect();var t=root.offsetHeight-window.innerHeight;var p=t>0?(-r.top)/t:0;return p<0?0:p>1?1:p;}
     var ticking=false;
     function onScroll(){if(ticking)return;ticking=true;requestAnimationFrame(function(){var p=prog();var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);texts.forEach(function(el){var a=parseFloat(el.getAttribute('data-in'))||0;var b=parseFloat(el.getAttribute('data-out'))||1;var mid=(a+b)/2,half=Math.max(0.0001,(b-a)/2);var d=Math.abs(p-mid);var op=d>half?0:1-d/half;op=Math.max(0,Math.min(1,op*1.5));el.style.opacity=op.toFixed(3);el.style.transform='translate(-50%,calc(-50% + '+((1-op)*34)+'px))';});ticking=false;});}
@@ -555,7 +531,7 @@ ${layers}
     function cover(img){var cw=sticky.clientWidth,ch=sticky.clientHeight,iw=img.naturalWidth,ih=img.naturalHeight;if(!iw||!ih)return;var s=Math.max(cw/iw,ch/ih),dw=iw*s,dh=ih*s,dx=(cw-dw)/2,dy=(ch-dh)/2;ctx.clearRect(0,0,cw,ch);ctx.drawImage(img,dx,dy,dw,dh);}
     function paint(i){i=Math.max(0,Math.min(frames.length-1,i));var im=imgs[i];if(im&&im.complete&&im.naturalWidth){cover(im);cur=i;}}
     function resize(){var w=sticky.clientWidth,h=sticky.clientHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);paint(cur<0?0:cur);}
-    frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0)paint(0);};im.onerror=function(){};im.src=src;imgs[idx]=im;});
+    frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0){paint(0);try{if(document.querySelector('[data-frames]')===root){window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));}}catch(e){}}};im.onerror=function(){};im.src=src;imgs[idx]=im;});
     function prog(){var r=root.getBoundingClientRect();var t=root.offsetHeight-window.innerHeight;var p=t>0?(-r.top)/t:0;return p<0?0:p>1?1:p;}
     var ticking=false;
     function onScroll(){if(ticking)return;ticking=true;requestAnimationFrame(function(){var p=prog();var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);texts.forEach(function(el){var a=parseFloat(el.getAttribute('data-in'))||0;var b=parseFloat(el.getAttribute('data-out'))||1;var mid=(a+b)/2,half=Math.max(0.0001,(b-a)/2);var d=Math.abs(p-mid);var op=d>half?0:1-d/half;op=Math.max(0,Math.min(1,op*1.5));el.style.opacity=op.toFixed(3);el.style.transform='translateY(calc(-50% + '+((1-op)*24)+'px))';});ticking=false;});}
@@ -1714,6 +1690,21 @@ VIDEO_PROMPT (на английском) — кинематографичная 
 🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
 ═══ КОНЕЦ ИНТЕРАКТИВНОГО РЕЖИМА ═══\n`;
         }
+        systemContent += `\n\n═══ ПРЕЛОАДЕР САЙТА (ОБЯЗАТЕЛЬНО) ═══
+Этот сайт содержит тяжёлую видео-анимацию, которая грузится не мгновенно. Чтобы посетитель не увидел пустой/чёрный экран, добавь УНИКАЛЬНЫЙ полноэкранный прелоадер.
+
+ПРАВИЛА:
+1. Самым ПЕРВЫМ элементом внутри <body> (до <header> и до маркера {{SCROLLANIM}}) вставь:
+   <div id="site-preloader"> ... твоя авторская анимация загрузки ... </div>
+   ⚠️ id ОБЯЗАН быть ровно "site-preloader" — по нему система автоматически скроет прелоадер, когда видео-кадры загрузятся.
+2. Прелоадер ДОЛЖЕН быть УНИКАЛЬНЫМ и идеально соответствовать стилю ИМЕННО ЭТОГО сайта:
+   - тот же фон, что у сайта (тёмный/светлый/градиент/цвет бренда);
+   - те же шрифты и фирменные цвета;
+   - то же настроение (люкс / минимализм / неон / эко / техно и т.д.).
+3. По центру — твоя СОБСТВЕННАЯ анимация (НЕ банальный круглый спиннер): например, пульсирующее название/логотип бренда, тонкая анимированная линия-прогресс, морфинг фигуры, печатающийся текст, мерцание — то, что подходит теме.
+4. Стили прелоадера задай инлайн (в <style> внутри документа или style-атрибутом). Используй position:fixed; inset:0; высокий z-index.
+5. НЕ добавляй JavaScript для скрытия прелоадера — система скроет его сама автоматически. Просто создай красивую статичную/CSS-анимированную заглушку.
+═══ КОНЕЦ ПРЕЛОАДЕРА ═══\n`;
       }
       if (seoH1 && typeof seoH1 === "string" && seoH1.trim()) {
         const h2List = seoH2s && typeof seoH2s === "string"
