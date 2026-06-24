@@ -38,3 +38,15 @@ generation, storage, deployability, cap, billing, and fallback.
   mints credits. (Both the SCROLLANIM marker resolver and `/api/generate-scroll-assets`
   follow this; the standalone endpoint had this exact bug and was fixed.)
 - The generate endpoint must enforce project ownership — auto image-gen spends credits.
+- SCROLLANIM with an uploaded product photo (Интерактивный mode): NEVER feed the raw user
+  photo straight to the Kling image-to-video model — the busy original background leaks into
+  the video. First regenerate the product onto a COMPLETELY SOLID single-color background
+  (product on the RIGHT for "split" layout, centered for "parallax") and use that still as
+  Kling's source. Reference-image regeneration must use `nano-banana-2` (`input.image_url`
+  array); `gpt-image-2-text-to-image` is text-to-image only and silently ignores references.
+  On regen failure, leave the reference still undefined so the pipeline falls back to a
+  text-to-image still — which still yields a solid background (the hard requirement).
+  **Why:** users explicitly require a monochrome video background regardless of their photo.
+- Ordering invariant: any external paid API call (e.g. the product-still regeneration) MUST
+  happen AFTER the credit deduction succeeds, not before — otherwise a user with no balance
+  can still trigger paid upstream work. Gate the spend on `deductCredits(...).success`.

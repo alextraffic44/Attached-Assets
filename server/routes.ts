@@ -163,6 +163,69 @@ async function generateStillForVideo(
   return null;
 }
 
+// Regenerate an uploaded product photo onto a CLEAN SOLID (monochrome) background
+// with the product positioned for the chosen layout (right for "split", centered for
+// "parallax"), then return the raw KIE CDN URL so Kling can use it as the video source.
+// gpt-image-2 is text-to-image only and can't take a reference image, so the product
+// is preserved via Nano Banana 2 (image-to-image with image_url).
+async function generateProductStill(
+  productImageUrl: string,
+  layout: "parallax" | "split",
+  shouldStop: () => boolean = () => false,
+): Promise<string | null> {
+  if (!KIE_API_KEY) return null;
+  const placement = layout === "split"
+    ? "Position the product on the RIGHT third of the frame; keep the entire LEFT half as clean empty negative space (still the same solid color) for text."
+    : "Position the product centered in the frame.";
+  const prompt =
+    `Take the exact product from the reference image and keep it perfectly identical ` +
+    `(same shape, label, text, colors and proportions). Place it in a premium product-photography scene on a ` +
+    `COMPLETELY SOLID, FLAT, UNIFORM single-color studio background — one plain matte color filling the whole frame, ` +
+    `absolutely no gradient, no pattern, no texture, no scenery, no props, no visible surface or horizon line. ` +
+    `${placement} Soft even studio lighting, a subtle realistic contact shadow under the product, photorealistic, ` +
+    `ultra-high detail, 16:9 aspect ratio, no text, no watermark.`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (shouldStop()) return null;
+    if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
+    let taskId: string | null = null;
+    try {
+      const resp = await fetch(NANO_BANANA_CREATE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
+        body: JSON.stringify({ model: "nano-banana-2", input: { prompt, image_url: [productImageUrl], aspect_ratio: "16:9", resolution: "2K" } }),
+      });
+      const body: any = await resp.json().catch(() => null);
+      if (body?.code === 200 && body?.data?.taskId) taskId = body.data.taskId;
+      else { console.warn("[SCROLLANIM] product-still create failed:", body?.msg); continue; }
+    } catch (e: any) { console.warn("[SCROLLANIM] product-still create error:", e?.message); continue; }
+    const imgDeadline = Date.now() + 180000; // 3 min per attempt
+    while (Date.now() < imgDeadline) {
+      if (shouldStop()) return null;
+      await new Promise(r => setTimeout(r, 4000));
+      try {
+        const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
+          headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
+        });
+        const body: any = await resp.json().catch(() => null);
+        if (!body || body.code !== 200 || !body.data) continue;
+        const state = body.data.state;
+        if (state === "success") {
+          const result = JSON.parse(body.data.resultJson || "{}");
+          const url = (result.resultUrls || [])[0] || null;
+          if (url) { console.log(`[SCROLLANIM] product still ready: ${url}`); return url; }
+          break;
+        }
+        if (state === "fail" || state === "failed" || state === "error") {
+          console.warn(`[SCROLLANIM] product-still task failed (attempt ${attempt + 1}):`, body.data?.failMsg);
+          break;
+        }
+      } catch (e: any) { console.warn("[SCROLLANIM] product-still poll error:", e?.message); }
+    }
+  }
+  console.warn("[SCROLLANIM] product-still generation failed after all attempts");
+  return null;
+}
+
 // Create a 5s image-to-video on KIE Kling, poll until ready, slice into WebP frames,
 // upload each to object storage. Returns ordered "/objects/..." URLs (or [] on failure).
 // If referenceStillUrl is provided, it is used directly (skips nano-banana-2 still generation).
@@ -186,7 +249,7 @@ async function generateScrollFrames(
 
   const animPrompt =
     `${videoPrompt.trim()}. Smooth slow cinematic camera motion, gentle natural atmospheric movement, ` +
-    `subtle depth and parallax, pure white background maintained, no text, no captions, no watermark.`;
+    `subtle depth and parallax, keep the solid uniform background perfectly clean and unchanged, no text, no captions, no watermark.`;
 
   // Overall deadline shared across all retry attempts (still image time already consumed)
   const deadline = Date.now() + 2400000; // 40 min cap (Kling can take up to 35 min)
@@ -593,6 +656,13 @@ async function resolveScrollAnimMarkers(
 
   const planned = entries.slice(0, 2); // at most 2 scroll blocks per site
   const phaseDeadline = Date.now() + 2520000; // 42 min total budget (Kling can take up to 35 min)
+  const layout: "parallax" | "split" = interactiveStyle === "split" ? "split" : "parallax";
+
+  // Product still is regenerated lazily (ONCE) AFTER the first successful credit
+  // deduction inside the loop, so we never spend external API budget on a user who
+  // cannot pay.
+  let referenceStill: string | undefined = undefined;
+  let productStillResolved = false;
 
   for (const [raw, parsed] of planned) {
     if (isAborted() || Date.now() >= phaseDeadline) break;
@@ -606,6 +676,18 @@ async function resolveScrollAnimMarkers(
       billed = !ded.alreadyProcessed;
     }
 
+    // User is confirmed billable → safe to spend external API. Regenerate the uploaded
+    // product photo ONCE onto a clean SOLID background (product positioned per layout)
+    // and feed THAT still to Kling, so the scroll video always has a uniform background
+    // instead of the raw busy photo. On failure referenceStill stays undefined and
+    // generateScrollFrames falls back to a text-to-image still (still a solid bg).
+    if (productImageUrl && !productStillResolved) {
+      productStillResolved = true;
+      try { res.write(`data: ${JSON.stringify({ status: "Готовлю кадр товара на однотонном фоне..." })}\n\n`); } catch {}
+      referenceStill = (await generateProductStill(productImageUrl, layout, () => isAborted() || Date.now() >= phaseDeadline)) || undefined;
+      if (!referenceStill) console.warn("[SCROLLANIM] product-still failed — falling back to text-to-image still (solid bg preserved)");
+    }
+
     // Keep the SSE connection alive with periodic status pings while video renders
     const keepAliveInterval = setInterval(() => {
       try { res.write(`data: ${JSON.stringify({ status: "Рендерю видео для анимации прокрутки (ожидаю результат от KIE)..." })}\n\n`); } catch {}
@@ -613,12 +695,11 @@ async function resolveScrollAnimMarkers(
 
     let frames: string[] = [];
     try {
-      frames = await generateScrollFrames(parsed.videoPrompt, () => isAborted() || Date.now() >= phaseDeadline, productImageUrl);
+      frames = await generateScrollFrames(parsed.videoPrompt, () => isAborted() || Date.now() >= phaseDeadline, referenceStill);
     } finally {
       clearInterval(keepAliveInterval);
     }
 
-    const layout = interactiveStyle === "split" ? "split" : "parallax";
     if (frames.length >= 8) {
       replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts, layout));
       generated++;
