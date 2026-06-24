@@ -163,27 +163,145 @@ async function generateStillForVideo(
   return null;
 }
 
+// A product-aware creative concept for the scroll video: a small static element to
+// bake into the still (via image-to-image) plus the matching motion to animate it.
+type CreativeProductConcept = {
+  stillAddition: string; // extra static accent to composite into the still
+  motionPrompt: string;  // image-to-video motion that animates the scene
+  productSummary?: string;
+};
+
+// Load product-image bytes for vision analysis. We ONLY read images we host
+// ourselves under "/objects/..." (the path uploaded product photos always use),
+// reading straight from object storage by entity id. We deliberately never
+// server-fetch an arbitrary external URL here — that avoids SSRF / redirect / DNS
+// rebinding risk entirely. Anything that isn't an own object path is skipped (the
+// caller then falls back to the generic, non-vision video prompt).
+async function fetchProductImageForVision(
+  productImageUrl: string,
+): Promise<{ base64: string; mimeType: string } | null> {
+  const MAX_BYTES = 12 * 1024 * 1024; // 12 MB
+  let pathname = "";
+  try { pathname = new URL(productImageUrl).pathname; } catch { pathname = productImageUrl; }
+  if (!pathname.startsWith("/objects/")) return null; // never fetch external URLs
+  try {
+    const file = await objectStorage.getObjectEntityFile(pathname);
+    const [meta] = await file.getMetadata();
+    const mimeType = (meta.contentType as string) || "image/png";
+    if (!mimeType.startsWith("image/")) return null;
+    if (Number(meta.size || 0) > MAX_BYTES) {
+      console.warn("[SCROLLANIM] product image too large for vision:", meta.size);
+      return null;
+    }
+    const [buf] = await file.download();
+    if (!buf?.length || buf.length > MAX_BYTES) return null;
+    return { base64: buf.toString("base64"), mimeType };
+  } catch (e: any) {
+    console.warn("[SCROLLANIM] vision image read failed:", e?.message);
+    return null;
+  }
+}
+
+// Analyze the uploaded product photo with Gemini vision and invent ONE tasteful,
+// product-aware cinematic concept (e.g. a butterfly landing on a cream, petals
+// drifting) instead of a plain 360 rotation. Returns null on any failure/timeout so
+// the caller falls back to the generic video prompt and the pipeline never breaks.
+async function generateCreativeConcept(
+  productImageUrl: string,
+  layout: "parallax" | "split",
+  shouldStop: () => boolean = () => false,
+): Promise<CreativeProductConcept | null> {
+  if (shouldStop()) return null;
+  const img = await fetchProductImageForVision(productImageUrl);
+  if (!img || shouldStop()) return null;
+
+  const placementNote = layout === "split"
+    ? "The product sits on the RIGHT third of the frame and the LEFT half stays clean empty space for text, so keep any added element on or near the product on the right and never fill the left half."
+    : "The product is centered, so keep any added element close around the product.";
+
+  const instruction =
+`You are an award-winning product-commercial creative director.
+Look at the product in the image and design ONE short, tasteful, photoreal cinematic concept for a scroll-bound hero video — NOT a boring 360 rotation.
+Pick an idea that fits THIS product's category and mood, for example:
+- cosmetics / cream / skincare: a delicate butterfly gently lands on it, soft flower petals drift around, a fresh flower softly blooms beside it, light water droplets;
+- perfume: soft mist or light ribbons swirling, subtle glints of light;
+- watch / jewellery: slow light glints sweeping, a few gears or sparkles floating;
+- drink / water: condensation beads, a gentle splash, fresh fruit or leaves nearby;
+- food / coffee: rising steam, herbs or beans gently falling.
+Hard rules: keep the REAL product and its label exactly intact; a SOLID flat studio background; at most one or two subtle elegant accents; no text, no humans, no hands, no invented brand logos; tasteful and premium, never cluttered or surreal. ${placementNote}
+Return STRICT JSON only (no markdown, no commentary):
+{"productSummary":"<2-4 words: what the product is>","stillAddition":"<one short English phrase: the extra STATIC element(s) to composite into the still beside/around the product>","motionPrompt":"<one English sentence: the gentle cinematic MOTION that animates that scene for an image-to-video model>"}`;
+
+  // Hard 20s bound: the AbortController aborts the underlying request (if the SDK
+  // honors it) and the Promise.race guarantees we never wait longer regardless.
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const callP = gemini.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        { role: "user", parts: [
+          { inlineData: { data: img.base64, mimeType: img.mimeType } },
+          { text: instruction },
+        ] },
+      ],
+      config: { abortSignal: controller.signal },
+    });
+    const timeoutP = new Promise<null>((resolve) => { timer = setTimeout(() => { controller.abort(); resolve(null); }, 20000); });
+    const result: any = await Promise.race([callP, timeoutP]);
+    if (!result) { console.warn("[SCROLLANIM] creative-concept vision timed out"); return null; }
+    const text: string =
+      result?.text ??
+      result?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).filter(Boolean).join("") ??
+      "";
+    if (!text) return null;
+    const jsonStr = (text.match(/\{[\s\S]*\}/) || [text])[0];
+    const parsed = JSON.parse(jsonStr);
+    const stillAddition = typeof parsed.stillAddition === "string" ? parsed.stillAddition.trim() : "";
+    const motionPrompt = typeof parsed.motionPrompt === "string" ? parsed.motionPrompt.trim() : "";
+    if (!stillAddition && !motionPrompt) return null;
+    console.log(`[SCROLLANIM] creative concept (${parsed.productSummary || "?"}) → still: "${stillAddition.slice(0, 90)}" | motion: "${motionPrompt.slice(0, 90)}"`);
+    return { stillAddition, motionPrompt, productSummary: typeof parsed.productSummary === "string" ? parsed.productSummary : undefined };
+  } catch (e: any) {
+    console.warn("[SCROLLANIM] creative-concept generation failed:", e?.message);
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // Regenerate an uploaded product photo onto a CLEAN SOLID (monochrome) background
 // with the product positioned for the chosen layout (right for "split", centered for
 // "parallax"), then return the raw KIE CDN URL so Kling can use it as the video source.
 // Uses gpt-image-2-image-to-image (KIE) with input_urls so the model EDITS the user's
 // actual product photo (preserving the real product) rather than inventing a new one.
+// When stillAddition is given, a small tasteful creative accent is baked into the scene.
 async function generateProductStill(
   productImageUrl: string,
   layout: "parallax" | "split",
   shouldStop: () => boolean = () => false,
+  stillAddition?: string,
 ): Promise<string | null> {
   if (!KIE_API_KEY) return null;
   const placement = layout === "split"
     ? "Position the product on the RIGHT third of the frame; keep the entire LEFT half as clean empty negative space (still the same solid color) for text."
     : "Position the product centered in the frame.";
+  const hasAddition = !!(stillAddition && stillAddition.trim());
+  // When adding a creative accent we must NOT forbid "props" outright, but the
+  // background must still stay one solid flat color.
+  const noProps = hasAddition
+    ? `absolutely no gradient, no pattern, no texture, no scenery, no visible surface or horizon line. `
+    : `absolutely no gradient, no pattern, no texture, no scenery, no props, no visible surface or horizon line. `;
+  const creative = hasAddition
+    ? `As a tasteful cinematic accent you MAY add: ${stillAddition!.trim()} — placed beside or around the product only, small and elegant, NEVER covering, replacing or altering the product or its label, and keep the background a single solid flat color. `
+    : "";
   const prompt =
     `Take the exact product from the reference image and keep it perfectly identical ` +
     `(same shape, label, text, colors and proportions). Place it in a premium product-photography scene on a ` +
     `COMPLETELY SOLID, FLAT, UNIFORM single-color studio background — one plain matte color filling the whole frame, ` +
-    `absolutely no gradient, no pattern, no texture, no scenery, no props, no visible surface or horizon line. ` +
+    `${noProps}` +
     `${placement} Soft even studio lighting, a subtle realistic contact shadow under the product, photorealistic, ` +
-    `ultra-high detail, 16:9 aspect ratio. Keep the product's own label and text exactly intact; add no extra text, captions or watermark.`;
+    `ultra-high detail, 16:9 aspect ratio. ${creative}Keep the product's own label and text exactly intact; add no extra text, captions or watermark.`;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (shouldStop()) return null;
     if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
@@ -669,6 +787,10 @@ async function resolveScrollAnimMarkers(
   // cannot pay.
   let referenceStill: string | undefined = undefined;
   let productStillResolved = false;
+  // Creative concept is analyzed from the product photo ONCE (lazily, after the first
+  // successful credit deduction) and reused for every block on this site.
+  let creativeConcept: CreativeProductConcept | null = null;
+  let creativeConceptResolved = false;
 
   for (const [raw, parsed] of planned) {
     if (isAborted() || Date.now() >= phaseDeadline) break;
@@ -689,8 +811,14 @@ async function resolveScrollAnimMarkers(
     // generateScrollFrames falls back to a text-to-image still (still a solid bg).
     if (productImageUrl && !productStillResolved) {
       productStillResolved = true;
+      // Analyze the product ONCE and invent a creative, product-aware concept.
+      if (!creativeConceptResolved) {
+        creativeConceptResolved = true;
+        try { res.write(`data: ${JSON.stringify({ status: "Анализирую товар и придумываю креативную идею для видео..." })}\n\n`); } catch {}
+        creativeConcept = await generateCreativeConcept(productImageUrl, layout, () => isAborted() || Date.now() >= phaseDeadline);
+      }
       try { res.write(`data: ${JSON.stringify({ status: "Готовлю кадр товара на однотонном фоне..." })}\n\n`); } catch {}
-      referenceStill = (await generateProductStill(productImageUrl, layout, () => isAborted() || Date.now() >= phaseDeadline)) || undefined;
+      referenceStill = (await generateProductStill(productImageUrl, layout, () => isAborted() || Date.now() >= phaseDeadline, creativeConcept?.stillAddition)) || undefined;
       if (!referenceStill) console.warn("[SCROLLANIM] product-still failed — falling back to text-to-image still (solid bg preserved)");
     }
 
@@ -699,9 +827,14 @@ async function resolveScrollAnimMarkers(
       try { res.write(`data: ${JSON.stringify({ status: "Рендерю видео для анимации прокрутки (ожидаю результат от KIE)..." })}\n\n`); } catch {}
     }, 20000);
 
+    // For product-photo sites, drive Kling with the vision-derived creative motion
+    // (falls back to the LLM's videoPrompt when no concept was produced).
+    const effectivePrompt = (productImageUrl && creativeConcept?.motionPrompt)
+      ? creativeConcept.motionPrompt
+      : parsed.videoPrompt;
     let frames: string[] = [];
     try {
-      frames = await generateScrollFrames(parsed.videoPrompt, () => isAborted() || Date.now() >= phaseDeadline, referenceStill);
+      frames = await generateScrollFrames(effectivePrompt, () => isAborted() || Date.now() >= phaseDeadline, referenceStill);
     } finally {
       clearInterval(keepAliveInterval);
     }
@@ -1741,11 +1874,11 @@ export async function registerRoutes(
 → СРАЗУ после закрывающего тега </header> (на отдельной строке, ДО любых других секций) вставь:
 {{SCROLLANIM:ВИДЕО-ПРОМПТ|Заголовок1::Подзаголовок1||Заголовок2::Подзаголовок2||Заголовок3::Подзаголовок3}}
 
-Формат ВИДЕО-ПРОМПТА для сплит-режима:
-"${hasProductImage ? "product on right side of frame, slow 360 rotation" : "PRODUCT_NAME on right side of frame, slow 360 rotation"}, left side clean solid [light/beige/cream] background, soft studio lighting, cinematic, no text, no watermark"
+Формат ВИДЕО-ПРОМПТА для сплит-режима (на английском). Придумай КРЕАТИВНУЮ кинематографичную сцену под товар — НЕ просто «вращение 360». Товар справа, левая половина — чистый однотонный фон под текст. Добавь 1-2 тонких эффекта по смыслу товара (крем — бабочка садится на крышку / лепестки летят / распускающийся цветок рядом; парфюм — лёгкая дымка и блики света; часы — блики и парящие шестерёнки; напиток — капли конденсата, всплеск, фрукты):
+"${hasProductImage ? "the product" : "PRODUCT_NAME"} on the right side of frame, <креативный эффект по теме>, left side clean solid [light/beige/cream] background, soft studio lighting, cinematic, no text, no watermark"
 Примеры:
-- "luxury glass water bottle on right side, slow rotation, left side pure white background, cinematic"
-- "premium skincare cream jar on right side, slow 360 rotation, left side warm ivory background, cinematic"
+- "premium skincare cream jar on the right, a delicate butterfly gently lands on the lid and soft petals drift through the air, left side warm ivory background, cinematic macro"
+- "luxury glass water bottle on the right, fresh condensation beads form and a gentle splash rises, left side pure white background, cinematic"
 
 Тексты — РОВНО 3 пары на РУССКОМ (Заголовок::Подзаголовок), короткие и продающие.
 
@@ -1763,12 +1896,12 @@ export async function registerRoutes(
 → СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
 {{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|Заголовок1::Подзаголовок1||Заголовок2::Подзаголовок2||Заголовок3::Подзаголовок3}}
 
-VIDEO_PROMPT (на английском) — кинематографичная сцена по теме сайта:
-- Вода/напиток: "premium glass water bottle slowly rotating 360, cinematic macro"
-- Крем/косметика: "luxury skincare jar slowly rotating, soft studio light, macro detail, cinematic"
-- Часы: "luxury mechanical watch slowly rotating, exploded gears floating, cinematic"
-- Кофе: "elegant coffee cup with swirling cream, slow rotation, cinematic"
-- Еда: "gourmet dish slowly rotating, steam rising, cinematic macro"
+VIDEO_PROMPT (на английском) — придумай КРЕАТИВНУЮ кинематографичную сцену по теме сайта (НЕ просто «вращение 360»), с 1-2 тонкими эффектами по смыслу:
+- Вода/напиток: "premium glass water bottle with fresh condensation beads and a gentle rising splash, slow cinematic push-in, macro"
+- Крем/косметика: "luxury skincare jar with a delicate butterfly landing on the lid and soft petals drifting, soft studio light, macro detail, cinematic"
+- Часы: "luxury mechanical watch with slow sweeping light glints and a few gears gently floating, cinematic macro"
+- Кофе: "elegant coffee cup with rising steam and slowly swirling cream, warm light, cinematic"
+- Еда: "gourmet dish with rising steam and fresh herbs gently falling, cinematic macro"
 
 Тексты — РОВНО 3 пары на РУССКОМ (Заголовок::Подзаголовок), короткие и продающие.
 
@@ -2436,13 +2569,13 @@ ${designAnalysis}
         let textsAuto: string;
         if (isSplitAuto) {
           videoPromptAuto = absoluteProductImageUrl
-            ? "product on right side of frame, slow 360 rotation, left side clean solid white background, soft studio lighting, cinematic, no text"
-            : `${firstWords.slice(0, 70)} product on right side, rotating slowly, left side clean solid white background, soft studio lighting, cinematic`;
+            ? "the product on the right side of frame, a delicate butterfly gently lands and soft petals drift through the air, left side clean solid white background, soft studio lighting, cinematic macro, no text"
+            : `${firstWords.slice(0, 70)} product on the right side, soft cinematic accents and gentle atmospheric motion, left side clean solid white background, soft studio lighting, cinematic`;
           textsAuto = "Познакомьтесь с нами::Откройте для себя наш продукт||Качество и стиль::Только лучшее для вас||Начните сейчас::Сделайте первый шаг";
         } else {
           videoPromptAuto = absoluteProductImageUrl
-            ? "premium product slowly rotating 360 degrees, studio lighting, clean white background, cinematic macro detail"
-            : `${firstWords.slice(0, 70)} slowly rotating, clean white background, studio lighting, cinematic`;
+            ? "premium product with soft cinematic accents — gentle drifting petals and slow sweeping light, studio lighting, clean solid background, cinematic macro detail"
+            : `${firstWords.slice(0, 70)} with gentle cinematic motion and soft atmospheric accents, clean solid background, studio lighting, cinematic`;
           textsAuto = "Добро пожаловать::Откройте что-то новое||Наше качество::Только лучшее||Начните прямо сейчас::Попробуйте сегодня";
         }
         const markerAuto = `\n{{SCROLLANIM:${videoPromptAuto}|${textsAuto}}}\n`;
