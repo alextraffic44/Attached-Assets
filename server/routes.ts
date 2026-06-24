@@ -496,11 +496,15 @@ function buildScrollAnimHtml(frames: string[], texts: Array<{ title: string; sub
   const cid = "csa" + Math.random().toString(36).slice(2, 8);
   const framesJson = JSON.stringify(frames).replace(/'/g, "&#39;");
   const isSplit = layout === "split";
+  const n = Math.max(1, texts.length);
   const layers = texts.map((t, i) => {
-    const seg = 1 / Math.max(1, texts.length);
-    const dIn = (i * seg + seg * 0.12).toFixed(3);
-    const dOut = (i * seg + seg * 0.88).toFixed(3);
-    return `      <div class="${cid}-text" data-in="${dIn}" data-out="${dOut}">
+    const segStart = i / n, segEnd = (i + 1) / n, fade = (1 / n) * 0.22;
+    // First block is fully visible at scroll=0 (no fade-in); last block stays until the end (no fade-out).
+    const fi = (i === 0 ? -1 : segStart).toFixed(3);
+    const fis = (i === 0 ? 0 : segStart + fade).toFixed(3);
+    const fos = (i === n - 1 ? 2 : segEnd - fade).toFixed(3);
+    const fo = (i === n - 1 ? 2 : segEnd).toFixed(3);
+    return `      <div class="${cid}-text" data-fi="${fi}" data-fis="${fis}" data-fos="${fos}" data-fo="${fo}">
         ${t.title ? `<h2>${csaEsc(t.title)}</h2>` : ""}
         ${t.sub ? `<p>${csaEsc(t.sub)}</p>` : ""}
       </div>`;
@@ -520,15 +524,16 @@ ${layers}
   </div>
 </section>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Manrope:wght@400;500;600&display=swap');
   .${cid}-scroll{position:relative;height:${scrollVh}vh;margin:0;padding:0;background:#000;}
   .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#000;}
   .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
-  .${cid}-veil{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 78% 78% at 50% 50%,rgba(0,0,0,0) 42%,rgba(0,0,0,0.25) 100%);}
+  .${cid}-veil{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 80% 80% at 50% 50%,rgba(0,0,0,0) 38%,rgba(0,0,0,0.32) 100%);}
   .${cid}-overlays{position:absolute;inset:0;pointer-events:none;}
-  .${cid}-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(860px,88vw);text-align:center;opacity:0;will-change:opacity,transform;}
-  .${cid}-text::before{content:"";position:absolute;inset:-40% -30%;z-index:-1;background:radial-gradient(ellipse at center,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.25) 50%,rgba(0,0,0,0) 72%);filter:blur(12px);}
-  .${cid}-text h2{margin:0 0 .4em;font-size:clamp(2.2rem,6vw,5rem);font-weight:800;letter-spacing:-0.03em;line-height:1.05;color:#fff;text-shadow:0 2px 32px rgba(0,0,0,0.5);}
-  .${cid}-text p{margin:0 auto;max-width:640px;font-size:clamp(1rem,2.2vw,1.4rem);line-height:1.6;color:rgba(255,255,255,0.88);text-shadow:0 1px 16px rgba(0,0,0,0.4);}
+  .${cid}-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1040px,92vw);text-align:center;opacity:0;will-change:opacity,transform;}
+  .${cid}-text::before{content:"";position:absolute;inset:-45% -35%;z-index:-1;background:radial-gradient(ellipse at center,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.22) 52%,rgba(0,0,0,0) 74%);filter:blur(14px);}
+  .${cid}-text h2{margin:0 0 .3em;font-family:'Unbounded',system-ui,sans-serif;font-size:clamp(2.8rem,8.5vw,7rem);font-weight:800;letter-spacing:-0.03em;line-height:0.98;color:#fff;text-shadow:0 2px 40px rgba(0,0,0,0.55);}
+  .${cid}-text p{margin:.2em auto 0;max-width:760px;font-family:'Manrope',system-ui,sans-serif;font-size:clamp(1.1rem,2.6vw,1.7rem);font-weight:500;line-height:1.55;color:rgba(255,255,255,0.9);text-shadow:0 1px 18px rgba(0,0,0,0.45);}
 </style>
 <script>
 (function(){
@@ -549,7 +554,7 @@ ${layers}
     frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0){paint(0);try{if(document.querySelector('[data-frames]')===root){window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));}}catch(e){}}};im.onerror=function(){};im.src=src;imgs[idx]=im;});
     function prog(){var r=root.getBoundingClientRect();var t=root.offsetHeight-window.innerHeight;var p=t>0?(-r.top)/t:0;return p<0?0:p>1?1:p;}
     var ticking=false;
-    function onScroll(){if(ticking)return;ticking=true;requestAnimationFrame(function(){var p=prog();var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);texts.forEach(function(el){var a=parseFloat(el.getAttribute('data-in'))||0;var b=parseFloat(el.getAttribute('data-out'))||1;var mid=(a+b)/2,half=Math.max(0.0001,(b-a)/2);var d=Math.abs(p-mid);var op=d>half?0:1-d/half;op=Math.max(0,Math.min(1,op*1.5));el.style.opacity=op.toFixed(3);el.style.transform='translate(-50%,calc(-50% + '+((1-op)*34)+'px))';});ticking=false;});}
+    function onScroll(){if(ticking)return;ticking=true;requestAnimationFrame(function(){var p=prog();var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);texts.forEach(function(el){var fi=parseFloat(el.getAttribute('data-fi')),fis=parseFloat(el.getAttribute('data-fis')),fos=parseFloat(el.getAttribute('data-fos')),fo=parseFloat(el.getAttribute('data-fo'));var op=0;if(!isNaN(fi)&&p>=fi&&p<=fo){op=p<fis?(fis>fi?(p-fi)/(fis-fi):1):(p<=fos?1:(fo>fos?1-(p-fos)/(fo-fos):1));}op=Math.max(0,Math.min(1,op));el.style.opacity=op.toFixed(3);el.style.transform='translate(-50%,calc(-50% + '+((1-op)*30)+'px))';});ticking=false;});}
     window.addEventListener('scroll',onScroll,{passive:true});
     window.addEventListener('resize',resize);
     resize();onScroll();
@@ -569,14 +574,15 @@ ${layers}
   </div>
 </section>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Manrope:wght@400;500;600&display=swap');
   .${cid}-scroll{position:relative;height:${scrollVh}vh;margin:0;padding:0;background:#f8f7f4;}
   .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#f8f7f4;}
   .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
-  .${cid}-panel{position:absolute;top:0;left:0;width:48%;height:100%;pointer-events:none;display:flex;align-items:center;padding:0 clamp(32px,5vw,80px);}
-  .${cid}-text{position:absolute;left:clamp(32px,5vw,80px);top:50%;transform:translateY(-50%);width:min(46vw,560px);text-align:left;opacity:0;will-change:opacity,transform;}
-  .${cid}-text h2{margin:0 0 .5em;font-size:clamp(1.8rem,4vw,3.8rem);font-weight:800;letter-spacing:-0.035em;line-height:1.05;color:#1D1D1F;}
-  .${cid}-text p{margin:0;max-width:480px;font-size:clamp(0.9rem,1.8vw,1.2rem);line-height:1.65;color:#555;}
-  @media(max-width:700px){.${cid}-panel{width:100%;background:linear-gradient(to top,rgba(248,247,244,0.95) 60%,rgba(248,247,244,0) 100%);bottom:0;top:auto;height:42%;align-items:flex-start;padding:16px 20px;} .${cid}-text{position:relative;top:auto;left:auto;transform:none;width:100%;text-align:center;} .${cid}-text h2{font-size:clamp(1.4rem,6vw,2rem);} .${cid}-text p{font-size:0.85rem;}}
+  .${cid}-panel{position:absolute;top:0;left:0;width:52%;height:100%;pointer-events:none;display:flex;align-items:center;padding:0 clamp(32px,5.5vw,96px);}
+  .${cid}-text{position:absolute;left:clamp(32px,5.5vw,96px);top:50%;transform:translateY(-50%);width:min(50vw,640px);text-align:left;opacity:0;will-change:opacity,transform;}
+  .${cid}-text h2{margin:0 0 .35em;font-family:'Unbounded',system-ui,sans-serif;font-size:clamp(2.2rem,5.5vw,5.4rem);font-weight:800;letter-spacing:-0.03em;line-height:1.0;color:#15151A;}
+  .${cid}-text p{margin:0;max-width:540px;font-family:'Manrope',system-ui,sans-serif;font-size:clamp(1rem,2vw,1.45rem);font-weight:500;line-height:1.6;color:#4a4a4f;}
+  @media(max-width:700px){.${cid}-panel{width:100%;background:linear-gradient(to top,rgba(248,247,244,0.96) 60%,rgba(248,247,244,0) 100%);bottom:0;top:auto;height:46%;align-items:flex-start;padding:18px 22px;} .${cid}-text{position:relative;top:auto;left:auto;transform:none;width:100%;text-align:center;} .${cid}-text h2{font-size:clamp(1.7rem,7vw,2.4rem);} .${cid}-text p{font-size:0.92rem;}}
 </style>
 <script>
 (function(){
@@ -597,7 +603,7 @@ ${layers}
     frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0){paint(0);try{if(document.querySelector('[data-frames]')===root){window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));}}catch(e){}}};im.onerror=function(){};im.src=src;imgs[idx]=im;});
     function prog(){var r=root.getBoundingClientRect();var t=root.offsetHeight-window.innerHeight;var p=t>0?(-r.top)/t:0;return p<0?0:p>1?1:p;}
     var ticking=false;
-    function onScroll(){if(ticking)return;ticking=true;requestAnimationFrame(function(){var p=prog();var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);texts.forEach(function(el){var a=parseFloat(el.getAttribute('data-in'))||0;var b=parseFloat(el.getAttribute('data-out'))||1;var mid=(a+b)/2,half=Math.max(0.0001,(b-a)/2);var d=Math.abs(p-mid);var op=d>half?0:1-d/half;op=Math.max(0,Math.min(1,op*1.5));el.style.opacity=op.toFixed(3);el.style.transform='translateY(calc(-50% + '+((1-op)*24)+'px))';});ticking=false;});}
+    function onScroll(){if(ticking)return;ticking=true;requestAnimationFrame(function(){var p=prog();var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);texts.forEach(function(el){var fi=parseFloat(el.getAttribute('data-fi')),fis=parseFloat(el.getAttribute('data-fis')),fos=parseFloat(el.getAttribute('data-fos')),fo=parseFloat(el.getAttribute('data-fo'));var op=0;if(!isNaN(fi)&&p>=fi&&p<=fo){op=p<fis?(fis>fi?(p-fi)/(fis-fi):1):(p<=fos?1:(fo>fos?1-(p-fos)/(fo-fos):1));}op=Math.max(0,Math.min(1,op));el.style.opacity=op.toFixed(3);el.style.transform='translateY(calc(-50% + '+((1-op)*22)+'px))';});ticking=false;});}
     window.addEventListener('scroll',onScroll,{passive:true});
     window.addEventListener('resize',resize);
     resize();onScroll();
@@ -1771,6 +1777,17 @@ VIDEO_PROMPT (на английском) — кинематографичная 
 🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
 ═══ КОНЕЦ ИНТЕРАКТИВНОГО РЕЖИМА ═══\n`;
         }
+        systemContent += `\n\n═══ ШАПКА / ВЕРХНЕЕ МЕНЮ (ОБЯЗАТЕЛЬНО для интерактивного сайта) ═══
+Видео-анимация занимает весь экран сразу под шапкой, поэтому шапка НЕ должна быть тяжёлой непрозрачной плашкой — она должна «парить» поверх анимации и почти сливаться с ней, оставаясь читаемой.
+ПРАВИЛА:
+1. <header> с position:fixed; top:0; left:0; right:0; z-index:1000. Базовый фон — ПРОЗРАЧНЫЙ (background:transparent), без сплошной заливки.
+2. Лёгкий glassmorphism: backdrop-filter:blur(16px) saturate(140%); -webkit-backdrop-filter:blur(16px) saturate(140%); очень слабая подложка background:rgba(255,255,255,0.06) для ТЁМНОЙ анимации или rgba(15,15,15,0.10) для СВЕТЛОЙ; тонкая нижняя граница border-bottom:1px solid rgba(255,255,255,0.10) (для светлой анимации — rgba(0,0,0,0.06)). НЕ используй тяжёлые тени под шапкой.
+3. Логотип и пункты меню — читаемые поверх видео: на ТЁМНОЙ анимации текст светлый (#fff / rgba(255,255,255,0.9)) с лёгкой тенью text-shadow:0 1px 12px rgba(0,0,0,0.4); на СВЕТЛОЙ — тёмный текст. Подбери цвет под фон именно своей анимации.
+4. CTA-кнопку в шапке НЕ делай яркой массивной плашкой (никаких сплошных золотых/цветных прямоугольников — это «утяжеляет» дизайн). Сделай её тонкой: прозрачный фон + бордер 1px (outline-стиль) ИЛИ компактная полупрозрачная кнопка.
+5. Компактная высота (padding по вертикали 14–18px). На мобильных — аккуратное бургер-меню.
+6. По желанию добавь немного JS: при скролле > 60px добавляй <header> класс «scrolled» с чуть более плотным фоном/блюром, но базовое состояние всегда прозрачно-стеклянное.
+7. Секции ПОСЛЕ анимации должны иметь собственный фон, чтобы фиксированная шапка читалась и над ними.
+═══ КОНЕЦ ШАПКИ ═══\n`;
         systemContent += `\n\n═══ ПРЕЛОАДЕР САЙТА (ОБЯЗАТЕЛЬНО) ═══
 Этот сайт содержит тяжёлую видео-анимацию, которая грузится не мгновенно. Чтобы посетитель не увидел пустой/чёрный экран, добавь УНИКАЛЬНЫЙ полноэкранный прелоадер.
 
