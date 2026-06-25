@@ -47,6 +47,34 @@ function sha1(buf: Buffer): string {
   return crypto.createHash("sha1").update(buf).digest("hex");
 }
 
+/**
+ * Poll the Netlify API until the deployment reaches "ready" state (all CDN nodes
+ * have the new files) or the timeout is hit. This prevents the race condition where
+ * the publish endpoint returns before Netlify finishes propagating to all edges,
+ * causing broken images / 404s on the first page load (especially on custom domains).
+ */
+async function waitForDeployReady(deployId: string, timeoutMs = 180_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let delay = 3000;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, delay));
+    try {
+      const res = await fetch(`${NETLIFY_API}/deploys/${deployId}`, { headers: headers() });
+      if (!res.ok) { delay = Math.min(delay * 1.5, 10000); continue; }
+      const data = (await res.json()) as any;
+      const state: string = data.state || "";
+      console.log(`[Netlify] deploy ${deployId} state: ${state}`);
+      if (state === "ready") return;
+      if (state === "error") throw new Error(`Netlify deployment failed: ${data.error_message || "unknown error"}`);
+    } catch (err: any) {
+      if (err.message?.startsWith("Netlify deployment failed")) throw err;
+    }
+    delay = Math.min(delay * 1.3, 8000);
+  }
+  // Timeout — not fatal, site may still come up shortly
+  console.warn(`[Netlify] deploy ${deployId} did not reach "ready" within ${timeoutMs / 1000}s — proceeding anyway`);
+}
+
 export async function deployToNetlify(
   projectId: number,
   files: DeployFile[]
@@ -111,6 +139,11 @@ export async function deployToNetlify(
       throw new Error(`File upload failed for ${path} (${uploadRes.status}): ${err}`);
     }
   }
+
+  // Wait for Netlify to finish processing the deployment and make it live on ALL CDN
+  // edges. Without this, the custom domain may serve stale/incomplete content for
+  // 30-90 seconds while Netlify propagates — causing broken images on first load.
+  await waitForDeployReady(deployId);
 
   const url = `https://${siteName}.netlify.app`;
   return { url, deploymentId: deployId, netlifyProjectId: siteId };
