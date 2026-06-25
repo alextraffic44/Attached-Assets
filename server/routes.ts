@@ -110,6 +110,57 @@ async function ensureFfmpegPath(ffmpeg: any): Promise<void> {
   }
 }
 
+// Robust KIE request wrapper. KIE frequently returns transient server errors
+// (HTTP 429/5xx, empty bodies, or an in-body error `code`) — any one of which can
+// otherwise abort a whole generation. This retries with exponential backoff so a
+// single KIE hiccup never kills the animation/image pipeline. Returns the parsed
+// JSON body (or the last error body / null when every attempt failed).
+async function kieRequestJson(
+  url: string,
+  init: RequestInit,
+  opts: { label?: string; retries?: number; shouldStop?: () => boolean; timeoutMs?: number } = {},
+): Promise<any | null> {
+  const retries = opts.retries ?? 4;
+  const shouldStop = opts.shouldStop ?? (() => false);
+  const label = opts.label ?? "KIE";
+  const timeoutMs = opts.timeoutMs ?? 30000; // hard per-request cap so a hung fetch can't bust budgets
+  let last: any = null;
+  for (let i = 0; i <= retries; i++) {
+    if (shouldStop()) return last;
+    if (i > 0) {
+      const delay = Math.min(2000 * 2 ** (i - 1), 16000); // 2s,4s,8s,16s,16s...
+      await new Promise((r) => setTimeout(r, delay));
+      if (shouldStop()) return last;
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const resp = await fetch(url, { ...init, signal: ctrl.signal });
+      if (resp.status === 429 || resp.status >= 500) {
+        console.warn(`[KIE-RETRY] ${label}: HTTP ${resp.status} (try ${i + 1}/${retries + 1})`);
+        continue;
+      }
+      const body: any = await resp.json().catch(() => null);
+      if (body == null) {
+        console.warn(`[KIE-RETRY] ${label}: empty/non-JSON body (try ${i + 1}/${retries + 1})`);
+        continue;
+      }
+      // KIE sometimes signals a transient failure via an in-body code (rate limit / 5xx)
+      if (typeof body.code === "number" && (body.code === 429 || body.code >= 500)) {
+        console.warn(`[KIE-RETRY] ${label}: body.code ${body.code} (try ${i + 1}/${retries + 1}) ${body.msg || ""}`);
+        last = body;
+        continue;
+      }
+      return body;
+    } catch (e: any) {
+      console.warn(`[KIE-RETRY] ${label}: network error (try ${i + 1}/${retries + 1}): ${e?.message}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return last;
+}
+
 // Step 0 helper: generate a cinematic still image for use as the video source frame.
 // Returns the raw public CDN URL from KIE (NOT re-uploaded) so Kling can fetch it.
 async function generateStillForVideo(
@@ -121,42 +172,42 @@ async function generateStillForVideo(
     `${scenePrompt.trim()}. Cinematic wide-angle still frame, photorealistic, beautiful dramatic ` +
     `composition, pure white seamless studio background, bright even lighting, no text, no watermark, ` +
     `ultra-high detail, 16:9 aspect ratio.`;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     if (shouldStop()) return null;
     if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
     let taskId: string | null = null;
-    try {
-      const resp = await fetch(NANO_BANANA_CREATE_URL, {
+    const createBody: any = await kieRequestJson(
+      NANO_BANANA_CREATE_URL,
+      {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
         body: JSON.stringify({ model: "nano-banana-2", input: { prompt: imagePrompt, aspect_ratio: "16:9", resolution: "2K" } }),
-      });
-      const body: any = await resp.json().catch(() => null);
-      if (body?.code === 200 && body?.data?.taskId) taskId = body.data.taskId;
-      else { console.warn("[SCROLLANIM] still-image create failed:", body?.msg); continue; }
-    } catch (e: any) { console.warn("[SCROLLANIM] still-image create error:", e?.message); continue; }
+      },
+      { label: "SCROLLANIM still-create", retries: 4, shouldStop },
+    );
+    if (createBody?.code === 200 && createBody?.data?.taskId) taskId = createBody.data.taskId;
+    else { console.warn("[SCROLLANIM] still-image create failed:", createBody?.msg); continue; }
     const imgDeadline = Date.now() + 180000; // 3 min per attempt
     while (Date.now() < imgDeadline) {
       if (shouldStop()) return null;
       await new Promise(r => setTimeout(r, 4000));
-      try {
-        const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
-          headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
-        });
-        const body: any = await resp.json().catch(() => null);
-        if (!body || body.code !== 200 || !body.data) continue;
-        const state = body.data.state;
-        if (state === "success") {
-          const result = JSON.parse(body.data.resultJson || "{}");
-          const url = (result.resultUrls || [])[0] || null;
-          if (url) { console.log(`[SCROLLANIM] still image ready: ${url}`); return url; }
-          break;
-        }
-        if (state === "fail" || state === "failed" || state === "error") {
-          console.warn(`[SCROLLANIM] still-image task failed (attempt ${attempt + 1}):`, body.data?.failMsg);
-          break;
-        }
-      } catch (e: any) { console.warn("[SCROLLANIM] still-image poll error:", e?.message); }
+      const body: any = await kieRequestJson(
+        `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
+        { headers: { "Authorization": `Bearer ${KIE_API_KEY}` } },
+        { label: "SCROLLANIM still-poll", retries: 2, shouldStop: () => shouldStop() || Date.now() >= imgDeadline },
+      );
+      if (!body || body.code !== 200 || !body.data) continue;
+      const state = body.data.state;
+      if (state === "success") {
+        const result = JSON.parse(body.data.resultJson || "{}");
+        const url = (result.resultUrls || [])[0] || null;
+        if (url) { console.log(`[SCROLLANIM] still image ready: ${url}`); return url; }
+        break;
+      }
+      if (state === "fail" || state === "failed" || state === "error") {
+        console.warn(`[SCROLLANIM] still-image task failed (attempt ${attempt + 1}):`, body.data?.failMsg);
+        break;
+      }
     }
   }
   console.warn("[SCROLLANIM] still-image generation failed after all attempts");
@@ -408,42 +459,42 @@ async function generateProductStill(
     `${noProps}` +
     `${placement} Soft even studio lighting, a subtle realistic contact shadow under the product, photorealistic, ` +
     `ultra-high detail, 16:9 aspect ratio. ${creative}Keep the product's own label and text exactly intact; add no extra text, captions or watermark.`;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     if (shouldStop()) return null;
     if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
     let taskId: string | null = null;
-    try {
-      const resp = await fetch(NANO_BANANA_CREATE_URL, {
+    const createBody: any = await kieRequestJson(
+      NANO_BANANA_CREATE_URL,
+      {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
         body: JSON.stringify({ model: "gpt-image-2-image-to-image", input: { prompt, input_urls: [productImageUrl], aspect_ratio: "16:9", resolution: "2K" } }),
-      });
-      const body: any = await resp.json().catch(() => null);
-      if (body?.code === 200 && body?.data?.taskId) taskId = body.data.taskId;
-      else { console.warn("[SCROLLANIM] product-still create failed:", body?.msg); continue; }
-    } catch (e: any) { console.warn("[SCROLLANIM] product-still create error:", e?.message); continue; }
+      },
+      { label: "SCROLLANIM product-create", retries: 4, shouldStop },
+    );
+    if (createBody?.code === 200 && createBody?.data?.taskId) taskId = createBody.data.taskId;
+    else { console.warn("[SCROLLANIM] product-still create failed:", createBody?.msg); continue; }
     const imgDeadline = Date.now() + 180000; // 3 min per attempt
     while (Date.now() < imgDeadline) {
       if (shouldStop()) return null;
       await new Promise(r => setTimeout(r, 4000));
-      try {
-        const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
-          headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
-        });
-        const body: any = await resp.json().catch(() => null);
-        if (!body || body.code !== 200 || !body.data) continue;
-        const state = body.data.state;
-        if (state === "success") {
-          const result = JSON.parse(body.data.resultJson || "{}");
-          const url = (result.resultUrls || [])[0] || null;
-          if (url) { console.log(`[SCROLLANIM] product still ready: ${url}`); return url; }
-          break;
-        }
-        if (state === "fail" || state === "failed" || state === "error") {
-          console.warn(`[SCROLLANIM] product-still task failed (attempt ${attempt + 1}):`, body.data?.failMsg);
-          break;
-        }
-      } catch (e: any) { console.warn("[SCROLLANIM] product-still poll error:", e?.message); }
+      const body: any = await kieRequestJson(
+        `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
+        { headers: { "Authorization": `Bearer ${KIE_API_KEY}` } },
+        { label: "SCROLLANIM product-poll", retries: 2, shouldStop: () => shouldStop() || Date.now() >= imgDeadline },
+      );
+      if (!body || body.code !== 200 || !body.data) continue;
+      const state = body.data.state;
+      if (state === "success") {
+        const result = JSON.parse(body.data.resultJson || "{}");
+        const url = (result.resultUrls || [])[0] || null;
+        if (url) { console.log(`[SCROLLANIM] product still ready: ${url}`); return url; }
+        break;
+      }
+      if (state === "fail" || state === "failed" || state === "error") {
+        console.warn(`[SCROLLANIM] product-still task failed (attempt ${attempt + 1}):`, body.data?.failMsg);
+        break;
+      }
     }
   }
   console.warn("[SCROLLANIM] product-still generation failed after all attempts");
@@ -481,7 +532,7 @@ async function generateScrollFrames(
 
   // Overall deadline shared across all retry attempts (still image time already consumed)
   const deadline = Date.now() + 2400000; // 40 min cap (Kling can take up to 35 min)
-  const MAX_VIDEO_ATTEMPTS = 3; // retry on API failure (e.g. upstream timeout)
+  const MAX_VIDEO_ATTEMPTS = 4; // retry on API failure (e.g. upstream timeout)
   let mp4Url: string | null = null;
 
   for (let videoAttempt = 0; videoAttempt < MAX_VIDEO_ATTEMPTS; videoAttempt++) {
@@ -491,27 +542,22 @@ async function generateScrollFrames(
       await new Promise(r => setTimeout(r, 5000));
     }
 
-    // Step 1 — create the image-to-video task
+    // Step 1 — create the image-to-video task (kieRequestJson retries 5xx/429/network)
     let taskId: string | null = null;
-    for (let attempt = 0; attempt < 3 && !taskId; attempt++) {
-      if (shouldStop() || Date.now() >= deadline) break;
-      if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
-      try {
-        const resp = await fetch(NANO_BANANA_CREATE_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-          body: JSON.stringify({
-            model: KLING_IMG2VID_MODEL,
-            input: { prompt: animPrompt, image_urls: [stillUrl], duration: SCROLL_VIDEO_DURATION, resolution: "1080p" },
-          }),
-        });
-        const body: any = await resp.json().catch(() => null);
-        if (body?.code === 200 && body?.data?.taskId) taskId = body.data.taskId;
-        else console.warn("[SCROLLANIM] create task failed:", body?.msg || body?.code);
-      } catch (e: any) {
-        console.warn("[SCROLLANIM] create task network error:", e?.message);
-      }
-    }
+    const createBody: any = await kieRequestJson(
+      NANO_BANANA_CREATE_URL,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
+        body: JSON.stringify({
+          model: KLING_IMG2VID_MODEL,
+          input: { prompt: animPrompt, image_urls: [stillUrl], duration: SCROLL_VIDEO_DURATION, resolution: "1080p" },
+        }),
+      },
+      { label: "SCROLLANIM video-create", retries: 4, shouldStop: () => shouldStop() || Date.now() >= deadline },
+    );
+    if (createBody?.code === 200 && createBody?.data?.taskId) taskId = createBody.data.taskId;
+    else console.warn("[SCROLLANIM] create task failed:", createBody?.msg || createBody?.code);
     if (!taskId) continue; // next video attempt
 
     console.log(`[SCROLLANIM] video task created (attempt ${videoAttempt + 1}): ${taskId}`);
@@ -524,10 +570,11 @@ async function generateScrollFrames(
       await new Promise(r => setTimeout(r, 5000));
       pollCount++;
       try {
-        const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
-          headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
-        });
-        const body: any = await resp.json().catch(() => null);
+        const body: any = await kieRequestJson(
+          `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
+          { headers: { "Authorization": `Bearer ${KIE_API_KEY}` } },
+          { label: "SCROLLANIM video-poll", retries: 2, shouldStop: () => shouldStop() || Date.now() >= deadline },
+        );
         if (!body || body.code !== 200 || !body.data) { console.log(`[SCROLLANIM] poll #${pollCount}: no data`); continue; }
         const state = body.data.state;
         if (pollCount <= 3 || pollCount % 10 === 0) console.log(`[SCROLLANIM] poll #${pollCount} state=${state}`);
