@@ -789,10 +789,23 @@ function buildScrollAnimHtml(frames: string[], texts: Array<{ title: string; sub
   }).join("\n");
   const scrollVh = Math.max(300, Math.min(560, texts.length * 130 + 180));
 
+  // Global nav controller + enforcement (injected once, guarded).
+  // 1) CSS: while the animation is on screen (body WITHOUT `craft-anim-passed`)
+  //    the site <header> is FORCED fully transparent with !important — so the
+  //    menu never shows a plate/blur over the animation, even if the generated
+  //    CSS hardcodes an opaque header. Once the animation is fully scrolled past
+  //    (`craft-anim-passed` added) the override stops and whatever header styles
+  //    the site defines (colored/solid) take over.
+  // 2) JS: toggles `craft-anim-passed` on <body> once EVERY scroll-animation
+  //    section (marked with data-craft-scrollanim) has scrolled above the header.
+  //    Uses a dedicated attribute (not the generic data-frames) to avoid clashes,
+  //    and a header-height-aware threshold instead of a magic number.
+  const navCtl = `\n<style>header{transition:background .45s ease,background-color .45s ease,backdrop-filter .45s ease,-webkit-backdrop-filter .45s ease,border-color .45s ease,box-shadow .45s ease;}body:not(.craft-anim-passed) header{background:transparent!important;background-color:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-color:transparent!important;box-shadow:none!important;}</style>\n<script>(function(){if(window.__craftNavCtl)return;window.__craftNavCtl=true;function u(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;var h=document.querySelector('header');var th=h?h.offsetHeight:64;var passed=true;for(var i=0;i<s.length;i++){if(s[i].getBoundingClientRect().bottom>th){passed=false;break;}}document.body.classList.toggle('craft-anim-passed',passed);}window.addEventListener('scroll',u,{passive:true});window.addEventListener('resize',u);if(document.readyState!=='loading'){u();}else{document.addEventListener('DOMContentLoaded',u);}u();})();</script>`;
+
   // ── Parallax (full-screen) layout ──────────────────────────────────────────
   if (!isSplit) {
     return `
-<section class="${cid}-scroll" data-frames='${framesJson}' data-layout="parallax">
+<section class="${cid}-scroll" data-frames='${framesJson}' data-layout="parallax" data-craft-scrollanim="1">
   <div class="${cid}-sticky">
     <canvas class="${cid}-canvas"></canvas>
     <div class="${cid}-veil"></div>
@@ -839,12 +852,12 @@ ${layers}
     resize();onScroll();
   });
 })();
-</script>`;
+</script>${navCtl}`;
   }
 
   // ── Split layout: video right, text left on solid background area ──────────
   return `
-<section class="${cid}-scroll" data-frames='${framesJson}' data-layout="split">
+<section class="${cid}-scroll" data-frames='${framesJson}' data-layout="split" data-craft-scrollanim="1">
   <div class="${cid}-sticky">
     <canvas class="${cid}-canvas"></canvas>
     <div class="${cid}-panel">
@@ -889,7 +902,7 @@ ${layers}
     resize();onScroll();
   });
 })();
-</script>`;
+</script>${navCtl}`;
 }
 
 // Scan files for {{SCROLLANIM:...}} markers, generate the animation, and bake the result in.
@@ -2094,15 +2107,18 @@ VIDEO_PROMPT (на английском) — придумай КРЕАТИВНУ
 ═══ КОНЕЦ ИНТЕРАКТИВНОГО РЕЖИМА ═══\n`;
         }
         systemContent += `\n\n═══ ШАПКА / ВЕРХНЕЕ МЕНЮ (ОБЯЗАТЕЛЬНО для интерактивного сайта) ═══
-Видео-анимация занимает весь экран сразу под шапкой, поэтому шапка НЕ должна быть тяжёлой непрозрачной плашкой — она должна «парить» поверх анимации и почти сливаться с ней, оставаясь читаемой.
-ПРАВИЛА:
-1. <header> с position:fixed; top:0; left:0; right:0; z-index:1000. Базовый фон — ПРОЗРАЧНЫЙ (background:transparent), без сплошной заливки.
-2. Лёгкий glassmorphism: backdrop-filter:blur(16px) saturate(140%); -webkit-backdrop-filter:blur(16px) saturate(140%); очень слабая подложка background:rgba(255,255,255,0.06) для ТЁМНОЙ анимации или rgba(15,15,15,0.10) для СВЕТЛОЙ; тонкая нижняя граница border-bottom:1px solid rgba(255,255,255,0.10) (для светлой анимации — rgba(0,0,0,0.06)). НЕ используй тяжёлые тени под шапкой.
-3. Логотип и пункты меню — читаемые поверх видео: на ТЁМНОЙ анимации текст светлый (#fff / rgba(255,255,255,0.9)) с лёгкой тенью text-shadow:0 1px 12px rgba(0,0,0,0.4); на СВЕТЛОЙ — тёмный текст. Подбери цвет под фон именно своей анимации.
-4. CTA-кнопку в шапке НЕ делай яркой массивной плашкой (никаких сплошных золотых/цветных прямоугольников — это «утяжеляет» дизайн). Сделай её тонкой: прозрачный фон + бордер 1px (outline-стиль) ИЛИ компактная полупрозрачная кнопка.
-5. Компактная высота (padding по вертикали 14–18px). На мобильных — аккуратное бургер-меню.
-6. По желанию добавь немного JS: при скролле > 60px добавляй <header> класс «scrolled» с чуть более плотным фоном/блюром, но базовое состояние всегда прозрачно-стеклянное.
-7. Секции ПОСЛЕ анимации должны иметь собственный фон, чтобы фиксированная шапка читалась и над ними.
+Видео-анимация занимает весь экран сразу под шапкой. ПОКА ИДЁТ АНИМАЦИЯ шапка НЕ должна быть видна как плашка — никакого фона, блюра, границы или тени, иначе она портит эффект анимации. Шапка должна быть ПОЛНОСТЬЮ ПРОЗРАЧНОЙ: видны только логотип и пункты меню, «парящие» поверх видео. Цветной (заметный) вид шапка получает ТОЛЬКО после того, как пользователь полностью пролистал анимацию.
+
+КАК ЭТО РАБОТАЕТ: система САМА автоматически добавляет класс \`craft-anim-passed\` на <body>, когда анимация полностью прокручена. Используй ЭТОТ класс, чтобы «включить» цветную шапку. НЕ пиши свой JS для отслеживания скролла шапки.
+
+ПРАВИЛА (соблюдай ТОЧНО):
+1. <header> с position:fixed; top:0; left:0; right:0; z-index:1000; и ОБЯЗАТЕЛЬНО transition:background .45s ease, backdrop-filter .45s ease, border-color .45s ease, box-shadow .45s ease;.
+2. БАЗОВОЕ состояние (во время анимации) — АБСОЛЮТНО ПРОЗРАЧНОЕ: background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; border:none; box-shadow:none. НИКАКОЙ подложки, блюра, границы или тени. Это критично — иначе анимация выглядит испорченной.
+3. ЦВЕТНОЕ состояние — задаётся ТОЛЬКО через селектор \`body.craft-anim-passed header\`: здесь дай шапке настоящий фирменный фон (плотный фон бренда ИЛИ насыщенный glassmorphism с backdrop-filter:blur), тонкую нижнюю границу и мягкую тень. Именно это состояние «появляется в цвете», когда анимация пролистана.
+4. Логотип и пункты меню должны быть читаемы в ОБОИХ состояниях: поверх видео — светлые с лёгкой тенью (text-shadow:0 1px 12px rgba(0,0,0,0.4)) для ТЁМНОЙ анимации или тёмные для СВЕТЛОЙ; в цветном состоянии — подходящие под выбранный фон шапки (при необходимости меняй цвет текста тоже через \`body.craft-anim-passed header ...\`).
+5. CTA-кнопку в шапке во время анимации делай ЛЁГКОЙ (прозрачный фон + бордер 1px, outline-стиль), без массивной заливки; в цветном состоянии (\`body.craft-anim-passed\`) можешь сделать её фирменной.
+6. Компактная высота (padding по вертикали 14–18px). На мобильных — аккуратное бургер-меню.
+7. Секции ПОСЛЕ анимации должны иметь собственный фон, чтобы фиксированная цветная шапка читалась над ними.
 ═══ КОНЕЦ ШАПКИ ═══\n`;
         systemContent += `\n\n═══ ПРЕЛОАДЕР САЙТА (ОБЯЗАТЕЛЬНО) ═══
 Этот сайт содержит тяжёлую видео-анимацию, которая грузится не мгновенно. Чтобы посетитель не увидел пустой/чёрный экран, добавь УНИКАЛЬНЫЙ полноэкранный прелоадер.
