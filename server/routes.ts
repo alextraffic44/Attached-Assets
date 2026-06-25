@@ -169,11 +169,11 @@ async function generateStillForVideo(
 ): Promise<string | null> {
   if (!KIE_API_KEY) return null;
   const imagePrompt =
-    `${scenePrompt.trim()}. Ultra-cinematic widescreen film still, shot on ARRI Alexa with an anamorphic lens, ` +
-    `photorealistic, breathtaking dramatic composition with deep layered depth of field, and a calmer, less-busy ` +
-    `central zone so large text can sit on top and stay legible. Bold directional key light with soft volumetric ` +
-    `god rays, rich filmic color grading, deep elegant shadows and luminous highlights, gentle atmospheric haze ` +
-    `for depth, immersive premium mood. No text, no watermark, no logos, ultra-high detail, 8K, 16:9 aspect ratio.`;
+    `${scenePrompt.trim()}. A complete immersive cinematic SCENE with a real environment and layered depth (NOT a plain solid backdrop). ` +
+    `Ultra-cinematic widescreen film still, shot on ARRI Alexa with an anamorphic lens, photorealistic, breathtaking dramatic ` +
+    `composition that draws the eye deep into the scene, with a slightly calmer focal area where large overlay text can stay legible. ` +
+    `Bold directional key light with soft volumetric god rays, rich filmic color grading, deep elegant shadows and luminous ` +
+    `highlights, gentle atmospheric haze for depth, immersive premium Hollywood mood. No text, no watermark, no logos, ultra-high detail, 8K, 16:9 aspect ratio.`;
   for (let attempt = 0; attempt < 4; attempt++) {
     if (shouldStop()) return null;
     if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
@@ -289,7 +289,7 @@ Pick the most striking idea for this product category:
 - hair care: light refracts and travels through the glossy product texture, strands flowing in air currents.
 Hard rules:
 - preserve the REAL product and its label exactly (same shape, text, colors, proportions);
-- SOLID flat single-color background — no scenery (dramatic directional lighting ON that solid background is encouraged: a luminous glow, a soft falloff, a moving highlight);
+- background may be a clean dramatic backdrop OR a tasteful softly-out-of-focus premium environment that suits the product (no clutter, no competing objects), with dramatic directional lighting (a luminous glow, a soft falloff, a moving highlight) — the product stays the clear faithful hero;
 - ONE bold focal effect + the slow camera push-in — both already plausible from the composed still;
 - no humans, no hands, no invented logos; cinematic, premium and dynamic;
 - the effect must be PHOTOREALISTIC and achievable from a single still + 5s video.
@@ -300,7 +300,7 @@ The Kling video model gets the RENDERED STILL as frame 1 — the scene is alread
 Animate ONLY what is already visible (light, shadow, mist, liquid, particles, reflections, texture) PLUS a slow camera push-in. Do NOT introduce new objects flying in, and never make the motion so subtle it looks frozen.
 ✓ CORRECT: "a hard spotlight beam sweeps boldly left-to-right across the metallic lid while the camera pushes in slowly and the shadow glides across the surface"
 ✗ WRONG:   "a spark flies in from the left" (it wasn't in the still) / "the lid barely shimmers" (too subtle, looks static)
-${layout === "split" ? "SPLIT GUARDRAIL: keep the product on the right third and the entire left half a clean empty solid matte color; the camera push-in must be gentle (about 5-8 percent) with NO pan, NO tilt, NO pull-back and NO frame-edge reveal; keep ALL effects on or around the product on the right, never over the left text area." : "Keep the camera push-in smooth and centered with no frame-edge reveal."}
+${layout === "split" ? "SPLIT GUARDRAIL: keep the product on the right third and keep the LEFT half calmer, softer and uncluttered (simpler or gently out of focus) so overlay text stays readable; the camera push-in must be gentle (about 5-8 percent) with NO pan, NO tilt, NO pull-back and NO frame-edge reveal; keep ALL effects on or around the product on the right, never over the left text area." : "Keep the camera push-in smooth and centered with no frame-edge reveal."}
 
 Return STRICT JSON only (no markdown, no commentary):
 {"productSummary":"<3-5 words: exact product name + category>","stillAddition":"<one vivid English phrase: the dramatic STATIC accent/lighting already composed in the still>","motionPrompt":"<one precise cinematic sentence: bold VISIBLE motion of the already-present elements plus a slow camera push-in — dramatic, premium, stunning>"}`;
@@ -389,7 +389,7 @@ Rules:
 1. Describe ONLY what is visibly present in this still — do NOT invent elements that aren't there.
 2. The motion must be CLEARLY VISIBLE and evolve across the 5 seconds (the viewer scrubs it by scrolling — subtle or imperceptible motion looks broken and dull). Make it bold, premium and dramatic.
 3. Always combine TWO things: a slow cinematic camera PUSH-IN, plus visible motion of the light, shadow, particles, mist, liquid, reflections or texture that are actually in the frame.
-4. Keep the solid background's COLOR unchanged and never reveal the frame edges — push-in only, no pan, no tilt, no pull-back.
+4. Keep the background coherent and undistorted (do not warp, melt or recolor it) and never reveal the frame edges — push-in only, no pan, no tilt, no pull-back.
 5. Cinematic high-end commercial energy — graceful but unmistakable movement, never a frozen image.
 6. ${placementHint}
 7. No camera shake, no warping of the product, no text, no human hands.
@@ -446,24 +446,26 @@ async function generateProductStill(
 ): Promise<string | null> {
   if (!KIE_API_KEY) return null;
   const placement = layout === "split"
-    ? "Position the product on the RIGHT third of the frame; keep the entire LEFT half as clean empty negative space (still the same solid color) for text."
+    ? "Position the product on the RIGHT third of the frame; keep the LEFT half calmer, softer and uncluttered (clean negative space) so overlay text stays readable."
     : "Position the product centered in the frame.";
   const bgGuard = layout === "split"
-    ? `Concentrate all lighting and any glow tightly around the product on the RIGHT; the entire LEFT half MUST stay a perfectly flat uniform single matte color with NO visible gradient, glow or texture (clean space for text). `
-    : `Keep the glow softly around the product and the rest of the background a clean uniform matte color with no busy gradient. `;
+    ? `Keep the LEFT half calmer, softer and less detailed (simpler or gently out of focus) so overlay text stays readable, and concentrate the product, the sharp detail and any glow on the RIGHT. `
+    : `Keep the product the clear hero with the focus and glow on it, and the surrounding environment softer and uncluttered. `;
   const hasAddition = !!(stillAddition && stillAddition.trim());
-  // When adding a creative accent we must NOT forbid "props" outright, but the
-  // background must still stay one solid flat color.
+  // The background may be a clean dramatic backdrop OR a tasteful, softly-blurred
+  // premium environment that suits the product — but never cluttered or busy, and
+  // the product must always stay the clear, faithful hero.
   const noProps = hasAddition
-    ? `absolutely no gradient, no pattern, no texture, no scenery, no visible surface or horizon line. `
-    : `absolutely no gradient, no pattern, no texture, no scenery, no props, no visible surface or horizon line. `;
+    ? `keep it tasteful and uncluttered with no competing objects, the product as the clear hero. `
+    : `keep it tasteful and uncluttered with no competing objects or busy patterns, the product as the clear hero. `;
   const creative = hasAddition
-    ? `As a tasteful cinematic accent you MAY add: ${stillAddition!.trim()} — placed beside or around the product only, small and elegant, NEVER covering, replacing or altering the product or its label, and keep the background a single solid flat color. `
+    ? `As a tasteful cinematic accent you MAY add: ${stillAddition!.trim()} — placed beside or around the product only, small and elegant, NEVER covering, replacing or altering the product or its label, and keep the surroundings soft and uncluttered. `
     : "";
   const prompt =
     `Take the exact product from the reference image and keep it perfectly identical ` +
-    `(same shape, label, text, colors and proportions). Place it in a high-end cinematic product-commercial scene on a ` +
-    `COMPLETELY SOLID, FLAT, UNIFORM single-color background — one plain matte color filling the whole frame, ` +
+    `(same shape, label, text, colors and proportions) — the product is the untouchable hero. Place it in a high-end ` +
+    `cinematic product-commercial setting: choose whatever looks most premium for this product — either a clean dramatic ` +
+    `studio backdrop OR a tasteful, softly out-of-focus contextual environment (elegant surface, soft bokeh, atmospheric depth), ` +
     `${noProps}` +
     `${placement} Dramatic premium lighting like a luxury magazine ad (not flat catalog lighting): a strong directional ` +
     `key light and a crisp rim/edge highlight that separate the product, a soft halo of light only around the product, ` +
@@ -519,6 +521,7 @@ async function generateScrollFrames(
   videoPrompt: string,
   shouldStop: () => boolean = () => false,
   referenceStillUrl?: string,
+  layout: "parallax" | "split" = "parallax",
 ): Promise<string[]> {
   if (!KIE_API_KEY) { console.warn("[SCROLLANIM] missing KIE_API_KEY"); return []; }
 
@@ -533,16 +536,19 @@ async function generateScrollFrames(
   if (!stillUrl) { console.warn("[SCROLLANIM] aborting: no still image"); return []; }
   if (shouldStop()) { console.warn("[SCROLLANIM] aborted by shouldStop() after still image"); return []; }
 
-  // Append cinematic production guidance: a gentle slow camera push-in plus premium
-  // lighting/color so the scrubbed frames show real, visible motion (the prior
-  // "ultra-slow"/"imperceptible" wording made the animation read as a static image).
-  // The push-in is additive and never overrides the product-creative motion in videoPrompt.
+  // Append cinematic production guidance so the scrubbed frames show real, visible
+  // motion (the prior "ultra-slow"/"imperceptible" wording made the animation read as
+  // a static image). For scene/parallax we allow bold immersive forward camera travel
+  // that reveals depth; for split (product) we keep a gentle push-in to protect product
+  // fidelity. Additive — never overrides the creative motion already in videoPrompt.
+  const cameraGuidance = layout === "split"
+    ? `with an elegant slow cinematic camera push-in only — no pan, no tilt, no pull-back, no frame-edge reveal — keeping the product perfectly intact and the left side calm for text`
+    : `with bold immersive cinematic camera movement that pulls the viewer INTO the scene — a smooth forward dolly / push-in that glides deeper and naturally reveals depth and detail (e.g. gliding toward a doorway or through the space) — graceful and steady, never shaky`;
   const animPrompt =
-    `${videoPrompt.trim()}. Render as a high-end cinematic commercial: smooth, graceful but clearly visible motion ` +
-    `(the scene must noticeably evolve from start to finish), with an elegant slow cinematic camera push-in only — ` +
-    `no pan, no tilt, no pull-back, no frame-edge reveal — premium dramatic lighting and rich filmic color grading. ` +
-    `Keep the overall composition and any solid background color stable, do not warp, morph or distort the main subject, ` +
-    `no text, no captions, no watermark, no camera shake, no flicker.`;
+    `${videoPrompt.trim()}. Render as a high-end Hollywood-grade cinematic shot: smooth, graceful but clearly visible motion ` +
+    `(the scene must noticeably evolve and feel alive from start to finish), ${cameraGuidance}, premium dramatic lighting ` +
+    `and rich filmic color grading. Do not warp, melt or distort the main subject or any architecture, ` +
+    `no text, no captions, no watermark, no camera shake, no flicker, no jump cuts.`;
 
   // Overall deadline shared across all retry attempts (still image time already consumed)
   const deadline = Date.now() + 2400000; // 40 min cap (Kling can take up to 35 min)
@@ -912,7 +918,7 @@ ${layers}
   .${cid}-scroll{position:relative;height:${scrollVh}vh;margin:0;padding:0;background:#f8f7f4;}
   .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#f8f7f4;}
   .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
-  .${cid}-panel{position:absolute;top:0;left:0;width:52%;height:100%;pointer-events:none;display:flex;align-items:center;padding:0 clamp(32px,5.5vw,96px);}
+  .${cid}-panel{position:absolute;top:0;left:0;width:52%;height:100%;pointer-events:none;display:flex;align-items:center;padding:0 clamp(32px,5.5vw,96px);background:linear-gradient(to right,rgba(248,247,244,0.9) 0%,rgba(248,247,244,0.74) 42%,rgba(248,247,244,0) 100%);}
   .${cid}-text{position:absolute;left:clamp(32px,5.5vw,96px);top:50%;transform:translateY(-50%);width:min(50vw,640px);text-align:left;opacity:0;will-change:opacity,transform;}
   .${cid}-text h2{margin:0 0 .35em;font-family:'Unbounded',system-ui,sans-serif;font-size:clamp(2.2rem,5.5vw,5.4rem);font-weight:800;letter-spacing:-0.03em;line-height:1.0;color:#15151A;}
   .${cid}-text p{margin:0;max-width:540px;font-family:'Manrope',system-ui,sans-serif;font-size:clamp(1rem,2vw,1.45rem);font-weight:500;line-height:1.6;color:#4a4a4f;}
@@ -1068,7 +1074,7 @@ async function resolveScrollAnimMarkers(
       : parsed.videoPrompt;
     let frames: string[] = [];
     try {
-      frames = await generateScrollFrames(effectivePrompt, () => isAborted() || Date.now() >= phaseDeadline, referenceStill);
+      frames = await generateScrollFrames(effectivePrompt, () => isAborted() || Date.now() >= phaseDeadline, referenceStill, layout);
     } finally {
       clearInterval(keepAliveInterval);
     }
@@ -2146,12 +2152,14 @@ export async function registerRoutes(
 → СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
 {{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|Заголовок1::Подзаголовок1||Заголовок2::Подзаголовок2||Заголовок3::Подзаголовок3}}
 
-VIDEO_PROMPT (на английском) — придумай КИНЕМАТОГРАФИЧНУЮ сцену по теме сайта с ВАУ-эффектом (НЕ «вращение 360»). Движение ОБЯЗАНО быть заметным и развиваться по ходу видео (зритель прокручивает его скроллом — еле заметное движение выглядит унылым): всегда объедини медленный кинематографичный наезд камеры (push-in) + яркий движущийся эффект по смыслу. Можно использовать полноценную атмосферную сцену/окружение (не обязательно студийный фон), но оставь более спокойную центральную зону, чтобы крупный текст читался поверх:
-- Вода/напиток: "premium glass water bottle, fresh condensation beads run down and a splash leaps up catching the light, slow cinematic camera push-in, dramatic volumetric lighting, cinematic macro"
-- Крем/косметика: "luxury skincare jar, a glistening serum drop slides down while luminous light rays bloom across the surface, slow cinematic camera push-in, rich dramatic lighting, cinematic macro"
-- Часы: "luxury mechanical watch, a beam of light sweeps across the dial igniting travelling sparkles and reflections, slow cinematic camera push-in, deep cinematic shadows, macro"
-- Кофе: "elegant coffee cup, ribbons of steam rise and curl while warm light shifts across the surface, slow cinematic camera push-in, moody cinematic lighting"
-- Природа/услуги/общее: "breathtaking cinematic establishing scene of the theme, volumetric god rays and drifting atmospheric haze, slow cinematic camera push-in revealing depth, epic film-still lighting"
+VIDEO_PROMPT (на английском) — ты КИНОРЕЖИССЁР голливудского уровня. Придумай ЯРКУЮ, СМЕЛУЮ, полноценную КИНОСЦЕНУ под нишу сайта, которая при скролле создаёт эффект ПОГРУЖЕНИЯ (НЕ «вращение 360», НЕ скучный однотонный фон). Фон — это НАСТОЯЩАЯ киносцена/окружение под нишу (вилла, цех, витрина, студия, природа, зал), а не плоский цвет. Движение ОБЯЗАНО быть заметным и развиваться по ходу видео (зритель сам прокручивает кадры — еле заметное движение выглядит унылым): объедини СМЕЛОЕ движение камеры ВГЛУБЬ сцены (плавный пролёт/наезд вперёд, который втягивает зрителя внутрь и раскрывает глубину) + живое действие в кадре по смыслу ниши. Думай КРЕАТИВНО под конкретную нишу. Сцену делай с чуть более спокойной зоной, где ляжет крупный текст (он накладывается поверх и подсвечивается автоматически). Пиши развёрнуто, ТОЛЬКО запятые (без | :: и фигурных скобок):
+- Недвижимость/вилла: "cinematic approach to a grand modern villa at golden hour, the camera glides forward toward tall glass doors that slowly swing open revealing a luxurious sunlit living room, warm light spilling out, soft dust motes drifting, volumetric god rays, epic film-still lighting, photorealistic"
+- Стройка/ремонт: "sweeping cinematic forward move over a sunlit modern construction site, cranes turning and golden light shifting across fresh concrete and glass, drifting dust catching the light, dramatic volumetric lighting, photorealistic"
+- Ювелирка: "extreme macro dolly-in toward a diamond ring on black velvet, facets igniting with travelling rainbow sparkles as a beam of light sweeps across, deep luxurious shadows, slow cinematic push-in, photorealistic"
+- Ресторан/еда: "cinematic dolly-in across an elegant plated dish, ribbons of steam rising and curling, fresh herbs gently falling, warm candlelight flickering, shallow depth of field, mouth-watering film-still lighting"
+- Авто: "low cinematic tracking push-in toward a luxury car in a dark studio, light streaks sweeping along the glossy bodywork, reflections igniting, subtle mist drifting on the floor, dramatic high-contrast lighting, photorealistic"
+- Косметика/крем: "luxury skincare jar in a soft elegant setting, a delicate butterfly gently lands on the lid while luminous light rays bloom and a glistening drop slides down, slow cinematic push-in, rich dramatic lighting, cinematic macro"
+- Природа/услуги/общее: "breathtaking cinematic forward flight into the themed scene, volumetric god rays and drifting atmospheric haze, the camera revealing depth and grandeur, epic film-still lighting, photorealistic"
 
 Тексты — РОВНО 3 пары на РУССКОМ (Заголовок::Подзаголовок), короткие и продающие.
 
