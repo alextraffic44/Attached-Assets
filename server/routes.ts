@@ -675,6 +675,34 @@ async function generateScrollFrames(
 // If the AI already authored a bespoke, on-brand preloader (id="site-preloader"),
 // we keep its visuals and only wire up hiding. Otherwise we inject a neutral,
 // palette-adaptive fallback so a loader is never missing.
+// Strip conversational preamble and markdown code fences that the model
+// sometimes wraps around the HTML document. Robust to an UNCLOSED ```html
+// fence (streaming truncation / model omitting the closing fence), which is
+// the common cause of "код файла `index.html`: ```html" leaking into the
+// saved site. Idempotent and safe on already-clean HTML.
+function cleanHtmlDoc(raw: string): string {
+  if (!raw) return raw;
+  let c = raw.replace(/^\uFEFF/, "");
+  // Remove a leading opening fence (```html / ``` ...), even if preamble text
+  // came before it — slice from the fence first, then re-trim.
+  const openFence = c.match(/```[a-zA-Z]*[ \t]*\r?\n?/);
+  if (openFence && openFence.index !== undefined) {
+    const afterFence = c.slice(openFence.index + openFence[0].length);
+    // Only treat it as a code fence wrapper if real HTML follows it.
+    if (/<!DOCTYPE\s+html|<html[\s>]/i.test(afterFence)) c = afterFence;
+  }
+  // Drop any conversational preamble before the actual document start.
+  const di = c.search(/<!DOCTYPE\s+html/i);
+  const hi = c.search(/<html[\s>]/i);
+  let start = -1;
+  if (di !== -1 && hi !== -1) start = Math.min(di, hi);
+  else start = di !== -1 ? di : hi;
+  if (start > 0) c = c.slice(start);
+  // Strip a trailing closing fence if present.
+  c = c.replace(/\r?\n?```[ \t]*\r?\n?\s*$/, "");
+  return c.trim();
+}
+
 function injectLoadingOverlay(html: string): string {
   // Only inject into HTML documents (some AI outputs omit a closing </body>,
   // so we tolerate that and fall back to </html> / end-of-doc on insertion).
@@ -2751,12 +2779,17 @@ ${designAnalysis}
             }
           }
         } else {
-          const singleMatch = fullResponse.match(/```html\n?([\s\S]*?)```/);
+          const singleMatch = fullResponse.match(/```html\s*\n?([\s\S]*?)```/i);
           let parsedCode: string | null = null;
-          if (singleMatch) {
-            parsedCode = replaceImgMarkers(singleMatch[1].trim());
-          } else if (fullResponse.includes("<!DOCTYPE") || fullResponse.includes("<html")) {
-            parsedCode = replaceImgMarkers(fullResponse.trim());
+          if (singleMatch && singleMatch[1].includes("<")) {
+            // Closed ```html fence — use its content (still clean stray preamble/fences).
+            parsedCode = replaceImgMarkers(cleanHtmlDoc(singleMatch[1]));
+          } else if (/<!DOCTYPE\s+html|<html[\s>]/i.test(fullResponse)) {
+            // No closed fence (e.g. unclosed ```html or raw doc) — slice the real
+            // document out of the response, dropping conversational preamble and any
+            // dangling opening/closing fence. Prevents the leak where the model's
+            // "Вот готовый код файла index.html: ```html" prefix became the site.
+            parsedCode = replaceImgMarkers(cleanHtmlDoc(fullResponse));
           }
 
           if (parsedCode && isEditMode && editingFile !== "index.html") {
@@ -2768,6 +2801,13 @@ ${designAnalysis}
             mainHtmlCode = project.generatedCode || "";
           }
         }
+      }
+
+      // Final safety net: if any parsing path still left conversational preamble
+      // or a stray markdown fence in front of a full HTML document, strip it now so
+      // a clean document is always persisted/previewed (covers "каждый второй сайт").
+      if (mainHtmlCode && /<!DOCTYPE\s+html|<html[\s>]/i.test(mainHtmlCode) && !/^\s*<(!DOCTYPE|html)/i.test(mainHtmlCode)) {
+        mainHtmlCode = cleanHtmlDoc(mainHtmlCode);
       }
 
       // Generate on-theme photos for any {{GENIMG:...}} markers and bake the
