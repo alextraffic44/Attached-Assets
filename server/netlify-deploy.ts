@@ -36,10 +36,17 @@ async function ensureSite(name: string): Promise<string> {
     body: JSON.stringify({ name }),
   });
 
-  const site = (await createRes.json()) as any;
+  const site = (await createRes.json().catch(() => null)) as any;
   if (!createRes.ok) {
-    throw new Error(site?.message || `Cannot create Netlify site: ${createRes.status}`);
+    const detail: string = site?.message || site?.error || (site?.errors && JSON.stringify(site.errors)) || "";
+    if (createRes.status === 403 && /credit|usage|exceeded|blocked|payment|billing/i.test(detail)) {
+      throw new Error(
+        "Публикация временно недоступна: на хостинге Netlify закончились кредиты аккаунта — новые публикации заблокированы до пополнения. Это ограничение хостинга, а не вашего сайта. Сообщите администратору, чтобы пополнить баланс Netlify."
+      );
+    }
+    throw new Error(detail ? `Netlify: ${detail}` : `Cannot create Netlify site: ${createRes.status}`);
   }
+  if (!site?.id) throw new Error("Netlify: некорректный ответ при создании сайта");
   return site.id;
 }
 
@@ -103,12 +110,25 @@ export async function deployToNetlify(
     body: JSON.stringify({ files: fileMap }),
   });
 
-  const deploy = (await deployRes.json()) as any;
+  const deploy = (await deployRes.json().catch(() => null)) as any;
   if (!deployRes.ok) {
     console.error("[Netlify deploy] Error:", JSON.stringify(deploy));
-    throw new Error(deploy?.message || `Netlify deploy error: ${deployRes.status}`);
+    // Netlify uses several fields for errors (`message`, `error`, `errors`).
+    const detail: string =
+      deploy?.message ||
+      deploy?.error ||
+      (deploy?.errors && JSON.stringify(deploy.errors)) ||
+      "";
+    // Account-level credit/billing block → give the user a clear, actionable message.
+    if (deployRes.status === 403 && /credit|usage|exceeded|blocked|payment|billing/i.test(detail)) {
+      throw new Error(
+        "Публикация временно недоступна: на хостинге Netlify закончились кредиты аккаунта — новые публикации заблокированы до пополнения. Это ограничение хостинга, а не вашего сайта. Сообщите администратору, чтобы пополнить баланс Netlify."
+      );
+    }
+    throw new Error(detail ? `Netlify: ${detail}` : `Netlify deploy error: ${deployRes.status}`);
   }
 
+  if (!deploy?.id) throw new Error("Netlify: некорректный ответ при создании деплоя");
   const deployId: string = deploy.id;
   const required: string[] = deploy.required || [];
 
