@@ -220,28 +220,34 @@ async function generateCreativeConcept(
     : "The product is centered, so keep any added element close around the product.";
 
   const instruction =
-`You are an award-winning product-commercial creative director.
-Look at the product in the image and design ONE short, tasteful, photoreal cinematic concept for a scroll-bound hero video — NOT a boring 360 rotation.
-Pick an idea that fits THIS product's category and mood, for example:
-- cosmetics / cream / skincare: a delicate butterfly with wings gently open resting on the lid; or a fresh rose petal lying beside the jar; or a tiny dewdrop on the surface;
-- perfume: a soft translucent mist cloud suspended around the bottle; subtle light flares;
-- watch / jewellery: a single sparkle of light sitting on the surface; a few tiny gem reflections;
-- drink / water: condensation droplets on the glass; a slice of citrus beside the bottle;
-- food / coffee: a curl of rising steam above the cup; a few coffee beans resting nearby.
+`You are the creative director of the world's most celebrated product-commercial studio (think Apple launch films, Tom Ford ads, Chanel No.5).
+Study the product in the image carefully — brand, category, texture, mood, color palette, material.
+Design ONE spectacular, premium cinematic concept for a 5-second scroll-bound hero video. NOT a boring rotation. Think STUNNING.
+
+Choose the most WOW idea for this specific product category:
+- men's grooming (clay, wax, pomade, gel): a razor-sharp spotlight beam sweeps across the metallic lid, casting a dramatic hard shadow; OR volcanic matte clay texture slowly materialises as dark dust settles; OR a single ember spark drifts past the tin in slow motion;
+- skincare / face cream: a single perfect dewdrop slides slowly down the jar surface in extreme macro; OR a translucent gold serum drop falls in zero-gravity and explodes on impact; OR ultra-thin luminous light rays bloom around the jar;
+- perfume / cologne: a dense translucent mist cloud hangs frozen around the bottle, drifting with imperceptible slowness; OR a refracted rainbow prism light band sweeps across the glass;
+- watch / jewellery: a needle-thin beam of light sweeps across the dial face, igniting micro-sparkles; OR water-thin reflective light dances over the surface;
+- drink / beverage: a single condensation bead traces a path down the cold glass in extreme slow motion;
+- food / coffee: a single thread of aromatic steam rises and curls like silk; OR a coffee bean rolls into perfect position with a soft thud;
+- hair care: light refracts through the product texture; a single perfectly defined hair strand slowly moves in air currents.
 Hard rules:
-- keep the REAL product and its label exactly intact (same shape, colors, text);
-- SOLID flat studio background;
-- at most one or two subtle elegant accents — they must already be IN THE STILL (not approaching);
-- no text, no humans, no hands, no invented brand logos; tasteful and premium, never cluttered or surreal.
+- preserve the REAL product and its label exactly (same shape, text, colors, proportions);
+- SOLID flat single-color studio background — absolutely no gradient, no scenery;
+- maximum ONE dramatic focal accent — present in the still already;
+- no humans, no hands, no invented logos; cinematic and premium;
+- the effect must be PHOTOREALISTIC and achievable in a single still + 5s video.
 ${placementNote}
 
-CRITICAL for motionPrompt — the Kling video model receives the STILL as its first frame, so the scene is already set.
-The motionPrompt must animate what is ALREADY PRESENT in the still:
-✓ CORRECT: "the butterfly's wings gently flutter in slow motion, a soft shimmer of light moves across the cream jar"
-✗ WRONG:   "a butterfly approaches from the right and lands on the jar" (butterfly can't approach if it's already in the still)
+CRITICAL for motionPrompt:
+The Kling video model gets the RENDERED STILL as frame 1 — the scene is already composed.
+motionPrompt must animate ONLY what is already visible in the still (no new elements arriving):
+✓ CORRECT: "a razor-sharp spotlight beam slowly sweeps left-to-right across the metallic lid, the hard shadow glides smoothly"
+✗ WRONG:   "a spark flies in from the left" (can't appear if it wasn't already in the still)
 
 Return STRICT JSON only (no markdown, no commentary):
-{"productSummary":"<2-4 words: what the product is>","stillAddition":"<one short English phrase: the extra STATIC element already present in the still beside/around the product>","motionPrompt":"<one English sentence: how those already-present elements MOVE in the video — animate what is in the still>"}`;
+{"productSummary":"<3-5 words: exact product name + category>","stillAddition":"<one vivid English phrase: the dramatic STATIC accent already composed in the still>","motionPrompt":"<one precise cinematic sentence: how those already-present elements move in Kling — dramatic, slow, stunning>"}`;
 
   // Hard 20s bound: the AbortController aborts the underlying request (if the SDK
   // honors it) and the Promise.race guarantees we never wait longer regardless.
@@ -275,6 +281,95 @@ Return STRICT JSON only (no markdown, no commentary):
     return { stillAddition, motionPrompt, productSummary: typeof parsed.productSummary === "string" ? parsed.productSummary : undefined };
   } catch (e: any) {
     console.warn("[SCROLLANIM] creative-concept generation failed:", e?.message);
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+// After GPT Image 2 renders the product still, analyze the ACTUAL output image with
+// Gemini vision to write a precise Kling motion prompt based on what's really there —
+// instead of trusting a pre-planned prompt written before seeing the final rendering.
+// Falls back gracefully (returns null) so the caller can use the pre-planned motionPrompt.
+async function generateMotionPromptFromStill(
+  stillUrl: string,
+  layout: "parallax" | "split",
+  shouldStop: () => boolean = () => false,
+): Promise<string | null> {
+  if (shouldStop()) return null;
+
+  // Download the still from KIE CDN (external URL, no SSRF risk — we just generated it)
+  let base64: string;
+  let mimeType: string;
+  try {
+    const ctrl = new AbortController();
+    const tId = setTimeout(() => ctrl.abort(), 30000);
+    const resp = await fetch(stillUrl, { signal: ctrl.signal });
+    clearTimeout(tId);
+    if (!resp.ok) { console.warn(`[SCROLLANIM] still download failed (${resp.status})`); return null; }
+    const ct = resp.headers.get("content-type") || "image/jpeg";
+    mimeType = ct.split(";")[0].trim();
+    if (!mimeType.startsWith("image/")) return null;
+    const buf = Buffer.from(await resp.arrayBuffer());
+    if (!buf.length || buf.length > 15 * 1024 * 1024) return null;
+    base64 = buf.toString("base64");
+  } catch (e: any) {
+    console.warn("[SCROLLANIM] still download error:", e?.message);
+    return null;
+  }
+  if (shouldStop()) return null;
+
+  const placementHint = layout === "split"
+    ? "The product is on the RIGHT side; left half is empty text area."
+    : "The product is centered.";
+
+  const instruction =
+`You are a world-class cinematographer directing a 5-second luxury product video for Kling AI.
+Look at this RENDERED PRODUCT STILL very carefully — examine every element, lighting, texture, and visual accent present.
+
+Your task: write ONE precise cinematic motion sentence that Kling will follow to animate this exact still.
+
+Rules:
+1. Describe ONLY what is visibly present in this still — do NOT invent elements that aren't there.
+2. Make it SPECTACULAR and premium — slow, dramatic, high-end commercial quality.
+3. Specify the motion of light, shadow, particles, liquid, or objects that are actually in the frame.
+4. Keep the solid background UNCHANGED — no motion that reveals edges or changes the background color.
+5. Ultra-slow, macro-scale beauty motion — think luxury slow-motion commercial.
+6. ${placementHint}
+7. No camera shake, no text, no human hands.
+
+Examples of great motion prompts (adapt to what's actually in THIS still):
+- "A sharp spotlight beam glides slowly across the metallic tin lid from left to right, casting a precise moving shadow"
+- "Micro-dewdrops on the jar surface slowly magnify and slide downward in extreme macro slow motion"
+- "A dense frozen mist cloud drifts imperceptibly, subtle light prisming through it"
+- "A single ember particle rotates slowly in the air while a warm light ray sweeps the surface"
+
+Respond with ONLY the motion prompt sentence — no JSON, no explanation, no quotes.`;
+
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const callP = gemini.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [{ role: "user", parts: [
+        { inlineData: { data: base64, mimeType } },
+        { text: instruction },
+      ]}],
+      config: { abortSignal: controller.signal },
+    });
+    const timeoutP = new Promise<null>((resolve) => { timer = setTimeout(() => { controller.abort(); resolve(null); }, 25000); });
+    const result: any = await Promise.race([callP, timeoutP]);
+    if (!result) { console.warn("[SCROLLANIM] motion-from-still timed out"); return null; }
+    const text: string =
+      result?.text ??
+      result?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).filter(Boolean).join("") ??
+      "";
+    if (!text || text.trim().length < 15) return null;
+    const prompt = text.trim().replace(/^["']+|["']+$/g, "");
+    console.log(`[SCROLLANIM] vision motion prompt (from actual still): "${prompt.slice(0, 150)}"`);
+    return prompt;
+  } catch (e: any) {
+    console.warn("[SCROLLANIM] motion-from-still generation failed:", e?.message);
     return null;
   } finally {
     if (timer) clearTimeout(timer);
@@ -839,6 +934,18 @@ async function resolveScrollAnimMarkers(
         // so Kling still animates the REAL product rather than a generic text-to-image still.
         console.warn("[SCROLLANIM] product-still failed — using raw product photo as Kling source (real product preserved, bg may not be clean)");
         referenceStill = productImageUrl;
+      } else {
+        // GPT Image 2 rendered the still — now analyze the ACTUAL output with Gemini vision
+        // to write a motion prompt based on what's really in the image (not the pre-planned
+        // concept that may differ from what gpt-image-2 actually rendered).
+        try { res.write(`data: ${JSON.stringify({ status: "Анализирую готовое изображение и пишу промпт для Kling..." })}\n\n`); } catch {}
+        const visionMotion = await generateMotionPromptFromStill(
+          referenceStill, layout, () => isAborted() || Date.now() >= phaseDeadline,
+        );
+        if (visionMotion) {
+          // Override creativeConcept.motionPrompt with the vision-derived one
+          creativeConcept = { ...(creativeConcept ?? { stillAddition: "", motionPrompt: "" }), motionPrompt: visionMotion };
+        }
       }
     }
 
