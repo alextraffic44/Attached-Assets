@@ -223,14 +223,25 @@ async function generateCreativeConcept(
 `You are an award-winning product-commercial creative director.
 Look at the product in the image and design ONE short, tasteful, photoreal cinematic concept for a scroll-bound hero video — NOT a boring 360 rotation.
 Pick an idea that fits THIS product's category and mood, for example:
-- cosmetics / cream / skincare: a delicate butterfly gently lands on it, soft flower petals drift around, a fresh flower softly blooms beside it, light water droplets;
-- perfume: soft mist or light ribbons swirling, subtle glints of light;
-- watch / jewellery: slow light glints sweeping, a few gears or sparkles floating;
-- drink / water: condensation beads, a gentle splash, fresh fruit or leaves nearby;
-- food / coffee: rising steam, herbs or beans gently falling.
-Hard rules: keep the REAL product and its label exactly intact; a SOLID flat studio background; at most one or two subtle elegant accents; no text, no humans, no hands, no invented brand logos; tasteful and premium, never cluttered or surreal. ${placementNote}
+- cosmetics / cream / skincare: a delicate butterfly with wings gently open resting on the lid; or a fresh rose petal lying beside the jar; or a tiny dewdrop on the surface;
+- perfume: a soft translucent mist cloud suspended around the bottle; subtle light flares;
+- watch / jewellery: a single sparkle of light sitting on the surface; a few tiny gem reflections;
+- drink / water: condensation droplets on the glass; a slice of citrus beside the bottle;
+- food / coffee: a curl of rising steam above the cup; a few coffee beans resting nearby.
+Hard rules:
+- keep the REAL product and its label exactly intact (same shape, colors, text);
+- SOLID flat studio background;
+- at most one or two subtle elegant accents — they must already be IN THE STILL (not approaching);
+- no text, no humans, no hands, no invented brand logos; tasteful and premium, never cluttered or surreal.
+${placementNote}
+
+CRITICAL for motionPrompt — the Kling video model receives the STILL as its first frame, so the scene is already set.
+The motionPrompt must animate what is ALREADY PRESENT in the still:
+✓ CORRECT: "the butterfly's wings gently flutter in slow motion, a soft shimmer of light moves across the cream jar"
+✗ WRONG:   "a butterfly approaches from the right and lands on the jar" (butterfly can't approach if it's already in the still)
+
 Return STRICT JSON only (no markdown, no commentary):
-{"productSummary":"<2-4 words: what the product is>","stillAddition":"<one short English phrase: the extra STATIC element(s) to composite into the still beside/around the product>","motionPrompt":"<one English sentence: the gentle cinematic MOTION that animates that scene for an image-to-video model>"}`;
+{"productSummary":"<2-4 words: what the product is>","stillAddition":"<one short English phrase: the extra STATIC element already present in the still beside/around the product>","motionPrompt":"<one English sentence: how those already-present elements MOVE in the video — animate what is in the still>"}`;
 
   // Hard 20s bound: the AbortController aborts the underlying request (if the SDK
   // honors it) and the Promise.race guarantees we never wait longer regardless.
@@ -365,9 +376,13 @@ async function generateScrollFrames(
   if (!stillUrl) { console.warn("[SCROLLANIM] aborting: no still image"); return []; }
   if (shouldStop()) { console.warn("[SCROLLANIM] aborted by shouldStop() after still image"); return []; }
 
+  // When the prompt already carries a specific product-creative motion (butterfly wings
+  // fluttering, steam rising, etc.) do NOT append conflicting generic "camera motion"
+  // instructions — Kling would follow those and lose the intended effect. Just add the
+  // minimal technical constraints so the background stays clean.
   const animPrompt =
-    `${videoPrompt.trim()}. Smooth slow cinematic camera motion, gentle natural atmospheric movement, ` +
-    `subtle depth and parallax, keep the solid uniform background perfectly clean and unchanged, no text, no captions, no watermark.`;
+    `${videoPrompt.trim()}. Photorealistic, ultra-slow elegant motion, ` +
+    `keep the solid uniform background perfectly clean and unchanged, no text, no captions, no watermark, no camera shake.`;
 
   // Overall deadline shared across all retry attempts (still image time already consumed)
   const deadline = Date.now() + 2400000; // 40 min cap (Kling can take up to 35 min)
