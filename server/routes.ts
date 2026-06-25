@@ -1716,7 +1716,19 @@ document.querySelectorAll('form[data-lead-form]').forEach(form => {
     } catch(err) { console.error(err); }
   });
 });
-Оборачивай формы в <form data-lead-form="имя_формы">.`;
+Оборачивай формы в <form data-lead-form="имя_формы">.
+
+⚠️ ПРЕЛОАДЕР ДЛЯ ПАРАЛЛАКС / АНИМИРОВАННЫХ САЙТОВ (КРИТИЧНО):
+Если сайт содержит параллакс, тяжёлые scroll-анимации, canvas-эффекты или кинематичный дизайн — ОБЯЗАТЕЛЬНО добавь прелоадер:
+
+1. ПЕРВЫМ элементом внутри <body> вставь <div id="site-preloader">...</div>
+   ⚠️ id ОБЯЗАН быть ровно "site-preloader" — по нему система находит элемент.
+2. position:fixed; inset:0; z-index:2147483647; — поверх всего содержимого.
+3. Дизайн: те же цвета, шрифты, настроение что и у сайта. Анимация — тематическая (пульсация логотипа/названия, тонкая прогресс-линия, печатающийся текст, мерцание), НЕ банальный серый спиннер.
+4. Добавь РОВНО этот JS для скрытия (не изменяй код, только вставь):
+<script>(function(){var p=document.getElementById('site-preloader');if(!p)return;var done=false;function hide(){if(done)return;done=true;p.style.transition='opacity 0.7s ease,visibility 0.7s';p.style.opacity='0';p.style.visibility='hidden';p.style.pointerEvents='none';setTimeout(function(){try{if(p.parentNode)p.parentNode.removeChild(p);}catch(e){}},800);}window.addEventListener('load',function(){setTimeout(hide,1500);},{once:true});setTimeout(hide,6000);})();</script>
+   Этот код: скрывает прелоадер через 1.5с после полной загрузки страницы, жёсткий лимит — 6 секунд.
+   НЕ добавляй другой JS для скрытия — только этот блок.`;
 
 const RESEARCH_AND_ENHANCE_PROMPT = `Ты выполняешь ДВЕ задачи одновременно:
 

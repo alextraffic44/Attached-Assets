@@ -1665,8 +1665,8 @@ window.__PROJECT_ID__=${projectId};
   }
   function go(){
     try{window.dispatchEvent(new Event('load'));}catch(e){}
-    setTimeout(kill,2000);
-    setTimeout(kill,5000);
+    setTimeout(kill,8000);
+    setTimeout(kill,12000);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);
   else go();
