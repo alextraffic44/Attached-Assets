@@ -604,20 +604,18 @@ async function generateScrollFrames(
     return [];
   }
 
-  // Step 5 — compress each frame to WebP and upload to object storage
+  // Step 5 — upload raw JPEG frames to object storage (no compression)
   const urls: string[] = [];
   try {
-    const sharp = (await import("sharp")).default as any;
     const files = fs.readdirSync(framesDir).filter(f => /\.jpg$/i.test(f)).sort();
     for (const f of files) {
       if (shouldStop()) break;
       const raw = fs.readFileSync(path.join(framesDir, f));
-      const webp = await sharp(raw).webp({ quality: 92 }).toBuffer();
-      const url = await uploadToObjectStorage(webp, "image/webp", "webp");
+      const url = await uploadToObjectStorage(raw, "image/jpeg", "jpg");
       urls.push(url);
     }
   } catch (e: any) {
-    console.warn("[SCROLLANIM] frame processing failed:", e?.message);
+    console.warn("[SCROLLANIM] frame upload failed:", e?.message);
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
