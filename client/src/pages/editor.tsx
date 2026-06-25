@@ -716,6 +716,16 @@ export default function EditorPage() {
       const url = uploadMatch[1];
       if (!allImageUrls.has(url)) uploadUrls.add(url);
     }
+    // Also catch bare /objects/ and /uploads/ asset URLs that aren't inside a
+    // src/href/poster attribute — e.g. the ~90 scroll-animation frame URLs that
+    // live inside the data-frames='[...JSON...]' attribute. Without this they
+    // never get bundled and the exported animation breaks.
+    const bareUploadRegex = /\/(?:objects|uploads)\/[A-Za-z0-9._/-]+\.(?:png|jpg|jpeg|webp|gif|svg|mp4|webm|mov|ogg|ogv|mp3|wav|m4a|aac|glb|gltf)/gi;
+    let bareMatch;
+    while ((bareMatch = bareUploadRegex.exec(allCodeToScan)) !== null) {
+      const url = bareMatch[0];
+      if (!allImageUrls.has(url)) uploadUrls.add(url);
+    }
     if (uploadUrls.size > 0 && imgFolder) {
       let upIdx = 0;
       for (const url of Array.from(uploadUrls)) {
@@ -833,7 +843,9 @@ export default function EditorPage() {
   },true);
 })();
 </script>`;
-    htmlCode = htmlCode.replace('</body>', leadExportScript + '\n</body>');
+    htmlCode = htmlCode.includes('</body>')
+      ? htmlCode.replace('</body>', leadExportScript + '\n</body>')
+      : (htmlCode.includes('</html>') ? htmlCode.replace('</html>', leadExportScript + '\n</html>') : htmlCode + '\n' + leadExportScript);
 
     zip.file("index.html", htmlCode);
 
@@ -846,7 +858,9 @@ export default function EditorPage() {
         Array.from(allModelUrls.entries()).forEach(([remoteUrl, localPath]) => {
           pfCode = pfCode.split(remoteUrl).join(localPath);
         });
-        pfCode = pfCode.replace('</body>', leadExportScript + '\n</body>');
+        pfCode = pfCode.includes('</body>')
+          ? pfCode.replace('</body>', leadExportScript + '\n</body>')
+          : (pfCode.includes('</html>') ? pfCode.replace('</html>', leadExportScript + '\n</html>') : pfCode + '\n' + leadExportScript);
         zip.file(pf.filename, pfCode);
       }
     }

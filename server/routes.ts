@@ -629,8 +629,9 @@ async function generateScrollFrames(
 // we keep its visuals and only wire up hiding. Otherwise we inject a neutral,
 // palette-adaptive fallback so a loader is never missing.
 function injectLoadingOverlay(html: string): string {
-  // Only inject into full HTML documents
-  if (!html.includes('<body') || !html.includes('</body>')) return html;
+  // Only inject into HTML documents (some AI outputs omit a closing </body>,
+  // so we tolerate that and fall back to </html> / end-of-doc on insertion).
+  if (!html.includes('<body')) return html;
   // Skip if our hide script is already present
   if (html.includes('__craft_loader_hide__')) return html;
 
@@ -677,7 +678,10 @@ function injectLoadingOverlay(html: string): string {
   setTimeout(hide,6000);
 })();</script>`;
 
-  return html.replace(/<\/body>/i, visual + hideScript + '\n</body>');
+  const inject = visual + hideScript;
+  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, inject + '\n</body>');
+  if (/<\/html>/i.test(html)) return html.replace(/<\/html>/i, inject + '\n</html>');
+  return html + '\n' + inject;
 }
 
 function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>): string {
@@ -3202,7 +3206,9 @@ ${designAnalysis}
       insertPos = sectionEnds[idx];
     }
 
-    const newHtml = html.slice(0, insertPos) + "\n" + animHtml + "\n" + html.slice(insertPos);
+    let newHtml = html.slice(0, insertPos) + "\n" + animHtml + "\n" + html.slice(insertPos);
+    // Wire up the reliable preloader-hide script so the loader can't get stuck.
+    newHtml = injectLoadingOverlay(newHtml);
 
     // Save version before modifying
     await storage.createProjectVersion({ projectId, code: html, label: "До: Вставка видео-анимации" });
@@ -3664,6 +3670,9 @@ ${designAnalysis}
       for (const img of projectImages) {
         mainHtml = mainHtml.replace(new RegExp(`\\{\\{IMG:${img.name}\\}\\}`, "g"), img.url);
       }
+      // Ensure the reliable preloader-hide script is present (self-heals older
+      // sites whose stored code was saved without it). Idempotent.
+      mainHtml = injectLoadingOverlay(mainHtml);
       mainHtml = injectLeadsScript(mainHtml);
       files.push({ filename: "index.html", content: mainHtml });
 
