@@ -1637,7 +1637,42 @@ window.__PROJECT_ID__=${projectId};
   else document.addEventListener('DOMContentLoaded',fixSticky);
 })();
 </script>`;
-    return code.replace('</head>', leadScript + stickyFixScript + '</head>');
+    const preloaderKillScript = `<script data-nz-preloader-kill>
+(function(){
+  var SELS=['#preloader','.preloader','#loader','.loader','#loading','.loading',
+    '#page-loader','.page-loader','#site-loader','.site-loader',
+    '#splash','.splash','#splash-screen','.splash-screen',
+    '#preload','.preload','#intro','.intro-overlay',
+    '#loadScreen','.load-screen','.loading-screen',
+    '#loadingOverlay','.loadingOverlay','#pageLoader','.pageLoader',
+    '[data-preloader]','[data-loader]','.preloading','.page-loading'];
+  function kill(){
+    for(var i=0;i<SELS.length;i++){
+      try{
+        var els=document.querySelectorAll(SELS[i]);
+        for(var j=0;j<els.length;j++){
+          var el=els[j];
+          el.style.setProperty('opacity','0','important');
+          el.style.setProperty('visibility','hidden','important');
+          el.style.setProperty('pointer-events','none','important');
+          (function(e){setTimeout(function(){e.style.setProperty('display','none','important');},400);})(el);
+        }
+      }catch(e){}
+    }
+    try{document.body.classList.remove('loading','preloading','is-loading','page-loading','js-loading');}catch(e){}
+    try{document.documentElement.classList.remove('loading','preloading','is-loading','page-loading','js-loading');}catch(e){}
+    try{document.body.style.removeProperty('overflow');document.documentElement.style.removeProperty('overflow');}catch(e){}
+  }
+  function go(){
+    try{window.dispatchEvent(new Event('load'));}catch(e){}
+    setTimeout(kill,2000);
+    setTimeout(kill,5000);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);
+  else go();
+})();
+<\/script>`;
+    return code.replace('</head>', leadScript + stickyFixScript + preloaderKillScript + '</head>');
   }, [projectId]);
 
   const getEditableCode = useCallback((code: string) => {
