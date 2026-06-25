@@ -1932,9 +1932,9 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
   return (
     <div className="h-screen bg-[#F6F7FB] dark:bg-[#0F172A] flex flex-col p-3 gap-3 overflow-hidden">
-      <header className="h-16 flex items-center justify-between gap-4 bg-white dark:bg-slate-900 rounded-2xl px-5 border border-slate-100 dark:border-slate-800 shadow-sm shrink-0">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => setLocation("/dashboard")} data-testid="button-back">
+      <header className="h-16 flex items-center justify-between gap-2 sm:gap-4 bg-white dark:bg-slate-900 rounded-2xl px-3 sm:px-5 border border-slate-100 dark:border-slate-800 shadow-sm shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9 shrink-0 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => setLocation("/dashboard")} data-testid="button-back">
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setLocation("/")}>
@@ -1952,14 +1952,14 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               <line x1="15" y1="20" x2="17" y2="20" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
               <path d="M8 26 h16 M10 28 h12" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
             </svg>
-            <div className="flex flex-col">
+            <div className="hidden md:flex flex-col">
               <span style={{ fontWeight: 700, fontSize: '1.1rem', letterSpacing: '-0.03em', color: '#1D1D1F', lineHeight: 1 }}>Craft AI</span>
               <h1 className="text-xs font-bold tracking-tight text-slate-400 mt-0.5" data-testid="text-project-title">{project?.title}</h1>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-nowrap overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
           {/* Device switcher */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-full p-1 gap-0.5">
             {[
@@ -1991,7 +1991,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               : "bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-slate-800"}`}
           >
             {showCode ? <Eye className="w-4 h-4" /> : <Code2 className="w-4 h-4" />}
-            <span>{showCode ? "Превью" : "Код"}</span>
+            <span className="hidden xl:inline">{showCode ? "Превью" : "Код"}</span>
           </button>
 
           {!showCode && currentCode && (
@@ -2005,7 +2005,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   : "bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-slate-800"}`}
               >
                 <MousePointer2 className="w-4 h-4" />
-                Редактор
+                <span className="hidden xl:inline">Редактор</span>
               </button>
               <button
                 onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }}
@@ -2016,7 +2016,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   : "bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-slate-800"}`}
               >
                 <Crosshair className="w-4 h-4" />
-                Выбрать
+                <span className="hidden xl:inline">Выбрать</span>
               </button>
               <button
                 onClick={() => setShowTemplates(true)}
@@ -2025,7 +2025,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 className="flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-violet-600 transition-all duration-200"
               >
                 <Sparkles className="w-4 h-4" />
-                Шаблоны
+                <span className="hidden xl:inline">Шаблоны</span>
               </button>
               <button
                 onClick={() => setShowGenerations(true)}
@@ -2034,7 +2034,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 className="relative flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-cyan-600 transition-all duration-200"
               >
                 <ImagePlus className="w-4 h-4" />
-                Медиа
+                <span className="hidden xl:inline">Медиа</span>
                 {projectImages.length > 0 && (
                   <span className="absolute -top-1.5 -right-1 bg-primary text-white text-[9px] font-bold px-1.5 min-w-[18px] h-[18px] rounded-full flex items-center justify-center">{projectImages.length}</span>
                 )}
@@ -2055,7 +2055,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 className="flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-rose-500 transition-all duration-200"
               >
                 <Video className="w-4 h-4" />
-                Анимация
+                <span className="hidden xl:inline">Анимация</span>
               </button>
             </>
           )}
@@ -2182,7 +2182,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             ) : (
               <ExternalLink className="w-4 h-4" />
             )}
-            {project?.publishStatus === "published" ? "Опубликован" : project?.publishStatus === "suspended" ? "Приостановлен" : "Опубликовать"}
+            <span className="hidden lg:inline">{project?.publishStatus === "published" ? "Опубликован" : project?.publishStatus === "suspended" ? "Приостановлен" : "Опубликовать"}</span>
           </button>
         </div>
       </header>
