@@ -1616,7 +1616,28 @@ window.__PROJECT_ID__=${projectId};
   },true);
 })();
 </script>`;
-    return code.replace('</head>', leadScript + '</head>');
+    const stickyFixScript = `<script data-nz-stickyfix>
+(function(){
+  function fixSticky(){
+    var s=document.querySelectorAll('[data-craft-scrollanim]');
+    if(!s.length)return;
+    for(var i=0;i<s.length;i++){
+      var el=s[i];
+      while(el&&el.nodeType===1&&el!==document.documentElement){
+        var cs=getComputedStyle(el);
+        if(cs.overflowX==='hidden')el.style.overflowX='clip';
+        if(cs.overflowY==='hidden')el.style.overflowY='clip';
+        el=el.parentElement;
+      }
+    }
+    var de=document.documentElement,b=document.body;
+    [de,b].forEach(function(n){if(!n)return;var c=getComputedStyle(n);if(c.overflowX==='hidden')n.style.overflowX='clip';if(c.overflowY==='hidden')n.style.overflowY='clip';});
+  }
+  if(document.readyState!=='loading')fixSticky();
+  else document.addEventListener('DOMContentLoaded',fixSticky);
+})();
+</script>`;
+    return code.replace('</head>', leadScript + stickyFixScript + '</head>');
   }, [projectId]);
 
   const getEditableCode = useCallback((code: string) => {
