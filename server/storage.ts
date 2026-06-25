@@ -48,6 +48,7 @@ export interface IStorage {
   getPublishedProjectsCount(userId: number): Promise<number>;
   getAllPublishedProjects(): Promise<Project[]>;
   getAllUsersWithPublishedSites(): Promise<{ userId: number; publishedCount: number }[]>;
+  getAllProjectsWithPendingAnim(): Promise<Project[]>;
 
   adminGetAllUsers(): Promise<User[]>;
   adminGetUserTransactions(userId: number): Promise<import("@shared/schema").CreditTransaction[]>;
@@ -313,6 +314,11 @@ export class DatabaseStorage implements IStorage {
       map.set(p.userId, (map.get(p.userId) || 0) + 1);
     }
     return Array.from(map.entries()).map(([userId, publishedCount]) => ({ userId, publishedCount }));
+  }
+
+  async getAllProjectsWithPendingAnim(): Promise<Project[]> {
+    const all = await db.select().from(projects);
+    return all.filter(p => (p.generatedCode || "").includes('data-scroll-anim-pending="1"'));
   }
 
   async adminGetAllUsers(): Promise<User[]> {

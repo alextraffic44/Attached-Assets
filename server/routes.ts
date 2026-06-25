@@ -4629,5 +4629,33 @@ ${fullHtml}`;
   }, msUntilFirstRun);
   console.log(`[Billing] Next daily billing scheduled in ${Math.round(msUntilFirstRun / 1000 / 60)} minutes (at 03:00)`);
 
+  // ── Startup cleanup: replace stuck pending animation placeholders ─────────
+  // If the server was restarted while a background animation pipeline was running,
+  // the fire-and-forget task is killed and the DB keeps the pending spinner forever.
+  // On every boot we scan for such orphaned projects and replace with static fallback.
+  setTimeout(async () => {
+    try {
+      const allProjects = await storage.getAllProjectsWithPendingAnim();
+      if (!allProjects || allProjects.length === 0) return;
+      console.log(`[Startup] Found ${allProjects.length} project(s) with stuck animation placeholder — replacing with fallback`);
+      for (const proj of allProjects) {
+        try {
+          const fallback = (proj.generatedCode || "").replace(
+            /<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g,
+            scrollAnimFallbackHtml([{ title: "", sub: "" }])
+          );
+          if (fallback !== proj.generatedCode) {
+            await storage.updateProject(proj.id, { generatedCode: fallback });
+            console.log(`[Startup] Cleared pending placeholder for project ${proj.id}`);
+          }
+        } catch (e: any) {
+          console.warn(`[Startup] Failed to clear project ${proj.id}:`, e?.message);
+        }
+      }
+    } catch (e: any) {
+      console.warn("[Startup] Animation cleanup scan failed:", e?.message);
+    }
+  }, 15000); // 15s delay to let DB connections stabilise
+
   return httpServer;
 }

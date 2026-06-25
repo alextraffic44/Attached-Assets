@@ -344,6 +344,37 @@ export default function EditorPage() {
     return () => { if (animPollRef.current) clearInterval(animPollRef.current); };
   }, []);
 
+  // Auto-restart animation poll when the editor loads and the project already has a
+  // stuck pending placeholder — covers page refresh / navigation away during generation.
+  useEffect(() => {
+    if (!project) return;
+    const code = project.generatedCode || "";
+    if (!code.includes('data-scroll-anim-pending="1"')) return;
+    if (animPollRef.current) return; // poll already running (from live generation)
+
+    const pollStart = Date.now();
+    const POLL_TIMEOUT = 20 * 60 * 1000; // 20 min hard cap
+
+    const done = (rawCode: string) => {
+      if (animPollRef.current) { clearInterval(animPollRef.current); animPollRef.current = null; }
+      const cleaned = (rawCode || "").replace(/<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g, "");
+      if (cleaned) setStreamedCode(cleaned);
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+    };
+
+    animPollRef.current = setInterval(async () => {
+      try {
+        const resp = await fetch(`/api/projects/${projectId}`, { credentials: "include" });
+        if (!resp.ok) return;
+        const proj = await resp.json();
+        const c: string = proj?.generatedCode || "";
+        if (!c.includes('data-scroll-anim-pending="1"') || Date.now() - pollStart > POLL_TIMEOUT) {
+          done(c);
+        }
+      } catch {}
+    }, 12000);
+  }, [project, projectId]);
+
   const handleAddPage = useCallback(async () => {
     let name = newPageName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
     if (!name) return;
