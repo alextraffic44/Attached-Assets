@@ -215,6 +215,17 @@ export default function EditorPage() {
   const gen3dInputRef = useRef<HTMLInputElement>(null);
   const gen3dRetryRef = useRef(0);
 
+  // Video-to-scroll-animation dialog
+  const [videoAnimOpen, setVideoAnimOpen] = useState(false);
+  const [videoAnimStep, setVideoAnimStep] = useState<"upload" | "processing" | "select" | "done">("upload");
+  const [videoAnimFrames, setVideoAnimFrames] = useState<string[]>([]);
+  const [videoAnimSections, setVideoAnimSections] = useState<string[]>([]);
+  const [videoAnimSectionIdx, setVideoAnimSectionIdx] = useState(0);
+  const [videoAnimProgress, setVideoAnimProgress] = useState("");
+  const [videoAnimError, setVideoAnimError] = useState("");
+  const [videoAnimInserting, setVideoAnimInserting] = useState(false);
+  const videoAnimInputRef = useRef<HTMLInputElement>(null);
+
   const [mockupMode, setMockupMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showGenerations, setShowGenerations] = useState(false);
@@ -2002,6 +2013,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <Box className="w-4 h-4" />
                 3D
               </button>
+              <button
+                onClick={() => { setVideoAnimOpen(true); setVideoAnimStep("upload"); setVideoAnimFrames([]); setVideoAnimError(""); setVideoAnimProgress(""); }}
+                data-testid="button-video-anim"
+                title="Scroll-анимация из видео"
+                className="flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-rose-500 transition-all duration-200"
+              >
+                <Video className="w-4 h-4" />
+                Анимация
+              </button>
             </>
           )}
 
@@ -3113,6 +3133,169 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 </div>
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Video-to-Scroll-Animation dialog ─────────────────────────────────── */}
+      <Dialog open={videoAnimOpen} onOpenChange={(v) => { if (!videoAnimInserting && videoAnimStep !== "processing") setVideoAnimOpen(v); }}>
+        <DialogContent className="sm:max-w-lg p-0 bg-white dark:bg-slate-900 border-0 shadow-[0_25px_60px_-12px_rgba(0,0,0,0.25)] rounded-3xl max-h-[85vh] overflow-hidden" aria-describedby="videoanim-desc">
+          <div className="px-6 pt-6 pb-5 border-b border-slate-100 dark:border-slate-800">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-500 to-orange-500 flex items-center justify-center shadow-lg shadow-rose-500/25">
+                  <Video className="w-5 h-5 text-white" />
+                </div>
+                Scroll-анимация из видео
+              </DialogTitle>
+              <DialogDescription id="videoanim-desc" className="text-slate-400 text-sm mt-1.5 ml-[52px]">
+                Загрузите готовое видео — мы нарежем кадры и вставим scroll-анимацию в нужный блок
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+
+          <div className="px-6 py-5 space-y-4">
+            {/* Step: upload */}
+            {videoAnimStep === "upload" && (
+              <>
+                <input
+                  ref={videoAnimInputRef}
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime,video/ogg,.mp4,.webm,.mov,.ogg"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setVideoAnimError("");
+                    setVideoAnimStep("processing");
+                    setVideoAnimProgress("Загружаю видео и нарезаю кадры...");
+                    try {
+                      const fd = new FormData();
+                      fd.append("video", file);
+                      const resp = await fetch(`/api/projects/${projectId}/video-frames`, { method: "POST", body: fd });
+                      const data = await resp.json();
+                      if (!resp.ok) throw new Error(data.message || "Ошибка сервера");
+                      setVideoAnimFrames(data.frames || []);
+                      // Load sections list
+                      setVideoAnimProgress("Определяю блоки сайта...");
+                      const secResp = await fetch(`/api/projects/${projectId}/sections`);
+                      const secData = await secResp.json();
+                      setVideoAnimSections(secData.sections || ["Секция 1"]);
+                      setVideoAnimSectionIdx(0);
+                      setVideoAnimStep("select");
+                    } catch (err: any) {
+                      setVideoAnimError(err.message || "Ошибка");
+                      setVideoAnimStep("upload");
+                    }
+                    e.target.value = "";
+                  }}
+                />
+                <div
+                  className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-10 flex flex-col items-center gap-3 cursor-pointer hover:border-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-900/10 transition-all"
+                  onClick={() => videoAnimInputRef.current?.click()}
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center">
+                    <Video className="w-7 h-7 text-rose-400" />
+                  </div>
+                  <div className="text-center">
+                    <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">Нажмите чтобы выбрать видео</p>
+                    <p className="text-xs text-slate-400 mt-1">MP4, WebM, MOV · любая длина · до 200 МБ</p>
+                  </div>
+                </div>
+                {videoAnimError && (
+                  <div className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-4 py-3">{videoAnimError}</div>
+                )}
+              </>
+            )}
+
+            {/* Step: processing */}
+            {videoAnimStep === "processing" && (
+              <div className="flex flex-col items-center gap-5 py-8">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-rose-500 to-orange-500 flex items-center justify-center shadow-lg shadow-rose-500/30 animate-pulse">
+                  <Video className="w-8 h-8 text-white" />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="font-bold text-slate-700 dark:text-slate-200">{videoAnimProgress}</p>
+                  <p className="text-xs text-slate-400">Это займёт несколько секунд...</p>
+                </div>
+                <Loader2 className="w-6 h-6 text-rose-400 animate-spin" />
+              </div>
+            )}
+
+            {/* Step: select block */}
+            {videoAnimStep === "select" && (
+              <div className="space-y-4">
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl px-4 py-3 flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Готово — {videoAnimFrames.length} кадров нарезано</p>
+                    <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Выберите, после какого блока вставить анимацию</p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Вставить после блока:</p>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {videoAnimSections.map((label, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setVideoAnimSectionIdx(i)}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-all border ${
+                          videoAnimSectionIdx === i
+                            ? "bg-rose-50 dark:bg-rose-900/30 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300"
+                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <Button
+                  className="w-full h-11 bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 text-white font-bold rounded-xl shadow-lg shadow-rose-500/25"
+                  disabled={videoAnimInserting}
+                  onClick={async () => {
+                    setVideoAnimInserting(true);
+                    try {
+                      const resp = await fetch(`/api/projects/${projectId}/inject-scroll-anim`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ frames: videoAnimFrames, insertAfterSection: videoAnimSectionIdx, texts: [] }),
+                      });
+                      const data = await resp.json();
+                      if (!resp.ok) throw new Error(data.message || "Ошибка вставки");
+                      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
+                      setVideoAnimStep("done");
+                    } catch (err: any) {
+                      setVideoAnimError(err.message || "Ошибка");
+                    } finally {
+                      setVideoAnimInserting(false);
+                    }
+                  }}
+                >
+                  {videoAnimInserting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Вставляю...</> : <><CheckCircle2 className="w-4 h-4 mr-2" />Вставить анимацию</>}
+                </Button>
+                {videoAnimError && <div className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-4 py-3">{videoAnimError}</div>}
+              </div>
+            )}
+
+            {/* Step: done */}
+            {videoAnimStep === "done" && (
+              <div className="flex flex-col items-center gap-5 py-8">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                  <CheckCircle2 className="w-8 h-8 text-white" />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="font-bold text-slate-700 dark:text-slate-200">Анимация вставлена!</p>
+                  <p className="text-xs text-slate-400">Прокрутите сайт чтобы увидеть эффект</p>
+                </div>
+                <Button className="w-full h-11 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl" onClick={() => setVideoAnimOpen(false)}>
+                  Закрыть
+                </Button>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

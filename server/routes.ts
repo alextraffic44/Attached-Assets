@@ -3090,6 +3090,128 @@ ${designAnalysis}
     }
   });
 
+  // ── Video-to-Scroll-Animation pipeline ────────────────────────────────────────
+  // List section labels from the current project HTML so the client can show a picker.
+  app.get("/api/projects/:id/sections", requireAuth, async (req: any, res) => {
+    const projectId = parseInt(req.params.id);
+    const project = await storage.getProject(projectId);
+    if (!project || project.userId !== req.user!.id) return res.status(403).json({ message: "Нет доступа" });
+    const html = project.generatedCode || "";
+    const labels: string[] = [];
+    const re = /<section([^>]*)>/gi;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      const attrs = m[1] || "";
+      const id = (attrs.match(/id=["']([^"']+)["']/) || [])[1];
+      const cls = (attrs.match(/class=["']([^"']+)["']/) || [])[1];
+      const tag = id ? `#${id}` : cls ? `.${cls.split(" ")[0]}` : "";
+      labels.push(`Секция ${labels.length + 1}${tag ? " " + tag : ""}`);
+    }
+    if (labels.length === 0) labels.push("Начало сайта");
+    return res.json({ sections: labels });
+  });
+
+  // Upload a video, extract ~90 frames with ffmpeg, store as WebP in Object Storage.
+  app.post("/api/projects/:id/video-frames", requireAuth, upload.single("video"), async (req: any, res) => {
+    const projectId = parseInt(req.params.id);
+    const project = await storage.getProject(projectId);
+    if (!project || project.userId !== req.user!.id) return res.status(403).json({ message: "Нет доступа" });
+
+    const file = req.file;
+    if (!file) return res.status(400).json({ message: "Видео не загружено" });
+    if (!file.mimetype.startsWith("video/") && !/\.(mp4|webm|mov|mpeg|ogg|avi)$/i.test(file.originalname)) {
+      return res.status(400).json({ message: "Неподдерживаемый формат. Загрузите mp4, webm или mov." });
+    }
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "videoframe-"));
+    const videoPath = path.join(tmpDir, "input.mp4");
+    const framesDir = path.join(tmpDir, "frames");
+    try {
+      fs.writeFileSync(videoPath, file.buffer);
+      fs.mkdirSync(framesDir, { recursive: true });
+
+      const ffmpegMod = (await import("fluent-ffmpeg")).default as any;
+      await ensureFfmpegPath(ffmpegMod);
+
+      // Probe duration so we can normalise to ~90 frames regardless of length
+      const duration = await new Promise<number>((resolve) => {
+        ffmpegMod.ffprobe(videoPath, (err: any, meta: any) => {
+          resolve(err ? 10 : (meta?.format?.duration ?? 10));
+        });
+      });
+
+      const TARGET_FRAMES = 90;
+      const fps = TARGET_FRAMES / Math.max(1, duration);
+      console.log(`[VIDEO-FRAMES] duration=${duration.toFixed(1)}s fps=${fps.toFixed(3)} target=${TARGET_FRAMES}`);
+
+      await new Promise<void>((resolve, reject) => {
+        ffmpegMod(videoPath)
+          .outputOptions(["-vf", `fps=${fps.toFixed(4)}`, "-q:v", "2"])
+          .output(path.join(framesDir, "frame_%04d.jpg"))
+          .on("end", () => resolve())
+          .on("error", (err: any) => reject(err))
+          .run();
+      });
+
+      const sharp = (await import("sharp")).default as any;
+      const frameFiles = fs.readdirSync(framesDir).filter((f: string) => /\.jpg$/i.test(f)).sort();
+      console.log(`[VIDEO-FRAMES] ffmpeg produced ${frameFiles.length} frames`);
+
+      const urls: string[] = [];
+      for (const f of frameFiles) {
+        const raw = fs.readFileSync(path.join(framesDir, f));
+        const webp = await sharp(raw).webp({ quality: 88 }).toBuffer();
+        const url = await uploadToObjectStorage(webp, "image/webp", "webp");
+        urls.push(url);
+      }
+      return res.json({ frames: urls, count: urls.length });
+    } catch (e: any) {
+      console.error("[VIDEO-FRAMES] error:", e?.message);
+      return res.status(500).json({ message: "Ошибка нарезки кадров: " + (e?.message || "неизвестная ошибка") });
+    } finally {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  });
+
+  // Inject a scroll-animation section into the project HTML after the chosen section index.
+  app.post("/api/projects/:id/inject-scroll-anim", requireAuth, async (req: any, res) => {
+    const projectId = parseInt(req.params.id);
+    const project = await storage.getProject(projectId);
+    if (!project || project.userId !== req.user!.id) return res.status(403).json({ message: "Нет доступа" });
+
+    const { frames, insertAfterSection = 0, texts = [] } = req.body;
+    if (!Array.isArray(frames) || frames.length === 0) return res.status(400).json({ message: "Нет кадров" });
+
+    const html = project.generatedCode || "";
+    if (!html.trim()) return res.status(400).json({ message: "Сайт ещё не сгенерирован" });
+
+    const animHtml = buildScrollAnimHtml(frames, texts, "parallax");
+
+    // Find all </section> close-tag positions
+    const sectionEnds: number[] = [];
+    const endRe = /<\/section>/gi;
+    let em;
+    while ((em = endRe.exec(html)) !== null) sectionEnds.push(em.index + em[0].length);
+
+    let insertPos: number;
+    if (sectionEnds.length === 0) {
+      // No sections — insert before </body> or at end
+      const bodyClose = html.lastIndexOf("</body>");
+      insertPos = bodyClose >= 0 ? bodyClose : html.length;
+    } else {
+      const idx = Math.max(0, Math.min(Number(insertAfterSection), sectionEnds.length - 1));
+      insertPos = sectionEnds[idx];
+    }
+
+    const newHtml = html.slice(0, insertPos) + "\n" + animHtml + "\n" + html.slice(insertPos);
+
+    // Save version before modifying
+    await storage.createProjectVersion({ projectId, code: html, label: "До: Вставка видео-анимации" });
+    await storage.updateProject(projectId, { generatedCode: newHtml });
+
+    return res.json({ code: newHtml, sections: sectionEnds.length });
+  });
+
   // WaveSpeed 3D model generation
   app.post("/api/3d/generate", requireAuth, aiLimiter, async (req, res) => {
     try {
