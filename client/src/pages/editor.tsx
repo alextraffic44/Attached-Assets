@@ -1932,7 +1932,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
   return (
     <div className="h-screen bg-[#F6F7FB] dark:bg-[#0F172A] flex flex-col p-3 gap-3 overflow-hidden">
-      <header className="h-16 flex items-center justify-between gap-2 sm:gap-4 bg-white dark:bg-slate-900 rounded-2xl px-3 sm:px-5 border border-slate-100 dark:border-slate-800 shadow-sm shrink-0">
+      <header className="h-16 flex items-center gap-2 sm:gap-3 bg-white dark:bg-slate-900 rounded-2xl px-3 sm:px-5 border border-slate-100 dark:border-slate-800 shadow-sm shrink-0">
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9 shrink-0 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => setLocation("/dashboard")} data-testid="button-back">
             <ArrowLeft className="w-4 h-4" />
@@ -1952,14 +1952,14 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               <line x1="15" y1="20" x2="17" y2="20" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
               <path d="M8 26 h16 M10 28 h12" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
             </svg>
-            <div className="hidden md:flex flex-col">
+            <div className="hidden xl:flex flex-col">
               <span style={{ fontWeight: 700, fontSize: '1.1rem', letterSpacing: '-0.03em', color: '#1D1D1F', lineHeight: 1 }}>Craft AI</span>
               <h1 className="text-xs font-bold tracking-tight text-slate-400 mt-0.5" data-testid="text-project-title">{project?.title}</h1>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-nowrap overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
+        <div className="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
           {/* Device switcher */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-full p-1 gap-0.5">
             {[
@@ -2140,12 +2140,13 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           >
             <Camera className="w-4 h-4" />
           </button>
+        </div>
 
-          {/* Publish button */}
-          <button
-            title="Опубликовать"
-            data-testid="button-publish"
-            onClick={() => {
+        {/* Publish button — always visible, outside scrollable toolbar */}
+        <button
+          title="Опубликовать"
+          data-testid="button-publish"
+          onClick={() => {
               setPublishResult(null);
               setPublishError(null);
               setDomainError(null);
@@ -2169,7 +2170,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 setTimeout(() => handlePublish(), 50);
               }
             }}
-            className={`flex items-center gap-2 h-10 px-5 rounded-full text-sm font-semibold transition-all duration-200 ${
+            className={`shrink-0 flex items-center gap-2 h-10 px-5 rounded-full text-sm font-semibold transition-all duration-200 ${
               project?.publishStatus === "published"
                 ? "bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-md shadow-emerald-200 hover:shadow-lg hover:shadow-emerald-300"
                 : project?.publishStatus === "suspended"
@@ -2182,9 +2183,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             ) : (
               <ExternalLink className="w-4 h-4" />
             )}
-            <span className="hidden lg:inline">{project?.publishStatus === "published" ? "Опубликован" : project?.publishStatus === "suspended" ? "Приостановлен" : "Опубликовать"}</span>
+            <span className="hidden sm:inline">{project?.publishStatus === "published" ? "Опубликован" : project?.publishStatus === "suspended" ? "Приостановлен" : "Опубликовать"}</span>
           </button>
-        </div>
       </header>
 
       <div className="flex-1 flex gap-3 overflow-hidden relative">
