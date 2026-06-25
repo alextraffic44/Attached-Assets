@@ -169,9 +169,11 @@ async function generateStillForVideo(
 ): Promise<string | null> {
   if (!KIE_API_KEY) return null;
   const imagePrompt =
-    `${scenePrompt.trim()}. Cinematic wide-angle still frame, photorealistic, beautiful dramatic ` +
-    `composition, pure white seamless studio background, bright even lighting, no text, no watermark, ` +
-    `ultra-high detail, 16:9 aspect ratio.`;
+    `${scenePrompt.trim()}. Ultra-cinematic widescreen film still, shot on ARRI Alexa with an anamorphic lens, ` +
+    `photorealistic, breathtaking dramatic composition with deep layered depth of field, and a calmer, less-busy ` +
+    `central zone so large text can sit on top and stay legible. Bold directional key light with soft volumetric ` +
+    `god rays, rich filmic color grading, deep elegant shadows and luminous highlights, gentle atmospheric haze ` +
+    `for depth, immersive premium mood. No text, no watermark, no logos, ultra-high detail, 8K, 16:9 aspect ratio.`;
   for (let attempt = 0; attempt < 4; attempt++) {
     if (shouldStop()) return null;
     if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
@@ -271,34 +273,37 @@ async function generateCreativeConcept(
     : "The product is centered, so keep any added element close around the product.";
 
   const instruction =
-`You are the creative director of the world's most celebrated product-commercial studio (think Apple launch films, Tom Ford ads, Chanel No.5).
+`You are the creative director of the world's most celebrated product-commercial studio (Apple launch films, Tom Ford, Chanel No.5).
 Study the product in the image carefully — brand, category, texture, mood, color palette, material.
-Design ONE spectacular, premium cinematic concept for a 5-second scroll-bound hero video. NOT a boring rotation. Think STUNNING.
+Design ONE spectacular, premium cinematic concept for a 5-second scroll-bound hero video that delivers an instant WOW. NOT a boring 360 rotation.
 
-Choose the most WOW idea for this specific product category:
-- men's grooming (clay, wax, pomade, gel): a razor-sharp spotlight beam sweeps across the metallic lid, casting a dramatic hard shadow; OR volcanic matte clay texture slowly materialises as dark dust settles; OR a single ember spark drifts past the tin in slow motion;
-- skincare / face cream: a single perfect dewdrop slides slowly down the jar surface in extreme macro; OR a translucent gold serum drop falls in zero-gravity and explodes on impact; OR ultra-thin luminous light rays bloom around the jar;
-- perfume / cologne: a dense translucent mist cloud hangs frozen around the bottle, drifting with imperceptible slowness; OR a refracted rainbow prism light band sweeps across the glass;
-- watch / jewellery: a needle-thin beam of light sweeps across the dial face, igniting micro-sparkles; OR water-thin reflective light dances over the surface;
-- drink / beverage: a single condensation bead traces a path down the cold glass in extreme slow motion;
-- food / coffee: a single thread of aromatic steam rises and curls like silk; OR a coffee bean rolls into perfect position with a soft thud;
-- hair care: light refracts through the product texture; a single perfectly defined hair strand slowly moves in air currents.
+The motion MUST be clearly visible and evolve dramatically across the 5 seconds (the viewer scrubs it by scrolling — subtle or imperceptible motion looks broken and dull). Always combine a slow cinematic camera PUSH-IN with ONE bold signature effect that genuinely moves.
+
+Pick the most striking idea for this product category:
+- men's grooming (clay, wax, pomade): a hard spotlight beam sweeps boldly across the metallic lid while its shadow glides; OR dark matte dust swirls and settles around the tin as the light intensifies;
+- skincare / face cream: a glistening serum drop swells and slides down the jar in rich macro while luminous light rays bloom and brighten; OR golden light sweeps across the dewy texture;
+- perfume / cologne: a translucent mist cloud rolls and curls around the bottle as a rainbow prism light band sweeps across the glass;
+- watch / jewellery: a beam of light sweeps across the dial igniting travelling micro-sparkles, reflections dancing over the metal;
+- drink / beverage: condensation beads form and run down the cold glass while a gentle splash leaps up or bubbles rise and catch the light;
+- food / coffee: ribbons of aromatic steam rise and curl while warm light shifts across the surface;
+- hair care: light refracts and travels through the glossy product texture, strands flowing in air currents.
 Hard rules:
 - preserve the REAL product and its label exactly (same shape, text, colors, proportions);
-- SOLID flat single-color studio background — absolutely no gradient, no scenery;
-- maximum ONE dramatic focal accent — present in the still already;
-- no humans, no hands, no invented logos; cinematic and premium;
-- the effect must be PHOTOREALISTIC and achievable in a single still + 5s video.
+- SOLID flat single-color background — no scenery (dramatic directional lighting ON that solid background is encouraged: a luminous glow, a soft falloff, a moving highlight);
+- ONE bold focal effect + the slow camera push-in — both already plausible from the composed still;
+- no humans, no hands, no invented logos; cinematic, premium and dynamic;
+- the effect must be PHOTOREALISTIC and achievable from a single still + 5s video.
 ${placementNote}
 
 CRITICAL for motionPrompt:
 The Kling video model gets the RENDERED STILL as frame 1 — the scene is already composed.
-motionPrompt must animate ONLY what is already visible in the still (no new elements arriving):
-✓ CORRECT: "a razor-sharp spotlight beam slowly sweeps left-to-right across the metallic lid, the hard shadow glides smoothly"
-✗ WRONG:   "a spark flies in from the left" (can't appear if it wasn't already in the still)
+Animate ONLY what is already visible (light, shadow, mist, liquid, particles, reflections, texture) PLUS a slow camera push-in. Do NOT introduce new objects flying in, and never make the motion so subtle it looks frozen.
+✓ CORRECT: "a hard spotlight beam sweeps boldly left-to-right across the metallic lid while the camera pushes in slowly and the shadow glides across the surface"
+✗ WRONG:   "a spark flies in from the left" (it wasn't in the still) / "the lid barely shimmers" (too subtle, looks static)
+${layout === "split" ? "SPLIT GUARDRAIL: keep the product on the right third and the entire left half a clean empty solid matte color; the camera push-in must be gentle (about 5-8 percent) with NO pan, NO tilt, NO pull-back and NO frame-edge reveal; keep ALL effects on or around the product on the right, never over the left text area." : "Keep the camera push-in smooth and centered with no frame-edge reveal."}
 
 Return STRICT JSON only (no markdown, no commentary):
-{"productSummary":"<3-5 words: exact product name + category>","stillAddition":"<one vivid English phrase: the dramatic STATIC accent already composed in the still>","motionPrompt":"<one precise cinematic sentence: how those already-present elements move in Kling — dramatic, slow, stunning>"}`;
+{"productSummary":"<3-5 words: exact product name + category>","stillAddition":"<one vivid English phrase: the dramatic STATIC accent/lighting already composed in the still>","motionPrompt":"<one precise cinematic sentence: bold VISIBLE motion of the already-present elements plus a slow camera push-in — dramatic, premium, stunning>"}`;
 
   // Hard 20s bound: the AbortController aborts the underlying request (if the SDK
   // honors it) and the Promise.race guarantees we never wait longer regardless.
@@ -371,29 +376,29 @@ async function generateMotionPromptFromStill(
   if (shouldStop()) return null;
 
   const placementHint = layout === "split"
-    ? "The product is on the RIGHT side; left half is empty text area."
-    : "The product is centered.";
+    ? "The product is on the RIGHT side and the left half is an empty solid text area — keep every effect on or around the product on the right, keep the camera push-in gentle (about 5-8 percent) and never let motion spill into or change the left half."
+    : "The product is centered — keep the push-in smooth and centered.";
 
   const instruction =
 `You are a world-class cinematographer directing a 5-second luxury product video for Kling AI.
 Look at this RENDERED PRODUCT STILL very carefully — examine every element, lighting, texture, and visual accent present.
 
-Your task: write ONE precise cinematic motion sentence that Kling will follow to animate this exact still.
+Your task: write ONE precise cinematic motion sentence that Kling will follow to animate this exact still into an instant WOW.
 
 Rules:
 1. Describe ONLY what is visibly present in this still — do NOT invent elements that aren't there.
-2. Make it SPECTACULAR and premium — slow, dramatic, high-end commercial quality.
-3. Specify the motion of light, shadow, particles, liquid, or objects that are actually in the frame.
-4. Keep the solid background UNCHANGED — no motion that reveals edges or changes the background color.
-5. Ultra-slow, macro-scale beauty motion — think luxury slow-motion commercial.
+2. The motion must be CLEARLY VISIBLE and evolve across the 5 seconds (the viewer scrubs it by scrolling — subtle or imperceptible motion looks broken and dull). Make it bold, premium and dramatic.
+3. Always combine TWO things: a slow cinematic camera PUSH-IN, plus visible motion of the light, shadow, particles, mist, liquid, reflections or texture that are actually in the frame.
+4. Keep the solid background's COLOR unchanged and never reveal the frame edges — push-in only, no pan, no tilt, no pull-back.
+5. Cinematic high-end commercial energy — graceful but unmistakable movement, never a frozen image.
 6. ${placementHint}
-7. No camera shake, no text, no human hands.
+7. No camera shake, no warping of the product, no text, no human hands.
 
 Examples of great motion prompts (adapt to what's actually in THIS still):
-- "A sharp spotlight beam glides slowly across the metallic tin lid from left to right, casting a precise moving shadow"
-- "Micro-dewdrops on the jar surface slowly magnify and slide downward in extreme macro slow motion"
-- "A dense frozen mist cloud drifts imperceptibly, subtle light prisming through it"
-- "A single ember particle rotates slowly in the air while a warm light ray sweeps the surface"
+- "A hard spotlight beam sweeps boldly across the metallic tin lid from left to right while the camera pushes in slowly and the shadow glides across the surface"
+- "Glistening dewdrops swell and run down the jar surface in rich macro as luminous light rays bloom and the camera eases in"
+- "A translucent mist cloud rolls and curls around the bottle, a rainbow prism band sweeping across the glass while the camera pushes in"
+- "Reflections travel across the watch dial igniting moving micro-sparkles while the camera slowly closes in"
 
 Respond with ONLY the motion prompt sentence — no JSON, no explanation, no quotes.`;
 
@@ -443,6 +448,9 @@ async function generateProductStill(
   const placement = layout === "split"
     ? "Position the product on the RIGHT third of the frame; keep the entire LEFT half as clean empty negative space (still the same solid color) for text."
     : "Position the product centered in the frame.";
+  const bgGuard = layout === "split"
+    ? `Concentrate all lighting and any glow tightly around the product on the RIGHT; the entire LEFT half MUST stay a perfectly flat uniform single matte color with NO visible gradient, glow or texture (clean space for text). `
+    : `Keep the glow softly around the product and the rest of the background a clean uniform matte color with no busy gradient. `;
   const hasAddition = !!(stillAddition && stillAddition.trim());
   // When adding a creative accent we must NOT forbid "props" outright, but the
   // background must still stay one solid flat color.
@@ -454,11 +462,14 @@ async function generateProductStill(
     : "";
   const prompt =
     `Take the exact product from the reference image and keep it perfectly identical ` +
-    `(same shape, label, text, colors and proportions). Place it in a premium product-photography scene on a ` +
-    `COMPLETELY SOLID, FLAT, UNIFORM single-color studio background — one plain matte color filling the whole frame, ` +
+    `(same shape, label, text, colors and proportions). Place it in a high-end cinematic product-commercial scene on a ` +
+    `COMPLETELY SOLID, FLAT, UNIFORM single-color background — one plain matte color filling the whole frame, ` +
     `${noProps}` +
-    `${placement} Soft even studio lighting, a subtle realistic contact shadow under the product, photorealistic, ` +
-    `ultra-high detail, 16:9 aspect ratio. ${creative}Keep the product's own label and text exactly intact; add no extra text, captions or watermark.`;
+    `${placement} Dramatic premium lighting like a luxury magazine ad (not flat catalog lighting): a strong directional ` +
+    `key light and a crisp rim/edge highlight that separate the product, a soft halo of light only around the product, ` +
+    `deep elegant shadows and rich glossy reflections for real depth. ${bgGuard}` +
+    `A subtle realistic contact shadow under the product, photorealistic, ultra-high detail, 8K, 16:9 aspect ratio. ` +
+    `${creative}Keep the product's own label and text exactly intact; add no extra text, captions or watermark.`;
   for (let attempt = 0; attempt < 4; attempt++) {
     if (shouldStop()) return null;
     if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
@@ -522,13 +533,16 @@ async function generateScrollFrames(
   if (!stillUrl) { console.warn("[SCROLLANIM] aborting: no still image"); return []; }
   if (shouldStop()) { console.warn("[SCROLLANIM] aborted by shouldStop() after still image"); return []; }
 
-  // When the prompt already carries a specific product-creative motion (butterfly wings
-  // fluttering, steam rising, etc.) do NOT append conflicting generic "camera motion"
-  // instructions — Kling would follow those and lose the intended effect. Just add the
-  // minimal technical constraints so the background stays clean.
+  // Append cinematic production guidance: a gentle slow camera push-in plus premium
+  // lighting/color so the scrubbed frames show real, visible motion (the prior
+  // "ultra-slow"/"imperceptible" wording made the animation read as a static image).
+  // The push-in is additive and never overrides the product-creative motion in videoPrompt.
   const animPrompt =
-    `${videoPrompt.trim()}. Photorealistic, ultra-slow elegant motion, ` +
-    `keep the solid uniform background perfectly clean and unchanged, no text, no captions, no watermark, no camera shake.`;
+    `${videoPrompt.trim()}. Render as a high-end cinematic commercial: smooth, graceful but clearly visible motion ` +
+    `(the scene must noticeably evolve from start to finish), with an elegant slow cinematic camera push-in only — ` +
+    `no pan, no tilt, no pull-back, no frame-edge reveal — premium dramatic lighting and rich filmic color grading. ` +
+    `Keep the overall composition and any solid background color stable, do not warp, morph or distort the main subject, ` +
+    `no text, no captions, no watermark, no camera shake, no flicker.`;
 
   // Overall deadline shared across all retry attempts (still image time already consumed)
   const deadline = Date.now() + 2400000; // 40 min cap (Kling can take up to 35 min)
@@ -1073,6 +1087,18 @@ async function resolveScrollAnimMarkers(
   return { generated, creditsUsed };
 }
 
+// Append cinematic, editorial-grade quality cues to a GENIMG prompt so every
+// auto-generated content photo looks high-end instead of "stocky". Applied only at
+// the generateGptImage call site — the ORIGINAL marker text stays the dedupe/cache
+// key and the library name. Purely additive (no content restrictions) so prompts
+// that intentionally include text/logos still work.
+function withImageQualityBooster(p: string): string {
+  const base = p.trim().replace(/[.\s]+$/, "");
+  return `${base}. Editorial cinematic photography, shot on a full-frame camera with a fast prime lens, ` +
+    `dramatic directional lighting, natural depth of field, rich filmic color grading, lifelike textures, ` +
+    `crisp professional detail, premium commercial quality, photorealistic, ultra high resolution.`;
+}
+
 // Low-level: create a GPT Image 2 task on KIE, poll until ready, download and
 // store in object storage. Returns the "/objects/..." URL or null on failure.
 // Retries the full attempt up to MAX_ATTEMPTS times on transient errors.
@@ -1285,7 +1311,7 @@ async function resolveGenImgMarkers(
             }
           }
           if (proceed) {
-            const url = await generateGptImage(parsed.prompt, parsed.ratio, () => isAborted() || Date.now() >= phaseDeadline);
+            const url = await generateGptImage(withImageQualityBooster(parsed.prompt), parsed.ratio, () => isAborted() || Date.now() >= phaseDeadline);
             if (url) {
               resolvedUrl = url;
               generated++;
@@ -1602,7 +1628,7 @@ const SYSTEM_PROMPT = `Ты — креативный frontend-разработч
      - светлый минимализм → "bright airy, soft natural light, clean white background"
      - luxury → "premium, sophisticated, editorial quality"
   3. НАСТРОЕНИЕ + ОСВЕЩЕНИЕ: эмоция, цветовая температура, источник света
-  4. КАЧЕСТВО: всегда добавляй "photorealistic, high resolution, professional photography"
+  4. КАЧЕСТВО (делай фото КИНЕМАТОГРАФИЧНЫМИ, а не «стоковыми»): всегда добавляй "editorial cinematic photography, dramatic directional lighting, shallow depth of field, rich filmic color grading, photorealistic, ultra high resolution, professional"
 
   Примеры правильных промптов:
   - Герой для тёмного сайта спа: {{GENIMG:luxury spa treatment room, dark moody atmosphere, warm golden candlelight, premium black marble surfaces, serene calm mood, photorealistic, professional photography|16:9}}
@@ -2098,11 +2124,11 @@ export async function registerRoutes(
 → СРАЗУ после закрывающего тега </header> (на отдельной строке, ДО любых других секций) вставь:
 {{SCROLLANIM:ВИДЕО-ПРОМПТ|Заголовок1::Подзаголовок1||Заголовок2::Подзаголовок2||Заголовок3::Подзаголовок3}}
 
-Формат ВИДЕО-ПРОМПТА для сплит-режима (на английском). Придумай КРЕАТИВНУЮ кинематографичную сцену под товар — НЕ просто «вращение 360». Товар справа, левая половина — чистый однотонный фон под текст. Добавь 1-2 тонких эффекта по смыслу товара (крем — бабочка садится на крышку / лепестки летят / распускающийся цветок рядом; парфюм — лёгкая дымка и блики света; часы — блики и парящие шестерёнки; напиток — капли конденсата, всплеск, фрукты):
-"${hasProductImage ? "the product" : "PRODUCT_NAME"} on the right side of frame, <креативный эффект по теме>, left side clean solid [light/beige/cream] background, soft studio lighting, cinematic, no text, no watermark"
+Формат ВИДЕО-ПРОМПТА для сплит-режима (на английском). Придумай КИНЕМАТОГРАФИЧНУЮ сцену под товар с ВАУ-эффектом — НЕ «вращение 360». Движение ОБЯЗАНО быть заметным и развиваться (зритель сам прокручивает видео скроллом — еле заметное движение выглядит сломанным и унылым): объедини медленный кинематографичный наезд камеры (push-in) + 1 яркий эффект по смыслу товара, который реально движется (крем — блики и лучи света расходятся, капля стекает; парфюм — дымка клубится и блик-радуга скользит по стеклу; часы — луч света бежит по циферблату, искры; напиток — капли конденсата стекают, поднимаются пузырьки). Товар СПРАВА, левая половина — чистый однотонный матовый фон под текст; ВСЕ эффекты держи СПРАВА у товара, камера только лёгкий push-in (5-8%) без панорам, наклонов и отъезда:
+"${hasProductImage ? "the product" : "PRODUCT_NAME"} on the right third of frame, <яркий кинематографичный эффект, который реально движется>, slow cinematic camera push-in, left half clean solid matte background, dramatic premium lighting, cinematic, no text, no watermark"
 Примеры:
-- "premium skincare cream jar on the right, a delicate butterfly gently lands on the lid and soft petals drift through the air, left side warm ivory background, cinematic macro"
-- "luxury glass water bottle on the right, fresh condensation beads form and a gentle splash rises, left side pure white background, cinematic"
+- "premium skincare cream jar on the right third, a glistening serum drop slides down and luminous light rays bloom across the dewy surface, slow cinematic camera push-in, left half clean ivory background, dramatic premium lighting, cinematic macro"
+- "luxury glass water bottle on the right third, fresh condensation beads form and run down while light glints travel across the glass, slow cinematic camera push-in, left half clean white background, dramatic premium lighting, cinematic"
 
 Тексты — РОВНО 3 пары на РУССКОМ (Заголовок::Подзаголовок), короткие и продающие.
 
@@ -2120,12 +2146,12 @@ export async function registerRoutes(
 → СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
 {{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|Заголовок1::Подзаголовок1||Заголовок2::Подзаголовок2||Заголовок3::Подзаголовок3}}
 
-VIDEO_PROMPT (на английском) — придумай КРЕАТИВНУЮ кинематографичную сцену по теме сайта (НЕ просто «вращение 360»), с 1-2 тонкими эффектами по смыслу:
-- Вода/напиток: "premium glass water bottle with fresh condensation beads and a gentle rising splash, slow cinematic push-in, macro"
-- Крем/косметика: "luxury skincare jar with a delicate butterfly landing on the lid and soft petals drifting, soft studio light, macro detail, cinematic"
-- Часы: "luxury mechanical watch with slow sweeping light glints and a few gears gently floating, cinematic macro"
-- Кофе: "elegant coffee cup with rising steam and slowly swirling cream, warm light, cinematic"
-- Еда: "gourmet dish with rising steam and fresh herbs gently falling, cinematic macro"
+VIDEO_PROMPT (на английском) — придумай КИНЕМАТОГРАФИЧНУЮ сцену по теме сайта с ВАУ-эффектом (НЕ «вращение 360»). Движение ОБЯЗАНО быть заметным и развиваться по ходу видео (зритель прокручивает его скроллом — еле заметное движение выглядит унылым): всегда объедини медленный кинематографичный наезд камеры (push-in) + яркий движущийся эффект по смыслу. Можно использовать полноценную атмосферную сцену/окружение (не обязательно студийный фон), но оставь более спокойную центральную зону, чтобы крупный текст читался поверх:
+- Вода/напиток: "premium glass water bottle, fresh condensation beads run down and a splash leaps up catching the light, slow cinematic camera push-in, dramatic volumetric lighting, cinematic macro"
+- Крем/косметика: "luxury skincare jar, a glistening serum drop slides down while luminous light rays bloom across the surface, slow cinematic camera push-in, rich dramatic lighting, cinematic macro"
+- Часы: "luxury mechanical watch, a beam of light sweeps across the dial igniting travelling sparkles and reflections, slow cinematic camera push-in, deep cinematic shadows, macro"
+- Кофе: "elegant coffee cup, ribbons of steam rise and curl while warm light shifts across the surface, slow cinematic camera push-in, moody cinematic lighting"
+- Природа/услуги/общее: "breathtaking cinematic establishing scene of the theme, volumetric god rays and drifting atmospheric haze, slow cinematic camera push-in revealing depth, epic film-still lighting"
 
 Тексты — РОВНО 3 пары на РУССКОМ (Заголовок::Подзаголовок), короткие и продающие.
 

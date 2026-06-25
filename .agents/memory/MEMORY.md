@@ -11,4 +11,5 @@
 - [Cyrillic web fonts](cyrillic-fonts.md) — generated RU text needs Cyrillic-capable fonts; use Unbounded+Manrope, AVOID Space Grotesk/Syne (Latin-only, silently break).
 - [Interactive loading UX](interactive-loading-ux.md) — keep ONE robot loader up until SCROLLANIM video is fully ready, then reveal; iframe `src` blob overrides `srcDoc` so clear it at each generation start.
 - [Injected browser scripts](injected-browser-scripts.md) — `<script>` strings injected into generated sites run in the browser & aren't transpiled; TS syntax (`as HTMLElement`) = SyntaxError that kills the whole block.
+- [SCROLLANIM/GENIMG wow prompts](scrollanim-wow-prompts.md) — scrubbed frames need VISIBLE motion + slow camera push-in only (never "imperceptible/ultra-slow", never pan/tilt); split keeps left-half flat; GENIMG booster only at call site, never alters dedupe key.
 - [HTML extraction leak](html-extraction-leak.md) — model output sometimes has preamble + UNCLOSED ```html fence; never persist raw fullResponse, run through `cleanHtmlDoc` (slice from <!DOCTYPE/<html, strip fences) or preamble leaks as the site.
