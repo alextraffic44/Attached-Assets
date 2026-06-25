@@ -202,8 +202,26 @@ async function generateStillForVideo(
       const state = body.data.state;
       if (state === "success") {
         const result = JSON.parse(body.data.resultJson || "{}");
-        const url = (result.resultUrls || [])[0] || null;
-        if (url) { console.log(`[SCROLLANIM] still image ready: ${url}`); return url; }
+        const cdnUrl = (result.resultUrls || [])[0] || null;
+        if (cdnUrl) {
+          // Re-upload to Object Storage → stable permanent URL Kling can always fetch
+          // (KIE CDN URLs may expire before Kling dequeues the task, causing video-create to fail)
+          try {
+            const imgResp = await fetch(cdnUrl, { signal: AbortSignal.timeout(25000) });
+            if (imgResp.ok) {
+              const imgBuf = Buffer.from(await imgResp.arrayBuffer());
+              const relUrl = await uploadToObjectStorage(imgBuf, "image/jpeg", "jpg");
+              const appBase = process.env.APP_BASE_URL || "https://craft-ai.ru";
+              const stableUrl = `${appBase}${relUrl}`;
+              console.log(`[SCROLLANIM] still re-uploaded → stable URL: ${stableUrl}`);
+              return stableUrl;
+            }
+          } catch (upErr: any) {
+            console.warn("[SCROLLANIM] still re-upload failed, using raw CDN URL:", upErr?.message);
+          }
+          console.log(`[SCROLLANIM] still image ready (CDN fallback): ${cdnUrl}`);
+          return cdnUrl;
+        }
         break;
       }
       if (state === "fail" || state === "failed" || state === "error") {
@@ -500,8 +518,25 @@ async function generateProductStill(
       const state = body.data.state;
       if (state === "success") {
         const result = JSON.parse(body.data.resultJson || "{}");
-        const url = (result.resultUrls || [])[0] || null;
-        if (url) { console.log(`[SCROLLANIM] product still ready: ${url}`); return url; }
+        const cdnUrl = (result.resultUrls || [])[0] || null;
+        if (cdnUrl) {
+          // Re-upload to Object Storage for a stable non-expiring URL
+          try {
+            const imgResp = await fetch(cdnUrl, { signal: AbortSignal.timeout(25000) });
+            if (imgResp.ok) {
+              const imgBuf = Buffer.from(await imgResp.arrayBuffer());
+              const relUrl = await uploadToObjectStorage(imgBuf, "image/jpeg", "jpg");
+              const appBase = process.env.APP_BASE_URL || "https://craft-ai.ru";
+              const stableUrl = `${appBase}${relUrl}`;
+              console.log(`[SCROLLANIM] product still re-uploaded → stable URL: ${stableUrl}`);
+              return stableUrl;
+            }
+          } catch (upErr: any) {
+            console.warn("[SCROLLANIM] product still re-upload failed, using CDN URL:", upErr?.message);
+          }
+          console.log(`[SCROLLANIM] product still ready (CDN fallback): ${cdnUrl}`);
+          return cdnUrl;
+        }
         break;
       }
       if (state === "fail" || state === "failed" || state === "error") {
@@ -571,7 +606,7 @@ async function generateScrollFrames(
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
         body: JSON.stringify({
           model: KLING_IMG2VID_MODEL,
-          input: { prompt: animPrompt, image_urls: [stillUrl], duration: SCROLL_VIDEO_DURATION, resolution: "1080p" },
+          input: { prompt: animPrompt.slice(0, 2500), image_urls: [stillUrl], duration: SCROLL_VIDEO_DURATION },
         }),
       },
       { label: "SCROLLANIM video-create", retries: 4, shouldStop: () => shouldStop() || Date.now() >= deadline },
