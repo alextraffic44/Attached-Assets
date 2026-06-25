@@ -3153,15 +3153,13 @@ ${designAnalysis}
           .run();
       });
 
-      const sharp = (await import("sharp")).default as any;
       const frameFiles = fs.readdirSync(framesDir).filter((f: string) => /\.jpg$/i.test(f)).sort();
       console.log(`[VIDEO-FRAMES] ffmpeg produced ${frameFiles.length} frames`);
 
       const urls: string[] = [];
       for (const f of frameFiles) {
         const raw = fs.readFileSync(path.join(framesDir, f));
-        const webp = await sharp(raw).webp({ quality: 88 }).toBuffer();
-        const url = await uploadToObjectStorage(webp, "image/webp", "webp");
+        const url = await uploadToObjectStorage(raw, "image/jpeg", "jpg");
         urls.push(url);
       }
       return res.json({ frames: urls, count: urls.length });
