@@ -3035,6 +3035,41 @@ ${designAnalysis}
         mainHtmlCode = cleanHtmlDoc(mainHtmlCode);
       }
 
+      // ── Re-inject scroll-anim-pending if AI full-HTML edit stripped it ────────
+      // When the user edits while BG ANIM is still running, the AI may output a
+      // full HTML replacement that drops the pending spinner. BG ANIM then finds
+      // nothing to replace and the animation is permanently lost. Fix: if the
+      // ORIGINAL project code had the pending section and the AI-produced code
+      // does NOT, extract and re-inject it after </header> (or <body>).
+      {
+        const PEND_MARKER = 'data-scroll-anim-pending="1"';
+        const origCode = project.generatedCode || "";
+        if (origCode.includes(PEND_MARKER) && mainHtmlCode && !mainHtmlCode.includes(PEND_MARKER)) {
+          // Extract the full <section data-scroll-anim-pending...>...</section> from original
+          const mIdx = origCode.indexOf(PEND_MARKER);
+          const secStart = origCode.lastIndexOf('<section', mIdx);
+          if (secStart !== -1) {
+            let depth = 0, pos = secStart, secEnd = -1;
+            while (pos < origCode.length) {
+              const nextOpen = origCode.indexOf('<section', pos + 1);
+              const nextClose = origCode.indexOf('</section>', pos);
+              if (nextClose === -1) break;
+              if (nextOpen !== -1 && nextOpen < nextClose) { depth++; pos = nextOpen; }
+              else { if (depth === 0) { secEnd = nextClose + '</section>'.length; break; } depth--; pos = nextClose + 1; }
+            }
+            if (secEnd !== -1) {
+              const pendingBlock = origCode.slice(secStart, secEnd);
+              if (mainHtmlCode.includes('</header>')) {
+                mainHtmlCode = mainHtmlCode.replace('</header>', `</header>\n${pendingBlock}`);
+              } else {
+                mainHtmlCode = mainHtmlCode.replace(/<body([^>]*)>/i, (_m, attrs) => `<body${attrs}>\n${pendingBlock}`);
+              }
+              console.log(`[EDIT] Re-injected scroll-anim-pending section into AI-edited code (project ${project.id})`);
+            }
+          }
+        }
+      }
+
       // Generate on-theme photos for any {{GENIMG:...}} markers and bake the
       // resulting /objects/ URLs into the main page + all secondary files BEFORE
       // persisting, so preview, version history, deploy and ZIP all ship them.
