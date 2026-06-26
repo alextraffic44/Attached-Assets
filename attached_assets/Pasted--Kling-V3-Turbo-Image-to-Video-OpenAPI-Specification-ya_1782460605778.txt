@@ -1,0 +1,407 @@
+# Kling - V3 Turbo Image to Video
+
+## OpenAPI Specification
+
+```yaml
+openapi: 3.0.1
+info:
+  title: ''
+  description: ''
+  version: 1.0.0
+paths:
+  /api/v1/jobs/createTask:
+    post:
+      summary: Kling - V3 Turbo Image to Video
+      deprecated: false
+      description: >
+        ## Query Task Status
+
+
+        After submitting a task, use the unified query endpoint to check
+        progress and retrieve results:
+
+
+        <Card title="Get Task Details" icon="lucide-search"
+        href="/market/common/get-task-detail">
+          Learn how to query task status and retrieve generation results
+        </Card>
+
+
+        ::: tip[]
+
+        For production use, we recommend using the `callBackUrl` parameter to
+        receive automatic notifications when generation completes, rather than
+        polling the status endpoint.
+
+        :::
+
+
+        ## Related Resources
+
+
+        <CardGroup cols={2}>
+          <Card title="Market Overview" icon="lucide-store" href="/market/quickstart">
+            Explore all available models
+          </Card>
+          <Card title="Common API" icon="lucide-cog" href="/common-api/get-account-credits">
+            Check credits and account usage
+          </Card>
+        </CardGroup>
+      operationId: kling-v3-turbo-image-to-video
+      tags:
+        - docs/en/Market/Video Models/Kling
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - model
+                - input
+              properties:
+                model:
+                  type: string
+                  description: |-
+                    The model name to use for generation. Required field.
+
+                    - Must be `kling/v3-turbo-image-to-video` for this endpoint
+                  enum:
+                    - kling/v3-turbo-image-to-video
+                  default: kling/v3-turbo-image-to-video
+                  x-apidog-enum:
+                    - value: kling/v3-turbo-image-to-video
+                      name: ''
+                      description: ''
+                  examples:
+                    - kling/v3-turbo-image-to-video
+                callBackUrl:
+                  type: string
+                  format: uri
+                  description: >-
+                    The URL to receive generation task completion updates.
+                    Optional but recommended for production use.
+
+
+                    - System will POST task status and results to this URL when
+                    generation completes
+
+                    - Callback includes generated content URLs and task
+                    information
+
+                    - Your callback endpoint should accept POST requests with
+                    JSON payload containing results
+
+                    - Alternatively, use the Get Task Details endpoint to poll
+                    task status
+
+                    - To ensure callback security, see [Webhook Verification
+                    Guide](/common-api/webhook-verification) for signature
+                    verification implementation
+                  examples:
+                    - https://your-domain.com/api/callback
+                input:
+                  type: object
+                  description: Input parameters for the generation task
+                  properties:
+                    prompt:
+                      type: string
+                      description: >-
+                        The text prompt describing the video to generate (Max
+                        length: 2500 characters)
+                      maxLength: 2500
+                      examples:
+                        - >-
+                          Outdoor terrace of a European villa, by a dining table
+                          with a blue and white checkered tablecloth, a young
+                          white woman in a blue and white striped short-sleeve
+                          shirt and khaki shorts, with a brown belt, sits
+                          barefoot, opposite a young white man in a white
+                          T-shirt.The camera zooms in, the woman swirls the
+                          juice in a glass, her eyes looking at the distant
+                          woods, and says, "These trees will turn yellow in a
+                          month, won't they?"Close-up of the man, he lowers his
+                          head and says, "But they'll be green again next
+                          summer."Then the woman turns her head, smiles at the
+                          man opposite, and says, "Are you always this
+                          optimistic? Or just about summer?"Then the man lifts
+                          his head, looks at the woman and says, "Only about
+                          summers with you."
+                    image_urls:
+                      type: array
+                      items:
+                        type: string
+                        format: uri
+                      description: >-
+                        URL of the image to be used for the video (File URL
+                        after upload, not file content; Accepted types:
+                        image/jpeg, image/png; Max size: 10.0MB)
+                      examples:
+                        - - >-
+                            https://static.aiquickdraw.com/tools/example/1770688028208_jxcvxCQm.png
+                    duration:
+                      type: string
+                      description: |-
+                        The duration of the generated video in seconds
+                        Optional duration: 3s - 15s
+                      default: '5'
+                      examples:
+                        - '5'
+                    resolution:
+                      type: string
+                      description: Resolution of the generated video (720p or 1080p)
+                      enum:
+                        - 720p
+                        - 1080p
+                      x-apidog-enum:
+                        - value: 720p
+                          name: ''
+                          description: ''
+                        - value: 1080p
+                          name: ''
+                          description: ''
+                      default: 720p
+                      examples:
+                        - 720p
+                  required:
+                    - prompt
+                    - image_urls
+                    - duration
+                    - resolution
+                  x-apidog-orders:
+                    - prompt
+                    - image_urls
+                    - duration
+                    - resolution
+                  x-apidog-ignore-properties: []
+              x-apidog-orders:
+                - model
+                - callBackUrl
+                - input
+              x-apidog-ignore-properties: []
+            example:
+              model: kling/v3-turbo-image-to-video
+              input:
+                image_urls:
+                  - >-
+                    https://static.aiquickdraw.com/tools/example/1770688028208_jxcvxCQm.png
+                prompt: >-
+                  Outdoor terrace of a European villa, by a dining table with a
+                  blue and white checkered tablecloth, a young white woman in a
+                  blue and white striped short-sleeve shirt and khaki shorts,
+                  with a brown belt, sits barefoot, opposite a young white man
+                  in a white T-shirt.
+
+
+                  The camera zooms in, the woman swirls the juice in a glass,
+                  her eyes looking at the distant woods, and says, "These trees
+                  will turn yellow in a month, won't they?"
+
+
+                  Close-up of the man, he lowers his head and says, "But they'll
+                  be green again next summer."
+
+
+                  Then the woman turns her head, smiles at the man opposite, and
+                  says, "Are you always this optimistic? Or just about summer?"
+
+
+                  Then the man lifts his head, looks at the woman and says,
+                  "Only about summers with you."
+                duration: '5'
+                resolution: 720p
+      responses:
+        '200':
+          description: Request successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          taskId:
+                            type: string
+                            description: >-
+                              Task ID, can be used with Get Task Details
+                              endpoint to query task status
+                            examples:
+                              - task_kling_1765187759663
+                        x-apidog-orders:
+                          - taskId
+                        x-apidog-ignore-properties: []
+                    x-apidog-orders:
+                      - data
+                    x-apidog-ignore-properties: []
+              example:
+                code: 200
+                msg: success
+                data:
+                  taskId: task_kling_1765187759663
+          headers: {}
+          x-apidog-name: ''
+      security:
+        - BearerAuth: []
+          x-apidog:
+            schemeGroups:
+              - id: kn8M4YUlc5i0A0179ezwx
+                schemeIds:
+                  - BearerAuth
+            required: true
+            use:
+              id: kn8M4YUlc5i0A0179ezwx
+            scopes:
+              kn8M4YUlc5i0A0179ezwx:
+                BearerAuth: []
+      x-apidog-folder: docs/en/Market/Video Models/Kling
+      x-apidog-status: released
+      x-run-in-apidog: https://app.apidog.com/web/project/1184766/apis/api-38108028-run
+components:
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: >-
+            Response status code
+
+
+            - **200**: Success - Request has been processed successfully
+
+            - **401**: Unauthorized - Authentication credentials are missing or
+            invalid
+
+            - **402**: Insufficient Credits - Account does not have enough
+            credits to perform the operation
+
+            - **404**: Not Found - The requested resource or endpoint does not
+            exist
+
+            - **422**: Validation Error - The request parameters failed
+            validation checks
+
+            - **429**: Rate Limited - Request limit has been exceeded for this
+            resource
+
+            - **433**: Request Limit - Sub-key Usage Exceeds Limit
+
+            - **455**: Service Unavailable - System is currently undergoing
+            maintenance
+
+            - **500**: Server Error - An unexpected error occurred while
+            processing the request
+
+            - **501**: Generation Failed - Content generation task failed
+
+            - **505**: Feature Disabled - The requested feature is currently
+            disabled
+          enum:
+            - 200
+            - 401
+            - 402
+            - 404
+            - 422
+            - 429
+            - 433
+            - 455
+            - 500
+            - 501
+            - 505
+          x-apidog-enum:
+            - value: 200
+              name: ''
+              description: ''
+            - value: 401
+              name: ''
+              description: ''
+            - value: 402
+              name: ''
+              description: ''
+            - value: 404
+              name: ''
+              description: ''
+            - value: 422
+              name: ''
+              description: ''
+            - value: 429
+              name: ''
+              description: ''
+            - value: 433
+              name: ''
+              description: ''
+            - value: 455
+              name: ''
+              description: ''
+            - value: 500
+              name: ''
+              description: ''
+            - value: 501
+              name: ''
+              description: ''
+            - value: 505
+              name: ''
+              description: ''
+        msg:
+          type: string
+          description: Response message, error description when failed
+          examples:
+            - success
+        data:
+          type: object
+          properties:
+            taskId:
+              type: string
+              description: >-
+                Task ID, can be used with Get Task Details endpoint to query
+                task status
+          x-apidog-orders:
+            - taskId
+          required:
+            - taskId
+          x-apidog-ignore-properties: []
+      x-apidog-orders:
+        - code
+        - msg
+        - data
+      title: response not with recordId
+      required:
+        - data
+      x-apidog-ignore-properties: []
+      x-apidog-folder: ''
+  securitySchemes:
+    BearerAuth:
+      type: bearer
+      scheme: bearer
+      bearerFormat: API Key
+      description: >-
+        All API requests require a Bearer Token. Add the header `Authorization:
+        Bearer YOUR_API_KEY` to authenticate requests.
+    BearerAuth1:
+      type: bearer
+      scheme: bearer
+      bearerFormat: API Key
+      description: >-
+        所有 API 请求都需要 Bearer Token。请在请求头中添加 `Authorization: Bearer YOUR_API_KEY`
+        进行身份验证。
+servers:
+  - url: https://api.kie.ai
+    description: 正式环境
+security:
+  - BearerAuth: []
+    x-apidog:
+      schemeGroups:
+        - id: kn8M4YUlc5i0A0179ezwx
+          schemeIds:
+            - BearerAuth
+      required: true
+      use:
+        id: kn8M4YUlc5i0A0179ezwx
+      scopes:
+        kn8M4YUlc5i0A0179ezwx:
+          BearerAuth: []
+
+```

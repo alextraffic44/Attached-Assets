@@ -606,7 +606,7 @@ async function generateScrollFrames(
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
         body: JSON.stringify({
           model: KLING_IMG2VID_MODEL,
-          input: { prompt: animPrompt.slice(0, 2500), image_urls: [stillUrl], duration: SCROLL_VIDEO_DURATION },
+          input: { prompt: animPrompt.slice(0, 2500), image_urls: [stillUrl], duration: String(SCROLL_VIDEO_DURATION), resolution: "1080p" },
         }),
       },
       { label: "SCROLLANIM video-create", retries: 4, shouldStop: () => shouldStop() || Date.now() >= deadline },
