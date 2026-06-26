@@ -3006,9 +3006,7 @@ ${designAnalysis}
 
       // ── Auto-inject SCROLLANIM if interactive mode but AI missed the marker ──
       if (interactiveMode && isNewSite && !mainHtmlCode.includes("{{SCROLLANIM:")) {
-        const rawPrompt = typeof prompt === "string" ? prompt : "";
         const isSplitAuto = interactiveStyle === "split";
-        const firstWords = rawPrompt.replace(/[`'"]/g, "").slice(0, 100);
         let videoPromptAuto: string;
         let textsAuto: string;
         if (isSplitAuto) {
