@@ -830,6 +830,50 @@ function injectLoadingOverlay(html: string): string {
   return html + '\n' + inject;
 }
 
+/**
+ * Safely replace the `data-scroll-anim-pending="1"` section in an HTML string
+ * without using a regex with [\s\S]*? (catastrophic backtracking risk on large files).
+ * Finds the opening <section> tag by searching backward from the marker, then
+ * locates the matching </section> by tracking nesting depth.
+ */
+function safeReplaceScrollAnimPending(html: string, replacement: string): string {
+  const MARKER = 'data-scroll-anim-pending="1"';
+  const OPEN = '<section';
+  const CLOSE = '</section>';
+  let result = html;
+  // Replace all occurrences (there can be up to 2 per site)
+  for (let iteration = 0; iteration < 3; iteration++) {
+    const markerIdx = result.indexOf(MARKER);
+    if (markerIdx === -1) break;
+    // Find the <section tag that owns this marker (search backwards from marker)
+    const sectionStart = result.lastIndexOf(OPEN, markerIdx);
+    if (sectionStart === -1) break;
+    // Find matching </section> by tracking nesting depth
+    let depth = 0;
+    let pos = sectionStart;
+    let sectionEnd = -1;
+    while (pos < result.length) {
+      const nextOpen = result.indexOf(OPEN, pos + 1);
+      const nextClose = result.indexOf(CLOSE, pos + 1);
+      if (nextClose === -1) break; // malformed HTML
+      if (nextOpen !== -1 && nextOpen < nextClose) {
+        depth++;
+        pos = nextOpen;
+      } else {
+        if (depth === 0) {
+          sectionEnd = nextClose + CLOSE.length;
+          break;
+        }
+        depth--;
+        pos = nextClose;
+      }
+    }
+    if (sectionEnd === -1) break; // couldn't find closing tag — stop
+    result = result.slice(0, sectionStart) + replacement + result.slice(sectionEnd);
+  }
+  return result;
+}
+
 function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>): string {
   const first = texts[0] || { title: "", sub: "" };
   const tid = "pnd" + Math.random().toString(36).slice(2, 8);
@@ -3111,17 +3155,13 @@ ${designAnalysis}
             // (resolveScrollAnimMarkers already handles its own deduction)
           } catch (bgErr) {
             console.error(`[BG ANIM] Error for project ${project.id}:`, bgErr);
-            // On failure: replace pending placeholder with static fallback
+            // On failure: replace pending placeholder with static fallback (safe, no regex backtracking)
             try {
-              const fallbackCode = immediateHtml.replace(/<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g, () => {
-                const pipe = mainHtmlCode.match(/\{\{SCROLLANIM:[\s\S]+?\}\}/)?.[0];
-                if (!pipe) return "";
-                const inner = pipe.slice(13, -2);
-                const pipeIdx = inner.indexOf("|");
-                const textPart = pipeIdx === -1 ? "" : inner.slice(pipeIdx + 1);
-                const texts = textPart.split("||").map((seg: string) => { const [t, s] = seg.split("::"); return { title: (t||"").trim(), sub: (s||"").trim() }; });
-                return scrollAnimFallbackHtml(texts);
-              });
+              const pipe = mainHtmlCode.match(/\{\{SCROLLANIM:([\s\S]+?)\}\}/)?.[1] || "";
+              const pipeIdx = pipe.indexOf("|");
+              const textPart = pipeIdx === -1 ? "" : pipe.slice(pipeIdx + 1);
+              const texts = textPart.split("||").map((seg: string) => { const [t, s] = seg.split("::"); return { title: (t||"").trim(), sub: (s||"").trim() }; });
+              const fallbackCode = safeReplaceScrollAnimPending(immediateHtml, scrollAnimFallbackHtml(texts));
               await storage.updateProject(project.id, { generatedCode: fallbackCode });
             } catch {}
           }
@@ -4762,33 +4802,40 @@ ${fullHtml}`;
   }, msUntilFirstRun);
   console.log(`[Billing] Next daily billing scheduled in ${Math.round(msUntilFirstRun / 1000 / 60)} minutes (at 03:00)`);
 
-  // ── Startup cleanup: replace stuck pending animation placeholders ─────────
+  // ── Stuck-animation cleanup (startup + periodic) ──────────────────────────
   // If the server was restarted while a background animation pipeline was running,
   // the fire-and-forget task is killed and the DB keeps the pending spinner forever.
-  // On every boot we scan for such orphaned projects and replace with static fallback.
-  setTimeout(async () => {
+  // We clean up on boot AND every 30 minutes so restarts are no longer the only chance.
+  // Uses safeReplaceScrollAnimPending (string-search, no regex backtracking) so it
+  // reliably works even on large HTML files (50-100 KB) without Node.js hanging.
+  async function cleanupStuckPendingAnims(label: string) {
     try {
       const allProjects = await storage.getAllProjectsWithPendingAnim();
       if (!allProjects || allProjects.length === 0) return;
-      console.log(`[Startup] Found ${allProjects.length} project(s) with stuck animation placeholder — replacing with fallback`);
+      console.log(`[${label}] Found ${allProjects.length} project(s) with stuck animation placeholder — replacing with fallback`);
       for (const proj of allProjects) {
         try {
-          const fallback = (proj.generatedCode || "").replace(
-            /<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g,
+          const fallback = safeReplaceScrollAnimPending(
+            proj.generatedCode || "",
             scrollAnimFallbackHtml([{ title: "", sub: "" }])
           );
           if (fallback !== proj.generatedCode) {
             await storage.updateProject(proj.id, { generatedCode: fallback });
-            console.log(`[Startup] Cleared pending placeholder for project ${proj.id}`);
+            console.log(`[${label}] Cleared pending placeholder for project ${proj.id}`);
           }
         } catch (e: any) {
-          console.warn(`[Startup] Failed to clear project ${proj.id}:`, e?.message);
+          console.warn(`[${label}] Failed to clear project ${proj.id}:`, e?.message);
         }
       }
     } catch (e: any) {
-      console.warn("[Startup] Animation cleanup scan failed:", e?.message);
+      console.warn(`[${label}] Animation cleanup scan failed:`, e?.message);
     }
-  }, 15000); // 15s delay to let DB connections stabilise
+  }
+
+  // Run once on startup (15s delay so DB connections stabilise)
+  setTimeout(() => cleanupStuckPendingAnims("Startup"), 15000);
+  // Run every 30 minutes so stuck placeholders are cleaned even between restarts
+  setInterval(() => cleanupStuckPendingAnims("Periodic"), 30 * 60 * 1000);
 
   return httpServer;
 }
