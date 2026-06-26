@@ -571,6 +571,22 @@ async function generateScrollFrames(
   if (!stillUrl) { console.warn("[SCROLLANIM] aborting: no still image"); return []; }
   if (shouldStop()) { console.warn("[SCROLLANIM] aborted by shouldStop() after still image"); return []; }
 
+  // Strip Cyrillic text from videoPrompt — the AI sometimes copies the user's Russian
+  // site description into the SCROLLANIM marker instead of writing an English cinematic prompt.
+  // We remove all Cyrillic word-clusters and collapse extra whitespace; if nothing is left
+  // we fall back to a generic cinematic description so Kling always gets English-only input.
+  const cleanVideoPrompt = videoPrompt
+    .replace(/[\u0400-\u04FF][\u0400-\u04FF\s,;:!?—–-]*/g, " ")  // strip Cyrillic runs + trailing punctuation
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s.,;:]+|[\s.,;:]+$/g, "")
+    .trim();
+  const safeVideoPrompt = cleanVideoPrompt.length > 15
+    ? cleanVideoPrompt
+    : "breathtaking cinematic scene with atmospheric depth, volumetric lighting, photorealistic";
+  if (cleanVideoPrompt !== videoPrompt.trim()) {
+    console.log(`[SCROLLANIM] stripped Cyrillic from videoPrompt → "${safeVideoPrompt.slice(0, 120)}"`);
+  }
+
   // Append cinematic production guidance so the scrubbed frames show real, visible
   // motion (the prior "ultra-slow"/"imperceptible" wording made the animation read as
   // a static image). For scene/parallax we allow bold immersive forward camera travel
@@ -580,7 +596,7 @@ async function generateScrollFrames(
     ? `with an elegant slow cinematic camera push-in only — no pan, no tilt, no pull-back, no frame-edge reveal — keeping the product perfectly intact and the left side calm for text`
     : `with bold immersive cinematic camera movement that pulls the viewer INTO the scene — a smooth forward dolly / push-in that glides deeper and naturally reveals depth and detail (e.g. gliding toward a doorway or through the space) — graceful and steady, never shaky`;
   const animPrompt =
-    `${videoPrompt.trim()}. Render as a high-end Hollywood-grade cinematic shot: smooth, graceful but clearly visible motion ` +
+    `${safeVideoPrompt}. Render as a high-end Hollywood-grade cinematic shot: smooth, graceful but clearly visible motion ` +
     `(the scene must noticeably evolve and feel alive from start to finish), ${cameraGuidance}, premium dramatic lighting ` +
     `and rich filmic color grading. Do not warp, melt or distort the main subject or any architecture, ` +
     `no text, no captions, no watermark, no camera shake, no flicker, no jump cuts.`;
@@ -2998,12 +3014,12 @@ ${designAnalysis}
         if (isSplitAuto) {
           videoPromptAuto = absoluteProductImageUrl
             ? "the product on the right side of frame, a delicate butterfly gently lands and soft petals drift through the air, left side clean solid white background, soft studio lighting, cinematic macro, no text"
-            : `${firstWords.slice(0, 70)} product on the right side, soft cinematic accents and gentle atmospheric motion, left side clean solid white background, soft studio lighting, cinematic`;
+            : "premium product on the right side of frame, soft cinematic accents and gentle atmospheric motion, left side clean solid white background, soft studio lighting, cinematic";
           textsAuto = "Познакомьтесь с нами::Откройте для себя наш продукт||Качество и стиль::Только лучшее для вас||Начните сейчас::Сделайте первый шаг";
         } else {
           videoPromptAuto = absoluteProductImageUrl
             ? "premium product with soft cinematic accents — gentle drifting petals and slow sweeping light, studio lighting, clean solid background, cinematic macro detail"
-            : `${firstWords.slice(0, 70)} with gentle cinematic motion and soft atmospheric accents, clean solid background, studio lighting, cinematic`;
+            : "breathtaking cinematic forward flight into the scene, volumetric god rays and drifting atmospheric haze, the camera revealing depth and grandeur, epic film-still lighting, photorealistic";
           textsAuto = "Добро пожаловать::Откройте что-то новое||Наше качество::Только лучшее||Начните прямо сейчас::Попробуйте сегодня";
         }
         const markerAuto = `\n{{SCROLLANIM:${videoPromptAuto}|${textsAuto}}}\n`;
