@@ -992,46 +992,10 @@ ${layers}
       var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);
       texts.forEach(function(el){var fi=parseFloat(el.getAttribute('data-fi')),fis=parseFloat(el.getAttribute('data-fis')),fos=parseFloat(el.getAttribute('data-fos')),fo=parseFloat(el.getAttribute('data-fo'));var op=0;if(!isNaN(fi)&&p>=fi&&p<=fo){op=p<fis?(fis>fi?(p-fi)/(fis-fi):1):(p<=fos?1:(fo>fos?1-(p-fos)/(fo-fos):1));}op=Math.max(0,Math.min(1,op));el.style.opacity=op.toFixed(3);el.style.transform='translate(-50%,calc(-50% + '+((1-op)*30)+'px))';});
     }
-    // ── Scroll-jacking: lock page scroll while animation plays ──
-    var locked=false,lp=0;
+    // ── Passive scroll-driven progress (no scroll-jacking) ──
     function secTop(){return root.getBoundingClientRect().top+(window.pageYOffset||document.documentElement.scrollTop);}
     function totH(){return Math.max(1,root.offsetHeight-window.innerHeight);}
-    function lockScroll(){if(locked)return;locked=true;document.documentElement.style.overflow='hidden';document.body.style.overflow='hidden';}
-    function unlockScroll(toEnd){
-      if(!locked)return;locked=false;
-      document.documentElement.style.overflow='';document.body.style.overflow='';
-      window.scrollTo(0,toEnd?secTop()+totH()+1:Math.max(0,secTop()-1));
-      try{window.dispatchEvent(new Event('scroll'));}catch(e){}
-    }
-    function syncScroll(){if(locked)return;var s=secTop(),t=totH(),top=window.pageYOffset||document.documentElement.scrollTop;lp=Math.max(0,Math.min(1,(top-s)/t));setP(lp);}
-    function onWheel(e){
-      var s=secTop(),t=totH(),top=window.pageYOffset||document.documentElement.scrollTop;
-      var inZ=top>=(s-2)&&top<=(s+t+2);
-      if(!locked&&!inZ)return;
-      if(!locked){lp=Math.max(0,Math.min(1,(top-s)/t));lockScroll();}
-      e.preventDefault();
-      lp=Math.max(0,Math.min(1,lp+e.deltaY/t));
-      setP(lp);
-      if(lp>=1)unlockScroll(true);
-      else if(lp<=0&&e.deltaY<0)unlockScroll(false);
-    }
-    var ty=0;
-    function onTS(e){ty=e.touches[0].clientY;}
-    function onTM(e){
-      var s=secTop(),t=totH(),top=window.pageYOffset||document.documentElement.scrollTop;
-      var dy=ty-e.touches[0].clientY;ty=e.touches[0].clientY;
-      var inZ=top>=(s-2)&&top<=(s+t+2);
-      if(!locked&&!inZ)return;
-      if(!locked){lp=Math.max(0,Math.min(1,(top-s)/t));lockScroll();}
-      e.preventDefault();
-      lp=Math.max(0,Math.min(1,lp+dy/t*2.5));
-      setP(lp);
-      if(lp>=1)unlockScroll(true);
-      else if(lp<=0&&dy<0)unlockScroll(false);
-    }
-    window.addEventListener('wheel',onWheel,{passive:false});
-    window.addEventListener('touchstart',onTS,{passive:true});
-    window.addEventListener('touchmove',onTM,{passive:false});
+    function syncScroll(){var s=secTop(),t=totH(),top=window.pageYOffset||document.documentElement.scrollTop;setP((top-s)/t);}
     window.addEventListener('scroll',syncScroll,{passive:true});
     window.addEventListener('resize',resize);
     resize();syncScroll();
@@ -1084,46 +1048,10 @@ ${layers}
       var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);
       texts.forEach(function(el){var fi=parseFloat(el.getAttribute('data-fi')),fis=parseFloat(el.getAttribute('data-fis')),fos=parseFloat(el.getAttribute('data-fos')),fo=parseFloat(el.getAttribute('data-fo'));var op=0;if(!isNaN(fi)&&p>=fi&&p<=fo){op=p<fis?(fis>fi?(p-fi)/(fis-fi):1):(p<=fos?1:(fo>fos?1-(p-fos)/(fo-fos):1));}op=Math.max(0,Math.min(1,op));el.style.opacity=op.toFixed(3);el.style.transform='translateY(calc(-50% + '+((1-op)*22)+'px))';});
     }
-    // ── Scroll-jacking: lock page scroll while animation plays ──
-    var locked=false,lp=0;
+    // ── Passive scroll-driven progress (no scroll-jacking) ──
     function secTop(){return root.getBoundingClientRect().top+(window.pageYOffset||document.documentElement.scrollTop);}
     function totH(){return Math.max(1,root.offsetHeight-window.innerHeight);}
-    function lockScroll(){if(locked)return;locked=true;document.documentElement.style.overflow='hidden';document.body.style.overflow='hidden';}
-    function unlockScroll(toEnd){
-      if(!locked)return;locked=false;
-      document.documentElement.style.overflow='';document.body.style.overflow='';
-      window.scrollTo(0,toEnd?secTop()+totH()+1:Math.max(0,secTop()-1));
-      try{window.dispatchEvent(new Event('scroll'));}catch(e){}
-    }
-    function syncScroll(){if(locked)return;var s=secTop(),t=totH(),top=window.pageYOffset||document.documentElement.scrollTop;lp=Math.max(0,Math.min(1,(top-s)/t));setP(lp);}
-    function onWheel(e){
-      var s=secTop(),t=totH(),top=window.pageYOffset||document.documentElement.scrollTop;
-      var inZ=top>=(s-2)&&top<=(s+t+2);
-      if(!locked&&!inZ)return;
-      if(!locked){lp=Math.max(0,Math.min(1,(top-s)/t));lockScroll();}
-      e.preventDefault();
-      lp=Math.max(0,Math.min(1,lp+e.deltaY/t));
-      setP(lp);
-      if(lp>=1)unlockScroll(true);
-      else if(lp<=0&&e.deltaY<0)unlockScroll(false);
-    }
-    var ty=0;
-    function onTS(e){ty=e.touches[0].clientY;}
-    function onTM(e){
-      var s=secTop(),t=totH(),top=window.pageYOffset||document.documentElement.scrollTop;
-      var dy=ty-e.touches[0].clientY;ty=e.touches[0].clientY;
-      var inZ=top>=(s-2)&&top<=(s+t+2);
-      if(!locked&&!inZ)return;
-      if(!locked){lp=Math.max(0,Math.min(1,(top-s)/t));lockScroll();}
-      e.preventDefault();
-      lp=Math.max(0,Math.min(1,lp+dy/t*2.5));
-      setP(lp);
-      if(lp>=1)unlockScroll(true);
-      else if(lp<=0&&dy<0)unlockScroll(false);
-    }
-    window.addEventListener('wheel',onWheel,{passive:false});
-    window.addEventListener('touchstart',onTS,{passive:true});
-    window.addEventListener('touchmove',onTM,{passive:false});
+    function syncScroll(){var s=secTop(),t=totH(),top=window.pageYOffset||document.documentElement.scrollTop;setP((top-s)/t);}
     window.addEventListener('scroll',syncScroll,{passive:true});
     window.addEventListener('resize',resize);
     resize();syncScroll();
@@ -4843,6 +4771,55 @@ ${fullHtml}`;
   // We clean up on boot AND every 30 minutes so restarts are no longer the only chance.
   // Uses safeReplaceScrollAnimPending (string-search, no regex backtracking) so it
   // reliably works even on large HTML files (50-100 KB) without Node.js hanging.
+  // ── One-time migration: replace scroll-jacking JS with passive scroll ────────
+  // Finds all projects whose stored HTML still has the old scroll-jacking block
+  // (identified by the unique comment marker) and rewrites it to passive scroll.
+  // Runs once at startup. Safe to re-run — projects without the marker are skipped.
+  async function migrateScrollJackingToPassive() {
+    const JACKING_MARKER = '// \u2500\u2500 Scroll-jacking: lock page scroll while animation plays \u2500\u2500';
+    const PASSIVE_BLOCK =
+      '    // \u2500\u2500 Passive scroll-driven progress (no scroll-jacking) \u2500\u2500\n' +
+      '    function secTop(){return root.getBoundingClientRect().top+(window.pageYOffset||document.documentElement.scrollTop);}\n' +
+      '    function totH(){return Math.max(1,root.offsetHeight-window.innerHeight);}\n' +
+      '    function syncScroll(){var s=secTop(),t=totH(),top=window.pageYOffset||document.documentElement.scrollTop;setP((top-s)/t);}\n' +
+      '    window.addEventListener(\'scroll\',syncScroll,{passive:true});\n';
+    const RESIZE_ANCHOR = '    window.addEventListener(\'resize\',resize);';
+
+    try {
+      // Use raw SQL LIKE to avoid loading every project
+      const { projects } = await import("@shared/schema");
+      const { ilike } = await import("drizzle-orm");
+      const rows = await db.select({ id: projects.id, generatedCode: projects.generatedCode })
+        .from(projects)
+        .where(ilike(projects.generatedCode, '%Scroll-jacking: lock page scroll while animation plays%'));
+
+      if (!rows.length) return;
+      console.log(`[Migration] Patching scroll-jacking → passive scroll in ${rows.length} project(s)`);
+
+      for (const row of rows) {
+        let html = row.generatedCode || "";
+        let changed = false;
+        // There may be up to 2 occurrences (parallax + split), process both
+        let searchFrom = 0;
+        for (let pass = 0; pass < 3; pass++) {
+          const jackStart = html.indexOf(JACKING_MARKER, searchFrom);
+          if (jackStart === -1) break;
+          const resizeIdx = html.indexOf(RESIZE_ANCHOR, jackStart);
+          if (resizeIdx === -1) break;
+          html = html.slice(0, jackStart) + PASSIVE_BLOCK + html.slice(resizeIdx);
+          searchFrom = jackStart + PASSIVE_BLOCK.length;
+          changed = true;
+        }
+        if (changed) {
+          await storage.updateProject(row.id, { generatedCode: html });
+          console.log(`[Migration] Patched project ${row.id}`);
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Migration] scroll-jacking patch failed:', e?.message);
+    }
+  }
+
   async function cleanupStuckPendingAnims(label: string) {
     try {
       const allProjects = await storage.getAllProjectsWithPendingAnim();
@@ -4869,6 +4846,8 @@ ${fullHtml}`;
 
   // Run once on startup (15s delay so DB connections stabilise)
   setTimeout(() => cleanupStuckPendingAnims("Startup"), 15000);
+  // Patch old scroll-jacking JS to passive scroll (one-time migration, 20s delay)
+  setTimeout(() => migrateScrollJackingToPassive(), 20000);
   // Run every 30 minutes so stuck placeholders are cleaned even between restarts
   setInterval(() => cleanupStuckPendingAnims("Periodic"), 30 * 60 * 1000);
 
