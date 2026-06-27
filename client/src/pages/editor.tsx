@@ -229,6 +229,7 @@ export default function EditorPage() {
   const [mockupMode, setMockupMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showGenerations, setShowGenerations] = useState(false);
+  const [isRegenAnim, setIsRegenAnim] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<string | null>(null);
@@ -904,6 +905,51 @@ export default function EditorPage() {
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: "Архив готов!", description: `${allImageUrls.size + allModelUrls.size} файлов включено` });
+  };
+
+  // Detect if the current site has a failed animation fallback (prompt embedded in data attrs)
+  const hasAnimFallback = (streamedCode || project?.generatedCode || "").includes('data-scroll-anim-fallback="1"');
+
+  const handleRegenAnim = async () => {
+    if (!project) return;
+    setIsRegenAnim(true);
+    try {
+      const resp = await fetch(`/api/projects/${project.id}/regen-animation`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.message || "Ошибка запроса");
+      if (data.animPending) {
+        // Reload the project HTML (now has pending spinner) and start polling
+        const projResp = await fetch(`/api/projects/${project.id}`, { credentials: "include" });
+        const proj = await projResp.json();
+        if (proj.generatedCode) setStreamedCode(proj.generatedCode);
+        setGenerationStatus("Создаём видеоанимацию... (2–10 мин)");
+        if (animPollRef.current) clearInterval(animPollRef.current);
+        const pollStart = Date.now();
+        animPollRef.current = setInterval(async () => {
+          try {
+            const r = await fetch(`/api/projects/${project.id}`, { credentials: "include" });
+            const p = await r.json();
+            const c: string = p?.generatedCode || "";
+            const isStillPending = c.includes('data-scroll-anim-pending="1"');
+            const timedOut = Date.now() - pollStart > 25 * 60 * 1000;
+            if (!isStillPending || timedOut) {
+              clearInterval(animPollRef.current!);
+              animPollRef.current = null;
+              setGenerationStatus(null);
+              setStreamedCode(c);
+              queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+            }
+          } catch {}
+        }, 12000);
+      }
+    } catch (e: any) {
+      toast({ title: "Ошибка", description: e?.message || "Не удалось запустить генерацию анимации", variant: "destructive" });
+    } finally {
+      setIsRegenAnim(false);
+    }
   };
 
   const handlePublish = async () => {
@@ -2207,6 +2253,24 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             <Camera className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Retry animation button — shown when fallback static section is present */}
+        {hasAnimFallback && !isGenerating && (
+          <button
+            title="Видеоанимация не создана — нажмите, чтобы запустить снова"
+            data-testid="button-regen-anim"
+            onClick={handleRegenAnim}
+            disabled={isRegenAnim}
+            className="shrink-0 flex items-center gap-2 h-10 px-4 rounded-full text-sm font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md shadow-violet-200 hover:shadow-lg hover:shadow-violet-300 hover:from-violet-600 hover:to-purple-700 transition-all duration-200 disabled:opacity-60"
+          >
+            {isRegenAnim ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Video className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">Создать видео</span>
+          </button>
+        )}
 
         {/* Publish button — always visible, outside scrollable toolbar */}
         <button

@@ -902,13 +902,21 @@ function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>): st
 </section>`;
 }
 
-function scrollAnimFallbackHtml(texts: Array<{ title: string; sub: string }>): string {
+function scrollAnimFallbackHtml(
+  texts: Array<{ title: string; sub: string }>,
+  videoPrompt?: string,
+  style?: string,
+): string {
   const blocks = texts.map(t => `
       <div style="max-width:680px;margin:0 auto 3.5rem;">
         ${t.title ? `<h2 style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;letter-spacing:-0.03em;color:#0a0a0a;margin:0 0 .5em;line-height:1.1;">${csaEsc(t.title)}</h2>` : ""}
         ${t.sub ? `<p style="font-size:clamp(1rem,2vw,1.25rem);line-height:1.7;color:#444;margin:0;">${csaEsc(t.sub)}</p>` : ""}
       </div>`).join("");
-  return `<section style="background:#fff;padding:clamp(60px,12vw,160px) 6%;text-align:center;">${blocks}</section>`;
+  // Embed the original video prompt + style so the retry endpoint can reconstruct the marker
+  const promptAttr = videoPrompt
+    ? ` data-scroll-anim-prompt="${encodeURIComponent(videoPrompt)}" data-scroll-anim-style="${encodeURIComponent(style || "parallax")}"`
+    : "";
+  return `<section data-scroll-anim-fallback="1"${promptAttr} style="background:#fff;padding:clamp(60px,12vw,160px) 6%;text-align:center;">${blocks}</section>`;
 }
 
 // Build a self-contained scroll-bound Canvas animation block (section + style + script).
@@ -1099,7 +1107,7 @@ async function resolveScrollAnimMarkers(
     for (const [filename, code] of Array.from(filesMap.entries())) {
       const newCode = code.replace(/\{\{SCROLLANIM:([\s\S]+?)\}\}/g, (_full, inner) => {
         const key = String(inner).trim();
-        return replaceMap.get(key) ?? scrollAnimFallbackHtml(markers.get(key)?.texts || []);
+        return replaceMap.get(key) ?? scrollAnimFallbackHtml(markers.get(key)?.texts || [], markers.get(key)?.videoPrompt, layout);
       });
       filesMap.set(filename, newCode);
     }
@@ -3098,34 +3106,56 @@ ${designAnalysis}
           if (f.filename !== "index.html") bgFilesMap.set(f.filename, f.code);
         }
         const noopRes = { write: () => {}, end: () => {} };
+        // Extract fallback texts + prompt once (used in both retry and fallback paths)
+        const _animPipe = mainHtmlCode.match(/\{\{SCROLLANIM:([\s\S]+?)\}\}/)?.[1] || "";
+        const _animPipeIdx = _animPipe.indexOf("|");
+        const _animVideoPrompt = (_animPipeIdx === -1 ? _animPipe : _animPipe.slice(0, _animPipeIdx)).trim();
+        const _animTextPart = _animPipeIdx === -1 ? "" : _animPipe.slice(_animPipeIdx + 1);
+        const _animTexts = _animTextPart.split("||").map((seg: string) => { const [t, s] = seg.split("::"); return { title: (t||"").trim(), sub: (s||"").trim() }; }).filter((x: { title: string; sub: string }) => x.title || x.sub);
+        if (_animTexts.length === 0) _animTexts.push({ title: "", sub: "" });
+        const _animStyle = interactiveStyle || "parallax";
         (async () => {
-          try {
-            console.log(`[BG ANIM] Starting for project ${project.id}`);
-            const scrollResult = await resolveScrollAnimMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl, interactiveStyle);
-            let animatedCode = bgFilesMap.get("index.html") ?? immediateHtml;
-            // Re-inject the loading overlay into the now-animated version
-            animatedCode = injectLoadingOverlay(animatedCode);
-            await storage.updateProject(project.id, { generatedCode: animatedCode });
-            for (const f of secondaryForGen) {
-              if (f.filename === "index.html") continue;
-              const upd = bgFilesMap.get(f.filename);
-              if (upd !== undefined && upd !== f.code) {
-                await storage.upsertProjectFile({ projectId: project.id, filename: f.filename, code: upd });
-              }
+          const MAX_ANIM_ATTEMPTS = 2;
+          const RETRY_DELAY_MS = 3 * 60 * 1000; // 3 min before automatic retry
+          let animSucceeded = false;
+          for (let animAttempt = 0; animAttempt < MAX_ANIM_ATTEMPTS; animAttempt++) {
+            if (animAttempt > 0) {
+              // Wait before retry so Kling has time to recover from a transient outage
+              console.log(`[BG ANIM] Waiting ${RETRY_DELAY_MS / 60000} min before retry for project ${project.id}...`);
+              await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+              // Reload the filesMap from the original markers for a clean retry
+              bgFilesMap.set("index.html", mainHtmlCode);
             }
-            console.log(`[BG ANIM] Done for project ${project.id} — frames: ${scrollResult.generated}, credits: ${scrollResult.creditsUsed}`);
-            // Deduct remaining animation credits from user balance (idempotent)
-            // (resolveScrollAnimMarkers already handles its own deduction)
-          } catch (bgErr) {
-            console.error(`[BG ANIM] Error for project ${project.id}:`, bgErr);
-            // On failure: replace pending placeholder with static fallback (safe, no regex backtracking)
             try {
-              const pipe = mainHtmlCode.match(/\{\{SCROLLANIM:([\s\S]+?)\}\}/)?.[1] || "";
-              const pipeIdx = pipe.indexOf("|");
-              const textPart = pipeIdx === -1 ? "" : pipe.slice(pipeIdx + 1);
-              const texts = textPart.split("||").map((seg: string) => { const [t, s] = seg.split("::"); return { title: (t||"").trim(), sub: (s||"").trim() }; });
-              const fallbackCode = safeReplaceScrollAnimPending(immediateHtml, scrollAnimFallbackHtml(texts));
+              console.log(`[BG ANIM] Starting attempt ${animAttempt + 1}/${MAX_ANIM_ATTEMPTS} for project ${project.id}`);
+              const scrollResult = await resolveScrollAnimMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl, _animStyle);
+              let animatedCode = bgFilesMap.get("index.html") ?? immediateHtml;
+              animatedCode = injectLoadingOverlay(animatedCode);
+              await storage.updateProject(project.id, { generatedCode: animatedCode });
+              for (const f of secondaryForGen) {
+                if (f.filename === "index.html") continue;
+                const upd = bgFilesMap.get(f.filename);
+                if (upd !== undefined && upd !== f.code) {
+                  await storage.upsertProjectFile({ projectId: project.id, filename: f.filename, code: upd });
+                }
+              }
+              console.log(`[BG ANIM] Done (attempt ${animAttempt + 1}) for project ${project.id} — frames: ${scrollResult.generated}, credits: ${scrollResult.creditsUsed}`);
+              animSucceeded = true;
+              break;
+            } catch (bgErr: any) {
+              console.error(`[BG ANIM] Error (attempt ${animAttempt + 1}) for project ${project.id}:`, bgErr?.message || bgErr);
+            }
+          }
+          if (!animSucceeded) {
+            // All attempts failed — replace pending with static fallback that embeds the
+            // prompt so the editor's "Создать видео" button can trigger a retry later.
+            try {
+              const fallbackCode = safeReplaceScrollAnimPending(
+                immediateHtml,
+                scrollAnimFallbackHtml(_animTexts, _animVideoPrompt, _animStyle),
+              );
               await storage.updateProject(project.id, { generatedCode: fallbackCode });
+              console.warn(`[BG ANIM] All attempts failed for project ${project.id} — static fallback saved with prompt embedded`);
             } catch {}
           }
         })();
@@ -3149,6 +3179,106 @@ ${designAnalysis}
       } else {
         res.status(500).json({ message: errMsg });
       }
+    }
+  });
+
+  // ── Re-generate animation for a site that has the static fallback ────────────────
+  // Reads data-scroll-anim-prompt/style from the fallback section, re-injects the
+  // {{SCROLLANIM}} marker, saves a pending placeholder immediately so the editor can
+  // start polling, then runs the full video pipeline in the background.
+  app.post("/api/projects/:id/regen-animation", requireAuth, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const user = req.user as any;
+      const project = await storage.getProject(projectId);
+      if (!project || project.userId !== user.id) {
+        return res.status(404).json({ message: "Проект не найден" });
+      }
+      const html = project.generatedCode || "";
+      if (!html.includes('data-scroll-anim-fallback="1"') && !html.includes('data-scroll-anim-pending="1"')) {
+        return res.status(400).json({ message: "Анимация уже есть или сайт не интерактивный" });
+      }
+
+      // Extract embedded prompt + style from the fallback section data-attributes
+      const tagMatch = html.match(/<section[^>]*data-scroll-anim-fallback="1"[^>]*>/);
+      const tag = tagMatch ? tagMatch[0] : "";
+      const promptRaw = tag.match(/data-scroll-anim-prompt="([^"]*)"/)?.[1] || "";
+      const styleRaw = tag.match(/data-scroll-anim-style="([^"]*)"/)?.[1] || "";
+      const videoPrompt = promptRaw
+        ? decodeURIComponent(promptRaw)
+        : "breathtaking cinematic forward flight into the scene, volumetric god rays and drifting atmospheric haze, epic film-still lighting, photorealistic";
+      const animStyle = styleRaw ? decodeURIComponent(styleRaw) : "parallax";
+
+      // Extract text pairs from fallback h2/p elements
+      const secMatch = html.match(/<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/);
+      const animTexts: Array<{title: string; sub: string}> = [];
+      if (secMatch) {
+        const h2s = Array.from(secMatch[0].matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g)).map(m => m[1].replace(/<[^>]+>/g, "").trim());
+        const ps  = Array.from(secMatch[0].matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)).map(m => m[1].replace(/<[^>]+>/g, "").trim());
+        const n = Math.max(h2s.length, ps.length, 1);
+        for (let i = 0; i < n; i++) animTexts.push({ title: h2s[i] || "", sub: ps[i] || "" });
+      }
+      if (animTexts.length === 0) animTexts.push({ title: "", sub: "" });
+
+      // Build the {{SCROLLANIM:...}} marker for the BG pipeline
+      const textsStr = animTexts.map(t => `${t.title}::${t.sub}`).join("||");
+      const marker = `\n{{SCROLLANIM:${videoPrompt}|${textsStr}}}\n`;
+
+      // Replace fallback with pending spinner (shown to user immediately)
+      const pendingHtml = html.replace(
+        /<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/,
+        scrollAnimPendingHtml(animTexts),
+      );
+      // Replace fallback with {{SCROLLANIM}} marker (used by the BG pipeline)
+      const markerHtml = html.replace(
+        /<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/,
+        marker,
+      );
+
+      await storage.updateProject(projectId, { generatedCode: pendingHtml });
+      res.json({ animPending: true });
+
+      // ── Run video generation in background ──
+      const runKey = `regen-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      const bgMap = new Map<string, string>([["index.html", markerHtml]]);
+      const noopRes = { write: () => {}, end: () => {} };
+      const MAX_REGEN_ATTEMPTS = 2;
+      const REGEN_RETRY_DELAY = 3 * 60 * 1000;
+      (async () => {
+        let succeeded = false;
+        for (let attempt = 0; attempt < MAX_REGEN_ATTEMPTS; attempt++) {
+          if (attempt > 0) {
+            console.log(`[REGEN ANIM] Waiting ${REGEN_RETRY_DELAY / 60000} min before retry for project ${projectId}...`);
+            await new Promise(r => setTimeout(r, REGEN_RETRY_DELAY));
+            bgMap.set("index.html", markerHtml); // reset for clean retry
+          }
+          try {
+            console.log(`[REGEN ANIM] Attempt ${attempt + 1}/${MAX_REGEN_ATTEMPTS} for project ${projectId}`);
+            const result = await resolveScrollAnimMarkers(bgMap, projectId, user.id, runKey, noopRes, () => false, undefined, animStyle);
+            let finalCode = bgMap.get("index.html") ?? pendingHtml;
+            finalCode = injectLoadingOverlay(finalCode);
+            await storage.updateProject(projectId, { generatedCode: finalCode });
+            console.log(`[REGEN ANIM] Done (attempt ${attempt + 1}) for project ${projectId} — frames: ${result.generated}`);
+            succeeded = true;
+            break;
+          } catch (err: any) {
+            console.error(`[REGEN ANIM] Error (attempt ${attempt + 1}) for project ${projectId}:`, err?.message || err);
+          }
+        }
+        if (!succeeded) {
+          try {
+            const fallback = safeReplaceScrollAnimPending(
+              pendingHtml,
+              scrollAnimFallbackHtml(animTexts, videoPrompt, animStyle),
+            );
+            await storage.updateProject(projectId, { generatedCode: fallback });
+            console.warn(`[REGEN ANIM] All attempts failed for project ${projectId} — fallback written`);
+          } catch {}
+        }
+      })();
+    } catch (err: any) {
+      console.error("regen-animation error:", err?.message);
+      if (!res.headersSent) res.status(500).json({ message: err?.message || "Ошибка" });
     }
   });
 
