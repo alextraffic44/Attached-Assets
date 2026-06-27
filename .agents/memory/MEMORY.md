@@ -12,5 +12,6 @@
 - [Interactive loading UX](interactive-loading-ux.md) — keep ONE robot loader up until SCROLLANIM video is fully ready, then reveal; iframe `src` blob overrides `srcDoc` so clear it at each generation start.
 - [Injected browser scripts](injected-browser-scripts.md) — `<script>` strings injected into generated sites run in the browser & aren't transpiled; TS syntax (`as HTMLElement`) = SyntaxError that kills the whole block.
 - [ffmpeg deploy EIO](ffmpeg-deploy-eio.md) — fluent-ffmpeg pipe-read throws `EIO: i/o error, read` in deploy, dropping frames despite a downloaded mp4; use direct spawn w/ stdio ignored + retry + tmp-copy binary.
+- [Preloader id mismatch](preloader-id-mismatch.md) — stuck splash = model named it ≠`#site-preloader`; hide net must fall back to fullscreen-guarded selectors + keep hard cap (5s), never one exact id.
 - [SCROLLANIM/GENIMG wow prompts](scrollanim-wow-prompts.md) — scrubbed frames need VISIBLE motion + slow camera push-in only (never "imperceptible/ultra-slow", never pan/tilt); split keeps left-half flat; GENIMG booster only at call site, never alters dedupe key.
 - [HTML extraction leak](html-extraction-leak.md) — model output sometimes has preamble + UNCLOSED ```html fence; never persist raw fullResponse, run through `cleanHtmlDoc` (slice from <!DOCTYPE/<html, strip fences) or preamble leaks as the site.
