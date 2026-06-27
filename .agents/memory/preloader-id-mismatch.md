@@ -24,7 +24,16 @@ catch deviations; the fullscreen guard prevents the broad selectors from removin
 unrelated elements.
 
 **How to apply:** any change to preloader detection/hiding must preserve the
-fullscreen guard on fallback selectors and keep the hard cap as the last resort.
-Hard cap is 5s (user requirement: animation-site preloaders reveal within ~5s).
-Master prompts (anim + regular) also enforce exactly one `#site-preloader`, no
-second intro/splash overlay, ~5s cycle, and no model-authored hide JS.
+fullscreen guard on fallback selectors and keep a hard timeout as the last resort.
+
+**Reveal timing (user requirement):** preloader self-hides at a FIXED 5s — no early
+reveal. The generated site itself carries a `setTimeout(hide,5000)` script (both
+master prompts emit it; anim prompt previously forbade model hide-JS, now reversed),
+and `injectLoadingOverlay`'s backstop is also a single fixed `setTimeout(hide,5000)`.
+The earlier `craft:anim-ready` / `load`+delay early-hide triggers were intentionally
+dropped. `craft:anim-ready` is still dispatched by scroll-anim scripts but now unused
+by hiding. **Why:** user wants the full 5s so all content loads before reveal.
+**Tradeoff:** on slow CDN/clients frame-0 may not be decoded by 5s → brief blank hero;
+accepted per explicit user request. If revisited, add an in-section frame-0 placeholder
+rather than re-introducing early fullscreen-blocker reveal.
+Master prompts also enforce exactly one `#site-preloader`, no second intro/splash overlay.
