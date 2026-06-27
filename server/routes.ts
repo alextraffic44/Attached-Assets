@@ -86,28 +86,99 @@ function csaEsc(s: string): string {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-let _ffmpegPathResolved = false;
-async function ensureFfmpegPath(ffmpeg: any): Promise<void> {
-  if (_ffmpegPathResolved) return;
-  _ffmpegPathResolved = true;
+let _ffmpegStaticPath: string | null | undefined = undefined;
+let _ffmpegTmpPath: string | null = null;
+
+// Resolve (and cache) a path to an executable ffmpeg binary. Prefer the bundled
+// ffmpeg-static binary (works in the deployed env where PATH has no ffmpeg); fall
+// back to a system ffmpeg discovered via `which` (dev environment).
+async function getFfmpegStaticPath(): Promise<string | null> {
+  if (_ffmpegStaticPath !== undefined) return _ffmpegStaticPath;
+  let p: string | null = null;
   try {
-    // Prefer bundled binary from ffmpeg-static (works in deployed env where PATH has no ffmpeg)
-    const ffmpegStatic = await import("ffmpeg-static").catch(() => null);
-    const staticPath: string | null = (ffmpegStatic as any)?.default ?? (ffmpegStatic as any) ?? null;
-    if (staticPath && typeof staticPath === "string") {
-      ffmpeg.setFfmpegPath(staticPath);
-      console.log(`[SCROLLANIM] ffmpeg path (static): ${staticPath}`);
-      return;
-    }
+    const m: any = await import("ffmpeg-static").catch(() => null);
+    const sp = m?.default ?? m ?? null;
+    if (typeof sp === "string" && sp) p = sp;
   } catch {}
-  try {
-    // Fallback: find ffmpeg in PATH (dev environment)
-    const { execSync } = await import("child_process");
-    const p = execSync("which ffmpeg").toString().trim();
-    if (p) { ffmpeg.setFfmpegPath(p); console.log(`[SCROLLANIM] ffmpeg path (which): ${p}`); }
-  } catch {
-    console.warn("[SCROLLANIM] ffmpeg binary not found via ffmpeg-static or which");
+  if (!p) {
+    try {
+      const { execSync } = await import("child_process");
+      const w = execSync("which ffmpeg").toString().trim();
+      if (w) p = w;
+    } catch {}
   }
+  _ffmpegStaticPath = p;
+  console.log(p ? `[FFMPEG] binary: ${p}` : "[FFMPEG] binary NOT found via ffmpeg-static or PATH");
+  return p;
+}
+
+// Some deploy filesystems (read-only / overlay layers) throw EIO/ETXTBSY when the
+// ffmpeg-static binary is exec'd straight out of node_modules. As a fallback we copy
+// it once into a writable tmp dir (chmod +x) and exec from there instead.
+async function getFfmpegBinary(forceTmpCopy = false): Promise<string | null> {
+  const base = await getFfmpegStaticPath();
+  if (!base) return null;
+  if (!forceTmpCopy) return base;
+  if (_ffmpegTmpPath && fs.existsSync(_ffmpegTmpPath)) return _ffmpegTmpPath;
+  try {
+    const dest = path.join(os.tmpdir(), `craft-ffmpeg-${process.pid}`);
+    fs.copyFileSync(base, dest);
+    fs.chmodSync(dest, 0o755);
+    _ffmpegTmpPath = dest;
+    console.log(`[FFMPEG] copied binary to writable tmp: ${dest}`);
+    return dest;
+  } catch (e: any) {
+    console.warn(`[FFMPEG] tmp-copy failed: ${e?.message}`);
+    return base;
+  }
+}
+
+// Extract JPEG frames from a video into framesDir/frame_%04d.jpg, returning the
+// frame count. Uses a DIRECT child_process spawn with stdio FULLY ignored instead of
+// fluent-ffmpeg: fluent-ffmpeg drains the ffmpeg stderr pipe, and in the deployed
+// (restricted) filesystem that pipe read intermittently throws "EIO: i/o error, read",
+// which killed the whole animation even though the mp4 had downloaded fine. No pipes =
+// no pipe-read EIO. Success = exit code 0 AND >0 frames; on failure we retry (with the
+// binary copied to writable tmp) so a transient EIO or an exec-from-node_modules EIO
+// never wastes the already-rendered, already-billed video.
+async function extractFramesWithFfmpeg(
+  videoPath: string,
+  framesDir: string,
+  fps: number,
+  shouldStop: () => boolean = () => false,
+): Promise<number> {
+  const { spawn } = await import("child_process");
+  const args = ["-y", "-i", videoPath, "-vf", `fps=${fps}`, "-q:v", "1", path.join(framesDir, "frame_%04d.jpg")];
+  const MAX_TRIES = 3;
+  let lastErr: any = null;
+  for (let t = 0; t < MAX_TRIES; t++) {
+    if (shouldStop()) break;
+    const bin = await getFfmpegBinary(t > 0); // after the first failure, exec a tmp-copied binary
+    if (!bin) throw new Error("ffmpeg binary not found");
+    // clear any partial frames left by a previous failed attempt
+    try { for (const f of fs.readdirSync(framesDir)) fs.rmSync(path.join(framesDir, f), { force: true }); } catch {}
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn(bin, args, { stdio: ["ignore", "ignore", "ignore"] });
+        proc.on("error", reject);
+        proc.on("close", (code: number) => code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`)));
+      });
+      const n = fs.readdirSync(framesDir).filter(f => /\.jpg$/i.test(f)).length;
+      if (n > 0) { console.log(`[FFMPEG] extracted ${n} frames (try ${t + 1}, bin=${bin})`); return n; }
+      lastErr = new Error("ffmpeg produced 0 frames");
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`[FFMPEG] extract try ${t + 1}/${MAX_TRIES} failed: ${err?.message}`);
+    }
+    if (t < MAX_TRIES - 1) await new Promise(r => setTimeout(r, 1500));
+  }
+  throw lastErr || new Error("ffmpeg extraction failed");
+}
+
+// Set fluent-ffmpeg's binary path (still used by the user-video ffprobe duration probe).
+async function ensureFfmpegPath(ffmpeg: any): Promise<void> {
+  const p = await getFfmpegStaticPath();
+  if (p) { try { ffmpeg.setFfmpegPath(p); } catch {} }
 }
 
 // Robust KIE request wrapper. KIE frequently returns transient server errors
@@ -697,25 +768,11 @@ async function generateScrollFrames(
     return [];
   }
 
-  // Step 4 — extract frames with ffmpeg
+  // Step 4 — extract frames with ffmpeg (direct spawn + retry; see extractFramesWithFfmpeg)
   try {
-    const ffmpeg = (await import("fluent-ffmpeg")).default as any;
-    await ensureFfmpegPath(ffmpeg);
     const fps = Math.max(8, Math.round(SCROLL_FRAME_COUNT / SCROLL_VIDEO_DURATION));
     console.log(`[SCROLLANIM] starting ffmpeg: fps=${fps}, input=${videoPath}, output=${framesDir}/frame_%04d.jpg`);
-    await new Promise<void>((resolve, reject) => {
-      ffmpeg(videoPath)
-        .outputOptions([
-          "-vf", `fps=${fps}`,
-          "-q:v", "1",
-        ])
-        .output(path.join(framesDir, "frame_%04d.jpg"))
-        .on("end", () => { console.log("[SCROLLANIM] ffmpeg done"); resolve(); })
-        .on("error", (err: any) => reject(err))
-        .run();
-    });
-    const frameFiles = fs.readdirSync(framesDir).filter(f => /\.jpg$/i.test(f));
-    console.log(`[SCROLLANIM] ffmpeg extracted ${frameFiles.length} frames`);
+    await extractFramesWithFfmpeg(videoPath, framesDir, fps, shouldStop);
   } catch (e: any) {
     console.warn("[SCROLLANIM] ffmpeg extraction failed:", e?.message);
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
@@ -3589,14 +3646,7 @@ ${designAnalysis}
       const fps = TARGET_FRAMES / Math.max(1, duration);
       console.log(`[VIDEO-FRAMES] duration=${duration.toFixed(1)}s fps=${fps.toFixed(3)} target=${TARGET_FRAMES}`);
 
-      await new Promise<void>((resolve, reject) => {
-        ffmpegMod(videoPath)
-          .outputOptions(["-vf", `fps=${fps.toFixed(4)}`, "-q:v", "2"])
-          .output(path.join(framesDir, "frame_%04d.jpg"))
-          .on("end", () => resolve())
-          .on("error", (err: any) => reject(err))
-          .run();
-      });
+      await extractFramesWithFfmpeg(videoPath, framesDir, Number(fps.toFixed(4)));
 
       const frameFiles = fs.readdirSync(framesDir).filter((f: string) => /\.jpg$/i.test(f)).sort();
       console.log(`[VIDEO-FRAMES] ffmpeg produced ${frameFiles.length} frames`);
