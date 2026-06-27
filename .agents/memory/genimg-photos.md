@@ -52,3 +52,18 @@ generation, storage, deployability, cap, billing, and fallback.
 - Ordering invariant: any external paid API call (e.g. the product-still regeneration) MUST
   happen AFTER the credit deduction succeeds, not before — otherwise a user with no balance
   can still trigger paid upstream work. Gate the spend on `deductCredits(...).success`.
+- MARKER-ROBUSTNESS invariant: SCROLLANIM is detected by EXACT-string `{{SCROLLANIM:` in
+  several places (the `includes()` gate, the pending-replace regex, the auto-inject gate, and
+  the resolver's RE). LLMs deviate (`{{ SCROLLANIM :`, wrong case, markdown-fence/backtick
+  wrapping) → all strict checks miss it → animation silently skipped AND the raw marker leaks
+  to the visitor. So normalize the model output ONCE right after final-code assembly (before
+  any detection): canonicalize the opener `/\{\{\s*SCROLLANIM\s*:/gi → {{SCROLLANIM:`, then
+  unwrap backticks ONLY when anchored to a full `{{SCROLLANIM:...}}` (both sides) so unrelated
+  `SCROLLANIM:` text in scripts is never mutated. **Why:** exact-match detection is brittle to
+  normal LLM variance; first-attempt animation was failing on malformed markers.
+- RESOLVER-FINALIZE invariant: `resolveScrollAnimMarkers` MUST always reach `finalize()` (which
+  replaces every remaining marker with the static fallback). Wrap the per-block body — including
+  `deductCredits` and the unprotected helper awaits (product still / creative concept / vision /
+  frames) — in try/catch and `continue`, refunding billed credits on throw. A single helper
+  throw must NOT abort the whole function: that skips finalize() (raw marker can survive),
+  strands the 2nd block, and leaks the charge. Per-block isolation = "animation always resolves".

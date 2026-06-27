@@ -1135,10 +1135,11 @@ async function resolveScrollAnimMarkers(
     try { res.write(`data: ${JSON.stringify({ status: "Рендерю видео для анимации прокрутки (до 35 минут, зависит от очереди KIE)..." })}\n\n`); } catch {}
 
     let billed = false;
+    try {
     if (userId) {
       const ikey = `scroll-anim-${projectId}-${runKey}-${crypto.createHash("md5").update(raw).digest("hex").slice(0, 8)}`;
       const ded = await storage.deductCredits(userId, SCROLL_ANIM_COST, "scroll-anim", ikey);
-      if (!ded.success) break; // out of credits → leave for static fallback
+      if (!ded.success) break; // out of credits → leave for static fallback (finalize() still runs)
       billed = !ded.alreadyProcessed;
     }
 
@@ -1201,6 +1202,13 @@ async function resolveScrollAnimMarkers(
       try { res.write(`data: ${JSON.stringify({ status: `Анимация готова (${frames.length} кадров)` })}\n\n`); } catch {}
     } else if (billed && userId) {
       try { await storage.refundCredits(userId, SCROLL_ANIM_COST); } catch {}
+    }
+    } catch (blockErr: any) {
+      // A helper (product still / creative concept / vision / frames) threw — never let
+      // it abort the whole function (which would skip finalize() and strand the 2nd block).
+      // Refund this block's credits and continue; finalize() degrades it to static fallback.
+      console.warn(`[SCROLLANIM] block failed (project ${projectId}):`, blockErr?.message || blockErr);
+      if (billed && userId) { try { await storage.refundCredits(userId, SCROLL_ANIM_COST); } catch {} }
     }
   }
 
@@ -3018,6 +3026,23 @@ ${designAnalysis}
       const genRunKey = idempotencyKey || `gen-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
       const genImgResult = await resolveGenImgMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => clientGone);
       mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
+
+      // ── Normalize malformed SCROLLANIM markers before any detection ──
+      // The model sometimes deviates from the exact `{{SCROLLANIM:...}}` syntax —
+      // adds spaces ({{ SCROLLANIM :), changes case ({{scrollanim:), or wraps the
+      // marker in markdown code fences / backticks. Any of those makes the strict
+      // includes()/regex checks below miss it, which both skips video generation AND
+      // leaks the raw marker text to the visitor. Canonicalize first so detection,
+      // pending-replace, and resolveScrollAnimMarkers all see a well-formed marker.
+      if (interactiveMode) {
+        mainHtmlCode = mainHtmlCode
+          // 1. canonical opening tag first: {{  scrollanim  :  →  {{SCROLLANIM:
+          .replace(/\{\{\s*SCROLLANIM\s*:/gi, "{{SCROLLANIM:")
+          // 2. unwrap backticks / code fences ONLY when they hug a FULL canonical marker
+          //    on both sides — anchored to {{...}} so unrelated `SCROLLANIM:` text in
+          //    scripts/content is never touched.
+          .replace(/`+[ \t]*\n?[ \t]*(\{\{SCROLLANIM:[\s\S]*?\}\})[ \t]*\n?[ \t]*`+/g, "$1");
+      }
 
       // ── Auto-inject SCROLLANIM if interactive mode but AI missed the marker ──
       if (interactiveMode && isNewSite && !mainHtmlCode.includes("{{SCROLLANIM:")) {
