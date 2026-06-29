@@ -1900,17 +1900,7 @@ document.querySelectorAll('form[data-lead-form]').forEach(form => {
 });
 Оборачивай формы в <form data-lead-form="имя_формы">.
 
-⚠️ ПРЕЛОАДЕР ДЛЯ ПАРАЛЛАКС / АНИМИРОВАННЫХ САЙТОВ (КРИТИЧНО):
-Если сайт содержит параллакс, тяжёлые scroll-анимации, canvas-эффекты или кинематичный дизайн — ОБЯЗАТЕЛЬНО добавь прелоадер:
-
-1. ПЕРВЫМ элементом внутри <body> вставь РОВНО ОДИН <div id="site-preloader">...</div>
-   ⚠️ id ОБЯЗАН быть ровно "site-preloader" — по нему система находит и скрывает элемент. Не называй иначе и НЕ делай второй полноэкранный intro/splash-экран — иначе он зависнет навсегда.
-2. position:fixed; inset:0; z-index:2147483647; — поверх всего содержимого.
-3. Дизайн: те же цвета, шрифты, настроение что и у сайта. Анимация — тематическая (пульсация логотипа/названия, тонкая прогресс-линия, печатающийся текст, мерцание), НЕ банальный серый спиннер. Рассчитывай цикл анимации на ~5 секунд.
-4. Добавь РОВНО этот JS для скрытия (не изменяй код, только вставь):
-<script>(function(){var p=document.getElementById('site-preloader');if(!p)return;function hide(){p.style.transition='opacity 0.7s ease,visibility 0.7s';p.style.opacity='0';p.style.visibility='hidden';p.style.pointerEvents='none';setTimeout(function(){try{if(p.parentNode)p.parentNode.removeChild(p);}catch(e){}},800);}setTimeout(hide,5000);})();</script>
-   Этот код сам скрывает прелоадер РОВНО через 5 секунд — за это время весь контент сайта успевает загрузиться.
-   НЕ добавляй другой JS для скрытия — только этот блок.`;
+НЕ добавляй прелоадер, splash-screen или loading-overlay — они не нужны для обычных сайтов.`;
 
 const RESEARCH_AND_ENHANCE_PROMPT = `Ты выполняешь ДВЕ задачи одновременно:
 
@@ -4173,9 +4163,10 @@ ${designAnalysis}
       for (const img of projectImages) {
         mainHtml = mainHtml.replace(new RegExp(`\\{\\{IMG:${img.name}\\}\\}`, "g"), img.url);
       }
-      // Ensure the reliable preloader-hide script is present (self-heals older
-      // sites whose stored code was saved without it). Idempotent.
-      mainHtml = injectLoadingOverlay(mainHtml);
+      // Only inject preloader for sites that have scroll-animation sections.
+      if (mainHtml.includes('data-craft-scrollanim')) {
+        mainHtml = injectLoadingOverlay(mainHtml);
+      }
       mainHtml = injectLeadsScript(mainHtml);
       files.push({ filename: "index.html", content: mainHtml });
 
