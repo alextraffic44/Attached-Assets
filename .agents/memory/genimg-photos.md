@@ -61,6 +61,23 @@ generation, storage, deployability, cap, billing, and fallback.
   unwrap backticks ONLY when anchored to a full `{{SCROLLANIM:...}}` (both sides) so unrelated
   `SCROLLANIM:` text in scripts is never mutated. **Why:** exact-match detection is brittle to
   normal LLM variance; first-attempt animation was failing on malformed markers.
+- "BROKEN IMAGES" ON A GENERATED SITE IS USUALLY NOT A PUBLISH/LOADING BUG. Verify first: real
+  `/objects/` photos that 404 or are corrupt = publish bug; but if all photos load (HTTP 200,
+  valid JPEG) the "битые картинки" are almost always MIXED GRIDS — the prompt let the model put
+  real {{GENIMG}} photos in some cards of a grid and CSS-drawn art (e.g. `div.css-donut`) or flat
+  gradient SVG placeholders in the others. Next to photoreal images those look broken. Fixes:
+  (a) prompt GRID-CONSISTENCY rule — every card in a menu/product/gallery grid uses the SAME image
+  treatment (all {{GENIMG}} or none, never mixed); (b) forbid CSS-drawn objects/products as photo
+  substitutes; (c) the prompt's stated GENIMG limit MUST equal the code cap `MAX_AUTO_IMAGES`
+  (resolver does `entries.slice(0, MAX_AUTO_IMAGES)`; any marker past the cap silently becomes a
+  gradient placeholder → reintroduces mixed grids). **Why:** capping real images at 6 + "use CSS
+  gradients/inline SVG for the rest" was the prompt rule that produced half-photo/half-CSS donut menus.
+- AUTO-IMAGE CONCURRENCY ≠ MAX_AUTO_IMAGES. The worker pool size must be capped separately
+  (`MAX_AUTO_IMAGE_CONCURRENCY`, ~6) regardless of how high MAX_AUTO_IMAGES goes. Spawning one
+  worker per marker (`Promise.all` over `batch.length`) fires N simultaneous KIE requests; >~6
+  spikes 429s, and a failed image falls back to a gradient placeholder = mixed grid again. Raising
+  the per-site image budget is safe ONLY with a fixed concurrency cap (12 images resolve in ~2 waves
+  under the 420s phase deadline). Token cost note: max auto-image cost scales with the cap (12×15=180).
 - RESOLVER-FINALIZE invariant: `resolveScrollAnimMarkers` MUST always reach `finalize()` (which
   replaces every remaining marker with the static fallback). Wrap the per-block body — including
   `deductCredits` and the unprotected helper awaits (product still / creative concept / vision /

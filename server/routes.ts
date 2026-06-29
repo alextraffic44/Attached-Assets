@@ -123,7 +123,12 @@ const KIE_LLM_MODEL = "gpt-5-5";
 const KIE_GEMINI_URL = "https://api.kie.ai/gemini/v1/models/gemini-3-5-flash:streamGenerateContent";
 
 const AUTO_IMAGE_COST = 15;
-const MAX_AUTO_IMAGES = 6;
+const MAX_AUTO_IMAGES = 12;
+// Cap simultaneous KIE image generations. We allow up to 12 images per site, but
+// firing all of them at once spikes 429 rate-limits (failed images fall back to a
+// gradient placeholder, which reintroduces broken-looking mixed grids). 6 is the
+// concurrency level that already ran reliably; 12 images resolve in ~2 waves.
+const MAX_AUTO_IMAGE_CONCURRENCY = 6;
 
 // ─────────────────────────── Scroll Animation (Интерактивный режим) ───────────────────────────
 // Generate a short white-background video via KIE Kling, slice it into compressed WebP frames,
@@ -1575,7 +1580,7 @@ async function resolveGenImgMarkers(
         try { res.write(`data: ${JSON.stringify({ status: `${passLabel}: изображения (${successSoFar}/${total})...` })}\n\n`); } catch {}
       }
     };
-    await Promise.all(Array.from({ length: batch.length }, () => worker()));
+    await Promise.all(Array.from({ length: Math.min(batch.length, MAX_AUTO_IMAGE_CONCURRENCY) }, () => worker()));
   };
 
   // Pass 1 — generate all images
@@ -1862,6 +1867,8 @@ const SYSTEM_PROMPT = `Ты — креативный frontend-разработч
 
 ⚠️ ИЗОБРАЖЕНИЯ (КРИТИЧНО — НАРУШЕНИЕ ЗАПРЕЩЕНО):
 - ВСЕГДА вставляй настоящие фото через <img src="URL"> — НИКОГДА не используй div/section с градиентом вместо фото.
+- НИКОГДА не рисуй объекты (товары, еду, пончики, людей, машины и т.п.) средствами CSS («нарисованный» из div-ов пончик/предмет, css-фигуры) вместо настоящего фото — рядом с реальными фото это смотрится как СЛОМАННАЯ/БИТАЯ картинка. Любой предмет/товар = ТОЛЬКО {{GENIMG}}.
+- ПРАВИЛО ОДНОРОДНОСТИ СЕТКИ (главная причина «битых» сайтов): в любой сетке/ряду однотипных карточек (меню, товары, галерея, команда, портфолио) ВСЕ карточки ОБЯЗАНЫ иметь ОДИНАКОВЫЙ тип картинки — либо у ВСЕХ настоящее фото {{GENIMG}}, либо ни у одной. ЗАПРЕЩЕНО смешивать в одной сетке реальные фото с CSS-рисунками или градиентными заглушками. Если бюджета изображений не хватает на всю сетку — потрать его на ПОЛНЫЕ сетки целиком, а второстепенные одиночные блоки оформи чистой типографикой/цветом (без «битой» заглушки).
 - Все КОНТЕНТНЫЕ фото генерируй через маркер: {{GENIMG:<детальный промпт на английском>|<соотношение>}}
 
 ПРАВИЛА СОСТАВЛЕНИЯ ПРОМПТА ДЛЯ {{GENIMG}} — КАЖДЫЙ ПРОМПТ ОБЯЗАН СОДЕРЖАТЬ ВСЕ 4 КОМПОНЕНТА:
@@ -1891,7 +1898,7 @@ const SYSTEM_PROMPT = `Ты — креативный frontend-разработч
   Если контейнер имеет фиксированную высоту (height:300px) — НЕ используй aspect-ratio, используй height напрямую. Главное: img внутри ВСЕГДА имеет width:100%;height:100%;object-fit:cover.
   GPT Image 2 ХОРОШО рисует ТЕКСТ — можешь вписать нужный текст прямо в промпт ("poster with bold text 'SALE 50%'"). Используй текст в картинках УМЕРЕННО.
 
-- ЛИМИТ: не больше 6 маркеров {{GENIMG:...}} на запрос — выбирай САМЫЕ важные визуалы (hero + 2-4 ключевые секции). Для остального используй CSS-градиенты и inline SVG.
+- ЛИМИТ: до 12 маркеров {{GENIMG:...}} на запрос. ПРИОРИТЕТ бюджета изображений: (1) hero; (2) ВСЕ карточки главных сеток (меню/товары/галерея) — сетка ЦЕЛИКОМ, а не половина; (3) ключевые секции. Лучше покрыть реальными фото меньше секций, но ПОЛНОСТЬЮ, чем размазать по одной картинке и оставить сетки наполовину пустыми/«битыми». CSS-градиенты и inline SVG — ТОЛЬКО для абстрактного фона и декора, НИКОГДА вместо фото товара/контента.
 - НИКОГДА не используй Picsum, Unsplash или другие внешние/сток URL — только {{GENIMG:...}} для фото.
 - Для фото, которые ЗАГРУЗИЛ пользователь (URL вида /uploads/... или /objects/...) — используй URL напрямую, НЕ оборачивай в {{GENIMG}}.
 - Если в библиотеке уже есть подходящее изображение — используй маркер {{IMG:имя}}.
