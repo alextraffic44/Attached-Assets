@@ -123,11 +123,13 @@ const KIE_LLM_MODEL = "gpt-5-5";
 const KIE_GEMINI_URL = "https://api.kie.ai/gemini/v1/models/gemini-3-5-flash:streamGenerateContent";
 
 const AUTO_IMAGE_COST = 15;
-const MAX_AUTO_IMAGES = 12;
-// Cap simultaneous KIE image generations. We allow up to 12 images per site, but
-// firing all of them at once spikes 429 rate-limits (failed images fall back to a
-// gradient placeholder, which reintroduces broken-looking mixed grids). 6 is the
-// concurrency level that already ran reliably; 12 images resolve in ~2 waves.
+// Hard ceiling. The model decides how many images a site actually needs; this is just
+// the upper bound it can never exceed (markers past it become gradient placeholders).
+const MAX_AUTO_IMAGES = 10;
+// Cap simultaneous KIE image generations. Firing all of them at once spikes 429
+// rate-limits (failed images fall back to a gradient placeholder, which reintroduces
+// broken-looking mixed grids). 6 is the concurrency level that already ran reliably;
+// 10 images resolve in ~2 waves.
 const MAX_AUTO_IMAGE_CONCURRENCY = 6;
 
 // ─────────────────────────── Scroll Animation (Интерактивный режим) ───────────────────────────
@@ -1898,7 +1900,7 @@ const SYSTEM_PROMPT = `Ты — креативный frontend-разработч
   Если контейнер имеет фиксированную высоту (height:300px) — НЕ используй aspect-ratio, используй height напрямую. Главное: img внутри ВСЕГДА имеет width:100%;height:100%;object-fit:cover.
   GPT Image 2 ХОРОШО рисует ТЕКСТ — можешь вписать нужный текст прямо в промпт ("poster with bold text 'SALE 50%'"). Используй текст в картинках УМЕРЕННО.
 
-- ЛИМИТ: до 12 маркеров {{GENIMG:...}} на запрос. ПРИОРИТЕТ бюджета изображений: (1) hero; (2) ВСЕ карточки главных сеток (меню/товары/галерея) — сетка ЦЕЛИКОМ, а не половина; (3) ключевые секции. Лучше покрыть реальными фото меньше секций, но ПОЛНОСТЬЮ, чем размазать по одной картинке и оставить сетки наполовину пустыми/«битыми». CSS-градиенты и inline SVG — ТОЛЬКО для абстрактного фона и декора, НИКОГДА вместо фото товара/контента.
+- КОЛИЧЕСТВО ИЗОБРАЖЕНИЙ: сам реши, сколько фото реально нужно сайту под его контент и секции — но НЕ БОЛЬШЕ 10 маркеров {{GENIMG:...}} на запрос. Не делай картинку ради картинки, но и не экономь на главном (hero, карточки товаров/меню). Если по смыслу фото нужно больше 10 — приоритет: (1) hero; (2) ВСЕ карточки главных сеток (меню/товары/галерея) — сетка ЦЕЛИКОМ, а не половина; (3) ключевые секции. Лучше покрыть реальными фото меньше секций, но ПОЛНОСТЬЮ, чем размазать по одной картинке и оставить сетки наполовину пустыми/«битыми». CSS-градиенты и inline SVG — ТОЛЬКО для абстрактного фона и декора, НИКОГДА вместо фото товара/контента.
 - НИКОГДА не используй Picsum, Unsplash или другие внешние/сток URL — только {{GENIMG:...}} для фото.
 - Для фото, которые ЗАГРУЗИЛ пользователь (URL вида /uploads/... или /objects/...) — используй URL напрямую, НЕ оборачивай в {{GENIMG}}.
 - Если в библиотеке уже есть подходящее изображение — используй маркер {{IMG:имя}}.
