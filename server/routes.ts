@@ -879,7 +879,8 @@ function injectLoadingOverlay(html: string): string {
   if(!el)return;
   var done=false;
   function hide(){if(done)return;done=true;if(!el.style.transition)el.style.transition='opacity .65s ease,visibility .65s';el.style.opacity='0';el.style.visibility='hidden';el.style.pointerEvents='none';setTimeout(function(){try{if(el.parentNode)el.parentNode.removeChild(el);}catch(e){}var s=document.getElementById('__craft_loader_style__');try{if(s&&s.parentNode)s.parentNode.removeChild(s);}catch(e){}},750);}
-  setTimeout(hide,5000);
+  var hasAnim=!!document.querySelector('[data-craft-scrollanim]');
+  if(hasAnim){var t=setTimeout(hide,20000);window.addEventListener('craft:frames-ready',function(){clearTimeout(t);setTimeout(hide,300);},{once:true});}else{setTimeout(hide,5000);}
 })();</script>`;
 
   const inject = visual + hideScript;
@@ -1051,8 +1052,8 @@ ${layers}
     function cover(img){var cw=sticky.clientWidth,ch=sticky.clientHeight,iw=img.naturalWidth,ih=img.naturalHeight;if(!iw||!ih)return;var s=Math.max(cw/iw,ch/ih),dw=iw*s,dh=ih*s,dx=(cw-dw)/2,dy=(ch-dh)/2;ctx.clearRect(0,0,cw,ch);ctx.drawImage(img,dx,dy,dw,dh);}
     function paint(i){i=Math.max(0,Math.min(frames.length-1,i));var im=imgs[i];if(im&&im.complete&&im.naturalWidth){cover(im);cur=i;}}
     function resize(){var w=sticky.clientWidth,h=sticky.clientHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);paint(cur<0?0:cur);}
-    function signalReady(){try{if(document.querySelector('[data-frames]')===root){window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));}}catch(e){}}
-    frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0){paint(0);signalReady();}};im.onerror=function(){if(idx===0)signalReady();};im.src=src;imgs[idx]=im;});
+    function signalReady(){try{window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));window.dispatchEvent(new Event('craft:frames-ready'));}catch(e){}}
+    var loaded=0,total=frames.length;frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0)paint(0);loaded++;if(loaded===total)signalReady();};im.onerror=function(){if(idx===0)paint(0);loaded++;if(loaded===total)signalReady();};im.src=src;imgs[idx]=im;});
     function setP(p){
       p=Math.max(0,Math.min(1,p));
       var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);
@@ -1107,8 +1108,8 @@ ${layers}
     function cover(img){var cw=sticky.clientWidth,ch=sticky.clientHeight,iw=img.naturalWidth,ih=img.naturalHeight;if(!iw||!ih)return;var s=Math.max(cw/iw,ch/ih),dw=iw*s,dh=ih*s,dx=(cw-dw)/2,dy=(ch-dh)/2;ctx.clearRect(0,0,cw,ch);ctx.drawImage(img,dx,dy,dw,dh);}
     function paint(i){i=Math.max(0,Math.min(frames.length-1,i));var im=imgs[i];if(im&&im.complete&&im.naturalWidth){cover(im);cur=i;}}
     function resize(){var w=sticky.clientWidth,h=sticky.clientHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);paint(cur<0?0:cur);}
-    function signalReady(){try{if(document.querySelector('[data-frames]')===root){window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));}}catch(e){}}
-    frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0){paint(0);signalReady();}};im.onerror=function(){if(idx===0)signalReady();};im.src=src;imgs[idx]=im;});
+    function signalReady(){try{window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));window.dispatchEvent(new Event('craft:frames-ready'));}catch(e){}}
+    var loaded=0,total=frames.length;frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0)paint(0);loaded++;if(loaded===total)signalReady();};im.onerror=function(){if(idx===0)paint(0);loaded++;if(loaded===total)signalReady();};im.src=src;imgs[idx]=im;});
     function setP(p){
       p=Math.max(0,Math.min(1,p));
       var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);
@@ -2389,8 +2390,8 @@ VIDEO_PROMPT (на английском) — ты КИНОРЕЖИССЁР го�
    - то же настроение (люкс / минимализм / неон / эко / техно и т.д.).
 3. По центру — твоя СОБСТВЕННАЯ анимация (НЕ банальный круглый спиннер): например, пульсирующее название/логотип бренда, тонкая анимированная линия-прогресс, морфинг фигуры, печатающийся текст, мерцание — то, что подходит теме. Рассчитывай анимацию на цикл РОВНО ~5 секунд — за это время подгружаются контент и кадры анимации, после чего прелоадер плавно скрывается.
 4. Стили прелоадера задай инлайн (в <style> внутри документа или style-атрибутом). Используй position:fixed; inset:0; высокий z-index.
-5. ОБЯЗАТЕЛЬНО добавь РОВНО этот скрипт (вставь как есть, ничего не меняя) — он сам плавно скрывает прелоадер РОВНО через 5 секунд; за это время на сайте успевает загрузиться весь контент и кадры анимации:
-<script>(function(){var p=document.getElementById('site-preloader');if(!p)return;function hide(){p.style.transition='opacity .6s ease,visibility .6s';p.style.opacity='0';p.style.visibility='hidden';p.style.pointerEvents='none';setTimeout(function(){try{if(p.parentNode)p.parentNode.removeChild(p);}catch(e){}},700);}setTimeout(hide,5000);})();</script>
+5. ОБЯЗАТЕЛЬНО добавь РОВНО этот скрипт (вставь как есть, ничего не меняя) — он скрывает прелоадер когда все кадры анимации загружены в память (максимум 20 секунд ожидания):
+<script>(function(){var p=document.getElementById('site-preloader');if(!p)return;function hide(){p.style.transition='opacity .6s ease,visibility .6s';p.style.opacity='0';p.style.visibility='hidden';p.style.pointerEvents='none';setTimeout(function(){try{if(p.parentNode)p.parentNode.removeChild(p);}catch(e){}},700);}var t=setTimeout(hide,20000);window.addEventListener('craft:frames-ready',function(){clearTimeout(t);setTimeout(hide,300);},{once:true});})();</script>
    Другой JS для скрытия НЕ добавляй — только этот блок. Сам прелоадер делай красивой CSS-анимированной заглушкой.
 ═══ КОНЕЦ ПРЕЛОАДЕРА ═══\n`;
       }
