@@ -4182,49 +4182,78 @@ ${designAnalysis}
 
       // Download and bundle ALL locally-hosted media (images, video, audio, 3D models)
       // referenced via /objects/... or /uploads/... so they work on the deployed site.
+      // Also catches absolute same-origin URLs like https://craft-ai.ru/objects/... that
+      // are produced when Kling needs a public URL for the still image input.
+      const publishAppBase = (process.env.APP_BASE_URL || "https://craft-ai.ru").replace(/\/$/, "");
       const allHtmlForScan = files.map(f => f.content || "").join("\n");
-      const localMediaUrls = new Set<string>();
+      const localMediaUrls = new Set<string>(); // stores RELATIVE paths only
+      const absoluteToRelative = new Map<string, string>(); // absolute URL → relative path
       const mediaRegexes = [
         /(?:src|href|poster)\s*=\s*["'](\/(?:objects|uploads)\/[^"']+)["']/gi,
         /url\(\s*['"]?(\/(?:objects|uploads)\/[^"')]+?)['"]?\s*\)/gi,
-        // Bare media URLs anywhere (e.g. scroll-animation frame arrays in data-frames / JS)
+        // Bare relative media URLs (e.g. scroll-animation frame arrays in data-frames / JS)
         /(\/(?:objects|uploads)\/[A-Za-z0-9._\/-]+?\.(?:webp|jpe?g|png|gif|avif|svg|mp4|webm|mov|ogg|glb|gltf))/gi,
+        // Absolute same-origin URLs: https://craft-ai.ru/objects/...
+        new RegExp(`${publishAppBase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\/(?:objects|uploads)\\/[A-Za-z0-9._\\/-]+?\\.(?:webp|jpe?g|png|gif|avif|svg|mp4|webm|mov|ogg|glb|gltf))`, "gi"),
       ];
-      for (const rx of mediaRegexes) {
+      for (let ri = 0; ri < mediaRegexes.length; ri++) {
+        const rx = mediaRegexes[ri];
         let mm: RegExpExecArray | null;
         while ((mm = rx.exec(allHtmlForScan)) !== null) {
-          localMediaUrls.add(mm[1]);
+          if (ri === 3) {
+            // Absolute URL match: mm[0]=full abs URL, mm[1]=relative path
+            const absUrl = mm[0];
+            const relPath = mm[1];
+            localMediaUrls.add(relPath);
+            absoluteToRelative.set(absUrl, relPath);
+          } else {
+            localMediaUrls.add(mm[1]);
+          }
         }
       }
+      console.log(`[Publish] Found ${localMediaUrls.size} local media URL(s) to bundle for project ${projectId}`);
       if (localMediaUrls.size > 0) {
-        const mediaMap = new Map<string, string>();
+        const mediaMap = new Map<string, string>(); // relative path → local asset path
         const usedNames = new Set<string>();
         let counter = 0;
         const publishObjStorage = new ObjectStorageService();
         for (const mediaUrl of Array.from(localMediaUrls)) {
           try {
-            let buffer: Buffer;
+            let buffer: Buffer | null = null;
             if (mediaUrl.startsWith("/objects/")) {
-              // Direct GCS SDK download — works in both dev and prod, no localhost dependency
+              // Try GCS SDK first (works in both dev and prod, no localhost dependency)
               try {
                 const gcsFile = await publishObjStorage.getObjectEntityFile(mediaUrl);
                 const [fileContent] = await gcsFile.download();
                 buffer = fileContent as Buffer;
-                console.log(`[Publish] Object storage download OK: ${mediaUrl} (${buffer.length} bytes)`);
+                console.log(`[Publish] GCS download OK: ${mediaUrl} (${buffer.length} bytes)`);
               } catch (sdkErr: any) {
-                console.warn(`[Publish] Object storage SDK failed for ${mediaUrl}: ${sdkErr?.message || sdkErr}`);
-                continue;
+                console.warn(`[Publish] GCS SDK failed for ${mediaUrl}: ${sdkErr?.message || sdkErr} — trying localhost fallback`);
+                // Fallback: fetch via localhost (works in dev env)
+                try {
+                  const fetchUrl = `http://localhost:${process.env.PORT || 5000}${mediaUrl}`;
+                  const mediaResp = await fetch(fetchUrl, { signal: AbortSignal.timeout(15000) });
+                  if (mediaResp.ok) {
+                    buffer = Buffer.from(await mediaResp.arrayBuffer());
+                    console.log(`[Publish] Localhost fallback OK: ${mediaUrl} (${buffer.length} bytes)`);
+                  } else {
+                    console.warn(`[Publish] Localhost fallback ${mediaUrl} returned ${mediaResp.status}`);
+                  }
+                } catch (fetchErr: any) {
+                  console.warn(`[Publish] Localhost fallback failed for ${mediaUrl}:`, fetchErr?.message);
+                }
               }
             } else {
               // Legacy /uploads/ static path — use localhost fetch
               const fetchUrl = `http://localhost:${process.env.PORT || 5000}${mediaUrl}`;
-              const mediaResp = await fetch(fetchUrl);
+              const mediaResp = await fetch(fetchUrl, { signal: AbortSignal.timeout(15000) });
               if (!mediaResp.ok) {
                 console.warn(`[Publish] Media fetch ${mediaUrl} returned ${mediaResp.status}`);
                 continue;
               }
               buffer = Buffer.from(await mediaResp.arrayBuffer());
             }
+            if (!buffer) continue;
             let base = (mediaUrl.split("/").pop() || "").split("?")[0].replace(/[^a-zA-Z0-9._-]/g, "_");
             if (!base || base === "_") base = `asset_${counter}`;
             let fileName = base;
@@ -4238,11 +4267,18 @@ ${designAnalysis}
             console.warn(`[Publish] Could not bundle media ${mediaUrl}:`, err);
           }
         }
-        // Rewrite references in ALL html pages to the bundled local paths
+        console.log(`[Publish] Bundled ${mediaMap.size}/${localMediaUrls.size} media file(s) for project ${projectId}`);
+        // Rewrite references in ALL html pages: relative paths AND their absolute counterparts
         for (const f of files) {
           if (!f.content) continue;
-          for (const [remoteUrl, localPath] of Array.from(mediaMap.entries())) {
-            f.content = f.content.split(remoteUrl).join(localPath);
+          // Rewrite absolute same-origin URLs first (longer strings → no partial clobber)
+          for (const [absUrl, relPath] of Array.from(absoluteToRelative.entries())) {
+            const localPath = mediaMap.get(relPath);
+            if (localPath) f.content = f.content.split(absUrl).join(localPath);
+          }
+          // Then rewrite relative paths
+          for (const [relPath, localPath] of Array.from(mediaMap.entries())) {
+            f.content = f.content.split(relPath).join(localPath);
           }
         }
       }
