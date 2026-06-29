@@ -23,6 +23,21 @@ const proxyLimiter = rateLimit("proxy", { windowMs: 60_000, max: 60, keyGenerato
 const objectStorage = new ObjectStorageService();
 
 async function uploadToObjectStorage(buffer: Buffer, mimeType: string, ext: string): Promise<string> {
+  // Auto-detect actual image format from magic bytes so PNG data never gets saved
+  // with a .jpg extension (Nano Banana often returns PNG regardless of outputFormat).
+  // Netlify serves files with Content-Type based on extension, so a wrong extension
+  // causes strict browsers (Yandex, Safari) to reject the image as invalid.
+  if (buffer.length >= 12) {
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+      mimeType = "image/png"; ext = "png";
+    } else if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+      mimeType = "image/jpeg"; ext = "jpg";
+    } else if (buffer.slice(0, 4).toString("ascii") === "RIFF" && buffer.slice(8, 12).toString("ascii") === "WEBP") {
+      mimeType = "image/webp"; ext = "webp";
+    } else if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
+      mimeType = "image/gif"; ext = "gif";
+    }
+  }
   const objectId = crypto.randomUUID();
   const objectName = `uploads/${objectId}.${ext}`;
   const privateDir = objectStorage.getPrivateObjectDir();
@@ -4254,8 +4269,25 @@ ${designAnalysis}
               buffer = Buffer.from(await mediaResp.arrayBuffer());
             }
             if (!buffer) continue;
+            // Detect real format from magic bytes — Nano Banana returns PNG even when
+            // requested as JPEG, so the stored file may have .jpg extension but PNG content.
+            // Netlify assigns Content-Type from extension, causing strict browsers to reject.
             let base = (mediaUrl.split("/").pop() || "").split("?")[0].replace(/[^a-zA-Z0-9._-]/g, "_");
             if (!base || base === "_") base = `asset_${counter}`;
+            // Fix extension if actual format differs from file extension
+            if (buffer.length >= 12) {
+              const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+              const isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+              const isWebp = buffer.slice(0,4).toString("ascii") === "RIFF" && buffer.slice(8,12).toString("ascii") === "WEBP";
+              const isGif = buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
+              const hasBadExt = base.match(/\.jpe?g$/i) && isPng ||
+                                base.match(/\.png$/i) && isJpeg ||
+                                base.match(/\.jpe?g$/i) && isWebp;
+              if (hasBadExt) {
+                const correctExt = isPng ? "png" : isJpeg ? "jpg" : isWebp ? "webp" : isGif ? "gif" : null;
+                if (correctExt) base = base.replace(/\.[^.]+$/, `.${correctExt}`);
+              }
+            }
             let fileName = base;
             while (usedNames.has(fileName)) { fileName = `${counter}_${base}`; counter++; }
             usedNames.add(fileName);
