@@ -41,3 +41,29 @@ added to one of the four regexes explicitly.
 
 **Rewrite order:** Rewrite absolute same-origin URLs FIRST (longer strings), then relative
 paths — avoids partial-replacement where absolute URL contains the relative path as suffix.
+
+## Extension MUST match real bytes (Netlify Content-Type)
+
+Netlify serves `Content-Type` purely from the file extension. If the extension lies about the
+bytes, strict browsers refuse to render the image (this was the real root cause of "broken
+images on published sites"). Nano Banana returns PNG bytes even when our code asked for jpeg
+and saved a `.jpg` name.
+
+**Rule:** Detect the real format from magic bytes (PNG 89 50 4E 47 / JPEG FF D8 FF / WebP
+RIFF…WEBP / GIF 47 49 46) in TWO places: (1) `uploadToObjectStorage` overrides the
+passed mimeType/ext; (2) the deploy bundler ALWAYS forces the bundled asset's extension to
+the detected format before writing — never trust the source URL's extension. The mediaMap key
+stays the original `/objects/...` URL, value becomes `assets/<corrected-ext>`, so HTML rewrites
+stay consistent.
+
+## Publish-time compression
+
+`compressImageForPublish(buffer)` re-encodes raster images to ≤300KB at publish (mozjpeg q86→55
+for opaque, WebP q86→50 for alpha, resize max 1920px fit:inside, last-resort 1280px q72; never
+grows the file; dynamic `import("sharp")`). Real test: 3.8MB PNG → 184KB JPEG.
+
+**NEVER compress:** (1) animation frames — collected into a `frameUrls` Set parsed from
+`data-frames='...'` JSON arrays (quality matters for scroll playback); (2) `.gif` — Sharp would
+flatten an animated GIF to a single static frame. Gate regex is `/\.(jpe?g|png|webp)$/i` AND
+`!frameUrls.has(url)`. Because compression can change format (png→webp / png→jpg), the
+extension-forcing step above is what keeps the bundle valid afterwards.

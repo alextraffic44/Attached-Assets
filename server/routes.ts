@@ -50,6 +50,45 @@ async function uploadToObjectStorage(buffer: Buffer, mimeType: string, ext: stri
   await file.save(buffer, { contentType: mimeType, resumable: false });
   return `/objects/${objectName}`;
 }
+
+// Compress a raster image for publishing so it lands around 150-300KB while staying
+// visually lossless. Photos (no transparency) → mozjpeg; images with an alpha channel
+// → WebP (preserves transparency at a fraction of PNG size). Returns the original
+// buffer unchanged when it's already small, isn't a raster image, or can't be processed.
+// Animation frames are NEVER passed here — their crispness matters for smooth playback.
+async function compressImageForPublish(buffer: Buffer): Promise<Buffer> {
+  const TARGET_MAX = 300 * 1024;
+  if (buffer.length <= TARGET_MAX) return buffer; // already light enough — keep as-is
+  try {
+    const sharpMod = (await import("sharp")).default;
+    const meta = await sharpMod(buffer).metadata();
+    if (!meta.width || !meta.height) return buffer;
+    const MAX_DIM = 1920; // full-width heroes never need more than this on the web
+    const resizeOpts = (meta.width > MAX_DIM || meta.height > MAX_DIM)
+      ? { width: MAX_DIM, height: MAX_DIM, fit: "inside" as const, withoutEnlargement: true }
+      : undefined;
+    const mk = () => { let p = sharpMod(buffer).rotate(); if (resizeOpts) p = p.resize(resizeOpts); return p; };
+    let out: Buffer;
+    if (meta.hasAlpha) {
+      let q = 86;
+      out = await mk().webp({ quality: q }).toBuffer();
+      while (out.length > TARGET_MAX && q > 50) { q -= 8; out = await mk().webp({ quality: q }).toBuffer(); }
+    } else {
+      let q = 86;
+      out = await mk().jpeg({ quality: q, mozjpeg: true }).toBuffer();
+      while (out.length > TARGET_MAX && q > 55) { q -= 7; out = await mk().jpeg({ quality: q, mozjpeg: true }).toBuffer(); }
+      if (out.length > TARGET_MAX) {
+        // Last resort: downscale harder to guarantee a reasonable weight
+        out = await sharpMod(buffer).rotate().resize({ width: 1280, height: 1280, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 72, mozjpeg: true }).toBuffer();
+      }
+    }
+    return out.length < buffer.length ? out : buffer; // never grow the file
+  } catch (e: any) {
+    console.warn(`[Publish] Image compression skipped (using original):`, e?.message || e);
+    return buffer;
+  }
+}
+
 async function extractTextFromFile(base64Data: string, mimeType: string): Promise<string | null> {
   try {
     const buffer = Buffer.from(base64Data, "base64");
@@ -1784,10 +1823,14 @@ const SYSTEM_PROMPT = `Ты — креативный frontend-разработч
 - ✅ h2 секций: font-size: clamp(28px, 4vw, 48px); margin-bottom: 1rem
 - ✅ Абзацы: margin-bottom: 1.2em, max-width: 680px, не давай им занимать всю ширину без ограничения
 
-СТРУКТУРА HERO — выбирай ОДИН из вариантов (не один и тот же каждый раз):
-  Вариант A: Центрированный — текст по центру на весь экран, фоновый градиент или фото с overlay opacity ≤ 0.55
-  Вариант B: Раздельный — левая часть (55%) чистый цветной/градиентный фон + текст, правая часть (45%) большая фотография
-  Вариант C: Полноэкранное фото — текст сверху/снизу с широкой читаемой подложкой (blur + rgba), НЕ узкий прямоугольник
+СТРУКТУРА HERO (КРИТИЧНО — НАРУШЕНИЕ ЗАПРЕЩЕНО):
+- HERO ОБЯЗАН ВСЕГДА содержать настоящую фоновую фотографию, сгенерированную через {{GENIMG:<промпт>|16:9}}. НИКОГДА не делай hero только на сплошном цвете или одном градиенте без фото — фото в hero обязательно.
+- ЧИТАЕМОСТЬ ТЕКСТА — ГЛАВНОЕ: поверх hero-фото ВСЕГДА накладывай затемняющий градиент-оверлей, чтобы текст легко читался. Например: position:relative у контейнера, отдельный слой ::before или div с linear-gradient(rgba(0,0,0,.6), rgba(0,0,0,.35)) поверх фото (z-index ниже текста, выше фото). Для светлых дизайнов — свой оверлей под цвет бренда, но контраст текста к фону ОБЯЗАН быть высоким.
+- ПРОМПТ для hero-фото составляй так, чтобы фото подходило под текст: добавляй в промпт "with darker moody areas and clean negative space for text overlay, not busy in the center, dramatic cinematic directional lighting" — чтобы в зоне заголовка фон был спокойным/тёмным и текст не терялся.
+- Выбирай ОДИН layout (не один и тот же каждый раз):
+  Вариант A: Центрированный — фоновое фото {{GENIMG}} на весь экран + затемняющий оверлей, текст по центру
+  Вариант B: Раздельный — левая часть (55%) чистый цветной/градиентный фон + текст, правая часть (45%) большая фотография {{GENIMG}}
+  Вариант C: Полноэкранное фото {{GENIMG}} — текст сверху/снизу на широкой градиентной подложке (НЕ узкий прямоугольник)
 
 МНОГОСТРАНИЧНЫЕ САЙТЫ:
 Если пользователь просит несколько страниц — создай ОТДЕЛЬНЫЕ HTML-файлы:
@@ -4201,6 +4244,19 @@ ${designAnalysis}
       // are produced when Kling needs a public URL for the still image input.
       const publishAppBase = (process.env.APP_BASE_URL || "https://craft-ai.ru").replace(/\/$/, "");
       const allHtmlForScan = files.map(f => f.content || "").join("\n");
+      // Collect animation-frame URLs (from data-frames arrays) — these must NEVER be
+      // compressed; their crispness drives smooth scroll playback.
+      const frameUrls = new Set<string>();
+      {
+        const framesAttrRe = /data-frames\s*=\s*'([^']*)'/gi;
+        let fmatch: RegExpExecArray | null;
+        while ((fmatch = framesAttrRe.exec(allHtmlForScan)) !== null) {
+          try {
+            const arr = JSON.parse(fmatch[1].replace(/&#39;/g, "'"));
+            if (Array.isArray(arr)) arr.forEach((u: any) => { if (typeof u === "string") frameUrls.add(u); });
+          } catch { /* ignore malformed frame arrays */ }
+        }
+      }
       const localMediaUrls = new Set<string>(); // stores RELATIVE paths only
       const absoluteToRelative = new Map<string, string>(); // absolute URL → relative path
       const mediaRegexes = [
@@ -4269,9 +4325,20 @@ ${designAnalysis}
               buffer = Buffer.from(await mediaResp.arrayBuffer());
             }
             if (!buffer) continue;
+            // Compress regular raster images to ~150-300KB (visually lossless). Skip
+            // animation frames (quality matters), GIFs (Sharp would flatten animation
+            // to a single frame) and non-raster assets (video/3D/svg).
+            if (!frameUrls.has(mediaUrl) && /\.(jpe?g|png|webp)$/i.test(mediaUrl.split("?")[0])) {
+              const before = buffer.length;
+              buffer = await compressImageForPublish(buffer);
+              if (buffer.length !== before) {
+                console.log(`[Publish] Compressed ${mediaUrl}: ${(before/1024).toFixed(0)}KB → ${(buffer.length/1024).toFixed(0)}KB`);
+              }
+            }
             // Detect real format from magic bytes — Nano Banana returns PNG even when
             // requested as JPEG, so the stored file may have .jpg extension but PNG content.
-            // Netlify assigns Content-Type from extension, causing strict browsers to reject.
+            // Compression above may also have changed the format. Netlify assigns
+            // Content-Type from extension, so the extension must match the real bytes.
             let base = (mediaUrl.split("/").pop() || "").split("?")[0].replace(/[^a-zA-Z0-9._-]/g, "_");
             if (!base || base === "_") base = `asset_${counter}`;
             // Fix extension if actual format differs from file extension
@@ -4280,12 +4347,11 @@ ${designAnalysis}
               const isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
               const isWebp = buffer.slice(0,4).toString("ascii") === "RIFF" && buffer.slice(8,12).toString("ascii") === "WEBP";
               const isGif = buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
-              const hasBadExt = base.match(/\.jpe?g$/i) && isPng ||
-                                base.match(/\.png$/i) && isJpeg ||
-                                base.match(/\.jpe?g$/i) && isWebp;
-              if (hasBadExt) {
-                const correctExt = isPng ? "png" : isJpeg ? "jpg" : isWebp ? "webp" : isGif ? "gif" : null;
-                if (correctExt) base = base.replace(/\.[^.]+$/, `.${correctExt}`);
+              // Always force the extension to match the real bytes (covers PNG-as-jpg from
+              // Nano Banana AND format changes from compression, e.g. png→webp / png→jpg).
+              const realExt = isPng ? "png" : isJpeg ? "jpg" : isWebp ? "webp" : isGif ? "gif" : null;
+              if (realExt && !new RegExp(`\\.${realExt === "jpg" ? "jpe?g" : realExt}$`, "i").test(base)) {
+                base = /\.[^.]+$/.test(base) ? base.replace(/\.[^.]+$/, `.${realExt}`) : `${base}.${realExt}`;
               }
             }
             let fileName = base;
