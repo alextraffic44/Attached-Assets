@@ -1059,10 +1059,13 @@ function safeReplaceScrollAnimPending(html: string, replacement: string): string
   return result;
 }
 
-function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>): string {
+function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, videoPrompt?: string, style?: string): string {
   const first = texts[0] || { title: "", sub: "" };
   const tid = "pnd" + Math.random().toString(36).slice(2, 8);
-  return `<section data-scroll-anim-pending="1" style="position:relative;height:100vh;min-height:600px;background:linear-gradient(135deg,#0a0a0a 0%,#16213e 50%,#0a0a0a 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+  const _pa = videoPrompt ? ` data-scroll-anim-prompt="${encodeURIComponent(videoPrompt)}"` : "";
+  const _sa = style ? ` data-scroll-anim-style="${encodeURIComponent(style)}"` : "";
+  const _ta = texts.length ? ` data-scroll-anim-texts="${encodeURIComponent(texts.map(t => `${t.title}::${t.sub}`).join("||"))}"` : "";
+  return `<section data-scroll-anim-pending="1"${_pa}${_sa}${_ta} style="position:relative;height:100vh;min-height:600px;background:linear-gradient(135deg,#0a0a0a 0%,#16213e 50%,#0a0a0a 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;">
 <style>
 @keyframes ${tid}-spin{to{transform:rotate(360deg)}}
 @keyframes ${tid}-pulse{0%,100%{opacity:.5}50%{opacity:1}}
@@ -3300,7 +3303,8 @@ ${designAnalysis}
             const [title, sub] = seg.split("::");
             return { title: (title || "").trim(), sub: (sub || "").trim() };
           }).filter((t: { title: string; sub: string }) => t.title || t.sub);
-          return scrollAnimPendingHtml(texts.length ? texts : [{ title: "", sub: "" }]);
+          const videoPromptRaw = pipe === -1 ? (inner as string).trim() : (inner as string).slice(0, pipe).trim();
+          return scrollAnimPendingHtml(texts.length ? texts : [{ title: "", sub: "" }], videoPromptRaw || undefined, interactiveStyle || undefined);
         });
       }
 
@@ -3466,7 +3470,7 @@ ${designAnalysis}
       // Replace fallback with pending spinner (shown to user immediately)
       const pendingHtml = html.replace(
         /<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/,
-        scrollAnimPendingHtml(animTexts),
+        scrollAnimPendingHtml(animTexts, videoPrompt, animStyle),
       );
       // Replace fallback with {{SCROLLANIM}} marker (used by the BG pipeline)
       const markerHtml = html.replace(
@@ -5266,11 +5270,27 @@ ${fullHtml}`;
       console.log(`[${label}] Found ${allProjects.length} project(s) with stuck animation placeholder — replacing with fallback`);
       for (const proj of allProjects) {
         try {
+          const html = proj.generatedCode || "";
+          // Recover prompt/style/texts embedded in the pending section (if any) so the
+          // fallback keeps enough info for the "Повторить анимацию" button to re-run correctly.
+          const pendingTagMatch = html.match(/<section[^>]*data-scroll-anim-pending="1"[^>]*>/);
+          const pendingTag = pendingTagMatch ? pendingTagMatch[0] : "";
+          const _savedPromptEnc = pendingTag.match(/data-scroll-anim-prompt="([^"]*)"/)?.[1] || "";
+          const _savedStyleEnc  = pendingTag.match(/data-scroll-anim-style="([^"]*)"/)?.[1]  || "";
+          const _savedTextsEnc  = pendingTag.match(/data-scroll-anim-texts="([^"]*)"/)?.[1]  || "";
+          const savedPrompt = _savedPromptEnc ? decodeURIComponent(_savedPromptEnc) : undefined;
+          const savedStyle  = _savedStyleEnc  ? decodeURIComponent(_savedStyleEnc)  : undefined;
+          const savedTexts: Array<{title: string; sub: string}> = _savedTextsEnc
+            ? decodeURIComponent(_savedTextsEnc).split("||").map(seg => {
+                const [t, s] = seg.split("::");
+                return { title: (t || "").trim(), sub: (s || "").trim() };
+              })
+            : [{ title: "", sub: "" }];
           const fallback = safeReplaceScrollAnimPending(
-            proj.generatedCode || "",
-            scrollAnimFallbackHtml([{ title: "", sub: "" }])
+            html,
+            scrollAnimFallbackHtml(savedTexts, savedPrompt, savedStyle)
           );
-          if (fallback !== proj.generatedCode) {
+          if (fallback !== html) {
             await storage.updateProject(proj.id, { generatedCode: fallback });
             console.log(`[${label}] Cleared pending placeholder for project ${proj.id}`);
           }
