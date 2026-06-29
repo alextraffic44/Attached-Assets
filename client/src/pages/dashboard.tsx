@@ -261,7 +261,7 @@ export default function DashboardPage() {
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImage, setPhotoImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
-  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split">("parallax");
+  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split" | "action">("parallax");
   const [interactiveProductImage, setInteractiveProductImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const [tourStep, setTourStep] = useState(-1);
   const [activeTour, setActiveTour] = useState<TourStep[] | null>(null);
@@ -842,7 +842,7 @@ export default function DashboardPage() {
                         <div className="flex flex-col gap-3 flex-1">
                           {/* Style picker */}
                           <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Стиль анимации</div>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-3 gap-2">
                             {[
                               {
                                 id: "parallax" as const,
@@ -868,6 +868,18 @@ export default function DashboardPage() {
                                     <rect x="3" y="10" width="12" height="2" rx="1" fill="currentColor" opacity="0.5"/>
                                     <rect x="3" y="14" width="9" height="1.5" rx="0.75" fill="currentColor" opacity="0.3"/>
                                     <circle cx="31" cy="14" r="5" fill="currentColor" opacity="0.4"/>
+                                  </svg>
+                                ),
+                              },
+                              {
+                                id: "action" as const,
+                                label: "Экшн",
+                                desc: "Слоумо и облёт камеры",
+                                icon: (
+                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
+                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
+                                    <circle cx="20" cy="14" r="4.5" fill="currentColor" opacity="0.5"/>
+                                    <path d="M20 3 L20 6 M20 22 L20 25 M5 14 L8 14 M32 14 L35 14 M9.5 9.5 L11.6 11.6 M30.5 9.5 L28.4 11.6 M9.5 18.5 L11.6 16.4 M30.5 18.5 L28.4 16.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
                                   </svg>
                                 ),
                               },

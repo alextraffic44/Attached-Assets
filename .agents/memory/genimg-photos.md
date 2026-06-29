@@ -78,6 +78,11 @@ generation, storage, deployability, cap, billing, and fallback.
   spikes 429s, and a failed image falls back to a gradient placeholder = mixed grid again. Raising
   the per-site image budget is safe ONLY with a fixed concurrency cap (12 images resolve in ~2 waves
   under the 420s phase deadline). Token cost note: max auto-image cost scales with the cap (12×15=180).
+- KLING CLIP DURATION: `kling/v3-turbo-image-to-video` accepts a `duration` (seconds, passed as a
+  STRING) in the range 3–15. The Интерактивный modes pick per-mode lengths: parallax/split use 5s,
+  the "Экшн"/action (Hollywood-blockbuster) mode uses 10s with proportionally more sliced frames
+  (ffmpeg fps = round(targetFrameCount / videoDuration)). **Why:** "longer = more frames to scrub"
+  is only safe because the model documents 3–15s; do NOT exceed 15.
 - RESOLVER-FINALIZE invariant: `resolveScrollAnimMarkers` MUST always reach `finalize()` (which
   replaces every remaining marker with the static fallback). Wrap the per-block body — including
   `deductCredits` and the unprotected helper awaits (product still / creative concept / vision /

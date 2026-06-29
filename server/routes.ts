@@ -140,6 +140,10 @@ const SCROLL_ANIM_COST = 120;
 const SCROLL_FRAME_COUNT = 90;     // target frames extracted from a 5s clip (~18fps)
 const SCROLL_FRAME_WIDTH = 1280;   // downscale width for web delivery
 const SCROLL_VIDEO_DURATION = 5;   // seconds
+// "Экшн" (action / Hollywood-blockbuster) mode: longer clip + more sliced frames for a
+// richer, smoother slow-motion / bullet-time scrub.
+const SCROLL_ACTION_VIDEO_DURATION = 10; // seconds (user wants 6-10s blockbuster shots)
+const SCROLL_ACTION_FRAME_COUNT = 160;   // more sliced frames for the longer cinematic clip
 const KLING_IMG2VID_MODEL = "kling/v3-turbo-image-to-video";
 
 function csaEsc(s: string): string {
@@ -411,7 +415,7 @@ async function fetchProductImageForVision(
 // the caller falls back to the generic video prompt and the pipeline never breaks.
 async function generateCreativeConcept(
   productImageUrl: string,
-  layout: "parallax" | "split",
+  layout: "parallax" | "split" | "action",
   shouldStop: () => boolean = () => false,
 ): Promise<CreativeProductConcept | null> {
   if (shouldStop()) return null;
@@ -422,12 +426,45 @@ async function generateCreativeConcept(
     ? "The product sits on the RIGHT third of the frame and the LEFT half stays clean empty space for text, so keep any added element on or near the product on the right and never fill the left half."
     : "The product is centered, so keep any added element close around the product.";
 
+  const isAction = layout === "action";
+  const durSec = isAction ? "10-second" : "5-second";
+  const conceptLine = isAction
+    ? "Design ONE explosive HOLLYWOOD-BLOCKBUSTER action concept for a 10-second scroll-bound hero video that delivers an instant WOW — the most spectacular shot of an action film built around THIS product, NOT a calm product ad and NOT a boring 360 rotation."
+    : "Design ONE spectacular, premium cinematic concept for a 5-second scroll-bound hero video that delivers an instant WOW. NOT a boring 360 rotation.";
+  const motionLine = isAction
+    ? "The motion MUST be powerful, clearly visible and build dramatically across the 10 seconds (the viewer scrubs it by scrolling — subtle motion looks broken and dull). Combine a bold SLOW-MOTION camera ORBIT/ARC that flies AROUND the product (bullet-time feel) with ONE explosive signature effect — a splash, liquid, powder, petals, sparks or glittering shards bursting outward and hanging FROZEN in mid-air around the product."
+    : "The motion MUST be clearly visible and evolve dramatically across the 5 seconds (the viewer scrubs it by scrolling — subtle or imperceptible motion looks broken and dull). Always combine a slow cinematic camera PUSH-IN with ONE bold signature effect that genuinely moves.";
+  const focalRule = isAction
+    ? "- ONE explosive focal effect (a suspended burst) + a slow-motion camera orbit/arc — both already plausible from the composed still;"
+    : "- ONE bold focal effect + the slow camera push-in — both already plausible from the composed still;";
+  const criticalBlock = isAction
+    ? `CRITICAL for motionPrompt:
+The Kling video model gets the RENDERED STILL as frame 1 — the explosive burst (suspended splash / shards / particles) is ALREADY composed and frozen in the still. Animate that suspended burst drifting in slow motion PLUS a slow-motion camera ORBIT/ARC sweeping around the product. Keep the REAL product and its label perfectly intact. Do NOT spawn brand-new objects from off-screen, and never make the motion so subtle it looks frozen.
+✓ CORRECT: "the camera arcs slowly around the bottle in bullet-time as the suspended splash droplets drift and bright glints sweep across the glass"
+✗ WRONG:   "a car drives in from the left" (it wasn't in the still) / "the product barely shimmers" (too subtle, looks static)`
+    : `CRITICAL for motionPrompt:
+The Kling video model gets the RENDERED STILL as frame 1 — the scene is already composed.
+Animate ONLY what is already visible (light, shadow, mist, liquid, particles, reflections, texture) PLUS a slow camera push-in. Do NOT introduce new objects flying in, and never make the motion so subtle it looks frozen.
+✓ CORRECT: "a hard spotlight beam sweeps boldly left-to-right across the metallic lid while the camera pushes in slowly and the shadow glides across the surface"
+✗ WRONG:   "a spark flies in from the left" (it wasn't in the still) / "the lid barely shimmers" (too subtle, looks static)`;
+  const guardrailLine = layout === "split"
+    ? "SPLIT GUARDRAIL: keep the product on the right third and keep the LEFT half calmer, softer and uncluttered (simpler or gently out of focus) so overlay text stays readable; the camera push-in must be gentle (about 5-8 percent) with NO pan, NO tilt, NO pull-back and NO frame-edge reveal; keep ALL effects on or around the product on the right, never over the left text area."
+    : isAction
+    ? "ACTION: the camera may ORBIT/ARC around the product (bullet-time) but must keep the real product centered, intact and faithful — no warping and no frame-edge glitches."
+    : "Keep the camera push-in smooth and centered with no frame-edge reveal.";
+  const stillAddHint = isAction
+    ? "the dramatic STATIC accent already composed in the still — e.g. a frozen splash / suspended shards / particles bursting around the product"
+    : "the dramatic STATIC accent/lighting already composed in the still";
+  const motionHint = isAction
+    ? "a slow-motion camera orbit/arc around the product plus the suspended burst drifting — dramatic, premium, stunning"
+    : "bold VISIBLE motion of the already-present elements plus a slow camera push-in — dramatic, premium, stunning";
+
   const instruction =
 `You are the creative director of the world's most celebrated product-commercial studio (Apple launch films, Tom Ford, Chanel No.5).
 Study the product in the image carefully — brand, category, texture, mood, color palette, material.
-Design ONE spectacular, premium cinematic concept for a 5-second scroll-bound hero video that delivers an instant WOW. NOT a boring 360 rotation.
+${conceptLine}
 
-The motion MUST be clearly visible and evolve dramatically across the 5 seconds (the viewer scrubs it by scrolling — subtle or imperceptible motion looks broken and dull). Always combine a slow cinematic camera PUSH-IN with ONE bold signature effect that genuinely moves.
+${motionLine}
 
 Pick the most striking idea for this product category:
 - men's grooming (clay, wax, pomade): a hard spotlight beam sweeps boldly across the metallic lid while its shadow glides; OR dark matte dust swirls and settles around the tin as the light intensifies;
@@ -440,20 +477,16 @@ Pick the most striking idea for this product category:
 Hard rules:
 - preserve the REAL product and its label exactly (same shape, text, colors, proportions);
 - background may be a clean dramatic backdrop OR a tasteful softly-out-of-focus premium environment that suits the product (no clutter, no competing objects), with dramatic directional lighting (a luminous glow, a soft falloff, a moving highlight) — the product stays the clear faithful hero;
-- ONE bold focal effect + the slow camera push-in — both already plausible from the composed still;
+${focalRule}
 - no humans, no hands, no invented logos; cinematic, premium and dynamic;
-- the effect must be PHOTOREALISTIC and achievable from a single still + 5s video.
+- the effect must be PHOTOREALISTIC and achievable from a single still + ${durSec} video.
 ${placementNote}
 
-CRITICAL for motionPrompt:
-The Kling video model gets the RENDERED STILL as frame 1 — the scene is already composed.
-Animate ONLY what is already visible (light, shadow, mist, liquid, particles, reflections, texture) PLUS a slow camera push-in. Do NOT introduce new objects flying in, and never make the motion so subtle it looks frozen.
-✓ CORRECT: "a hard spotlight beam sweeps boldly left-to-right across the metallic lid while the camera pushes in slowly and the shadow glides across the surface"
-✗ WRONG:   "a spark flies in from the left" (it wasn't in the still) / "the lid barely shimmers" (too subtle, looks static)
-${layout === "split" ? "SPLIT GUARDRAIL: keep the product on the right third and keep the LEFT half calmer, softer and uncluttered (simpler or gently out of focus) so overlay text stays readable; the camera push-in must be gentle (about 5-8 percent) with NO pan, NO tilt, NO pull-back and NO frame-edge reveal; keep ALL effects on or around the product on the right, never over the left text area." : "Keep the camera push-in smooth and centered with no frame-edge reveal."}
+${criticalBlock}
+${guardrailLine}
 
 Return STRICT JSON only (no markdown, no commentary):
-{"productSummary":"<3-5 words: exact product name + category>","stillAddition":"<one vivid English phrase: the dramatic STATIC accent/lighting already composed in the still>","motionPrompt":"<one precise cinematic sentence: bold VISIBLE motion of the already-present elements plus a slow camera push-in — dramatic, premium, stunning>"}`;
+{"productSummary":"<3-5 words: exact product name + category>","stillAddition":"<one vivid English phrase: ${stillAddHint}>","motionPrompt":"<one precise cinematic sentence: ${motionHint}>"}`;
 
   // Hard 20s bound: the AbortController aborts the underlying request (if the SDK
   // honors it) and the Promise.race guarantees we never wait longer regardless.
@@ -499,7 +532,7 @@ Return STRICT JSON only (no markdown, no commentary):
 // Falls back gracefully (returns null) so the caller can use the pre-planned motionPrompt.
 async function generateMotionPromptFromStill(
   stillUrl: string,
-  layout: "parallax" | "split",
+  layout: "parallax" | "split" | "action",
   shouldStop: () => boolean = () => false,
 ): Promise<string | null> {
   if (shouldStop()) return null;
@@ -525,12 +558,35 @@ async function generateMotionPromptFromStill(
   }
   if (shouldStop()) return null;
 
+  const isAction = layout === "action";
   const placementHint = layout === "split"
     ? "The product is on the RIGHT side and the left half is an empty solid text area — keep every effect on or around the product on the right, keep the camera push-in gentle (about 5-8 percent) and never let motion spill into or change the left half."
+    : isAction
+    ? "The product is centered — the camera may orbit/arc around it (bullet-time) but keep the real product intact and faithful."
     : "The product is centered — keep the push-in smooth and centered.";
 
-  const instruction =
-`You are a world-class cinematographer directing a 5-second luxury product video for Kling AI.
+  const instruction = isAction
+    ? `You are a world-class action-film cinematographer directing a 10-second HOLLYWOOD-BLOCKBUSTER product shot for Kling AI.
+Look at this RENDERED PRODUCT STILL very carefully — examine every element, lighting, texture, suspended particle and visual accent present.
+
+Your task: write ONE precise cinematic motion sentence that Kling will follow to animate this exact still into a jaw-dropping blockbuster moment.
+
+Rules:
+1. Describe ONLY what is visibly present in this still — do NOT invent objects that aren't there.
+2. The motion must be POWERFUL and clearly visible and build across the 10 seconds (the viewer scrubs it by scrolling — subtle motion looks broken). Make it epic, premium and dramatic.
+3. Always combine TWO things: a bold SLOW-MOTION camera ORBIT/ARC flying AROUND the product (bullet-time), plus the suspended burst already in the frame (splash, shards, particles, sparks, mist, light streaks) drifting in slow motion.
+4. Keep the product coherent and undistorted (do not warp, melt or recolor it) — the real product and its label stay perfectly intact.
+5. Blockbuster cinematic energy — graceful but unmistakable slow-motion movement, never a frozen image.
+6. ${placementHint}
+7. No camera shake that breaks the product, no text, no human hands.
+
+Examples of great action motion prompts (adapt to what's actually in THIS still):
+- "The camera arcs slowly around the bottle in bullet-time as suspended splash droplets drift through the air and bright glints sweep across the glass"
+- "A sweeping slow-motion orbit circles the watch as glittering shards hang frozen mid-air and light beams travel across the dial"
+- "The camera flies around the jar in dramatic slow motion while a frozen powder burst drifts outward and anamorphic flares streak past"
+
+Respond with ONLY the motion prompt sentence — no JSON, no explanation, no quotes.`
+    : `You are a world-class cinematographer directing a 5-second luxury product video for Kling AI.
 Look at this RENDERED PRODUCT STILL very carefully — examine every element, lighting, texture, and visual accent present.
 
 Your task: write ONE precise cinematic motion sentence that Kling will follow to animate this exact still into an instant WOW.
@@ -590,7 +646,7 @@ Respond with ONLY the motion prompt sentence — no JSON, no explanation, no quo
 // When stillAddition is given, a small tasteful creative accent is baked into the scene.
 async function generateProductStill(
   productImageUrl: string,
-  layout: "parallax" | "split",
+  layout: "parallax" | "split" | "action",
   shouldStop: () => boolean = () => false,
   stillAddition?: string,
 ): Promise<string | null> {
@@ -688,7 +744,7 @@ async function generateScrollFrames(
   videoPrompt: string,
   shouldStop: () => boolean = () => false,
   referenceStillUrl?: string,
-  layout: "parallax" | "split" = "parallax",
+  layout: "parallax" | "split" | "action" = "parallax",
 ): Promise<string[]> {
   if (!KIE_API_KEY) { console.warn("[SCROLLANIM] missing KIE_API_KEY"); return []; }
 
@@ -726,12 +782,21 @@ async function generateScrollFrames(
   // fidelity. Additive — never overrides the creative motion already in videoPrompt.
   const cameraGuidance = layout === "split"
     ? `with an elegant slow cinematic camera push-in only — no pan, no tilt, no pull-back, no frame-edge reveal — keeping the product perfectly intact and the left side calm for text`
+    : layout === "action"
+    ? `with a bold Hollywood-blockbuster camera move — a dramatic slow-motion orbit/arc that flies AROUND the subject (bullet-time feel) or an explosive dynamic push-in, capturing the peak moment in cinematic slow motion with suspended particles, debris, sparks or shattering shards drifting through the air, sweeping anamorphic lens flares, motion-blur streaks and deep dramatic contrast — epic, powerful and fluid, never shaky`
     : `with bold immersive cinematic camera movement that pulls the viewer INTO the scene — a smooth forward dolly / push-in that glides deeper and naturally reveals depth and detail (e.g. gliding toward a doorway or through the space) — graceful and steady, never shaky`;
+  const styleLead = layout === "action"
+    ? `Render as an epic Hollywood blockbuster action sequence in dramatic slow motion (bullet-time): powerful, clearly visible motion that builds across the whole clip, IMAX-grade cinematic spectacle`
+    : `Render as a high-end Hollywood-grade cinematic shot: smooth, graceful but clearly visible motion (the scene must noticeably evolve and feel alive from start to finish)`;
   const animPrompt =
-    `${safeVideoPrompt}. Render as a high-end Hollywood-grade cinematic shot: smooth, graceful but clearly visible motion ` +
-    `(the scene must noticeably evolve and feel alive from start to finish), ${cameraGuidance}, premium dramatic lighting ` +
+    `${safeVideoPrompt}. ${styleLead}, ${cameraGuidance}, premium dramatic lighting ` +
     `and rich filmic color grading. Do not warp, melt or distort the main subject or any architecture, ` +
     `no text, no captions, no watermark, no camera shake, no flicker, no jump cuts.`;
+
+  // Per-mode clip length + sliced-frame budget: "action" uses a longer 10s clip and more
+  // frames for a richer, smoother slow-motion scrub; other modes keep the 5s / 90-frame default.
+  const videoDuration = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
+  const targetFrameCount = layout === "action" ? SCROLL_ACTION_FRAME_COUNT : SCROLL_FRAME_COUNT;
 
   // Overall deadline shared across all retry attempts (still image time already consumed)
   const deadline = Date.now() + 2400000; // 40 min cap (Kling can take up to 35 min)
@@ -754,7 +819,7 @@ async function generateScrollFrames(
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
         body: JSON.stringify({
           model: KLING_IMG2VID_MODEL,
-          input: { prompt: animPrompt.slice(0, 2500), image_urls: [stillUrl], duration: String(SCROLL_VIDEO_DURATION), resolution: "1080p" },
+          input: { prompt: animPrompt.slice(0, 2500), image_urls: [stillUrl], duration: String(videoDuration), resolution: "1080p" },
         }),
       },
       { label: "SCROLLANIM video-create", retries: 4, shouldStop: () => shouldStop() || Date.now() >= deadline },
@@ -831,7 +896,7 @@ async function generateScrollFrames(
 
   // Step 4 — extract frames with ffmpeg (direct spawn + retry; see extractFramesWithFfmpeg)
   try {
-    const fps = Math.max(8, Math.round(SCROLL_FRAME_COUNT / SCROLL_VIDEO_DURATION));
+    const fps = Math.max(8, Math.round(targetFrameCount / videoDuration));
     console.log(`[SCROLLANIM] starting ffmpeg: fps=${fps}, input=${videoPath}, output=${framesDir}/frame_%04d.jpg`);
     await extractFramesWithFfmpeg(videoPath, framesDir, fps, shouldStop);
   } catch (e: any) {
@@ -1041,7 +1106,7 @@ function scrollAnimFallbackHtml(
 
 // Build a self-contained scroll-bound Canvas animation block (section + style + script).
 // layout: "parallax" (default) — full-screen centered text; "split" — text on left, product on right.
-function buildScrollAnimHtml(frames: string[], texts: Array<{ title: string; sub: string }>, layout: "parallax" | "split" = "parallax"): string {
+function buildScrollAnimHtml(frames: string[], texts: Array<{ title: string; sub: string }>, layout: "parallax" | "split" | "action" = "parallax"): string {
   const cid = "csa" + Math.random().toString(36).slice(2, 8);
   const framesJson = JSON.stringify(frames).replace(/'/g, "&#39;");
   const isSplit = layout === "split";
@@ -1238,7 +1303,7 @@ async function resolveScrollAnimMarkers(
 
   const planned = entries.slice(0, 2); // at most 2 scroll blocks per site
   const phaseDeadline = Date.now() + 2520000; // 42 min total budget (Kling can take up to 35 min)
-  const layout: "parallax" | "split" = interactiveStyle === "split" ? "split" : "parallax";
+  const layout: "parallax" | "split" | "action" = interactiveStyle === "split" ? "split" : interactiveStyle === "action" ? "action" : "parallax";
 
   // Product still is regenerated lazily (ONCE) AFTER the first successful credit
   // deduction inside the loop, so we never spend external API budget on a user who
@@ -2394,6 +2459,30 @@ export async function registerRoutes(
 ⚠️ После маркера — обычные секции: преимущества, отзывы, CTA, форма, футер.
 🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
 ═══ КОНЕЦ СПЛИТ-РЕЖИМА ═══\n`;
+        } else if (interactiveStyle === "action") {
+          systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
+═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — ЭКШН» (голливудский блокбастер) ═══
+Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
+
+ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
+→ СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
+{{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|Заголовок1::Подзаголовок1||Заголовок2::Подзаголовок2||Заголовок3::Подзаголовок3}}
+
+VIDEO_PROMPT (на английском) — ты РЕЖИССЁР голливудского ЭКШН-блокбастера и ставишь САМЫЙ эффектный кадр фильма. Придумай ОДИН взрывной кинокадр под нишу сайта, который при скролле смотрится как сцена из дорогого боевика. Думай приёмами большого кино: BULLET-TIME (время будто застыло), СЛОУ-МО (замедленная съёмка), камера ОБЛЕТАЕТ объект по дуге/орбите, что-то эффектно РАЗЛЕТАЕТСЯ / РАЗБИВАЕТСЯ / ВЗРЫВАЕТСЯ, частицы, осколки, искры, брызги и пыль зависают в воздухе, анаморфные блики, моушн-блюр, глубокий драматичный контраст. Движение мощное, заметное и развивается по всему ролику (зритель сам прокручивает кадры скроллом — вялое движение убивает эффект). Адаптируй идею ПОД КОНКРЕТНУЮ НИШУ — эффектно для ЛЮБОГО бизнеса. Оставь зону поспокойнее, где ляжет крупный текст (он накладывается поверх и подсвечивается автоматически). Пиши развёрнуто, ТОЛЬКО запятые (без | :: и фигурных скобок):
+- Авто: "epic slow-motion bullet-time shot orbiting a luxury sports car as it powerslides through exploding clouds of dust and sparks, debris frozen mid-air, sweeping anamorphic lens flares, dramatic high-contrast lighting, photorealistic cinematic"
+- Ресторан/еда: "ultra slow-motion macro of a gourmet burger assembling in mid-air as fresh ingredients and droplets float and the camera arcs around it, seasoning sparks suspended, dramatic studio lighting, mouth-watering cinematic"
+- Спорт/фитнес: "explosive slow-motion bullet-time shot circling an athlete mid-jump, sweat droplets and chalk dust frozen in the air as the camera flies around in a full arc, dramatic stadium lighting, epic cinematic"
+- Ювелирка/часы: "cinematic bullet-time orbit around a diamond ring as a glass pane shatters into glittering shards suspended in slow motion, light beams igniting rainbow sparkles, deep luxurious shadows, photorealistic"
+- Стройка/техника: "powerful slow-motion camera flight around heavy machinery as concrete dust and sparks burst and hang frozen in the air, dramatic golden volumetric light, epic blockbuster cinematic"
+- Косметика/продукт: "slow-motion bullet-time orbit around the product as a splash of liquid and petals explode outward and freeze mid-air while the camera arcs around it, luminous beams and sparkles, dramatic premium lighting, cinematic macro"
+- Общее/услуги: "epic cinematic bullet-time shot orbiting the themed subject as particles, debris and light streaks burst and freeze in slow motion, the camera flying around in a dramatic arc, IMAX-grade blockbuster lighting, photorealistic"
+
+Тексты — РОВНО 3 пары на РУССКОМ (Заголовок::Подзаголовок), короткие и мощные, в духе кино-трейлера.
+
+⚠️ НЕ пиши <section> или Hero-раздел ДО этого маркера. Маркер И ЕСТЬ Hero.
+⚠️ НЕ создавай canvas-код вручную. Маркер заменяется автоматически системой.
+🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
+═══ КОНЕЦ ЭКШН-РЕЖИМА ═══\n`;
         } else {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
 ═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ» — СКРОЛЛ-АНИМАЦИЯ ═══
@@ -3166,6 +3255,7 @@ ${designAnalysis}
       // ── Auto-inject SCROLLANIM if interactive mode but AI missed the marker ──
       if (interactiveMode && isNewSite && !mainHtmlCode.includes("{{SCROLLANIM:")) {
         const isSplitAuto = interactiveStyle === "split";
+        const isActionAuto = interactiveStyle === "action";
         let videoPromptAuto: string;
         let textsAuto: string;
         if (isSplitAuto) {
@@ -3173,6 +3263,11 @@ ${designAnalysis}
             ? "the product on the right side of frame, a delicate butterfly gently lands and soft petals drift through the air, left side clean solid white background, soft studio lighting, cinematic macro, no text"
             : "premium product on the right side of frame, soft cinematic accents and gentle atmospheric motion, left side clean solid white background, soft studio lighting, cinematic";
           textsAuto = "Познакомьтесь с нами::Откройте для себя наш продукт||Качество и стиль::Только лучшее для вас||Начните сейчас::Сделайте первый шаг";
+        } else if (isActionAuto) {
+          videoPromptAuto = absoluteProductImageUrl
+            ? "epic slow-motion bullet-time orbit around the product as a splash of liquid and sparks explode outward and freeze mid-air while the camera arcs around it, luminous beams and suspended particles, dramatic premium lighting, cinematic macro"
+            : "epic cinematic bullet-time shot orbiting the themed subject as particles, debris and light streaks burst and freeze in slow motion, the camera flying around in a dramatic arc, IMAX-grade blockbuster lighting, photorealistic";
+          textsAuto = "Почувствуй мощь::Эффект, который впечатляет||Каждая деталь::Снято как в кино||Начни прямо сейчас::Сделай первый шаг";
         } else {
           videoPromptAuto = absoluteProductImageUrl
             ? "premium product with soft cinematic accents — gentle drifting petals and slow sweeping light, studio lighting, clean solid background, cinematic macro detail"
