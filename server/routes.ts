@@ -745,6 +745,7 @@ async function generateScrollFrames(
   shouldStop: () => boolean = () => false,
   referenceStillUrl?: string,
   layout: "parallax" | "split" | "action" = "parallax",
+  onTaskCreated?: (taskId: string) => void,
 ): Promise<string[]> {
   if (!KIE_API_KEY) { console.warn("[SCROLLANIM] missing KIE_API_KEY"); return []; }
 
@@ -829,6 +830,7 @@ async function generateScrollFrames(
     if (!taskId) continue; // next video attempt
 
     console.log(`[SCROLLANIM] video task created (attempt ${videoAttempt + 1}): ${taskId}`);
+    if (onTaskCreated) { try { onTaskCreated(taskId); } catch {} }
 
     // Step 2 — poll for completion (Kling video can take up to 35 min in queue)
     let taskFailed = false;
@@ -1378,7 +1380,27 @@ async function resolveScrollAnimMarkers(
       : parsed.videoPrompt;
     let frames: string[] = [];
     try {
-      frames = await generateScrollFrames(effectivePrompt, () => isAborted() || Date.now() >= phaseDeadline, referenceStill, layout);
+      frames = await generateScrollFrames(
+        effectivePrompt,
+        () => isAborted() || Date.now() >= phaseDeadline,
+        referenceStill,
+        layout,
+        // Persist the Kling task ID into the pending section in DB so startup cleanup
+        // can resume the already-running task if the server restarts mid-generation.
+        projectId ? (klingTaskId) => {
+          storage.getProject(projectId).then(proj => {
+            if (!proj) return;
+            const patched = (proj.generatedCode || "").replace(
+              /(data-scroll-anim-pending="1"[^>]*?)(>)/,
+              (m, attrs, gt) => attrs.includes("data-scroll-anim-task-id") ? m
+                : `${attrs} data-scroll-anim-task-id="${klingTaskId}"${gt}`,
+            );
+            if (patched !== proj.generatedCode) {
+              storage.updateProject(projectId, { generatedCode: patched }).catch(() => {});
+            }
+          }).catch(() => {});
+        } : undefined,
+      );
     } finally {
       clearInterval(keepAliveInterval);
     }
@@ -5278,21 +5300,102 @@ ${fullHtml}`;
           const _savedPromptEnc = pendingTag.match(/data-scroll-anim-prompt="([^"]*)"/)?.[1] || "";
           const _savedStyleEnc  = pendingTag.match(/data-scroll-anim-style="([^"]*)"/)?.[1]  || "";
           const _savedTextsEnc  = pendingTag.match(/data-scroll-anim-texts="([^"]*)"/)?.[1]  || "";
+          const _savedTaskEnc   = pendingTag.match(/data-scroll-anim-task-id="([^"]*)"/)?.[1] || "";
           const savedPrompt = _savedPromptEnc ? decodeURIComponent(_savedPromptEnc) : undefined;
           const savedStyle  = _savedStyleEnc  ? decodeURIComponent(_savedStyleEnc)  : undefined;
+          const savedTaskId = _savedTaskEnc   ? decodeURIComponent(_savedTaskEnc)   : "";
           const savedTexts: Array<{title: string; sub: string}> = _savedTextsEnc
             ? decodeURIComponent(_savedTextsEnc).split("||").map(seg => {
                 const [t, s] = seg.split("::");
                 return { title: (t || "").trim(), sub: (s || "").trim() };
               })
             : [{ title: "", sub: "" }];
+
+          // Write the static fallback immediately (unblocks server startup, user sees something).
+          // If we have a task ID, the background resume below will overwrite it with the real animation.
           const fallback = safeReplaceScrollAnimPending(
             html,
             scrollAnimFallbackHtml(savedTexts, savedPrompt, savedStyle)
           );
           if (fallback !== html) {
             await storage.updateProject(proj.id, { generatedCode: fallback });
-            console.log(`[${label}] Cleared pending placeholder for project ${proj.id}`);
+            console.log(`[${label}] Cleared pending placeholder for project ${proj.id} → fallback (will attempt background resume: ${savedTaskId ? "yes task=" + savedTaskId : "no task ID"})`);
+
+          // Background: try to fetch the already-created Kling video and build the animation,
+          // so the user gets the real animation without paying again or losing the video.
+          if (savedTaskId && KIE_API_KEY) {
+            const _projId  = proj.id;
+            const _layout: "parallax"|"split"|"action" =
+              savedStyle === "split" ? "split" : savedStyle === "action" ? "action" : "parallax";
+            const _vidDur  = _layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
+            const _frCnt   = _layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : SCROLL_FRAME_COUNT;
+            const _texts   = savedTexts;
+            (async () => {
+              try {
+                console.log(`[CLEANUP-RESUME] project ${_projId}: polling Kling task ${savedTaskId}`);
+                const resumeDeadline = Date.now() + 38 * 60 * 1000; // 38 min (Kling can take 35)
+                let mp4UrlResume: string | null = null;
+                while (Date.now() < resumeDeadline) {
+                  await new Promise(r => setTimeout(r, 12000));
+                  try {
+                    const sb: any = await kieRequestJson(
+                      `${NANO_BANANA_STATUS_URL}?taskId=${savedTaskId}`,
+                      { headers: { Authorization: `Bearer ${KIE_API_KEY}` } },
+                      { label: "CLEANUP-RESUME poll", retries: 2, shouldStop: () => false },
+                    );
+                    if (!sb || sb.code !== 200 || !sb.data) continue;
+                    const st = sb.data.state;
+                    console.log(`[CLEANUP-RESUME] project ${_projId} task state=${st}`);
+                    if (st === "success") {
+                      let r: any = {};
+                      try { r = typeof sb.data.resultJson === "string" ? JSON.parse(sb.data.resultJson) : (sb.data.resultJson || {}); } catch {}
+                      mp4UrlResume = (r.resultUrls || [])[0] || null;
+                      break;
+                    }
+                    if (st === "fail" || st === "failed" || st === "error") {
+                      console.warn(`[CLEANUP-RESUME] project ${_projId}: task failed — keeping fallback`);
+                      return;
+                    }
+                  } catch (pe: any) { console.warn(`[CLEANUP-RESUME] poll error:`, pe?.message); }
+                }
+                if (!mp4UrlResume) {
+                  console.warn(`[CLEANUP-RESUME] project ${_projId}: deadline reached, keeping fallback`);
+                  return;
+                }
+                // Download + slice + upload frames
+                const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrollresume-"));
+                const videoPath = path.join(tmpDir, "src.mp4");
+                const framesDir = path.join(tmpDir, "frames");
+                try {
+                  const vr = await fetch(mp4UrlResume);
+                  if (!vr.ok) throw new Error(`mp4 HTTP ${vr.status}`);
+                  fs.writeFileSync(videoPath, Buffer.from(await vr.arrayBuffer()));
+                  fs.mkdirSync(framesDir, { recursive: true });
+                  const fps = Math.max(8, Math.round(_frCnt / _vidDur));
+                  await extractFramesWithFfmpeg(videoPath, framesDir, fps, () => false);
+                  const frameUrls: string[] = [];
+                  for (const f of fs.readdirSync(framesDir).filter(f => /\.jpg$/i.test(f)).sort()) {
+                    const url = await uploadToObjectStorage(fs.readFileSync(path.join(framesDir, f)), "image/jpeg", "jpg");
+                    frameUrls.push(url);
+                  }
+                  if (frameUrls.length >= 8) {
+                    // Read current project code — only replace if it still has the fallback section
+                    const cur = await storage.getProject(_projId);
+                    if (!cur || !(cur.generatedCode || "").includes('data-scroll-anim-fallback="1"')) return;
+                    let finalCode = (cur.generatedCode || "").replace(
+                      /<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/, buildScrollAnimHtml(frameUrls, _texts, _layout));
+                    finalCode = injectLoadingOverlay(finalCode);
+                    await storage.updateProject(_projId, { generatedCode: finalCode });
+                    console.log(`[CLEANUP-RESUME] project ${_projId}: animation restored (${frameUrls.length} frames)`);
+                  } else {
+                    console.warn(`[CLEANUP-RESUME] project ${_projId}: too few frames (${frameUrls.length})`);
+                  }
+                } finally { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} }
+              } catch (err: any) {
+                console.warn(`[CLEANUP-RESUME] project ${_projId} error:`, err?.message);
+              }
+            })();
+          }
           }
         } catch (e: any) {
           console.warn(`[${label}] Failed to clear project ${proj.id}:`, e?.message);
