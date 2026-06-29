@@ -9,6 +9,7 @@ import LandingPage from "@/pages/landing";
 import AuthPage from "@/pages/auth-page";
 import DashboardPage from "@/pages/dashboard";
 import EditorPage from "@/pages/editor";
+import SeoEditorPage from "@/pages/seo-editor";
 import LeadsPage from "@/pages/leads";
 import GenerationsPage from "@/pages/generations";
 import ProfilePage from "@/pages/profile";
@@ -63,6 +64,7 @@ function Router() {
       <Route path="/generations">{() => <ProtectedRoute component={GenerationsPage} />}</Route>
       <Route path="/profile">{() => <ProtectedRoute component={ProfilePage} />}</Route>
       <Route path="/editor/:id">{() => <ProtectedRoute component={EditorPage} />}</Route>
+      <Route path="/seo/:id">{() => <ProtectedRoute component={SeoEditorPage} />}</Route>
       <Route path="/admin">{() => <ProtectedRoute component={AdminPage} />}</Route>
       <Route path="/oferta">{() => <LegalPage doc="oferta" />}</Route>
       <Route path="/privacy">{() => <LegalPage doc="privacy" />}</Route>

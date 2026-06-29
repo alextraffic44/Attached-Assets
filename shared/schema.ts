@@ -16,6 +16,35 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export interface SeoKeyword {
+  id: string;
+  keyword: string;
+  slug: string;
+  title: string;
+  status: "pending" | "generating" | "done" | "failed";
+  filename?: string;
+}
+
+export interface SeoCluster {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  keywords: SeoKeyword[];
+}
+
+export interface SeoConfig {
+  niche: string;
+  rawKeywords: string[];
+  clusters: SeoCluster[];
+  siteTitle: string;
+  siteDescription: string;
+  status: "idle" | "analyzing" | "generating" | "done" | "error";
+  pagesTotal: number;
+  pagesGenerated: number;
+  publishUrl?: string;
+}
+
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -27,6 +56,8 @@ export const projects = pgTable("projects", {
   publishStatus: text("publish_status").notNull().default("draft"),
   vercelProjectId: text("vercel_project_id"),
   customDomain: text("custom_domain"),
+  type: varchar("type", { length: 20 }).notNull().default("website"),
+  seoConfig: json("seo_config").$type<SeoConfig>(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

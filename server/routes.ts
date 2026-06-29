@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
 import { deployToNetlify, addCustomDomain, checkDomainStatus, unpublishFromNetlify } from "./netlify-deploy";
+import { registerSeoRoutes } from "./seo-routes";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { db } from "./db";
@@ -5412,6 +5413,8 @@ ${fullHtml}`;
   setTimeout(() => migrateScrollJackingToPassive(), 20000);
   // Run every 30 minutes so stuck placeholders are cleaned even between restarts
   setInterval(() => cleanupStuckPendingAnims("Periodic"), 30 * 60 * 1000);
+
+  registerSeoRoutes(app, storage);
 
   return httpServer;
 }

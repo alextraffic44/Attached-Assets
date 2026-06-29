@@ -23,6 +23,7 @@ const jsonVerify = (req: Request, _res: Response, buf: Buffer) => {
 const largeJson = express.json({ limit: "50mb", verify: jsonVerify });
 app.use("/api/upload-image", largeJson);
 app.use("/api/projects", largeJson);
+app.use("/api/seo", largeJson);
 
 // Small default limit everywhere else — protects against oversized-body DoS,
 // especially on the public, unauthenticated lead-intake endpoint.

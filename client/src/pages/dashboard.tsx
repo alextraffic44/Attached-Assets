@@ -560,14 +560,28 @@ export default function DashboardPage() {
               Ваши проекты
             </h1>
           </div>
-          <button
-            onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setSelectedStyleTemplate(null); setSelectedTemplate(""); setStyleCategory("buttons"); setShowCreateModal(true); }}
-            className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
-            style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.85rem 1.6rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em', flexShrink: 0 }}
-          >
-            <Plus className="w-5 h-5" />
-            Новый сайт
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+            <button
+              onClick={() => {
+                fetch('/api/seo/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ title: 'SEO-сайт', niche: '' }) })
+                  .then(r => r.json()).then(d => { if (d.project?.id) setLocation(`/seo/${d.project.id}`); });
+              }}
+              className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+              style={{ background: 'linear-gradient(135deg,#1a1a3e,#312e81)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 16, padding: '0.85rem 1.4rem', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', letterSpacing: '-0.01em' }}
+              title="Создать SEO-сайт из ключевых слов"
+            >
+              <span style={{ fontSize: '1rem' }}>📊</span>
+              SEO-машина
+            </button>
+            <button
+              onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setSelectedStyleTemplate(null); setSelectedTemplate(""); setStyleCategory("buttons"); setShowCreateModal(true); }}
+              className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+              style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.85rem 1.6rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
+            >
+              <Plus className="w-5 h-5" />
+              Новый сайт
+            </button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -594,7 +608,7 @@ export default function DashboardPage() {
             {userProjects.map((project) => (
               <div
                 key={project.id}
-                onClick={() => setLocation(`/editor/${project.id}`)}
+                onClick={() => setLocation((project as any).type === "seo" ? `/seo/${project.id}` : `/editor/${project.id}`)}
                 className="group cursor-pointer transition-all duration-500 hover:-translate-y-1.5"
                 style={{ borderRadius: '2rem', overflow: 'hidden', background: '#fff', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 2px 20px rgba(0,0,0,0.04)', position: 'relative' }}
               >
