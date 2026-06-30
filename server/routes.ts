@@ -52,11 +52,35 @@ async function uploadToObjectStorage(buffer: Buffer, mimeType: string, ext: stri
   return `/objects/${objectName}`;
 }
 
+// Frame-specific compressor for scroll-animation frames. Frames are opaque video
+// stills shown briefly during a scroll-scrub, so they tolerate more compression than
+// hero images — we scale to the web-delivery width and re-encode as a moderate-quality
+// mozjpeg. This is the single highest-leverage lever for making interactive sites load
+// over throttled foreign-CDN connections (e.g. Russian ISPs without a VPN), and unlike
+// the frame-count/JS changes it ALSO shrinks already-published sites on re-publish
+// (their stored ~236KB-per-frame JPEGs drop to ~60-90KB each, ~21MB → ~6MB total).
+async function compressFrameForPublish(buffer: Buffer): Promise<Buffer> {
+  try {
+    const sharpMod = (await import("sharp")).default;
+    const meta = await sharpMod(buffer).metadata();
+    if (!meta.width || !meta.height) return buffer;
+    let p = sharpMod(buffer).rotate();
+    if (meta.width > SCROLL_FRAME_WIDTH) {
+      p = p.resize({ width: SCROLL_FRAME_WIDTH, withoutEnlargement: true });
+    }
+    const out = await p.jpeg({ quality: 72, mozjpeg: true }).toBuffer();
+    return out.length < buffer.length ? out : buffer; // never grow the file
+  } catch (e: any) {
+    console.warn(`[Publish] Frame compression skipped (using original):`, e?.message || e);
+    return buffer;
+  }
+}
+
 // Compress a raster image for publishing so it lands around 150-300KB while staying
 // visually lossless. Photos (no transparency) → mozjpeg; images with an alpha channel
 // → WebP (preserves transparency at a fraction of PNG size). Returns the original
 // buffer unchanged when it's already small, isn't a raster image, or can't be processed.
-// Animation frames are NEVER passed here — their crispness matters for smooth playback.
+// Animation frames are NEVER passed here — they go through compressFrameForPublish.
 async function compressImageForPublish(buffer: Buffer): Promise<Buffer> {
   const TARGET_MAX = 300 * 1024;
   if (buffer.length <= TARGET_MAX) return buffer; // already light enough — keep as-is
@@ -138,13 +162,13 @@ const MAX_AUTO_IMAGE_CONCURRENCY = 6;
 // store each frame in object storage, and build a self-contained scroll-bound Canvas animation
 // block. Mirrors the {{GENIMG:...}} marker system with {{SCROLLANIM:videoPrompt|T::S||T::S}}.
 const SCROLL_ANIM_COST = 120;
-const SCROLL_FRAME_COUNT = 90;     // target frames extracted from a 5s clip (~18fps)
+const SCROLL_FRAME_COUNT = 72;     // target frames extracted from a 5s clip (~14fps) — fewer frames = lighter page (smooth enough for scroll-scrubbing)
 const SCROLL_FRAME_WIDTH = 1280;   // downscale width for web delivery
 const SCROLL_VIDEO_DURATION = 5;   // seconds
 // "Экшн" (action / Hollywood-blockbuster) mode: longer clip + more sliced frames for a
 // richer, smoother slow-motion / bullet-time scrub.
 const SCROLL_ACTION_VIDEO_DURATION = 10; // seconds (user wants 6-10s blockbuster shots)
-const SCROLL_ACTION_FRAME_COUNT = 160;   // more sliced frames for the longer cinematic clip
+const SCROLL_ACTION_FRAME_COUNT = 120;   // more sliced frames for the longer cinematic clip (trimmed from 160 to keep the page light)
 const KLING_IMG2VID_MODEL = "kling/v3-turbo-image-to-video";
 
 function csaEsc(s: string): string {
@@ -214,7 +238,12 @@ async function extractFramesWithFfmpeg(
   shouldStop: () => boolean = () => false,
 ): Promise<number> {
   const { spawn } = await import("child_process");
-  const args = ["-y", "-i", videoPath, "-vf", `fps=${fps}`, "-q:v", "1", path.join(framesDir, "frame_%04d.jpg")];
+  // Scale frames down to the web-delivery width at extraction time (the canvas covers
+  // the viewport, so 1280px is plenty) and use a high-but-not-lossless mjpeg quality.
+  // Full-1080p `-q:v 1` frames were ~236KB each; scaled `-q:v 4` frames are ~120KB,
+  // and publish-time compressFrameForPublish trims them further. SCROLL_FRAME_WIDTH was
+  // previously declared but never applied — that omission is why frames stayed huge.
+  const args = ["-y", "-i", videoPath, "-vf", `fps=${fps},scale='min(${SCROLL_FRAME_WIDTH},iw)':-2:flags=lanczos`, "-q:v", "4", path.join(framesDir, "frame_%04d.jpg")];
   const MAX_TRIES = 3;
   let lastErr: any = null;
   for (let t = 0; t < MAX_TRIES; t++) {
@@ -1185,7 +1214,11 @@ ${layers}
     function paint(i){i=Math.max(0,Math.min(frames.length-1,i));var im=imgs[i];if(im&&im.complete&&im.naturalWidth){cover(im);cur=i;}}
     function resize(){var w=sticky.clientWidth,h=sticky.clientHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);paint(cur<0?0:cur);}
     function signalReady(){try{window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));window.dispatchEvent(new Event('craft:frames-ready'));}catch(e){}}
-    var loaded=0,total=frames.length;frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0)paint(0);loaded++;if(loaded===total)signalReady();};im.onerror=function(){if(idx===0)paint(0);loaded++;if(loaded===total)signalReady();};im.src=src;imgs[idx]=im;});
+    // Windowed loader: cap concurrent frame requests (MAXP) and load in index order so
+    // frame 0 paints FIRST. On a throttled connection, loading all frames at once starved
+    // frame 0 and left a black hero; prioritising it means the hero shows immediately and
+    // the rest stream in behind it. signalReady() still fires once every frame settles.
+    var loaded=0,total=frames.length,started=0,MAXP=4;function _fin(){loaded++;if(loaded>=total)signalReady();}function _pump(){while(started<total&&(started-loaded)<MAXP){(function(idx){var im=new Image(),settled=false;function _done(){if(settled)return;settled=true;_fin();_pump();}im.decoding='async';imgs[idx]=im;im.onload=function(){if(idx===0)paint(0);_done();};im.onerror=function(){_done();};setTimeout(_done,12000);im.src=frames[idx];})(started++);}}_pump();
     function setP(p){
       p=Math.max(0,Math.min(1,p));
       var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);
@@ -1241,7 +1274,11 @@ ${layers}
     function paint(i){i=Math.max(0,Math.min(frames.length-1,i));var im=imgs[i];if(im&&im.complete&&im.naturalWidth){cover(im);cur=i;}}
     function resize(){var w=sticky.clientWidth,h=sticky.clientHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);paint(cur<0?0:cur);}
     function signalReady(){try{window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));window.dispatchEvent(new Event('craft:frames-ready'));}catch(e){}}
-    var loaded=0,total=frames.length;frames.forEach(function(src,idx){var im=new Image();im.decoding='async';im.onload=function(){if(idx===0)paint(0);loaded++;if(loaded===total)signalReady();};im.onerror=function(){if(idx===0)paint(0);loaded++;if(loaded===total)signalReady();};im.src=src;imgs[idx]=im;});
+    // Windowed loader: cap concurrent frame requests (MAXP) and load in index order so
+    // frame 0 paints FIRST. On a throttled connection, loading all frames at once starved
+    // frame 0 and left a black hero; prioritising it means the hero shows immediately and
+    // the rest stream in behind it. signalReady() still fires once every frame settles.
+    var loaded=0,total=frames.length,started=0,MAXP=4;function _fin(){loaded++;if(loaded>=total)signalReady();}function _pump(){while(started<total&&(started-loaded)<MAXP){(function(idx){var im=new Image(),settled=false;function _done(){if(settled)return;settled=true;_fin();_pump();}im.decoding='async';imgs[idx]=im;im.onload=function(){if(idx===0)paint(0);_done();};im.onerror=function(){_done();};setTimeout(_done,12000);im.src=frames[idx];})(started++);}}_pump();
     function setP(p){
       p=Math.max(0,Math.min(1,p));
       var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);
@@ -4418,6 +4455,7 @@ ${designAnalysis}
         const mediaMap = new Map<string, string>(); // relative path → local asset path
         const usedNames = new Set<string>();
         let counter = 0;
+        let bundledBytes = 0; // running total of bundled media bytes (for payload diagnostics)
         const publishObjStorage = new ObjectStorageService();
         for (const mediaUrl of Array.from(localMediaUrls)) {
           try {
@@ -4456,10 +4494,23 @@ ${designAnalysis}
               buffer = Buffer.from(await mediaResp.arrayBuffer());
             }
             if (!buffer) continue;
-            // Compress regular raster images to ~150-300KB (visually lossless). Skip
-            // animation frames (quality matters), GIFs (Sharp would flatten animation
-            // to a single frame) and non-raster assets (video/3D/svg).
-            if (!frameUrls.has(mediaUrl) && /\.(jpe?g|png|webp)$/i.test(mediaUrl.split("?")[0])) {
+            // Compress raster images at publish to keep deployed pages light. Heavy
+            // pages (especially multi-frame scroll animations) fail to load over
+            // throttled foreign-CDN connections (e.g. Russian ISPs without a VPN),
+            // which is why interactive sites showed broken images while light
+            // description sites loaded fine. Animation frames get a frame-specific
+            // compressor (scale + moderate JPEG — good enough for scroll-scrubbing and,
+            // crucially, shrinks ALREADY-published sites on re-publish); other rasters
+            // get the aggressive ≤300KB compressor. GIFs (Sharp flattens animation) and
+            // non-raster assets (video/3D/svg) are left untouched.
+            const isRaster = /\.(jpe?g|png|webp)$/i.test(mediaUrl.split("?")[0]);
+            if (isRaster && frameUrls.has(mediaUrl)) {
+              const before = buffer.length;
+              buffer = await compressFrameForPublish(buffer);
+              if (buffer.length !== before) {
+                console.log(`[Publish] Frame ${mediaUrl}: ${(before/1024).toFixed(0)}KB → ${(buffer.length/1024).toFixed(0)}KB`);
+              }
+            } else if (isRaster) {
               const before = buffer.length;
               buffer = await compressImageForPublish(buffer);
               if (buffer.length !== before) {
@@ -4491,12 +4542,13 @@ ${designAnalysis}
             counter++;
             const localPath = `assets/${fileName}`;
             files.push({ filename: localPath, contentBuffer: buffer });
+            bundledBytes += buffer.length;
             mediaMap.set(mediaUrl, localPath);
           } catch (err) {
             console.warn(`[Publish] Could not bundle media ${mediaUrl}:`, err);
           }
         }
-        console.log(`[Publish] Bundled ${mediaMap.size}/${localMediaUrls.size} media file(s) for project ${projectId}`);
+        console.log(`[Publish] Bundled ${mediaMap.size}/${localMediaUrls.size} media file(s) for project ${projectId} — total media payload ${(bundledBytes / 1024 / 1024).toFixed(1)} MB`);
         // Rewrite references in ALL html pages: relative paths AND their absolute counterparts
         for (const f of files) {
           if (!f.content) continue;

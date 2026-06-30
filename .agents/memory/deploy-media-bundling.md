@@ -58,12 +58,19 @@ stay consistent.
 
 ## Publish-time compression
 
-`compressImageForPublish(buffer)` re-encodes raster images to ≤300KB at publish (mozjpeg q86→55
-for opaque, WebP q86→50 for alpha, resize max 1920px fit:inside, last-resort 1280px q72; never
-grows the file; dynamic `import("sharp")`). Real test: 3.8MB PNG → 184KB JPEG.
+Two compressors run at publish, both raster-only (`/\.(jpe?g|png|webp)$/i`), both never grow
+the file, both dynamic `import("sharp")`:
+- `compressImageForPublish(buffer)` — non-frame rasters → ≤300KB (mozjpeg q86→55 opaque,
+  WebP q86→50 alpha, resize max 1920px fit:inside, last-resort 1280px q72). Real test: 3.8MB PNG → 184KB.
+- `compressFrameForPublish(buffer)` — animation frames → scale to `SCROLL_FRAME_WIDTH` (1280),
+  mozjpeg q72. Frames are collected into a `frameUrls` Set parsed from `data-frames='...'` JSON arrays.
 
-**NEVER compress:** (1) animation frames — collected into a `frameUrls` Set parsed from
-`data-frames='...'` JSON arrays (quality matters for scroll playback); (2) `.gif` — Sharp would
-flatten an animated GIF to a single static frame. Gate regex is `/\.(jpe?g|png|webp)$/i` AND
-`!frameUrls.has(url)`. Because compression can change format (png→webp / png→jpg), the
-extension-forcing step above is what keeps the bundle valid afterwards.
+**Gate:** frames (`frameUrls.has(url)`) → `compressFrameForPublish`; other rasters → `compressImageForPublish`.
+
+**Frames ARE now compressed at publish** (this REVERSES the old "never compress frames" rule).
+**Why:** heavy interactive sites (20-40MB of full-res frames + uncompressed product PNGs) failed
+to load over throttled Russian foreign-CDN connections — see `russia-cdn-throttling.md`. Compressing
+frames at publish is the one lever that also shrinks ALREADY-published sites on re-publish
+(~236KB/frame → ~70KB). `.gif` is still NEVER compressed (Sharp flattens animation to one frame).
+Because compression can change format (png→webp / png→jpg), the extension-forcing step above keeps
+the bundle valid afterwards.
