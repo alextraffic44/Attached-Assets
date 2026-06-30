@@ -36,12 +36,34 @@ export interface SeoCluster {
   keywords: SeoKeyword[];
 }
 
+// Per-site visual theme — varies the look (palette/fonts/radius/nav) while the
+// HTML/SEO structure stays identical across all generated sites.
+export interface SeoTheme {
+  id: string;
+  name: string;
+  headingFont: string; // Cyrillic-capable Google Font
+  bodyFont: string;    // Cyrillic-capable Google Font
+  accent: string;
+  accent2: string;
+  text: string;
+  text2: string;
+  muted: string;
+  bg: string;
+  bg2: string;
+  bg3: string;
+  border: string;
+  nav: string;
+  radius: string;
+}
+
 export interface SeoConfig {
   niche: string;
   rawKeywords: string[];
   clusters: SeoCluster[];
   siteTitle: string;
   siteDescription: string;
+  projectName?: string;
+  theme?: SeoTheme;
   targetUrl?: string;
   ctaLabel?: string;
   status: "idle" | "analyzing" | "generating" | "done" | "error";

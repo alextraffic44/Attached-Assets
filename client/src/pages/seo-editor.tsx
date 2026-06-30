@@ -36,6 +36,7 @@ export default function SeoEditorPage() {
   const qc = useQueryClient();
 
   const [phase, setPhase]           = useState<Phase>("setup");
+  const [projectName, setProjectName] = useState("");
   const [keywordsText, setKeywordsText] = useState("");
   const [niche, setNiche]           = useState("");
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export default function SeoEditorPage() {
     if (cfg.status === "done" || cfg.pagesGenerated > 0) setPhase("done");
     else if (cfg.clusters?.length > 0) setPhase("structure");
     else setPhase("setup");
+    setProjectName(cfg.projectName || cfg.siteTitle || project?.title || "");
     if (cfg.niche) setNiche(cfg.niche);
     if (cfg.rawKeywords?.length) setKeywordsText(cfg.rawKeywords.join("\n"));
     if (cfg.targetUrl) setTargetUrl(cfg.targetUrl);
@@ -97,6 +99,8 @@ export default function SeoEditorPage() {
 
   /* ── analyze ── */
   async function handleAnalyze() {
+    const name = projectName.trim();
+    if (!name) { toast({ title: "Введите название проекта", variant: "destructive" }); return; }
     const keywords = keywordsText.split(/[\n,]+/).map(k => k.trim()).filter(Boolean);
     if (!keywords.length) { toast({ title: "Введите ключевые слова", variant: "destructive" }); return; }
     if (keywords.length > 1000) { toast({ title: "Максимум 1000 ключей", variant: "destructive" }); return; }
@@ -108,7 +112,7 @@ export default function SeoEditorPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ keywords, niche, targetUrl: targetUrl.trim(), ctaLabel: ctaLabel.trim() }),
+        body: JSON.stringify({ keywords, niche, projectName: name, targetUrl: targetUrl.trim(), ctaLabel: ctaLabel.trim() }),
       });
       if (!res.ok) throw new Error((await res.json()).message);
       await refetch();
@@ -417,9 +421,29 @@ export default function SeoEditorPage() {
 
               <div style={{ marginBottom: 12 }}>
                 <label style={{ fontSize: 11, fontWeight: 600, color: "#666", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
+                  ✦ Название проекта <span style={{ color: "#f87171" }}>*</span>
+                </label>
+                <input
+                  data-testid="input-project-name"
+                  value={projectName}
+                  onChange={e => setProjectName(e.target.value)}
+                  placeholder="напр. НейроСтарт"
+                  maxLength={60}
+                  style={{ width: "100%", padding: "8px 11px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#e2e8f0", fontSize: 13, outline: "none", transition: "border-color 0.15s", boxSizing: "border-box" }}
+                  onFocus={e => (e.target.style.borderColor = "rgba(99,102,241,0.5)")}
+                  onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
+                />
+                <p style={{ fontSize: 10.5, color: "#555", marginTop: 5, lineHeight: 1.5 }}>
+                  Используется как название сайта в шапке, логотипе и подвале.
+                </p>
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#666", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
                   Ниша / тема сайта
                 </label>
                 <input
+                  data-testid="input-niche"
                   value={niche}
                   onChange={e => setNiche(e.target.value)}
                   placeholder="напр. нейросети для бизнеса"
@@ -478,18 +502,19 @@ export default function SeoEditorPage() {
               </div>
 
               <button
+                data-testid="button-analyze"
                 onClick={handleAnalyze}
-                disabled={isAnalyzing || !keywordsText.trim()}
+                disabled={isAnalyzing || !keywordsText.trim() || !projectName.trim()}
                 style={{
                   marginTop: 12, width: "100%", padding: "11px",
-                  background: isAnalyzing || !keywordsText.trim()
+                  background: isAnalyzing || !keywordsText.trim() || !projectName.trim()
                     ? "rgba(255,255,255,0.04)"
                     : "linear-gradient(135deg, #4f46e5, #7c3aed)",
-                  border: isAnalyzing || !keywordsText.trim() ? "1px solid rgba(255,255,255,0.06)" : "none",
-                  borderRadius: 10, color: isAnalyzing || !keywordsText.trim() ? "#555" : "#fff",
-                  fontWeight: 700, fontSize: 13.5, cursor: isAnalyzing || !keywordsText.trim() ? "not-allowed" : "pointer",
+                  border: isAnalyzing || !keywordsText.trim() || !projectName.trim() ? "1px solid rgba(255,255,255,0.06)" : "none",
+                  borderRadius: 10, color: isAnalyzing || !keywordsText.trim() || !projectName.trim() ? "#555" : "#fff",
+                  fontWeight: 700, fontSize: 13.5, cursor: isAnalyzing || !keywordsText.trim() || !projectName.trim() ? "not-allowed" : "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  boxShadow: !isAnalyzing && keywordsText.trim() ? "0 4px 16px rgba(99,102,241,0.4)" : "none",
+                  boxShadow: !isAnalyzing && keywordsText.trim() && projectName.trim() ? "0 4px 16px rgba(99,102,241,0.4)" : "none",
                   transition: "all 0.2s",
                 }}
               >

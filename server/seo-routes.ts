@@ -1,18 +1,17 @@
 import { type Express } from "express";
 import type { IStorage } from "./storage";
 import { deployToNetlify } from "./netlify-deploy";
-import type { SeoConfig, SeoCluster, SeoKeyword } from "@shared/schema";
+import type { SeoConfig, SeoCluster, SeoKeyword, SeoTheme } from "@shared/schema";
 import crypto from "crypto";
 
 const KIE_API_KEY = process.env.KIE_API_KEY || "";
-const KIE_BASE = "https://api.kie.ai/codex/v1";
-const KIE_TASKS_URL = `${KIE_BASE}/tasks`;
 const KIE_GEMINI_MODEL = "gemini-3-5-flash";
 const KIE_GEMINI_URL = `https://api.kie.ai/gemini/v1/models/${KIE_GEMINI_MODEL}:generateContent`;
+// GPT Image-2 job endpoints (same shape used in server/routes.ts for {{GENIMG}})
+const KIE_JOBS_CREATE = "https://api.kie.ai/api/v1/jobs/createTask";
+const KIE_JOBS_STATUS = "https://api.kie.ai/api/v1/jobs/recordInfo";
 
 const SEO_ARTICLE_COST = 70;
-const IMG_PER_ARTICLE = 3;
-const IMG_COST = 10;
 
 function slugify(text: string): string {
   return text
@@ -68,26 +67,32 @@ async function kieSync(messages: { role: string; content: string }[], timeout = 
   }
 }
 
+// One article cover via GPT Image-2 (text-to-image) at 1K, 16:9. Returns the raw
+// KIE CDN URL on success, or null on any failure (caller renders a gradient cover).
 async function generateImage(prompt: string, timeout = 120000): Promise<string | null> {
   if (!KIE_API_KEY) return null;
   try {
-    const createRes = await fetch(KIE_TASKS_URL, {
+    const createRes = await fetch(KIE_JOBS_CREATE, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${KIE_API_KEY}` },
-      body: JSON.stringify({ model: "nano-banana-2", input: { prompt, imageSize: "1536x1024", outputFormat: "jpg" } }),
+      body: JSON.stringify({
+        model: "gpt-image-2-text-to-image",
+        input: { prompt, aspect_ratio: "16:9", resolution: "1K" },
+      }),
     });
     const createData = await createRes.json() as any;
-    const taskId = createData?.data?.taskId;
-    if (!taskId) return null;
+    if (createData?.code !== 200 || !createData?.data?.taskId) return null;
+    const taskId = createData.data.taskId;
 
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
-      await new Promise(r => setTimeout(r, 6000));
-      const pollRes = await fetch(`${KIE_TASKS_URL}?taskId=${taskId}`, {
+      await new Promise(r => setTimeout(r, 5000));
+      const pollRes = await fetch(`${KIE_JOBS_STATUS}?taskId=${taskId}`, {
         headers: { Authorization: `Bearer ${KIE_API_KEY}` },
       });
       const pollData = await pollRes.json() as any;
-      const state = pollData?.data?.state;
+      if (pollData?.code !== 200) continue;
+      const state = pollData.data?.state;
       if (state === "success") {
         let result: any = {};
         try { result = typeof pollData.data.resultJson === "string" ? JSON.parse(pollData.data.resultJson) : (pollData.data.resultJson || {}); } catch {}
@@ -101,14 +106,91 @@ async function generateImage(prompt: string, timeout = 120000): Promise<string |
   }
 }
 
-const SITE_CSS = `/* Craft AI SEO Magazine */
-:root{--brand:#4f46e5;--brand-light:#6366f1;--text:#111827;--text2:#4b5563;--muted:#9ca3af;--bg:#fff;--bg2:#f9fafb;--bg3:#f3f4f6;--border:#e5e7eb;--nav:#0c0c14;--shadow:0 1px 8px rgba(0,0,0,.08);--shadow-lg:0 4px 24px rgba(0,0,0,.14);--r:8px;--w:1200px;--nh:58px}
+// Escape a user/AI-supplied string for safe interpolation into HTML text and
+// attribute contexts (projectName is user-controlled).
+function esc(s: string): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Validate + escape a user-supplied link for use in an href attribute. Only
+// absolute http(s) URLs with no attribute-breaking chars are allowed; anything
+// else (javascript:, data:, relative, malformed) returns "" so no link renders.
+function safeHref(url: string | undefined): string {
+  const u = String(url ?? "").trim();
+  if (!/^https?:\/\/[^\s'"<>`]+$/i.test(u)) return "";
+  return esc(u);
+}
+
+// ── Visual themes ─────────────────────────────────────────────────────────────
+// Each site gets ONE theme (deterministically chosen from the project name +
+// niche, then stored in seoConfig). HTML structure is identical across themes —
+// only palette / fonts / radius vary. All fonts are Cyrillic-capable.
+const THEME_PRESETS: SeoTheme[] = [
+  { id: "indigo", name: "Tech Indigo", headingFont: "Unbounded", bodyFont: "Manrope", accent: "#4f46e5", accent2: "#7c3aed", text: "#111827", text2: "#4b5563", muted: "#9ca3af", bg: "#ffffff", bg2: "#f9fafb", bg3: "#f3f4f6", border: "#e5e7eb", nav: "#0c0c14", radius: "8px" },
+  { id: "editorial", name: "Editorial Serif", headingFont: "Playfair Display", bodyFont: "PT Serif", accent: "#b91c1c", accent2: "#9f1239", text: "#1a1a1a", text2: "#44403c", muted: "#a8a29e", bg: "#fffdf9", bg2: "#faf6ef", bg3: "#f3ede2", border: "#e7e0d3", nav: "#1a1a1a", radius: "2px" },
+  { id: "finance", name: "Finance Blue", headingFont: "Montserrat", bodyFont: "Inter", accent: "#0369a1", accent2: "#0891b2", text: "#0f172a", text2: "#475569", muted: "#94a3b8", bg: "#ffffff", bg2: "#f8fafc", bg3: "#f1f5f9", border: "#e2e8f0", nav: "#0f172a", radius: "6px" },
+  { id: "wellness", name: "Wellness Green", headingFont: "Unbounded", bodyFont: "Golos Text", accent: "#059669", accent2: "#16a34a", text: "#14201a", text2: "#3f4d45", muted: "#9ca3af", bg: "#ffffff", bg2: "#f4fbf6", bg3: "#eaf6ee", border: "#d7ebdd", nav: "#0c1a14", radius: "14px" },
+  { id: "luxury", name: "Luxury Amber", headingFont: "Playfair Display", bodyFont: "Montserrat", accent: "#b45309", accent2: "#d97706", text: "#1c1917", text2: "#44403c", muted: "#a8a29e", bg: "#ffffff", bg2: "#fafaf9", bg3: "#f5f5f4", border: "#e7e5e4", nav: "#0a0a0a", radius: "4px" },
+  { id: "vibrant", name: "Vibrant Magenta", headingFont: "Unbounded", bodyFont: "Manrope", accent: "#db2777", accent2: "#7c3aed", text: "#18181b", text2: "#52525b", muted: "#a1a1aa", bg: "#ffffff", bg2: "#fafafa", bg3: "#f4f4f5", border: "#e4e4e7", nav: "#14101c", radius: "12px" },
+  { id: "teal", name: "Calm Teal", headingFont: "Montserrat", bodyFont: "Inter", accent: "#0d9488", accent2: "#0891b2", text: "#0f1f1d", text2: "#475569", muted: "#94a3b8", bg: "#ffffff", bg2: "#f5fbfa", bg3: "#ecf6f5", border: "#dcebe9", nav: "#0f2724", radius: "10px" },
+  { id: "sunset", name: "Sunset Orange", headingFont: "Rubik", bodyFont: "Golos Text", accent: "#ea580c", accent2: "#db2777", text: "#1c1410", text2: "#57534e", muted: "#a8a29e", bg: "#ffffff", bg2: "#fdf8f5", bg3: "#f9efe9", border: "#eee0d6", nav: "#1c1410", radius: "16px" },
+];
+
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+  return Math.abs(h);
+}
+
+// Deterministic per-project theme: same name+niche always yields the same theme,
+// different projects spread across the presets.
+function selectTheme(name: string, niche: string): SeoTheme {
+  const idx = hashStr(`${name}|${niche}`) % THEME_PRESETS.length;
+  return THEME_PRESETS[idx];
+}
+
+// Theme to use for a config — stored theme if present, else a deterministic pick
+// (keeps sites created before theming was added working).
+function themeOf(cfg: SeoConfig): SeoTheme {
+  return cfg.theme || selectTheme(cfg.projectName || cfg.siteTitle || "", cfg.niche || "");
+}
+
+// Google Fonts @import for the theme's heading + body fonts (MUST be the first
+// rule in the stylesheet).
+function fontsImport(t: SeoTheme): string {
+  const fam = (name: string, w: string) => `family=${name.replace(/ /g, "+")}:wght@${w}`;
+  if (t.headingFont === t.bodyFont) {
+    return `@import url('https://fonts.googleapis.com/css2?${fam(t.headingFont, "400;500;600;700;800;900")}&display=swap');`;
+  }
+  return `@import url('https://fonts.googleapis.com/css2?${fam(t.headingFont, "400;600;700;800;900")}&${fam(t.bodyFont, "400;500;600;700")}&display=swap');`;
+}
+
+// Inline SVG logo mark (gradient rounded square + project initial). idSuffix keeps
+// the gradient id unique when the mark appears twice on one page (nav + footer).
+function logoMark(t: SeoTheme, name: string, idSuffix: string): string {
+  const first = esc((name.trim()[0] || "S").toUpperCase());
+  const gid = `lgm-${idSuffix}`;
+  return `<svg class="logo-mark" width="30" height="30" viewBox="0 0 36 36" aria-hidden="true" focusable="false"><defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${t.accent}"/><stop offset="1" stop-color="${t.accent2}"/></linearGradient></defs><rect width="36" height="36" rx="8" fill="url(#${gid})"/><text x="18" y="24.5" text-anchor="middle" font-family="${esc(t.headingFont)},sans-serif" font-size="19" font-weight="800" fill="#ffffff">${first}</text></svg>`;
+}
+
+function buildSiteCss(t: SeoTheme): string {
+  return `${fontsImport(t)}
+/* Craft AI SEO Magazine — theme: ${t.id} */
+:root{--brand:${t.accent};--brand-light:${t.accent2};--text:${t.text};--text2:${t.text2};--muted:${t.muted};--bg:${t.bg};--bg2:${t.bg2};--bg3:${t.bg3};--border:${t.border};--nav:${t.nav};--heading-font:'${t.headingFont}';--body-font:'${t.bodyFont}';--shadow:0 1px 8px rgba(0,0,0,.08);--shadow-lg:0 4px 24px rgba(0,0,0,.14);--r:${t.radius};--w:1200px;--nh:58px}
 *{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.7}
+body{font-family:var(--body-font),-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.7}
+.nav-logo .logo-text,.hero-title,.section-title,.ac-title,.cat-card h2,.cat-header h1,.article-header h1,.article-body h2,.article-body h3,.footer-logo .logo-text,.faq-section>h2,.related-articles>h2,.cta-hero-text h2,.cta-block .cta-text strong,.key-takeaways h3,.pull-quote,.stat-card .stat-num{font-family:var(--heading-font),-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
 a{color:inherit;text-decoration:none}img{max-width:100%;height:auto;display:block}
 nav{background:var(--nav);height:var(--nh);position:sticky;top:0;z-index:100;box-shadow:0 2px 20px rgba(0,0,0,.4)}
 .nav-inner{max-width:var(--w);margin:0 auto;padding:0 1.5rem;display:flex;align-items:center;gap:1rem;height:100%}
-.nav-logo{font-weight:900;font-size:1.1rem;color:#fff;letter-spacing:-.03em;flex-shrink:0}
+.nav-logo{display:flex;align-items:center;gap:.5rem;color:#fff;flex-shrink:0}
+.nav-logo .logo-mark{flex-shrink:0;display:block}
+.nav-logo .logo-text{font-weight:900;font-size:1.1rem;color:#fff;letter-spacing:-.03em}
 .nav-links{display:flex;gap:.2rem;margin-left:auto;flex-wrap:wrap}
 .nav-links a{font-size:.8rem;color:rgba(255,255,255,.65);font-weight:500;padding:.35rem .65rem;border-radius:6px;transition:.15s;white-space:nowrap}
 .nav-links a:hover{color:#fff;background:rgba(255,255,255,.1)}
@@ -136,7 +218,7 @@ nav{background:var(--nav);height:var(--nh);position:sticky;top:0;z-index:100;box
 .hot-inner::-webkit-scrollbar{display:none}
 .hot-label{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--brand);white-space:nowrap;flex-shrink:0}
 .hot-chip{white-space:nowrap;font-size:.76rem;padding:.22rem .62rem;border-radius:20px;border:1px solid var(--border);color:var(--text2);font-weight:500;flex-shrink:0;transition:.15s;display:block}
-.hot-chip:hover{border-color:var(--brand);color:var(--brand);background:#f0f0ff}
+.hot-chip:hover{border-color:var(--brand);color:var(--brand);background:color-mix(in srgb,var(--brand) 9%,#fff)}
 /* ── AD SLOTS ── */
 .ad-slot{background:var(--bg2);border:1px dashed #d1d5db;border-radius:var(--r);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;min-height:90px}
 .ad-slot::before{content:'Реклама';position:absolute;top:4px;right:6px;font-size:.6rem;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
@@ -170,7 +252,7 @@ nav{background:var(--nav);height:var(--nh);position:sticky;top:0;z-index:100;box
 .cat-card p{font-size:.8rem;color:var(--text2);line-height:1.5}
 .cat-card .cc-count{margin-top:.5rem;font-size:.72rem;color:var(--brand);font-weight:600}
 /* ── CATEGORY PAGE HEADER ── */
-.cat-header{padding:2.25rem 0;margin-bottom:1.75rem;background:linear-gradient(135deg,var(--brand),#7c3aed)}
+.cat-header{padding:2.25rem 0;margin-bottom:1.75rem;background:linear-gradient(135deg,var(--brand),var(--brand-light))}
 .cat-header .container{color:#fff}
 .cat-header h1{font-size:clamp(1.5rem,3.5vw,2.1rem);font-weight:900;letter-spacing:-.04em;margin-bottom:.4rem}
 .cat-header p{opacity:.85;font-size:.95rem;max-width:540px}
@@ -183,16 +265,39 @@ nav{background:var(--nav);height:var(--nh);position:sticky;top:0;z-index:100;box
 .article-meta{font-size:.76rem;color:var(--muted);display:flex;gap:.875rem;align-items:center;flex-wrap:wrap;margin-bottom:1.5rem}
 .article-meta .tag{background:var(--brand);color:#fff;border-radius:3px;padding:.18rem .5rem;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 .hero-article-img{width:100%;border-radius:var(--r);margin-bottom:1.75rem;max-height:420px;object-fit:cover}
+.hero-cover-fallback{width:100%;height:340px;border-radius:var(--r);margin-bottom:1.75rem;position:relative;overflow:hidden;background-size:cover;background-position:center}
+.hero-cover-fallback::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 78% 22%,rgba(255,255,255,.28),transparent 42%),linear-gradient(120deg,rgba(255,255,255,.06),rgba(0,0,0,.18))}
 .article-body{font-size:1.025rem;line-height:1.85}
-.article-body h2{font-size:1.25rem;font-weight:800;letter-spacing:-.025em;margin:2.25rem 0 .875rem;padding-top:.4rem;border-top:1px solid var(--border);line-height:1.25}
+.article-body h2{position:relative;font-size:1.25rem;font-weight:800;letter-spacing:-.025em;margin:2.25rem 0 .875rem;padding-top:.4rem;border-top:1px solid var(--border);line-height:1.25}
+.article-body h2::after{content:'';display:block;width:48px;height:3px;margin-top:.5rem;border-radius:2px;background:linear-gradient(90deg,var(--brand),var(--brand-light));animation:h2bar 1s ease both}
 .article-body h3{font-size:1.025rem;font-weight:700;margin:1.75rem 0 .6rem}
 .article-body p{margin-bottom:1.2rem;color:var(--text2)}
+.article-body .lead{font-size:1.16rem;line-height:1.7;color:var(--text);font-weight:500}
+.article-body .lead::first-letter{float:left;font-family:var(--heading-font);font-size:3.3rem;line-height:.78;font-weight:800;color:var(--brand);margin:.12rem .6rem 0 0}
 .article-body ul,.article-body ol{margin:1rem 0 1.4rem 1.5rem;color:var(--text2)}
 .article-body li{margin-bottom:.4rem}
 .article-body strong{color:var(--text);font-weight:600}
 .article-body blockquote{border-left:4px solid var(--brand);padding:.875rem 1.4rem;background:var(--bg2);border-radius:0 8px 8px 0;margin:1.75rem 0;font-style:italic;color:var(--text2)}
 .article-img{width:100%;border-radius:var(--r);margin:1.75rem 0;max-height:400px;object-fit:cover;box-shadow:var(--shadow)}
 .reading-time{font-size:.7rem;color:var(--muted)}
+/* ── PREMIUM MAGAZINE ELEMENTS ── */
+.article-flourish{display:flex;justify-content:center;margin:1.4rem 0 2rem}
+.article-flourish svg{width:min(260px,62%);height:auto;overflow:visible}
+.af-line{fill:none;stroke:var(--brand);stroke-width:2;stroke-linecap:round;stroke-dasharray:240;stroke-dashoffset:240;animation:af-draw 1.8s ease forwards}
+.af-dot{fill:var(--brand-light);animation:af-move 3.4s ease-in-out infinite}
+.pull-quote{position:relative;font-size:1.35rem;line-height:1.5;font-weight:700;color:var(--text);margin:2rem 0;padding:.4rem 0 .4rem 1.6rem;border-left:4px solid var(--brand);font-style:normal}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin:1.75rem 0}
+.stat-card{background:color-mix(in srgb,var(--brand) 6%,#fff);border:1px solid color-mix(in srgb,var(--brand) 18%,#fff);border-radius:var(--r);padding:1.1rem 1rem;text-align:center;animation:sa-rise .6s ease both}
+.stat-card .stat-num{font-size:1.9rem;font-weight:900;color:var(--brand);line-height:1;letter-spacing:-.02em}
+.stat-card .stat-label{font-size:.76rem;color:var(--text2);margin-top:.4rem;line-height:1.4}
+.callout{display:flex;gap:.9rem;align-items:flex-start;background:color-mix(in srgb,var(--brand) 6%,#fff);border:1px solid color-mix(in srgb,var(--brand) 20%,#fff);border-left:4px solid var(--brand);border-radius:var(--r);padding:1rem 1.2rem;margin:1.5rem 0}
+.callout .callout-ico{font-size:1.3rem;flex-shrink:0;line-height:1.4}
+.callout .callout-body{font-size:.92rem;color:var(--text2);line-height:1.6}
+.callout .callout-body strong{color:var(--text)}
+@keyframes af-draw{to{stroke-dashoffset:0}}
+@keyframes af-move{0%,100%{transform:translateX(0)}50%{transform:translateX(150px)}}
+@keyframes h2bar{from{width:0;opacity:0}to{width:48px;opacity:1}}
+@keyframes sa-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 /* ── SIDEBAR ── */
 .sidebar{position:sticky;top:calc(var(--nh) + 1rem)}
 .sb-block{margin-bottom:1.5rem;border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
@@ -221,14 +326,15 @@ nav{background:var(--nav);height:var(--nh);position:sticky;top:0;z-index:100;box
 /* ── FOOTER ── */
 footer{background:var(--nav);color:rgba(255,255,255,.65);padding:2.5rem 1.5rem;margin-top:4rem}
 .footer-inner{max-width:var(--w);margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr;gap:2rem}
-.footer-logo{font-weight:900;font-size:.975rem;color:#fff;margin-bottom:.35rem;letter-spacing:-.02em}
+.footer-logo{display:flex;align-items:center;gap:.5rem;margin-bottom:.55rem}
+.footer-logo .logo-text{font-weight:900;font-size:.975rem;color:#fff;letter-spacing:-.02em}
 .footer-desc{font-size:.76rem;opacity:.5;line-height:1.6}
 .footer-col h4{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.35);margin-bottom:.75rem}
 .footer-col ul{list-style:none}.footer-col li{margin-bottom:.35rem}
 .footer-col a{font-size:.78rem;color:rgba(255,255,255,.5)}.footer-col a:hover{color:#fff}
 .footer-bottom{max-width:var(--w);margin:1.5rem auto 0;padding-top:1.1rem;border-top:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;font-size:.7rem;color:rgba(255,255,255,.28);flex-wrap:wrap;gap:.4rem}
 /* ── SEO CONTENT ELEMENTS ── */
-.key-takeaways{background:#eff0ff;border-left:4px solid var(--brand);border-radius:0 8px 8px 0;padding:1.1rem 1.4rem;margin:1.5rem 0}
+.key-takeaways{background:color-mix(in srgb,var(--brand) 7%,#fff);border-left:4px solid var(--brand);border-radius:0 8px 8px 0;padding:1.1rem 1.4rem;margin:1.5rem 0}
 .key-takeaways h3{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--brand);margin-bottom:.65rem}
 .key-takeaways ul{margin:0;padding-left:1.1rem;color:var(--text2)}.key-takeaways li{margin-bottom:.3rem;font-size:.9rem}
 .toc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:1rem 1.25rem;margin:1.5rem 0}
@@ -249,28 +355,29 @@ footer{background:var(--nav);color:rgba(255,255,255,.65);padding:2.5rem 1.5rem;m
 .pros-cons .pros h4{color:#059669}.pros-cons .cons h4{color:#dc2626}
 .pros-cons ul{margin:0;padding-left:1rem;font-size:.84rem;color:var(--text2)}.pros-cons li{margin-bottom:.28rem}
 .author-box{display:flex;gap:.875rem;align-items:center;margin:2.25rem 0 1.5rem;padding:1rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)}
-.author-avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--brand),#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.95rem;flex-shrink:0}
+.author-avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--brand-light));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.95rem;flex-shrink:0}
 .author-info .author-name{font-weight:700;font-size:.84rem;color:var(--text)}
 .author-info .author-bio{font-size:.73rem;color:var(--muted);line-height:1.5;margin-top:.1rem}
 .verdict-box{background:#f0fdf4;border-left:4px solid #22c55e;border-radius:0 8px 8px 0;padding:1rem 1.4rem;margin:1.5rem 0}
 .verdict-box h3{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#16a34a;margin-bottom:.45rem}
 .verdict-box p{color:var(--text2);margin:0;font-size:.9rem}
-.highlight-box{background:linear-gradient(135deg,#f5f3ff,#eef2ff);border:1px solid #c7d2fe;border-radius:var(--r);padding:1.1rem 1.4rem;margin:1.5rem 0}
+.highlight-box{background:linear-gradient(135deg,color-mix(in srgb,var(--brand) 8%,#fff),color-mix(in srgb,var(--brand-light) 10%,#fff));border:1px solid color-mix(in srgb,var(--brand) 22%,#fff);border-radius:var(--r);padding:1.1rem 1.4rem;margin:1.5rem 0}
 @media(max-width:1024px){.article-layout{grid-template-columns:1fr}.sidebar{position:static}.articles-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:768px){.hero-grid{grid-template-columns:1fr}.hero-side{display:none}.footer-inner{grid-template-columns:1fr 1fr}.articles-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.articles-grid{grid-template-columns:1fr}.footer-inner{grid-template-columns:1fr}.nav-links{display:none}.pros-cons{grid-template-columns:1fr}.step-box{flex-direction:column;gap:.6rem}.comparison-table{font-size:.75rem}}
 /* ── CTA BLOCK ── */
-.cta-block{background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);border-radius:12px;padding:1.4rem 1.75rem;margin:2rem 0;display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;box-shadow:0 4px 24px rgba(79,70,229,.3)}
+.cta-block{background:linear-gradient(135deg,var(--brand) 0%,var(--brand-light) 100%);border-radius:12px;padding:1.4rem 1.75rem;margin:2rem 0;display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;box-shadow:0 4px 24px rgba(0,0,0,.18)}
 .cta-block .cta-icon{font-size:2rem;flex-shrink:0}
 .cta-block .cta-text{flex:1;min-width:180px}
 .cta-block .cta-text strong{display:block;color:#fff;font-size:1rem;font-weight:800;margin-bottom:.2rem}
 .cta-block .cta-text span{color:rgba(255,255,255,.78);font-size:.84rem;line-height:1.45}
-.cta-btn{display:inline-flex;align-items:center;gap:.4rem;background:#fff;color:#4f46e5;font-weight:800;font-size:.875rem;padding:.6rem 1.25rem;border-radius:8px;white-space:nowrap;transition:.18s;text-decoration:none;flex-shrink:0}
-.cta-btn:hover{background:#ede9fe;transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,0,0,.25)}
-.cta-hero{background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:1.75rem;border-radius:12px;margin:1.5rem 0;display:flex;align-items:center;justify-content:space-between;gap:1.5rem;flex-wrap:wrap}
+.cta-btn{display:inline-flex;align-items:center;gap:.4rem;background:#fff;color:var(--brand);font-weight:800;font-size:.875rem;padding:.6rem 1.25rem;border-radius:8px;white-space:nowrap;transition:.18s;text-decoration:none;flex-shrink:0}
+.cta-btn:hover{background:color-mix(in srgb,var(--brand) 12%,#fff);transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,0,0,.25)}
+.cta-hero{background:linear-gradient(135deg,var(--brand),var(--brand-light));padding:1.75rem;border-radius:12px;margin:1.5rem 0;display:flex;align-items:center;justify-content:space-between;gap:1.5rem;flex-wrap:wrap}
 .cta-hero-text h2{color:#fff;font-size:1.2rem;font-weight:800;margin-bottom:.3rem}
 .cta-hero-text p{color:rgba(255,255,255,.78);font-size:.875rem}
 `;
+}
 
 const CARD_GRADS = [
   "linear-gradient(135deg,#4f46e5,#7c3aed)",
@@ -282,27 +389,31 @@ const CARD_GRADS = [
   "linear-gradient(135deg,#0e7490,#0891b2)",
 ];
 
-function buildNav(siteTitle: string, clusters: SeoCluster[], rootPath = "/"): string {
-  const links = clusters.slice(0, 7).map(c =>
-    `<a href="/${c.slug}/">${c.name}</a>`
+function buildNav(cfg: SeoConfig, rootPath = "/"): string {
+  const name = cfg.siteTitle || cfg.projectName || "Site";
+  const t = themeOf(cfg);
+  const links = cfg.clusters.slice(0, 7).map(c =>
+    `<a href="/${c.slug}/">${esc(c.name)}</a>`
   ).join("");
   return `<nav>
   <div class="nav-inner">
-    <a href="${rootPath}" class="nav-logo">${siteTitle}</a>
+    <a href="${rootPath}" class="nav-logo" aria-label="${esc(name)}">${logoMark(t, name, "nav")}<span class="logo-text">${esc(name)}</span></a>
     <div class="nav-links">${links}</div>
   </div>
 </nav>`;
 }
 
-function buildFooter(siteTitle: string, siteDescription: string, clusters: SeoCluster[]): string {
-  const catLinks = clusters.slice(0, 6).map(c =>
-    `<li><a href="/${c.slug}/">${c.name}</a></li>`
+function buildFooter(cfg: SeoConfig): string {
+  const name = cfg.siteTitle || cfg.projectName || "Site";
+  const t = themeOf(cfg);
+  const catLinks = cfg.clusters.slice(0, 6).map(c =>
+    `<li><a href="/${c.slug}/">${esc(c.name)}</a></li>`
   ).join("\n");
   return `<footer>
   <div class="footer-inner">
     <div>
-      <div class="footer-logo">${siteTitle}</div>
-      <p class="footer-desc">${siteDescription}</p>
+      <div class="footer-logo">${logoMark(t, name, "foot")}<span class="logo-text">${esc(name)}</span></div>
+      <p class="footer-desc">${esc(cfg.siteDescription)}</p>
     </div>
     <div class="footer-col">
       <h4>Разделы</h4>
@@ -317,7 +428,7 @@ function buildFooter(siteTitle: string, siteDescription: string, clusters: SeoCl
     </div>
   </div>
   <div class="footer-bottom">
-    <span>© ${new Date().getFullYear()} ${siteTitle}. Все права защищены.</span>
+    <span>© ${new Date().getFullYear()} ${esc(name)}. Все права защищены.</span>
     <span>Создано с Craft AI</span>
   </div>
 </footer>`;
@@ -345,8 +456,10 @@ function cardBg(image: string | undefined, gradIdx: number): string {
 }
 
 function buildHomePage(cfg: SeoConfig): string {
-  const nav = buildNav(cfg.siteTitle, cfg.clusters);
-  const footer = buildFooter(cfg.siteTitle, cfg.siteDescription, cfg.clusters);
+  const nav = buildNav(cfg);
+  const footer = buildFooter(cfg);
+  const safeUrl = safeHref(cfg.targetUrl);
+  const ctaLabelSafe = esc(cfg.ctaLabel || "Попробовать →");
 
   // Collect all done articles
   const allDone: Array<{ kw: SeoKeyword; cluster: SeoCluster; idx: number }> = [];
@@ -462,13 +575,13 @@ ${recentCards ? `<div class="container">
     ${recentCards}
   </div>
 </div>` : ""}
-${cfg.targetUrl ? `<div class="container">
+${safeUrl ? `<div class="container">
   <div class="cta-hero">
     <div class="cta-hero-text">
-      <h2>${cfg.siteTitle} — попробуйте прямо сейчас</h2>
-      <p>${cfg.siteDescription}</p>
+      <h2>${esc(cfg.siteTitle)} — попробуйте прямо сейчас</h2>
+      <p>${esc(cfg.siteDescription)}</p>
     </div>
-    <a href="${cfg.targetUrl}" class="cta-btn" target="_blank" rel="noopener sponsored">${cfg.ctaLabel || "Попробовать →"}</a>
+    <a href="${safeUrl}" class="cta-btn" target="_blank" rel="noopener sponsored">${ctaLabelSafe}</a>
   </div>
 </div>` : ""}
 <div class="container">
@@ -485,8 +598,8 @@ ${footer}
 }
 
 function buildCategoryPage(cluster: SeoCluster, cfg: SeoConfig): string {
-  const nav = buildNav(cfg.siteTitle, cfg.clusters);
-  const footer = buildFooter(cfg.siteTitle, cfg.siteDescription, cfg.clusters);
+  const nav = buildNav(cfg);
+  const footer = buildFooter(cfg);
   const done = cluster.keywords.filter(k => k.status === "done");
 
   const cards = done.map((k, i) => `<a href="/${cluster.slug}/${k.slug}/" class="article-card">
@@ -552,8 +665,8 @@ ${footer}
 }
 
 function buildFallbackArticle(kw: SeoKeyword, cluster: SeoCluster, cfg: SeoConfig): string {
-  const nav = buildNav(cfg.siteTitle, cfg.clusters);
-  const footer = buildFooter(cfg.siteTitle, cfg.siteDescription, cfg.clusters);
+  const nav = buildNav(cfg);
+  const footer = buildFooter(cfg);
   const adUnit = cfg.adUnitCode || `<div style="color:#9ca3af;font-size:.72rem;display:flex;align-items:center;justify-content:center;width:100%;height:100%">Рекламный блок 300×250</div>`;
   const adHeadCode = cfg.adHeadCode || "";
 
@@ -691,7 +804,8 @@ async function generateArticleHtml(
   cluster: SeoCluster,
   cfg: SeoConfig,
   allClusters: SeoCluster[],
-  images: string[],
+  cover: string,
+  idx: number,
 ): Promise<string> {
   // ── Build sidebar in TypeScript (reliable, consistent) ──
   const sidebarLinks = cluster.keywords
@@ -732,22 +846,24 @@ async function generateArticleHtml(
   const contentTypeBlock = getContentTypeInstructions(kw.contentType, kw.keyQuestions);
   const today = new Date().toLocaleDateString("ru-RU");
 
-  const ctaHtml = cfg.targetUrl ? `<div class="cta-block">
+  const safeUrl = safeHref(cfg.targetUrl);
+  const ctaLabelSafe = esc(cfg.ctaLabel || "Попробовать →");
+  const ctaHtml = safeUrl ? `<div class="cta-block">
   <div class="cta-icon">🚀</div>
   <div class="cta-text">
     <strong>[Write a compelling 8-12 word hook about ${cfg.siteTitle} related to "${kw.keyword}"]</strong>
     <span>[One sentence: what the user gets by clicking — make it relevant to the article topic]</span>
   </div>
-  <a href="${cfg.targetUrl}" class="cta-btn" target="_blank" rel="noopener sponsored">${cfg.ctaLabel || "Попробовать →"}</a>
+  <a href="${safeUrl}" class="cta-btn" target="_blank" rel="noopener sponsored">${ctaLabelSafe}</a>
 </div>` : "";
 
-  const prompt = `You are a world-class SEO content writer. Write ONLY the inner article HTML fragment — NO <!DOCTYPE>, NO <html>, NO <head>, NO <nav>, NO <footer>, NO <body>.
+  const prompt = `You are a world-class editorial designer + SEO writer creating a PREMIUM WEB MAGAZINE article. Write ONLY the inner article HTML fragment — NO <!DOCTYPE>, NO <html>, NO <head>, NO <nav>, NO <footer>, NO <body>.
 
 KEYWORD: "${kw.keyword}"
 TITLE (H1): "${kw.title}"
 CATEGORY: "${cluster.name}"
 SITE: "${cfg.siteTitle}" — ${cfg.siteDescription}
-${cfg.targetUrl ? `TARGET URL: ${cfg.targetUrl} | CTA BUTTON TEXT: "${cfg.ctaLabel || "Попробовать →"}"` : ""}
+${safeUrl ? `TARGET URL: ${safeUrl} | CTA BUTTON TEXT: "${cfg.ctaLabel || "Попробовать →"}"` : ""}
 
 ${contentTypeBlock}
 
@@ -756,14 +872,25 @@ CONTENT QUALITY (write in the same language as the keyword):
 - Hook from sentence one: surprising fact, bold statement, or relatable problem
 - Real statistics, concrete examples, named tools/brands where relevant
 - Write with authority and warmth — expert talking to a smart friend
-- Exactly 3 images: <img src="IMG_PLACEHOLDER_1" alt="[vivid, keyword-rich description]" class="article-img" loading="lazy"> (also IMG_PLACEHOLDER_2 and IMG_PLACEHOLDER_3 placed naturally in article body)
 - 5 FAQ pairs in collapsible structure
+
+VISUAL RHYTHM — THIS IS A MAGAZINE, NOT A WALL OF TEXT (CRITICAL):
+- The VERY FIRST paragraph MUST be <p class="lead">…</p> (a bold, larger intro paragraph with a drop-cap).
+- Break up the text. After every 2-3 paragraphs, insert ONE rich visual element. Choose from:
+  • Pull quote: <blockquote class="pull-quote">Memorable insight in 10-18 words.</blockquote>
+  • Callout box: <div class="callout"><div class="callout-title">💡 Совет</div><p>Actionable tip.</p></div> (also use ⚠️ Важно / 📌 Запомните variants)
+  • Stat grid (2-4 cards of real numbers): <div class="stat-grid"><div class="stat-card"><div class="stat-num">73%</div><div class="stat-label">short description</div></div>…</div>
+  • Inline SVG illustration for a concept — small, decorative, theme-neutral strokes using currentColor, e.g.:
+    <figure class="article-svg"><svg viewBox="0 0 320 160" role="img" aria-label="[what it shows]"><!-- simple geometric/line illustration, stroke="currentColor" fill="none" or subtle fills --></svg><figcaption>[1-line caption]</figcaption></figure>
+- Use these elements at least 4 times total across the article (mix of types). Never put two of the same type back-to-back.
+- DO NOT output any <img> tags. The hero cover image is added automatically — never write <img>, never reference IMG_PLACEHOLDER.
+- 5-6 H2 sections; vary paragraph length; use <ul>/<ol> and <table> where they genuinely help.
 
 INTERNAL LINKS (use naturally in body text):
 ${relatedLinks || "(none yet)"}
 ${ctaHtml ? `
 CTA BLOCK — insert this EXACTLY TWICE:
-  1) Right after the opening paragraph (before first H2)
+  1) Right after the opening lead paragraph (before first H2)
   2) Right before the [author-box]
 Use this exact HTML (fill in the bracketed placeholders with compelling copy):
 ${ctaHtml}` : ""}
@@ -777,13 +904,13 @@ OUTPUT EXACTLY THIS STRUCTURE (no outer wrappers, no page-level tags):
     <span>Обновлено: ${today}</span>
   </div>
 </div>
-<img src="IMG_PLACEHOLDER_1" alt="[hero description]" class="hero-article-img" loading="lazy">
+{{COVER}}
 [key-takeaways box if applicable]
 [toc if guide/tutorial/listicle]
 <div class="article-body">
-  [opening paragraph]
+  <p class="lead">[opening lead paragraph — bold, sets the stakes]</p>
   ${ctaHtml ? "[CTA BLOCK #1 — see above]" : ""}
-  [h2 sections with full content; IMG_PLACEHOLDER_2 and IMG_PLACEHOLDER_3 placed naturally; internal links where relevant]
+  [h2 sections with full content; rich visual elements (pull-quote / callout / stat-grid / inline SVG) interleaved every 2-3 paragraphs; internal links where relevant]
   ${ctaHtml ? "[CTA BLOCK #2 — see above]" : ""}
 </div>
 [author-box]
@@ -798,7 +925,7 @@ OUTPUT EXACTLY THIS STRUCTURE (no outer wrappers, no page-level tags):
   </div>
 </div>
 
-Output ONLY the HTML fragment above — no markdown, no explanations, no page-level tags.`;
+Output ONLY the HTML fragment above — no markdown, no explanations, no page-level tags. Keep the literal text {{COVER}} exactly where shown — it will be replaced automatically.`;
 
   let articleContent = "";
   try {
@@ -814,12 +941,26 @@ Output ONLY the HTML fragment above — no markdown, no explanations, no page-le
     return "";
   }
 
-  // Replace image placeholders with real URLs
-  if (images[0]) articleContent = articleContent.replace(/IMG_PLACEHOLDER_1/g, images[0]);
-  if (images[1]) articleContent = articleContent.replace(/IMG_PLACEHOLDER_2/g, images[1]);
-  if (images[2]) articleContent = articleContent.replace(/IMG_PLACEHOLDER_3/g, images[2] || images[0]);
-  // Fallback for any remaining placeholders
-  articleContent = articleContent.replace(/IMG_PLACEHOLDER_\d+/g, "https://placehold.co/800x450/e5e7eb/6b7280?text=Image");
+  // ── Cover image block (one per article, GPT-image-2 1K) with graceful fallback ──
+  const coverUrl = cssUrl(cover);
+  const coverImg = coverUrl
+    ? `<img class="hero-article-img" src="${coverUrl}" alt="${esc(kw.title)}" loading="lazy">`
+    : `<div class="hero-cover-fallback" style="background:${CARD_GRADS[idx % CARD_GRADS.length]}"><span>${esc(cluster.name)}</span></div>`;
+  const flourish = `<div class="article-flourish" aria-hidden="true"><svg viewBox="0 0 200 16"><path class="af-line" d="M2 8 C 50 2,80 14,110 8 S 170 2,198 8"/><circle class="af-dot" cx="2" cy="8" r="4"/></svg></div>`;
+  const coverBlock = `${coverImg}\n${flourish}`;
+  // Strip any stray <img> the model may have emitted despite instructions
+  articleContent = articleContent.replace(/<img\b[^>]*>/gi, "");
+  if (articleContent.includes("{{COVER}}")) {
+    articleContent = articleContent.replace(/\{\{COVER\}\}/g, coverBlock);
+  } else {
+    // No marker — inject cover right before the article body (robust), else prepend
+    const bodyIdx = articleContent.search(/<div\s+class="article-body"/i);
+    if (bodyIdx !== -1) {
+      articleContent = articleContent.slice(0, bodyIdx) + coverBlock + "\n" + articleContent.slice(bodyIdx);
+    } else {
+      articleContent = coverBlock + "\n" + articleContent;
+    }
+  }
 
   // ── Schema.org ──
   const schema = JSON.stringify({
@@ -840,8 +981,8 @@ Output ONLY the HTML fragment above — no markdown, no explanations, no page-le
     },
   });
 
-  const nav = buildNav(cfg.siteTitle, cfg.clusters);
-  const footer = buildFooter(cfg.siteTitle, cfg.siteDescription, cfg.clusters);
+  const nav = buildNav(cfg);
+  const footer = buildFooter(cfg);
   const adHeadCode = cfg.adHeadCode || "";
 
   return `<!DOCTYPE html>
@@ -950,14 +1091,24 @@ export function registerSeoRoutes(app: Express, storage: IStorage) {
     const proj = await storage.getProject(parseInt(req.params.id));
     if (!proj || proj.userId !== userId) return res.status(404).json({ message: "Not found" });
 
-    const { keywords, niche, targetUrl, ctaLabel } = req.body as { keywords: string[]; niche?: string; targetUrl?: string; ctaLabel?: string };
+    const { keywords, niche, targetUrl, ctaLabel, projectName } = req.body as { keywords: string[]; niche?: string; targetUrl?: string; ctaLabel?: string; projectName?: string };
     if (!keywords || keywords.length === 0) return res.status(400).json({ message: "keywords required" });
 
     const limited = keywords.slice(0, 1000).map(k => k.trim()).filter(Boolean);
     const siteNiche = niche || (proj.seoConfig?.niche) || proj.title;
 
+    // Sanitize project name — used verbatim across the site (logo + nav + footer + titles)
+    const cleanName = String(projectName || "")
+      .replace(/[<>"'`]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 60);
+    const prevCfg = (proj.seoConfig as SeoConfig) || ({} as SeoConfig);
+    const siteName = cleanName || prevCfg.projectName || "";
+    if (!siteName) return res.status(400).json({ message: "Введите название проекта" });
+
     await storage.updateProject(proj.id, {
-      seoConfig: { ...(proj.seoConfig as SeoConfig), status: "analyzing", rawKeywords: limited, niche: siteNiche },
+      seoConfig: { ...prevCfg, status: "analyzing", rawKeywords: limited, niche: siteNiche, projectName: siteName },
     } as any);
 
     try {
@@ -1033,20 +1184,25 @@ Respond with ONLY valid JSON, no explanation:
       }));
 
       const totalPages = clusters.reduce((s, c) => s + c.keywords.length, 0);
+      // Project name is authoritative — used verbatim as siteTitle across the whole site.
+      const finalName = siteName || parsed.siteTitle || proj.title;
+      const theme = selectTheme(finalName, siteNiche);
       const updatedConfig: SeoConfig = {
         niche: siteNiche,
         rawKeywords: limited,
         clusters,
-        siteTitle: parsed.siteTitle || proj.title,
+        projectName: finalName,
+        siteTitle: finalName,
         siteDescription: parsed.siteDescription || siteNiche,
-        targetUrl: targetUrl || (proj.seoConfig as SeoConfig)?.targetUrl || "",
-        ctaLabel: ctaLabel || (proj.seoConfig as SeoConfig)?.ctaLabel || "Попробовать →",
+        targetUrl: targetUrl || prevCfg.targetUrl || "",
+        ctaLabel: ctaLabel || prevCfg.ctaLabel || "Попробовать →",
+        theme,
         status: "idle",
         pagesTotal: totalPages,
         pagesGenerated: 0,
       };
 
-      await storage.updateProject(proj.id, { seoConfig: updatedConfig } as any);
+      await storage.updateProject(proj.id, { seoConfig: updatedConfig, title: finalName } as any);
       res.json({ config: updatedConfig });
     } catch (e: any) {
       await storage.updateProject(proj.id, {
@@ -1079,10 +1235,11 @@ Respond with ONLY valid JSON, no explanation:
     let creditsDepleted = false;
     req.on("close", () => { aborted = true; });
 
-    // Ensure site CSS is saved
-    await storage.upsertProjectFile({ projectId: proj.id, filename: "assets/style.css", code: SITE_CSS });
+    // Ensure site CSS is saved (themed)
+    await storage.upsertProjectFile({ projectId: proj.id, filename: "assets/style.css", code: buildSiteCss(themeOf(cfg)) });
 
     let generated = 0;
+    let articleIdx = 0;
     const allClusters = cfg.clusters;
 
     send({ type: "start", total: cfg.pagesTotal });
@@ -1092,6 +1249,7 @@ Respond with ONLY valid JSON, no explanation:
 
       for (const kw of cluster.keywords) {
         if (aborted || creditsDepleted) break;
+        const idx = articleIdx++;
         if (kw.status === "done") { generated++; continue; }
 
         const filename = `${cluster.slug}/${kw.slug}/index.html`;
@@ -1112,26 +1270,22 @@ Respond with ONLY valid JSON, no explanation:
           break;
         }
 
-        // ── Generate images (non-fatal — fallback to empty) ──
-        let images: string[] = ["", "", ""];
-        try {
-          const imgPrompt = (i: number) =>
-            `Professional photo for article "${kw.title}" about ${cluster.name}, ${cfg.niche}, image ${i + 1} of 3, photorealistic`;
-          const [img1, img2, img3] = await Promise.all([
-            generateImage(imgPrompt(0)),
-            generateImage(imgPrompt(1)),
-            generateImage(imgPrompt(2)),
-          ]);
-          images = [img1 || "", img2 || "", img3 || ""];
-        } catch (imgErr: any) {
-          console.warn(`[SEO] Images failed for "${kw.keyword}" (continuing):`, imgErr?.message);
+        // ── Generate ONE cover image (non-fatal — graceful gradient fallback) ──
+        let cover = "";
+        if (!aborted) {
+          try {
+            const coverPrompt = `Premium editorial magazine cover image for the article "${kw.title}" about ${cluster.name}, ${cfg.niche}. Cinematic, photorealistic, high-end, 16:9, no text, no watermark.`;
+            cover = (await generateImage(coverPrompt)) || "";
+          } catch (imgErr: any) {
+            console.warn(`[SEO] Cover image failed for "${kw.keyword}" (continuing):`, imgErr?.message);
+          }
         }
 
         // ── Generate article HTML with 1 automatic retry ──
         let html = "";
         for (let attempt = 1; attempt <= 2; attempt++) {
           try {
-            html = await generateArticleHtml(kw, cluster, cfg, allClusters, images);
+            html = await generateArticleHtml(kw, cluster, cfg, allClusters, cover, idx);
             if (html) break; // success
           } catch (artErr: any) {
             console.warn(`[SEO] Article attempt ${attempt} failed for "${kw.keyword}":`, artErr?.message);
@@ -1150,7 +1304,7 @@ Respond with ONLY valid JSON, no explanation:
         } else {
           await storage.upsertProjectFile({ projectId: proj.id, filename, code: html });
           kw.status = "done"; kw.filename = filename;
-          if (images[0]) kw.image = images[0];
+          if (cover) kw.image = cover;
           generated++;
           send({ type: "page_done", keyword: kw.keyword, status: "done", generated, total: cfg.pagesTotal });
         }
@@ -1351,8 +1505,9 @@ Respond ONLY with valid JSON (no markdown):
     let file = await storage.getProjectFile(proj.id, filename);
     // Fallback: if style.css missing from DB (old project), save & return it now
     if (!file && filename === "assets/style.css") {
-      await storage.upsertProjectFile({ projectId: proj.id, filename: "assets/style.css", code: SITE_CSS });
-      file = { id: 0, projectId: proj.id, filename: "assets/style.css", code: SITE_CSS, createdAt: new Date() } as any;
+      const css = buildSiteCss(themeOf(proj.seoConfig as SeoConfig));
+      await storage.upsertProjectFile({ projectId: proj.id, filename: "assets/style.css", code: css });
+      file = { id: 0, projectId: proj.id, filename: "assets/style.css", code: css, createdAt: new Date() } as any;
     }
     if (!file) return res.status(404).json({ message: "File not found" });
     const ct = filename.endsWith(".css") ? "text/css" : filename.endsWith(".txt") ? "text/plain" : "text/html";
