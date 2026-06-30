@@ -1285,7 +1285,12 @@ Respond ONLY with valid JSON (no markdown):
     if (!proj || proj.userId !== userId) return res.status(404).json({ message: "Not found" });
     const { filename } = req.query as { filename: string };
     if (!filename) return res.status(400).json({ message: "filename required" });
-    const file = await storage.getProjectFile(proj.id, filename);
+    let file = await storage.getProjectFile(proj.id, filename);
+    // Fallback: if style.css missing from DB (old project), save & return it now
+    if (!file && filename === "assets/style.css") {
+      await storage.upsertProjectFile({ projectId: proj.id, filename: "assets/style.css", code: SITE_CSS });
+      file = { id: 0, projectId: proj.id, filename: "assets/style.css", code: SITE_CSS, createdAt: new Date() } as any;
+    }
     if (!file) return res.status(404).json({ message: "File not found" });
     const ct = filename.endsWith(".css") ? "text/css" : filename.endsWith(".txt") ? "text/plain" : "text/html";
     res.type(ct).send(file.code);
