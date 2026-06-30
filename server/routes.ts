@@ -162,13 +162,13 @@ const MAX_AUTO_IMAGE_CONCURRENCY = 6;
 // store each frame in object storage, and build a self-contained scroll-bound Canvas animation
 // block. Mirrors the {{GENIMG:...}} marker system with {{SCROLLANIM:videoPrompt|T::S||T::S}}.
 const SCROLL_ANIM_COST = 120;
-const SCROLL_FRAME_COUNT = 72;     // target frames extracted from a 5s clip (~14fps) — fewer frames = lighter page (smooth enough for scroll-scrubbing)
+const SCROLL_FRAME_COUNT = 90;     // target frames extracted from a 5s clip
 const SCROLL_FRAME_WIDTH = 1280;   // downscale width for web delivery
 const SCROLL_VIDEO_DURATION = 5;   // seconds
 // "Экшн" (action / Hollywood-blockbuster) mode: longer clip + more sliced frames for a
 // richer, smoother slow-motion / bullet-time scrub.
 const SCROLL_ACTION_VIDEO_DURATION = 10; // seconds (user wants 6-10s blockbuster shots)
-const SCROLL_ACTION_FRAME_COUNT = 120;   // more sliced frames for the longer cinematic clip (trimmed from 160 to keep the page light)
+const SCROLL_ACTION_FRAME_COUNT = 160;   // more sliced frames for the longer cinematic clip
 const KLING_IMG2VID_MODEL = "kling/v3-turbo-image-to-video";
 
 function csaEsc(s: string): string {

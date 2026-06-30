@@ -28,7 +28,9 @@ can load one day and fail the next with no code change.
    key lever, because it ALSO shrinks already-published sites on re-publish.
 2. `extractFramesWithFfmpeg` now actually scales (`scale='min(1280,iw)':-2`) and uses `-q:v 4`
    (was `-q:v 1`, no scale — `SCROLL_FRAME_WIDTH` was declared but never used).
-3. `SCROLL_FRAME_COUNT` 90→72, `SCROLL_ACTION_FRAME_COUNT` 160→120 (new animations only).
+3. (Frame-count reduction was tried — 90→72 / 160→120 — but the user REVERTED it; counts stay
+   90 (`SCROLL_FRAME_COUNT`) and 160 (`SCROLL_ACTION_FRAME_COUNT`). Do not lower them: per-frame
+   compression already carries the payload win, and the user values scroll smoothness.)
 4. Canvas frame loader is windowed (MAXP=4, frame 0 first) with a per-frame 12s timeout +
    `settled` guard so a hung request always frees its slot and `signalReady()` always fires
    (no deadlock). New animations only.
