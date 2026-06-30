@@ -7,8 +7,8 @@ import crypto from "crypto";
 const KIE_API_KEY = process.env.KIE_API_KEY || "";
 const KIE_BASE = "https://api.kie.ai/codex/v1";
 const KIE_TASKS_URL = `${KIE_BASE}/tasks`;
-const KIE_RESPONSES_URL = `${KIE_BASE}/responses`;
-const KIE_LLM_MODEL = "gpt-5-5";
+const KIE_GEMINI_MODEL = "gemini-3-5-flash";
+const KIE_GEMINI_URL = `https://api.kie.ai/gemini/v1/models/${KIE_GEMINI_MODEL}:streamGenerateContent`;
 
 const SEO_ARTICLE_COST = 70;
 const IMG_PER_ARTICLE = 3;
@@ -26,41 +26,70 @@ function slugify(text: string): string {
     .slice(0, 60) || "page";
 }
 
+// Uses the same KIE Gemini flash endpoint as the main site generator. The Gemini
+// stream endpoint is the proven-working path on KIE, so we consume the stream and
+// accumulate it into the full response text (sync-style for JSON parsing).
 async function kieSync(messages: { role: string; content: string }[], timeout = 90000): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
-    const input = messages.map((m) => ({
-      role: m.role === "system" ? "developer" : m.role,
-      content: [{ type: "input_text", text: m.content }],
-    }));
-    const res = await fetch(KIE_RESPONSES_URL, {
+    const contents: any[] = [];
+    let systemPrompt = "";
+    for (const m of messages) {
+      if (m.role === "system" || m.role === "developer") {
+        systemPrompt += (systemPrompt ? "\n\n" : "") + m.content;
+        continue;
+      }
+      contents.push({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] });
+    }
+    const body: any = { stream: true, contents };
+    if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
+
+    const resp = await fetch(KIE_GEMINI_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${KIE_API_KEY}` },
-      body: JSON.stringify({ model: KIE_LLM_MODEL, stream: false, input, reasoning: { effort: "medium" } }),
+      body: JSON.stringify(body),
       signal: ctrl.signal,
     });
-    clearTimeout(timer);
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(`KIE ${res.status}${errText ? `: ${errText.slice(0, 300)}` : ""}`);
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      throw new Error(`KIE Gemini ${resp.status}${errText ? `: ${errText.slice(0, 300)}` : ""}`);
     }
-    const data = await res.json() as any;
+
     let text = "";
-    for (const item of data.output || []) {
-      if (item.type === "message" && Array.isArray(item.content)) {
-        for (const c of item.content) {
-          if (c.type === "output_text" && c.text) { text = c.text as string; break; }
+    const consume = (jsonStr: string) => {
+      if (!jsonStr || jsonStr === "[DONE]") return;
+      try {
+        const parsed = JSON.parse(jsonStr);
+        for (const part of parsed?.candidates?.[0]?.content?.parts ?? []) {
+          if (part.text) text += part.text as string;
         }
+      } catch { /* incomplete chunk — buffered for next iteration */ }
+    };
+    const reader = (resp.body as any).getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        consume(trimmed.startsWith("data: ") ? trimmed.slice(6) : trimmed);
       }
-      if (text) break;
     }
-    if (!text) text = data?.output_text || "";
+    if (buffer.trim()) {
+      const t = buffer.trim();
+      consume(t.startsWith("data: ") ? t.slice(6) : t);
+    }
+
     if (!text) throw new Error("Empty KIE response");
     return text;
-  } catch (e: any) {
+  } finally {
     clearTimeout(timer);
-    throw e;
   }
 }
 
