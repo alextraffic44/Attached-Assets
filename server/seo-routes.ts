@@ -8,6 +8,7 @@ const KIE_API_KEY = process.env.KIE_API_KEY || "";
 const KIE_BASE = "https://api.kie.ai/codex/v1";
 const KIE_TASKS_URL = `${KIE_BASE}/tasks`;
 const KIE_RESPONSES_URL = `${KIE_BASE}/responses`;
+const KIE_LLM_MODEL = "gpt-5-5";
 
 const SEO_ARTICLE_COST = 70;
 const IMG_PER_ARTICLE = 3;
@@ -29,16 +30,32 @@ async function kieSync(messages: { role: string; content: string }[], timeout = 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
+    const input = messages.map((m) => ({
+      role: m.role === "system" ? "developer" : m.role,
+      content: [{ type: "input_text", text: m.content }],
+    }));
     const res = await fetch(KIE_RESPONSES_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${KIE_API_KEY}` },
-      body: JSON.stringify({ model: "gpt-4.1", input: messages }),
+      body: JSON.stringify({ model: KIE_LLM_MODEL, stream: false, input, reasoning: { effort: "medium" } }),
       signal: ctrl.signal,
     });
     clearTimeout(timer);
-    if (!res.ok) throw new Error(`KIE ${res.status}`);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`KIE ${res.status}${errText ? `: ${errText.slice(0, 300)}` : ""}`);
+    }
     const data = await res.json() as any;
-    const text = data?.output?.[0]?.content?.[0]?.text || data?.output_text || "";
+    let text = "";
+    for (const item of data.output || []) {
+      if (item.type === "message" && Array.isArray(item.content)) {
+        for (const c of item.content) {
+          if (c.type === "output_text" && c.text) { text = c.text as string; break; }
+        }
+      }
+      if (text) break;
+    }
+    if (!text) text = data?.output_text || "";
     if (!text) throw new Error("Empty KIE response");
     return text;
   } catch (e: any) {
