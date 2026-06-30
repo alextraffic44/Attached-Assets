@@ -237,6 +237,22 @@ export default function SeoEditorPage() {
   }
 
   /* ── preview ── */
+  // Navigation interceptor script injected into every preview page
+  const NAV_INTERCEPTOR = `<script>
+(function(){
+  function intercept(e){
+    var el=e.target.closest('a[href]');
+    if(!el)return;
+    var href=el.getAttribute('href');
+    if(!href||href.startsWith('#')||href.startsWith('http')||href.startsWith('mailto')||href.startsWith('tel'))return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.parent.postMessage({type:'seo-nav',href:href},'*');
+  }
+  document.addEventListener('click',intercept,true);
+})();
+</script>`;
+
   async function loadPreview(filename: string) {
     setSelectedFile(filename);
     try {
@@ -246,16 +262,50 @@ export default function SeoEditorPage() {
       ]);
       if (!pageRes.ok) return;
       let html = await pageRes.text();
+
+      // Always inject CSS — replace existing link tag OR prepend into <head>
       if (cssRes.ok) {
         const css = await cssRes.text();
-        html = html.replace(
-          /<link[^>]+href=["'][^"']*assets\/style\.css["'][^>]*>/gi,
-          `<style>${css}</style>`
+        const styleTag = `<style>${css}</style>`;
+        const linked = html.replace(
+          /<link[^>]+href=["'][^"']*assets\/style\.css["'][^>]*\/?>/gi,
+          styleTag
         );
+        // If replace didn't find the link tag, inject into <head>
+        if (linked === html) {
+          html = html.replace(/<head([^>]*)>/i, `<head$1>${styleTag}`);
+          // If still no <head>, prepend at top
+          if (!html.includes(styleTag)) html = styleTag + html;
+        } else {
+          html = linked;
+        }
       }
+
+      // Inject navigation interceptor before </body>
+      html = html.replace(/<\/body>/i, `${NAV_INTERCEPTOR}</body>`);
+      if (!html.includes(NAV_INTERCEPTOR)) html += NAV_INTERCEPTOR;
+
       setPreviewHtml(html);
     } catch {}
   }
+
+  // Handle navigation messages from preview iframe
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      if (!e.data || e.data.type !== "seo-nav") return;
+      const href: string = e.data.href;
+      // Convert URL path → project filename
+      // /slug/article/ → slug/article/index.html
+      // /slug/ → slug/index.html
+      // / → index.html
+      let filename = href.replace(/^\//, "").replace(/\/$/, "");
+      if (!filename) filename = "index.html";
+      else if (!filename.endsWith(".html")) filename = filename + "/index.html";
+      loadPreview(filename);
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [id]);
 
   function toggleCluster(cid: string) {
     setOpenClusters(prev => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
