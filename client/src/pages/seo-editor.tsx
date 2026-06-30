@@ -57,7 +57,7 @@ export default function SeoEditorPage() {
   }, [cfg?.status, cfg?.clusters.length]);
 
   async function handleAnalyze() {
-    const keywords = keywordsText.split("\n").map(k => k.trim()).filter(Boolean);
+    const keywords = keywordsText.split(/[\n,]+/).map(k => k.trim()).filter(Boolean);
     if (keywords.length === 0) { toast({ title: "Введите ключевые слова", variant: "destructive" }); return; }
     if (keywords.length > 1000) { toast({ title: "Максимум 1000 ключей", variant: "destructive" }); return; }
     setIsAnalyzing(true);
@@ -212,7 +212,7 @@ export default function SeoEditorPage() {
             <div style={{ padding: "1.5rem", overflowY: "auto", flex: 1 }}>
               <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>🚀 Запуск SEO-машины</h2>
               <p style={{ fontSize: 13, color: "#888", marginBottom: 20, lineHeight: 1.6 }}>
-                Вставьте ключевые слова — по одному на строку. ИИ кластеризует их и построит структуру сайта.
+                Вставьте ключевые слова — через запятую или каждое на новой строке. ИИ кластеризует их и построит структуру сайта.
               </p>
 
               <label style={{ fontSize: 12, fontWeight: 600, color: "#aaa", display: "block", marginBottom: 6 }}>Ниша / тема сайта</label>
@@ -224,17 +224,17 @@ export default function SeoEditorPage() {
               />
 
               <label style={{ fontSize: 12, fontWeight: 600, color: "#aaa", display: "block", marginBottom: 6 }}>
-                Ключевые слова (до 1000, по одному на строку)
+                Ключевые слова (до 1000 — через запятую или по строкам)
               </label>
               <textarea
                 value={keywordsText}
                 onChange={e => setKeywordsText(e.target.value)}
-                placeholder={"как пользоваться midjourney\nmidjourney бесплатно\nchatgpt для бизнеса\n..."}
+                placeholder={"как пользоваться midjourney, midjourney бесплатно, chatgpt для бизнеса, ..."}
                 rows={14}
                 style={{ width: "100%", padding: "10px 12px", background: "#1e1e2e", border: "1px solid #2a2a3a", borderRadius: 8, color: "#e2e8f0", fontSize: 13, resize: "none", outline: "none", lineHeight: 1.6 }}
               />
               <div style={{ fontSize: 12, color: "#666", marginBottom: 16, marginTop: 6 }}>
-                {keywordsText.split("\n").filter(k => k.trim()).length} ключей
+                {keywordsText.split(/[\n,]+/).filter(k => k.trim()).length} ключей
               </div>
 
               <button
