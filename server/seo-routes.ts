@@ -510,6 +510,64 @@ ${footer}
 </html>`;
 }
 
+function buildFallbackArticle(kw: SeoKeyword, cluster: SeoCluster, cfg: SeoConfig): string {
+  const nav = buildNav(cfg.siteTitle, cfg.clusters);
+  const footer = buildFooter(cfg.siteTitle, cfg.siteDescription, cfg.clusters);
+  const adUnit = cfg.adUnitCode || `<div style="color:#9ca3af;font-size:.72rem;display:flex;align-items:center;justify-content:center;width:100%;height:100%">Рекламный блок 300×250</div>`;
+  const adHeadCode = cfg.adHeadCode || "";
+
+  const relatedLinks = cluster.keywords
+    .filter(k => k.slug !== kw.slug && k.filename)
+    .slice(0, 4)
+    .map(k => `<a href="/${cluster.slug}/${k.slug}/" class="related-card">
+      <div class="rc-cat">${cluster.name}</div>
+      <div class="rc-title">${k.title}</div>
+    </a>`).join("\n");
+
+  const sidebar = `<aside class="sidebar">
+  <div class="sb-block"><div class="ad-slot ad-300">${adUnit}</div></div>
+</aside>`;
+
+  return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${kw.title} | ${cfg.siteTitle}</title>
+<meta name="description" content="${kw.keyword} — читайте на ${cfg.siteTitle}">
+<meta name="robots" content="noindex,follow">
+<link rel="stylesheet" href="/assets/style.css">
+${adHeadCode}
+</head>
+<body>
+${nav}
+<div class="article-page">
+  <div class="breadcrumb">
+    <a href="/">Главная</a><span class="sep">›</span>
+    <a href="/${cluster.slug}/">${cluster.name}</a><span class="sep">›</span>
+    <span class="cur">${kw.title}</span>
+  </div>
+  <div class="article-layout">
+    <main class="article-main">
+      <div class="article-header">
+        <h1>${kw.title}</h1>
+        <div class="article-meta"><span class="tag">${cluster.name}</span></div>
+      </div>
+      <div style="padding:3rem 0;text-align:center">
+        <div style="font-size:2.5rem;margin-bottom:1rem">⏳</div>
+        <div style="font-size:1.05rem;font-weight:700;color:#374151;margin-bottom:.5rem">Статья скоро появится</div>
+        <div style="font-size:.875rem;color:#6b7280">Материал по теме «${kw.keyword}» находится в подготовке</div>
+      </div>
+      ${relatedLinks ? `<div class="related-articles"><h2>Читайте также</h2><div class="related-grid">${relatedLinks}</div></div>` : ""}
+    </main>
+    ${sidebar}
+  </div>
+</div>
+${footer}
+</body>
+</html>`;
+}
+
 function buildSitemap(cfg: SeoConfig, baseUrl: string): string {
   const now = new Date().toISOString().split("T")[0];
   let urls = `  <url><loc>${baseUrl}/</loc><lastmod>${now}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>\n`;
@@ -956,6 +1014,7 @@ Respond with ONLY valid JSON, no explanation:
     };
 
     let aborted = false;
+    let creditsDepleted = false;
     req.on("close", () => { aborted = true; });
 
     // Ensure site CSS is saved
@@ -967,78 +1026,97 @@ Respond with ONLY valid JSON, no explanation:
     send({ type: "start", total: cfg.pagesTotal });
 
     for (const cluster of allClusters) {
-      if (aborted) break;
+      if (aborted || creditsDepleted) break;
+
       for (const kw of cluster.keywords) {
-        if (aborted) break;
+        if (aborted || creditsDepleted) break;
         if (kw.status === "done") { generated++; continue; }
 
+        const filename = `${cluster.slug}/${kw.slug}/index.html`;
         send({ type: "progress", keyword: kw.keyword, status: "generating", generated, total: cfg.pagesTotal });
 
-        // Deduct credits
+        // ── Deduct credits ──
         const ikey = `seo-article-${proj.id}-${kw.id}`;
         const ded = await storage.deductCredits(userId, SEO_ARTICLE_COST, "seo-article", ikey);
         if (!ded.success) {
-          send({ type: "error", message: "Недостаточно токенов", generated, total: cfg.pagesTotal });
-          kw.status = "failed";
+          // Write fallback so URL exists, save progress, then stop
+          const fallback = buildFallbackArticle(kw, cluster, { ...cfg, clusters: allClusters });
+          await storage.upsertProjectFile({ projectId: proj.id, filename, code: fallback });
+          kw.status = "done"; kw.filename = filename;
+          const progressCfg: SeoConfig = { ...cfg, clusters: allClusters, pagesGenerated: generated };
+          await storage.updateProject(proj.id, { seoConfig: progressCfg } as any);
+          send({ type: "error", message: "Недостаточно токенов — пополните баланс и нажмите «Продолжить»", generated, total: cfg.pagesTotal });
+          creditsDepleted = true;
           break;
         }
 
+        // ── Generate images (non-fatal — fallback to empty) ──
+        let images: string[] = ["", "", ""];
         try {
-          // Generate 3 images in parallel
           const imgPrompt = (i: number) =>
-            `High quality professional photo for article "${kw.title}" about ${cluster.name}, ${cfg.niche}, image ${i + 1} of 3, photorealistic, clean, modern`;
+            `Professional photo for article "${kw.title}" about ${cluster.name}, ${cfg.niche}, image ${i + 1} of 3, photorealistic`;
           const [img1, img2, img3] = await Promise.all([
             generateImage(imgPrompt(0)),
             generateImage(imgPrompt(1)),
             generateImage(imgPrompt(2)),
           ]);
-          const images = [img1 || "", img2 || "", img3 || ""];
-
-          // Generate article HTML
-          const html = await generateArticleHtml(kw, cluster, cfg, allClusters, images);
-          if (!html) {
-            if (!ded.alreadyProcessed) await storage.refundCredits(userId, SEO_ARTICLE_COST);
-            kw.status = "failed";
-            send({ type: "page_done", keyword: kw.keyword, status: "failed", generated, total: cfg.pagesTotal });
-            continue;
-          }
-
-          const filename = `${cluster.slug}/${kw.slug}/index.html`;
-          await storage.upsertProjectFile({ projectId: proj.id, filename, code: html });
-
-          kw.status = "done";
-          kw.filename = filename;
-          generated++;
-        } catch (e: any) {
-          console.warn(`[SEO] Failed article ${kw.keyword}:`, e?.message);
-          if (!ded.alreadyProcessed) {
-            try { await storage.refundCredits(userId, SEO_ARTICLE_COST); } catch {}
-          }
-          kw.status = "failed";
+          images = [img1 || "", img2 || "", img3 || ""];
+        } catch (imgErr: any) {
+          console.warn(`[SEO] Images failed for "${kw.keyword}" (continuing):`, imgErr?.message);
         }
 
-        // Update config in DB after each page
-        const updatedCfg: SeoConfig = { ...cfg, clusters: allClusters, pagesGenerated: generated };
-        await storage.updateProject(proj.id, { seoConfig: updatedCfg } as any);
+        // ── Generate article HTML with 1 automatic retry ──
+        let html = "";
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            html = await generateArticleHtml(kw, cluster, cfg, allClusters, images);
+            if (html) break; // success
+          } catch (artErr: any) {
+            console.warn(`[SEO] Article attempt ${attempt} failed for "${kw.keyword}":`, artErr?.message);
+            if (attempt === 2) html = ""; // give up after 2 tries
+          }
+        }
 
-        send({ type: "page_done", keyword: kw.keyword, status: kw.status, generated, total: cfg.pagesTotal });
+        if (!html) {
+          // Refund credits, write fallback placeholder so URL always exists
+          if (!ded.alreadyProcessed) { try { await storage.refundCredits(userId, SEO_ARTICLE_COST); } catch {} }
+          const fallback = buildFallbackArticle(kw, cluster, { ...cfg, clusters: allClusters });
+          await storage.upsertProjectFile({ projectId: proj.id, filename, code: fallback });
+          kw.status = "done"; kw.filename = filename; // "done" so it's counted and site stays complete
+          generated++;
+          send({ type: "page_done", keyword: kw.keyword, status: "fallback", generated, total: cfg.pagesTotal });
+        } else {
+          await storage.upsertProjectFile({ projectId: proj.id, filename, code: html });
+          kw.status = "done"; kw.filename = filename;
+          generated++;
+          send({ type: "page_done", keyword: kw.keyword, status: "done", generated, total: cfg.pagesTotal });
+        }
+
+        // Save progress after every article (crash-safe)
+        const progressCfg: SeoConfig = { ...cfg, clusters: allClusters, pagesGenerated: generated };
+        await storage.updateProject(proj.id, { seoConfig: progressCfg } as any);
       }
 
-      // Generate category page after all articles in cluster are done
+      // Generate category index page
       if (!aborted) {
         const catHtml = buildCategoryPage(cluster, { ...cfg, clusters: allClusters });
         await storage.upsertProjectFile({ projectId: proj.id, filename: `${cluster.slug}/index.html`, code: catHtml });
       }
     }
 
-    // Generate homepage + sitemap
+    // Generate homepage + sitemap (even if some articles had fallbacks)
     if (!aborted) {
-      const finalCfg: SeoConfig = { ...cfg, clusters: allClusters, pagesGenerated: generated, status: "done" };
+      const doneStatus = creditsDepleted ? "idle" : "done";
+      const finalCfg: SeoConfig = { ...cfg, clusters: allClusters, pagesGenerated: generated, status: doneStatus };
       const homeHtml = buildHomePage(finalCfg);
       await storage.upsertProjectFile({ projectId: proj.id, filename: "index.html", code: homeHtml });
       await storage.upsertProjectFile({ projectId: proj.id, filename: "robots.txt", code: `User-agent: *\nAllow: /\nSitemap: /sitemap.xml` });
       await storage.updateProject(proj.id, { seoConfig: finalCfg, generatedCode: homeHtml } as any);
-      send({ type: "done", generated, total: cfg.pagesTotal });
+      if (creditsDepleted) {
+        send({ type: "done", generated, total: cfg.pagesTotal, partial: true });
+      } else {
+        send({ type: "done", generated, total: cfg.pagesTotal });
+      }
     }
 
     res.end();
