@@ -101,118 +101,180 @@ async function generateImage(prompt: string, timeout = 120000): Promise<string |
   }
 }
 
-const SITE_CSS = `/* Craft AI SEO — Generated Site */
-:root{--brand:#4f46e5;--brand-light:#6366f1;--text:#1a1a2e;--text2:#4a4a6a;--muted:#8888aa;--bg:#fff;--bg2:#f8f8fc;--border:#e8e8f0;--shadow:0 2px 12px rgba(0,0,0,.08);--r:12px;--w:820px;--nh:64px}
+const SITE_CSS = `/* Craft AI SEO Magazine */
+:root{--brand:#4f46e5;--brand-light:#6366f1;--text:#111827;--text2:#4b5563;--muted:#9ca3af;--bg:#fff;--bg2:#f9fafb;--bg3:#f3f4f6;--border:#e5e7eb;--nav:#0c0c14;--shadow:0 1px 8px rgba(0,0,0,.08);--shadow-lg:0 4px 24px rgba(0,0,0,.14);--r:8px;--w:1200px;--nh:58px}
 *{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}
-body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.8}
-a{color:var(--brand);text-decoration:none}a:hover{text-decoration:underline}
-img{max-width:100%;height:auto;border-radius:var(--r)}
-nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);height:var(--nh);display:flex;align-items:center}
-.nav-inner{max-width:var(--w);margin:0 auto;padding:0 1.5rem;width:100%;display:flex;align-items:center;gap:1.5rem}
-.nav-logo{font-weight:700;font-size:1.1rem;color:var(--text);text-decoration:none}
-.nav-links{display:flex;gap:1.25rem;flex-wrap:wrap;margin-left:auto}
-.nav-links a{font-size:.875rem;color:var(--text2);font-weight:500}
-.breadcrumb{max-width:var(--w);margin:1.25rem auto 0;padding:0 1.5rem;display:flex;gap:.5rem;align-items:center;font-size:.8rem;color:var(--muted);flex-wrap:wrap}
-.breadcrumb a{color:var(--muted)}.breadcrumb .sep{opacity:.5}.breadcrumb .cur{color:var(--text2)}
-.article-container{max-width:var(--w);margin:0 auto;padding:2rem 1.5rem 4rem}
-.article-header{margin-bottom:2rem}
-.article-header h1{font-size:clamp(1.75rem,4vw,2.4rem);font-weight:800;letter-spacing:-.03em;line-height:1.25;margin-bottom:.75rem}
-.article-meta{font-size:.85rem;color:var(--muted);display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap}
-.article-meta .tag{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:.2rem .75rem;color:var(--brand);font-weight:600;font-size:.78rem}
-.article-body{font-size:1.0625rem}
-.article-body h2{font-size:1.45rem;font-weight:700;letter-spacing:-.02em;margin:2.5rem 0 1rem;line-height:1.3}
-.article-body h3{font-size:1.15rem;font-weight:600;margin:1.75rem 0 .75rem}
-.article-body p{margin-bottom:1.25rem;color:var(--text2)}
-.article-body ul,.article-body ol{margin:1rem 0 1.5rem 1.5rem;color:var(--text2)}
-.article-body li{margin-bottom:.5rem}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.7}
+a{color:inherit;text-decoration:none}img{max-width:100%;height:auto;display:block}
+nav{background:var(--nav);height:var(--nh);position:sticky;top:0;z-index:100;box-shadow:0 2px 20px rgba(0,0,0,.4)}
+.nav-inner{max-width:var(--w);margin:0 auto;padding:0 1.5rem;display:flex;align-items:center;gap:1rem;height:100%}
+.nav-logo{font-weight:900;font-size:1.1rem;color:#fff;letter-spacing:-.03em;flex-shrink:0}
+.nav-links{display:flex;gap:.2rem;margin-left:auto;flex-wrap:wrap}
+.nav-links a{font-size:.8rem;color:rgba(255,255,255,.65);font-weight:500;padding:.35rem .65rem;border-radius:6px;transition:.15s;white-space:nowrap}
+.nav-links a:hover{color:#fff;background:rgba(255,255,255,.1)}
+.container{max-width:var(--w);margin:0 auto;padding:0 1.5rem}
+.breadcrumb{padding:.75rem 0;font-size:.75rem;color:var(--muted);display:flex;gap:.35rem;align-items:center;flex-wrap:wrap}
+.breadcrumb a{color:var(--muted)}.breadcrumb a:hover{color:var(--brand)}.breadcrumb .sep{opacity:.4}.breadcrumb .cur{color:var(--text2);font-weight:500}
+.cat-chip{display:inline-block;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:.18rem .5rem;border-radius:3px;color:#fff;background:var(--brand);line-height:1.5}
+/* ── HERO ── */
+.hero-wrap{padding:1.25rem 0 0}
+.hero-grid{display:grid;grid-template-columns:2fr 1fr;gap:3px;background:var(--border);border-radius:var(--r);overflow:hidden}
+.hero-main{position:relative;height:400px;display:block;overflow:hidden}
+.hero-main-bg{width:100%;height:100%;object-fit:cover}
+.hero-grad{width:100%;height:100%}
+.hero-side{display:flex;flex-direction:column;gap:3px}
+.hero-side-item{position:relative;flex:1;overflow:hidden;display:block;min-height:0}
+.hero-side-item .hero-grad{transition:.25s}
+.hero-side-item:hover .hero-grad{transform:scale(1.06)}
+.hero-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.88) 0%,rgba(0,0,0,.2) 55%,transparent 100%)}
+.hero-content{position:absolute;bottom:0;left:0;right:0;padding:1.1rem}
+.hero-title{font-size:1.4rem;font-weight:800;color:#fff;line-height:1.25;margin-top:.35rem;letter-spacing:-.025em}
+.hero-side-item .hero-title{font-size:.875rem;font-weight:700;line-height:1.3}
+/* ── HOT STRIP ── */
+.hot-strip{background:var(--bg2);border-bottom:1px solid var(--border);padding:.7rem 0;margin-top:1.25rem}
+.hot-inner{display:flex;align-items:center;gap:.875rem;overflow-x:auto;scrollbar-width:none}
+.hot-inner::-webkit-scrollbar{display:none}
+.hot-label{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--brand);white-space:nowrap;flex-shrink:0}
+.hot-chip{white-space:nowrap;font-size:.76rem;padding:.22rem .62rem;border-radius:20px;border:1px solid var(--border);color:var(--text2);font-weight:500;flex-shrink:0;transition:.15s;display:block}
+.hot-chip:hover{border-color:var(--brand);color:var(--brand);background:#f0f0ff}
+/* ── AD SLOTS ── */
+.ad-slot{background:var(--bg2);border:1px dashed #d1d5db;border-radius:var(--r);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;min-height:90px}
+.ad-slot::before{content:'Реклама';position:absolute;top:4px;right:6px;font-size:.6rem;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+.ad-728{width:100%;max-width:728px;height:90px;margin:1.25rem auto}
+.ad-300{width:100%;min-height:250px}
+.ad-resp{width:100%;min-height:100px;margin:1.5rem 0}
+/* ── SECTION HEADERS ── */
+.section-header{display:flex;align-items:baseline;gap:1rem;margin:2rem 0 1.25rem;padding-bottom:.5rem;border-bottom:2px solid var(--brand)}
+.section-title{font-size:1.05rem;font-weight:800;letter-spacing:-.02em}
+.section-more{font-size:.75rem;color:var(--brand);font-weight:600;margin-left:auto}
+.section-more:hover{text-decoration:underline}
+/* ── ARTICLE CARDS ── */
+.articles-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.1rem;margin-bottom:2.5rem}
+.article-card{display:block;border-radius:var(--r);overflow:hidden;border:1px solid var(--border);transition:.2s;background:#fff;color:var(--text)}
+.article-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+.ac-img-wrap{height:175px;overflow:hidden;position:relative}
+.ac-img-wrap img{width:100%;height:100%;object-fit:cover;transition:.25s}
+.article-card:hover .ac-img-wrap img{transform:scale(1.05)}
+.ac-img-grad{width:100%;height:100%}
+.ac-body{padding:.875rem 1rem 1rem}
+.ac-cat{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--brand);margin-bottom:.3rem;display:block}
+.ac-title{font-size:.925rem;font-weight:700;line-height:1.4;color:var(--text);margin-bottom:.35rem}
+.article-card:hover .ac-title{color:var(--brand)}
+.ac-meta{font-size:.7rem;color:var(--muted)}
+/* ── CATEGORY CARDS ── */
+.cats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:1rem;margin-bottom:3rem}
+.cat-card{border:1px solid var(--border);border-radius:var(--r);padding:1.4rem;display:block;color:var(--text);transition:.2s;background:#fff}
+.cat-card:hover{border-color:var(--brand-light);box-shadow:var(--shadow);transform:translateY(-2px)}
+.cat-card .cc-icon{font-size:1.4rem;margin-bottom:.5rem}
+.cat-card h2{font-size:.975rem;font-weight:700;margin-bottom:.35rem}
+.cat-card p{font-size:.8rem;color:var(--text2);line-height:1.5}
+.cat-card .cc-count{margin-top:.5rem;font-size:.72rem;color:var(--brand);font-weight:600}
+/* ── CATEGORY PAGE HEADER ── */
+.cat-header{padding:2.25rem 0;margin-bottom:1.75rem;background:linear-gradient(135deg,var(--brand),#7c3aed)}
+.cat-header .container{color:#fff}
+.cat-header h1{font-size:clamp(1.5rem,3.5vw,2.1rem);font-weight:900;letter-spacing:-.04em;margin-bottom:.4rem}
+.cat-header p{opacity:.85;font-size:.95rem;max-width:540px}
+.cat-header .breadcrumb{padding:.25rem 0 1rem}.cat-header .breadcrumb a,.cat-header .breadcrumb .sep{color:rgba(255,255,255,.5)}.cat-header .breadcrumb .cur{color:rgba(255,255,255,.85)}
+/* ── ARTICLE PAGE ── */
+.article-page{max-width:var(--w);margin:0 auto;padding:0 1.5rem 4rem}
+.article-layout{display:grid;grid-template-columns:1fr 295px;gap:2.25rem;align-items:start;margin-top:1.25rem}
+.article-main{min-width:0}
+.article-header h1{font-size:clamp(1.55rem,3.5vw,2.1rem);font-weight:900;letter-spacing:-.04em;line-height:1.2;margin-bottom:.875rem}
+.article-meta{font-size:.76rem;color:var(--muted);display:flex;gap:.875rem;align-items:center;flex-wrap:wrap;margin-bottom:1.5rem}
+.article-meta .tag{background:var(--brand);color:#fff;border-radius:3px;padding:.18rem .5rem;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.hero-article-img{width:100%;border-radius:var(--r);margin-bottom:1.75rem;max-height:420px;object-fit:cover}
+.article-body{font-size:1.025rem;line-height:1.85}
+.article-body h2{font-size:1.25rem;font-weight:800;letter-spacing:-.025em;margin:2.25rem 0 .875rem;padding-top:.4rem;border-top:1px solid var(--border);line-height:1.25}
+.article-body h3{font-size:1.025rem;font-weight:700;margin:1.75rem 0 .6rem}
+.article-body p{margin-bottom:1.2rem;color:var(--text2)}
+.article-body ul,.article-body ol{margin:1rem 0 1.4rem 1.5rem;color:var(--text2)}
+.article-body li{margin-bottom:.4rem}
 .article-body strong{color:var(--text);font-weight:600}
-.article-body blockquote{border-left:3px solid var(--brand);padding:1rem 1.5rem;background:var(--bg2);border-radius:0 var(--r) var(--r) 0;margin:1.5rem 0;color:var(--text2);font-style:italic}
-.article-img{width:100%;border-radius:var(--r);margin:1.75rem 0;box-shadow:var(--shadow);display:block;object-fit:cover;max-height:460px}
-.highlight-box{background:linear-gradient(135deg,#f0f0ff,#e8f0ff);border:1px solid #d0d8ff;border-radius:var(--r);padding:1.5rem;margin:2rem 0}
-.faq-section{margin-top:3rem;padding-top:2rem;border-top:1px solid var(--border)}
-.faq-section>h2{font-size:1.5rem;font-weight:700;margin-bottom:1.5rem}
-.faq-item{border:1px solid var(--border);border-radius:var(--r);margin-bottom:.75rem;overflow:hidden}
-.faq-question{padding:1rem 1.25rem;font-weight:600;font-size:1rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:var(--bg2);color:var(--text)}
-.faq-question:hover{background:#f0f0f8}.faq-answer{padding:1rem 1.25rem;color:var(--text2);line-height:1.7;border-top:1px solid var(--border)}
-.related-articles{margin-top:3rem;padding-top:2rem;border-top:1px solid var(--border)}
-.related-articles>h2{font-size:1.35rem;font-weight:700;margin-bottom:1.25rem}
-.related-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem}
-.related-card{border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;transition:all .2s;color:var(--text);background:var(--bg);display:block}
-.related-card:hover{border-color:var(--brand-light);box-shadow:var(--shadow);transform:translateY(-2px);text-decoration:none}
-.related-card .rc-cat{font-size:.75rem;color:var(--brand);font-weight:600;margin-bottom:.4rem;text-transform:uppercase;letter-spacing:.05em}
-.related-card .rc-title{font-size:.95rem;font-weight:600;line-height:1.4}
-.articles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.25rem}
-.article-card{border:1px solid var(--border);border-radius:var(--r);padding:1.5rem;transition:all .2s;display:block;color:var(--text);background:var(--bg)}
-.article-card:hover{border-color:var(--brand-light);box-shadow:var(--shadow);transform:translateY(-2px);text-decoration:none}
-.article-card .ac-cat{font-size:.75rem;color:var(--brand);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem}
-.article-card h2{font-size:1.1rem;font-weight:700;line-height:1.35;margin-bottom:.6rem}
-.article-card p{font-size:.875rem;color:var(--text2);line-height:1.5}
-.article-card .ac-read{margin-top:1rem;font-size:.8rem;font-weight:600;color:var(--brand)}
-.home-hero{padding:4rem 1.5rem 3rem;text-align:center;background:linear-gradient(180deg,var(--bg),var(--bg2))}
-.home-hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;letter-spacing:-.04em;margin-bottom:1rem}
-.home-hero p{font-size:1.15rem;color:var(--text2);max-width:520px;margin:0 auto 2.5rem}
-.categories-grid{max-width:900px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1.25rem}
-.category-card{border:1px solid var(--border);border-radius:var(--r);padding:1.75rem 1.5rem;transition:all .2s;display:block;color:var(--text);background:var(--bg)}
-.category-card:hover{border-color:var(--brand-light);box-shadow:var(--shadow);transform:translateY(-2px);text-decoration:none}
-.category-card .cc-icon{font-size:1.75rem;margin-bottom:.75rem}
-.category-card h2{font-size:1.15rem;font-weight:700;margin-bottom:.4rem}
-.category-card p{font-size:.875rem;color:var(--text2);line-height:1.5}
-.category-card .cc-count{margin-top:.75rem;font-size:.8rem;color:var(--brand);font-weight:600}
-.page-container{max-width:var(--w);margin:0 auto;padding:2rem 1.5rem 4rem}
-.page-header{margin-bottom:2.5rem}.page-header h1{font-size:clamp(1.75rem,4vw,2.4rem);font-weight:800;letter-spacing:-.03em;margin-bottom:.75rem}
-.page-header p{font-size:1.05rem;color:var(--text2);max-width:600px}
-footer{background:var(--bg2);border-top:1px solid var(--border);padding:3rem 1.5rem;margin-top:4rem}
+.article-body blockquote{border-left:4px solid var(--brand);padding:.875rem 1.4rem;background:var(--bg2);border-radius:0 8px 8px 0;margin:1.75rem 0;font-style:italic;color:var(--text2)}
+.article-img{width:100%;border-radius:var(--r);margin:1.75rem 0;max-height:400px;object-fit:cover;box-shadow:var(--shadow)}
+.reading-time{font-size:.7rem;color:var(--muted)}
+/* ── SIDEBAR ── */
+.sidebar{position:sticky;top:calc(var(--nh) + 1rem)}
+.sb-block{margin-bottom:1.5rem;border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.sb-head{background:var(--nav);color:rgba(255,255,255,.85);padding:.55rem .9rem;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em}
+.sb-body{padding:.75rem .9rem}
+.sb-list{list-style:none}
+.sb-list li{padding:.45rem 0;border-bottom:1px solid var(--border);font-size:.8rem;line-height:1.4}
+.sb-list li:last-child{border-bottom:none}
+.sb-list a{color:var(--text2);font-weight:500;display:block}.sb-list a:hover{color:var(--brand)}
+.sb-num{font-size:.64rem;font-weight:700;color:var(--brand);margin-bottom:.1rem}
+/* ── FAQ ── */
+.faq-section{margin-top:2.5rem;padding-top:1.75rem;border-top:2px solid var(--brand)}
+.faq-section>h2{font-size:1.1rem;font-weight:800;margin-bottom:1.1rem}
+.faq-item{border:1px solid var(--border);border-radius:var(--r);margin-bottom:.45rem;overflow:hidden}
+.faq-question{padding:.75rem 1rem;font-weight:600;font-size:.875rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;color:var(--text);user-select:none}
+.faq-question:hover{background:var(--bg2)}.faq-answer{padding:.75rem 1rem;color:var(--text2);line-height:1.7;border-top:1px solid var(--border);font-size:.85rem;display:none}
+/* ── RELATED ── */
+.related-articles{margin-top:2.5rem;padding-top:1.75rem;border-top:1px solid var(--border)}
+.related-articles>h2{font-size:.95rem;font-weight:800;margin-bottom:.875rem}
+.related-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.75rem}
+.related-card{border:1px solid var(--border);border-radius:var(--r);padding:.75rem;transition:.2s;color:var(--text);display:block;background:#fff}
+.related-card:hover{border-color:var(--brand);box-shadow:var(--shadow)}
+.related-card .rc-cat{font-size:.6rem;color:var(--brand);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.2rem}
+.related-card .rc-title{font-size:.78rem;font-weight:600;line-height:1.35;color:var(--text2)}
+.related-card:hover .rc-title{color:var(--brand)}
+/* ── FOOTER ── */
+footer{background:var(--nav);color:rgba(255,255,255,.65);padding:2.5rem 1.5rem;margin-top:4rem}
 .footer-inner{max-width:var(--w);margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr;gap:2rem}
-.footer-logo{font-weight:800;font-size:1.1rem;color:var(--text);margin-bottom:.5rem}
-.footer-desc{font-size:.875rem;color:var(--muted);line-height:1.6}
-.footer-col h4{font-size:.875rem;font-weight:700;margin-bottom:1rem}
-.footer-col ul{list-style:none}.footer-col li{margin-bottom:.5rem}
-.footer-col a{font-size:.875rem;color:var(--muted)}.footer-col a:hover{color:var(--brand)}
-.footer-bottom{max-width:var(--w);margin:2rem auto 0;padding-top:1.5rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem}
-.footer-bottom p{font-size:.8rem;color:var(--muted)}
-@media(max-width:640px){.footer-inner{grid-template-columns:1fr}.nav-links{display:none}.article-body h2{font-size:1.25rem}.home-hero h1{font-size:1.75rem}}
-/* ── Key Takeaways / TL;DR ── */
-.key-takeaways{background:linear-gradient(135deg,#f0f0ff,#eaf0ff);border:1px solid #c8d0ff;border-left:4px solid var(--brand);border-radius:var(--r);padding:1.5rem 1.75rem;margin:1.75rem 0}
-.key-takeaways h3{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--brand);margin-bottom:.875rem}
-.key-takeaways ul{margin:0;padding-left:1.25rem;color:var(--text2)}.key-takeaways li{margin-bottom:.5rem;font-size:.975rem}
-/* ── Table of Contents ── */
-.toc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem 1.5rem;margin:1.75rem 0}
-.toc-title{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.875rem}
-.toc ol{margin:0;padding-left:1.25rem;counter-reset:none}.toc li{margin-bottom:.4rem}
-.toc a{font-size:.925rem;color:var(--text2);text-decoration:none;font-weight:500}.toc a:hover{color:var(--brand)}
-/* ── Reading time ── */
-.reading-time{display:inline-flex;align-items:center;gap:.35rem;font-size:.8rem;color:var(--muted);font-weight:500}
-/* ── Step boxes (tutorials) ── */
-.step-box{display:flex;gap:1.25rem;margin:2rem 0;padding:1.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)}
-.step-num{flex-shrink:0;width:2rem;height:2rem;border-radius:50%;background:var(--brand);color:#fff;font-weight:800;font-size:.9rem;display:flex;align-items:center;justify-content:center}
-.step-content h3{font-size:1.05rem;font-weight:700;margin-bottom:.5rem;color:var(--text)}.step-content p{color:var(--text2);margin:0}
-/* ── Comparison table ── */
-.comparison-table{width:100%;border-collapse:collapse;margin:2rem 0;font-size:.9rem;border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
-.comparison-table th{background:var(--brand);color:#fff;padding:.875rem 1rem;text-align:left;font-weight:700}
-.comparison-table td{padding:.75rem 1rem;border-bottom:1px solid var(--border)}.comparison-table tr:last-child td{border-bottom:none}
-.comparison-table tr:nth-child(even) td{background:var(--bg2)}.comparison-table .ct-winner{color:var(--brand);font-weight:700}
-/* ── Pros / Cons ── */
-.pros-cons{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:2rem 0}
-.pros-cons .pros,.pros-cons .cons{padding:1.25rem 1.5rem;border-radius:var(--r)}.pros-cons .pros{background:#f0fff8;border:1px solid #b6e8ce}
-.pros-cons .cons{background:#fff5f5;border:1px solid #f5c5c5}
-.pros-cons h4{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem}
-.pros-cons .pros h4{color:#087f5b}.pros-cons .cons h4{color:#c92a2a}
-.pros-cons ul{margin:0;padding-left:1.1rem;font-size:.9rem;color:var(--text2)}.pros-cons li{margin-bottom:.4rem}
-/* ── Author box (E-E-A-T) ── */
-.author-box{display:flex;gap:1.25rem;align-items:center;margin:3rem 0 1.5rem;padding:1.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)}
-.author-avatar{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--brand),#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.25rem;flex-shrink:0}
-.author-info .author-name{font-weight:700;font-size:.95rem;color:var(--text);margin-bottom:.25rem}
-.author-info .author-bio{font-size:.8rem;color:var(--muted);line-height:1.5}
-/* ── Verdict box ── */
-.verdict-box{background:linear-gradient(135deg,#fafafa,#f5f5ff);border:1px solid var(--border);border-left:4px solid #22c55e;border-radius:var(--r);padding:1.5rem 1.75rem;margin:2rem 0}
-.verdict-box h3{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#16a34a;margin-bottom:.75rem}
-@media(max-width:640px){.pros-cons{grid-template-columns:1fr}.step-box{flex-direction:column;gap:.75rem}.comparison-table{font-size:.8rem}}
+.footer-logo{font-weight:900;font-size:.975rem;color:#fff;margin-bottom:.35rem;letter-spacing:-.02em}
+.footer-desc{font-size:.76rem;opacity:.5;line-height:1.6}
+.footer-col h4{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.35);margin-bottom:.75rem}
+.footer-col ul{list-style:none}.footer-col li{margin-bottom:.35rem}
+.footer-col a{font-size:.78rem;color:rgba(255,255,255,.5)}.footer-col a:hover{color:#fff}
+.footer-bottom{max-width:var(--w);margin:1.5rem auto 0;padding-top:1.1rem;border-top:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;font-size:.7rem;color:rgba(255,255,255,.28);flex-wrap:wrap;gap:.4rem}
+/* ── SEO CONTENT ELEMENTS ── */
+.key-takeaways{background:#eff0ff;border-left:4px solid var(--brand);border-radius:0 8px 8px 0;padding:1.1rem 1.4rem;margin:1.5rem 0}
+.key-takeaways h3{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--brand);margin-bottom:.65rem}
+.key-takeaways ul{margin:0;padding-left:1.1rem;color:var(--text2)}.key-takeaways li{margin-bottom:.3rem;font-size:.9rem}
+.toc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:1rem 1.25rem;margin:1.5rem 0}
+.toc-title{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.55rem}
+.toc ol{margin:0;padding-left:1.2rem}.toc li{margin-bottom:.28rem}
+.toc a{font-size:.83rem;color:var(--text2);font-weight:500}.toc a:hover{color:var(--brand)}
+.step-box{display:flex;gap:1rem;margin:1.5rem 0;padding:1.1rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)}
+.step-num{width:1.875rem;height:1.875rem;border-radius:50%;background:var(--brand);color:#fff;font-weight:800;font-size:.82rem;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.step-content h3{font-size:.975rem;font-weight:700;margin-bottom:.3rem;color:var(--text)}.step-content p{color:var(--text2);margin:0;font-size:.875rem}
+.comparison-table{width:100%;border-collapse:collapse;margin:1.75rem 0;font-size:.84rem;border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
+.comparison-table th{background:var(--brand);color:#fff;padding:.65rem .875rem;text-align:left;font-weight:700;font-size:.76rem}
+.comparison-table td{padding:.6rem .875rem;border-bottom:1px solid var(--border)}.comparison-table tr:last-child td{border-bottom:none}
+.comparison-table tr:nth-child(even) td{background:var(--bg2)}.comparison-table .ct-winner{color:#059669;font-weight:700}
+.pros-cons{display:grid;grid-template-columns:1fr 1fr;gap:.875rem;margin:1.5rem 0}
+.pros-cons .pros,.pros-cons .cons{padding:1rem 1.1rem;border-radius:var(--r)}
+.pros-cons .pros{background:#f0fdf4;border:1px solid #bbf7d0}.pros-cons .cons{background:#fff5f5;border:1px solid #fecaca}
+.pros-cons h4{font-size:.65rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.55rem}
+.pros-cons .pros h4{color:#059669}.pros-cons .cons h4{color:#dc2626}
+.pros-cons ul{margin:0;padding-left:1rem;font-size:.84rem;color:var(--text2)}.pros-cons li{margin-bottom:.28rem}
+.author-box{display:flex;gap:.875rem;align-items:center;margin:2.25rem 0 1.5rem;padding:1rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)}
+.author-avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--brand),#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.95rem;flex-shrink:0}
+.author-info .author-name{font-weight:700;font-size:.84rem;color:var(--text)}
+.author-info .author-bio{font-size:.73rem;color:var(--muted);line-height:1.5;margin-top:.1rem}
+.verdict-box{background:#f0fdf4;border-left:4px solid #22c55e;border-radius:0 8px 8px 0;padding:1rem 1.4rem;margin:1.5rem 0}
+.verdict-box h3{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#16a34a;margin-bottom:.45rem}
+.verdict-box p{color:var(--text2);margin:0;font-size:.9rem}
+.highlight-box{background:linear-gradient(135deg,#f5f3ff,#eef2ff);border:1px solid #c7d2fe;border-radius:var(--r);padding:1.1rem 1.4rem;margin:1.5rem 0}
+@media(max-width:1024px){.article-layout{grid-template-columns:1fr}.sidebar{position:static}.articles-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){.hero-grid{grid-template-columns:1fr}.hero-side{display:none}.footer-inner{grid-template-columns:1fr 1fr}.articles-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.articles-grid{grid-template-columns:1fr}.footer-inner{grid-template-columns:1fr}.nav-links{display:none}.pros-cons{grid-template-columns:1fr}.step-box{flex-direction:column;gap:.6rem}.comparison-table{font-size:.75rem}}
 `;
 
+const CARD_GRADS = [
+  "linear-gradient(135deg,#4f46e5,#7c3aed)",
+  "linear-gradient(135deg,#0891b2,#0e7490)",
+  "linear-gradient(135deg,#059669,#16a34a)",
+  "linear-gradient(135deg,#dc2626,#b91c1c)",
+  "linear-gradient(135deg,#d97706,#b45309)",
+  "linear-gradient(135deg,#7c3aed,#4f46e5)",
+  "linear-gradient(135deg,#0e7490,#0891b2)",
+];
+
 function buildNav(siteTitle: string, clusters: SeoCluster[], rootPath = "/"): string {
-  const links = clusters.slice(0, 5).map(c =>
+  const links = clusters.slice(0, 7).map(c =>
     `<a href="/${c.slug}/">${c.name}</a>`
-  ).join("\n        ");
+  ).join("");
   return `<nav>
   <div class="nav-inner">
     <a href="${rootPath}" class="nav-logo">${siteTitle}</a>
@@ -222,9 +284,9 @@ function buildNav(siteTitle: string, clusters: SeoCluster[], rootPath = "/"): st
 }
 
 function buildFooter(siteTitle: string, siteDescription: string, clusters: SeoCluster[]): string {
-  const catLinks = clusters.slice(0, 5).map(c =>
+  const catLinks = clusters.slice(0, 6).map(c =>
     `<li><a href="/${c.slug}/">${c.name}</a></li>`
-  ).join("\n        ");
+  ).join("\n");
   return `<footer>
   <div class="footer-inner">
     <div>
@@ -244,7 +306,8 @@ function buildFooter(siteTitle: string, siteDescription: string, clusters: SeoCl
     </div>
   </div>
   <div class="footer-bottom">
-    <p>© ${new Date().getFullYear()} ${siteTitle}. Все права защищены.</p>
+    <span>© ${new Date().getFullYear()} ${siteTitle}. Все права защищены.</span>
+    <span>Создано с Craft AI</span>
   </div>
 </footer>`;
 }
@@ -252,23 +315,77 @@ function buildFooter(siteTitle: string, siteDescription: string, clusters: SeoCl
 function buildHomePage(cfg: SeoConfig): string {
   const nav = buildNav(cfg.siteTitle, cfg.clusters);
   const footer = buildFooter(cfg.siteTitle, cfg.siteDescription, cfg.clusters);
-  const cards = cfg.clusters.map(c => {
+
+  // Collect all done articles
+  const allDone: Array<{ kw: SeoKeyword; cluster: SeoCluster; idx: number }> = [];
+  let gi = 0;
+  for (const c of cfg.clusters) {
+    for (const kw of c.keywords) {
+      if (kw.status === "done") { allDone.push({ kw, cluster: c, idx: gi++ }); }
+    }
+  }
+
+  // ── Hero grid (top 4 articles) ──
+  const h = allDone.slice(0, 4);
+  const heroMain = h[0] ? `<a href="/${h[0].cluster.slug}/${h[0].kw.slug}/" class="hero-main">
+    <div class="hero-grad" style="background:${CARD_GRADS[0]};position:absolute;inset:0"></div>
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <span class="cat-chip">${h[0].cluster.name}</span>
+      <div class="hero-title">${h[0].kw.title}</div>
+    </div>
+  </a>` : `<div class="hero-main"><div class="hero-grad" style="background:${CARD_GRADS[0]};position:absolute;inset:0"></div><div class="hero-overlay"></div><div class="hero-content"><div class="hero-title">${cfg.siteTitle}</div></div></div>`;
+
+  const heroSideItems = (h.length > 1 ? h.slice(1, 4) : cfg.clusters.slice(0, 3).map((c, i) => ({ kw: null as any, cluster: c, idx: i }))).map((a, i) =>
+    a.kw
+      ? `<a href="/${a.cluster.slug}/${a.kw.slug}/" class="hero-side-item">
+          <div class="hero-grad" style="background:${CARD_GRADS[(i+1)%CARD_GRADS.length]};position:absolute;inset:0"></div>
+          <div class="hero-overlay"></div>
+          <div class="hero-content"><span class="cat-chip">${a.cluster.name}</span><div class="hero-title">${a.kw.title}</div></div>
+        </a>`
+      : `<a href="/${a.cluster.slug}/" class="hero-side-item">
+          <div class="hero-grad" style="background:${CARD_GRADS[(i+1)%CARD_GRADS.length]};position:absolute;inset:0"></div>
+          <div class="hero-overlay"></div>
+          <div class="hero-content"><span class="cat-chip">${a.cluster.name}</span><div class="hero-title">${a.cluster.description}</div></div>
+        </a>`
+  ).join("\n");
+
+  // ── Hot strip ──
+  const hotChips = [
+    ...cfg.clusters.slice(0, 5).map(c => `<a href="/${c.slug}/" class="hot-chip">${c.name}</a>`),
+    ...allDone.slice(0, 8).map(a => `<a href="/${a.cluster.slug}/${a.kw.slug}/" class="hot-chip">${a.kw.keyword}</a>`),
+  ].join("\n        ");
+
+  // ── Ad unit ──
+  const adUnit = cfg.adUnitCode
+    ? cfg.adUnitCode
+    : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#9ca3af;font-size:.75rem">Рекламный блок 728×90</div>`;
+
+  // ── Recent articles grid ──
+  const recentCards = allDone.slice(4, 16).map((a, i) => `<a href="/${a.cluster.slug}/${a.kw.slug}/" class="article-card">
+    <div class="ac-img-wrap">
+      <div class="ac-img-grad" style="background:${CARD_GRADS[i%CARD_GRADS.length]};width:100%;height:100%"></div>
+    </div>
+    <div class="ac-body">
+      <span class="ac-cat">${a.cluster.name}</span>
+      <div class="ac-title">${a.kw.title}</div>
+      <div class="ac-meta">⏱ ~5 мин чтения</div>
+    </div>
+  </a>`).join("\n    ");
+
+  // ── Category cards ──
+  const catCards = cfg.clusters.map((c, i) => {
     const count = c.keywords.filter(k => k.status === "done").length;
-    const icon = "📄";
-    return `<a href="/${c.slug}/" class="category-card">
-      <div class="cc-icon">${icon}</div>
+    return `<a href="/${c.slug}/" class="cat-card">
+      <div class="cc-icon" style="width:36px;height:36px;border-radius:8px;background:${CARD_GRADS[i%CARD_GRADS.length]};margin-bottom:.625rem;display:flex;align-items:center;justify-content:center"></div>
       <h2>${c.name}</h2>
       <p>${c.description}</p>
-      <div class="cc-count">${count} статей</div>
+      <div class="cc-count">${count} ${count === 1 ? "статья" : count < 5 ? "статьи" : "статей"}</div>
     </a>`;
   }).join("\n    ");
 
-  const schema = JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: cfg.siteTitle,
-    description: cfg.siteDescription,
-  });
+  const schema = JSON.stringify({ "@context": "https://schema.org", "@type": "WebSite", name: cfg.siteTitle, description: cfg.siteDescription });
+  const adHeadCode = cfg.adHeadCode || "";
 
   return `<!DOCTYPE html>
 <html lang="ru">
@@ -279,18 +396,46 @@ function buildHomePage(cfg: SeoConfig): string {
 <meta name="description" content="${cfg.siteDescription}">
 <meta property="og:title" content="${cfg.siteTitle}">
 <meta property="og:description" content="${cfg.siteDescription}">
+<meta property="og:type" content="website">
 <link rel="stylesheet" href="/assets/style.css">
 <script type="application/ld+json">${schema}</script>
+${adHeadCode}
 </head>
 <body>
 ${nav}
-<section class="home-hero">
-  <h1>${cfg.siteTitle}</h1>
-  <p>${cfg.siteDescription}</p>
-</section>
-<div style="padding:0 1.5rem 4rem">
-  <div class="categories-grid">
-    ${cards}
+<div class="container">
+  <div class="hero-wrap">
+    <div class="hero-grid">
+      ${heroMain}
+      <div class="hero-side">${heroSideItems}</div>
+    </div>
+  </div>
+</div>
+<div class="hot-strip">
+  <div class="container">
+    <div class="hot-inner">
+      <span class="hot-label">🔥 Горячее</span>
+      ${hotChips}
+    </div>
+  </div>
+</div>
+<div class="container">
+  <div class="ad-slot ad-728">${adUnit}</div>
+</div>
+${recentCards ? `<div class="container">
+  <div class="section-header">
+    <span class="section-title">Новые статьи</span>
+  </div>
+  <div class="articles-grid">
+    ${recentCards}
+  </div>
+</div>` : ""}
+<div class="container">
+  <div class="section-header">
+    <span class="section-title">Все разделы</span>
+  </div>
+  <div class="cats-grid">
+    ${catCards}
   </div>
 </div>
 ${footer}
@@ -302,11 +447,19 @@ function buildCategoryPage(cluster: SeoCluster, cfg: SeoConfig): string {
   const nav = buildNav(cfg.siteTitle, cfg.clusters);
   const footer = buildFooter(cfg.siteTitle, cfg.siteDescription, cfg.clusters);
   const done = cluster.keywords.filter(k => k.status === "done");
-  const cards = done.map(k => `<a href="/${cluster.slug}/${k.slug}/" class="article-card">
-      <div class="ac-cat">${cluster.name}</div>
-      <h2>${k.title}</h2>
-      <div class="ac-read">Читать →</div>
-    </a>`).join("\n    ");
+
+  const cards = done.map((k, i) => `<a href="/${cluster.slug}/${k.slug}/" class="article-card">
+    <div class="ac-img-wrap">
+      <div class="ac-img-grad" style="background:${CARD_GRADS[i % CARD_GRADS.length]};width:100%;height:100%"></div>
+    </div>
+    <div class="ac-body">
+      <span class="ac-cat">${cluster.name}</span>
+      <div class="ac-title">${k.title}</div>
+      <div class="ac-meta">⏱ ~5 мин чтения</div>
+    </div>
+  </a>`).join("\n    ");
+
+  const adUnit = cfg.adUnitCode || `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#9ca3af;font-size:.75rem">Рекламный блок</div>`;
 
   const schema = JSON.stringify({
     "@context": "https://schema.org",
@@ -322,6 +475,8 @@ function buildCategoryPage(cluster: SeoCluster, cfg: SeoConfig): string {
     },
   });
 
+  const adHeadCode = cfg.adHeadCode || "";
+
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -329,23 +484,26 @@ function buildCategoryPage(cluster: SeoCluster, cfg: SeoConfig): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${cluster.name} | ${cfg.siteTitle}</title>
 <meta name="description" content="${cluster.description}">
+<meta property="og:title" content="${cluster.name} | ${cfg.siteTitle}">
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="canonical" href="/${cluster.slug}/">
 <script type="application/ld+json">${schema}</script>
+${adHeadCode}
 </head>
 <body>
 ${nav}
-<div class="breadcrumb">
-  <a href="/">Главная</a><span class="sep">›</span><span class="cur">${cluster.name}</span>
-</div>
-<div class="page-container">
-  <div class="page-header">
+<div class="cat-header">
+  <div class="container">
+    <div class="breadcrumb">
+      <a href="/">Главная</a><span class="sep">›</span><span class="cur">${cluster.name}</span>
+    </div>
     <h1>${cluster.name}</h1>
     <p>${cluster.description}</p>
   </div>
-  <div class="articles-grid">
-    ${cards}
-  </div>
+</div>
+<div class="container">
+  <div class="ad-slot ad-728">${adUnit}</div>
+  ${done.length > 0 ? `<div class="articles-grid">${cards}</div>` : `<p style="text-align:center;padding:3rem 0;color:#9ca3af">Статьи генерируются...</p>`}
 </div>
 ${footer}
 </body>
@@ -436,14 +594,46 @@ async function generateArticleHtml(
   allClusters: SeoCluster[],
   images: string[],
 ): Promise<string> {
-  const relatedLinks = allClusters
-    .flatMap(c => c.keywords.filter(k => k.slug !== kw.slug && k.status === "done").slice(0, 3).map(k => `/${c.slug}/${k.slug}/ — ${k.title}`))
+  // ── Build sidebar in TypeScript (reliable, consistent) ──
+  const sidebarLinks = cluster.keywords
+    .filter(k => k.status === "done" && k.slug !== kw.slug)
     .slice(0, 6)
+    .map((k, i) => `<li><div class="sb-num">${String(i + 1).padStart(2, "0")}</div><a href="/${cluster.slug}/${k.slug}/">${k.title}</a></li>`)
     .join("\n");
 
-  const contentTypeBlock = getContentTypeInstructions(kw.contentType, kw.keyQuestions);
+  const otherLinks = allClusters
+    .filter(c => c.id !== cluster.id)
+    .flatMap(c => c.keywords.filter(k => k.status === "done").slice(0, 2))
+    .slice(0, 4)
+    .map(k => {
+      const c = allClusters.find(x => x.keywords.some(x2 => x2.slug === k.slug))!;
+      return `<li><a href="/${c.slug}/${k.slug}/">${k.title}</a></li>`;
+    }).join("\n");
 
-  const prompt = `You are a world-class SEO content writer. Write an engaging, deeply informative HTML article.
+  const adUnit = cfg.adUnitCode || `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#9ca3af;font-size:.72rem">Рекламный блок 300×250</div>`;
+
+  const sidebar = `<aside class="sidebar">
+  <div class="sb-block"><div class="ad-slot ad-300">${adUnit}</div></div>
+  ${sidebarLinks ? `<div class="sb-block">
+    <div class="sb-head">В этом разделе</div>
+    <div class="sb-body"><ul class="sb-list">${sidebarLinks}</ul></div>
+  </div>` : ""}
+  ${otherLinks ? `<div class="sb-block">
+    <div class="sb-head">Ещё материалы</div>
+    <div class="sb-body"><ul class="sb-list">${otherLinks}</ul></div>
+  </div>` : ""}
+  <div class="sb-block"><div class="ad-slot ad-300">${adUnit}</div></div>
+</aside>`;
+
+  // ── Internal links for AI ──
+  const relatedLinks = allClusters
+    .flatMap(c => c.keywords.filter(k => k.slug !== kw.slug && k.status === "done").slice(0, 2).map(k => `/${c.slug}/${k.slug}/ → ${k.title}`))
+    .slice(0, 6).join("\n");
+
+  const contentTypeBlock = getContentTypeInstructions(kw.contentType, kw.keyQuestions);
+  const today = new Date().toLocaleDateString("ru-RU");
+
+  const prompt = `You are a world-class SEO content writer. Write ONLY the inner article HTML fragment — NO <!DOCTYPE>, NO <html>, NO <head>, NO <nav>, NO <footer>, NO <body>.
 
 KEYWORD: "${kw.keyword}"
 TITLE (H1): "${kw.title}"
@@ -452,66 +642,141 @@ SITE: "${cfg.siteTitle}" — ${cfg.siteDescription}
 
 ${contentTypeBlock}
 
-CONTENT QUALITY RULES (write in the same language as the keyword):
-- 2000-2800 genuinely informative words — NO filler, every sentence adds value
-- Hook readers from sentence one: surprising fact, bold statement, or relatable problem
-- Use real statistics, named examples, and concrete numbers where possible
-- Write with authority and warmth — like an expert explaining to a smart friend
-- Use <span class="reading-time">⏱ ~X min read</span> in article-meta (estimate from word count)
-- Include exactly 3 image tags at natural positions: <img src="IMG_PLACEHOLDER_1" alt="[vivid, keyword-rich description]" class="article-img"> (also IMG_PLACEHOLDER_2 and IMG_PLACEHOLDER_3)
-- FAQ section with 5 question-answer pairs (collapsible .faq-item structure)
+CONTENT QUALITY (write in the same language as the keyword):
+- 2000-2800 genuinely informative words — no filler, every sentence adds real value
+- Hook from sentence one: surprising fact, bold statement, or relatable problem
+- Real statistics, concrete examples, named tools/brands where relevant
+- Write with authority and warmth — expert talking to a smart friend
+- Exactly 3 images: <img src="IMG_PLACEHOLDER_1" alt="[vivid, keyword-rich description]" class="article-img" loading="lazy"> (also IMG_PLACEHOLDER_2 and IMG_PLACEHOLDER_3 placed naturally in article body)
+- 5 FAQ pairs in collapsible structure
 
-INTERNAL LINKS (use these hrefs naturally within body text):
-${relatedLinks || "(none yet — site is new)"}
+INTERNAL LINKS (use naturally in body text):
+${relatedLinks || "(none yet)"}
 
-REQUIRED HTML STRUCTURE (output complete <!DOCTYPE html>, NO markdown fences):
-<head>: charset, viewport, canonical, <title>${kw.title} | ${cfg.siteTitle}</title>, <meta name="description" content="[150-160 chars, compelling]">, OG/Twitter tags, <link rel="stylesheet" href="/assets/style.css">
-Schema.org JSON-LD: Article (with author, datePublished) + FAQPage + BreadcrumbList
-<body>:
-  <nav> with site logo + category links
-  <div class="breadcrumb">… › ${cluster.name} › ${kw.title}</div>
-  <div class="article-container">
-    <article>
-      <div class="article-header">
-        <h1>${kw.title}</h1>
-        <div class="article-meta">
-          <span class="tag">${cluster.name}</span>
-          <span class="reading-time">⏱ ~X min read</span>
-          <span>Updated: ${new Date().toLocaleDateString("ru-RU")}</span>
-        </div>
-      </div>
-      [key-takeaways box, toc if applicable]
-      <div class="article-body">[main content]</div>
-      [author-box]
-      <div class="faq-section">…</div>
-      <div class="related-articles"><div class="related-grid">…</div></div>
-    </article>
+OUTPUT EXACTLY THIS STRUCTURE (no outer wrappers, no page-level tags):
+<div class="article-header">
+  <h1>${kw.title}</h1>
+  <div class="article-meta">
+    <span class="tag">${cluster.name}</span>
+    <span class="reading-time">⏱ ~[N] мин чтения</span>
+    <span>Обновлено: ${today}</span>
   </div>
-  <footer>…</footer>
-  <script>FAQ toggle + smooth scroll for TOC links</script>
+</div>
+<img src="IMG_PLACEHOLDER_1" alt="[hero description]" class="hero-article-img" loading="lazy">
+[key-takeaways box if applicable]
+[toc if guide/tutorial/listicle]
+<div class="article-body">
+  [full content with h2 sections, blockquotes, IMG_PLACEHOLDER_2 and IMG_PLACEHOLDER_3 placed naturally; link to internal URLs where relevant]
+</div>
+[author-box]
+<div class="faq-section">
+  <h2>Часто задаваемые вопросы</h2>
+  [5 faq-items: <div class="faq-item"><div class="faq-question">Question<span>+</span></div><div class="faq-answer">Answer text</div></div>]
+</div>
+<div class="related-articles">
+  <h2>Читайте также</h2>
+  <div class="related-grid">
+    [3-4 related-card divs using internal links above]
+  </div>
+</div>
 
-Output ONLY clean HTML — no markdown, no explanation text.`;
+Output ONLY the HTML fragment above — no markdown, no explanations, no page-level tags.`;
 
-  let html = "";
+  let articleContent = "";
   try {
-    html = await kieSync([
-      { role: "system", content: "You are an expert SEO content writer. Output only clean HTML without any markdown fences or explanation." },
+    articleContent = await kieSync([
+      { role: "system", content: "You are an expert SEO content writer. Output only a clean inner HTML fragment — no markdown, no page-level tags, no explanation." },
       { role: "user", content: prompt },
     ], 240000);
-    html = cleanHtml(html);
+    // Strip any accidental page-level wrapping
+    articleContent = articleContent.replace(/^\uFEFF/, "").replace(/```[a-zA-Z]*\n?/g, "").replace(/```\s*$/g, "").trim();
+    articleContent = articleContent.replace(/<!DOCTYPE[^>]*>/gi, "").replace(/<\/?html[^>]*>/gi, "").replace(/<head>[\s\S]*?<\/head>/gi, "").replace(/<\/?body[^>]*>/gi, "").replace(/<\/?nav[^>]*>[\s\S]*?<\/nav>/gi, "").replace(/<footer[\s\S]*?<\/footer>/gi, "").trim();
   } catch (e: any) {
     console.warn(`[SEO] Article gen failed for ${kw.keyword}:`, e?.message);
     return "";
   }
 
-  // Replace image placeholders with actual URLs
-  images.forEach((url, i) => {
-    if (url) html = html.replace(`IMG_PLACEHOLDER_${i + 1}`, url);
-  });
-  // Remove unfilled placeholders
-  html = html.replace(/IMG_PLACEHOLDER_\d+/g, "https://placehold.co/820x460/e8e8f0/4a4a6a?text=Image");
+  // Replace image placeholders with real URLs
+  if (images[0]) articleContent = articleContent.replace(/IMG_PLACEHOLDER_1/g, images[0]);
+  if (images[1]) articleContent = articleContent.replace(/IMG_PLACEHOLDER_2/g, images[1]);
+  if (images[2]) articleContent = articleContent.replace(/IMG_PLACEHOLDER_3/g, images[2] || images[0]);
+  // Fallback for any remaining placeholders
+  articleContent = articleContent.replace(/IMG_PLACEHOLDER_\d+/g, "https://placehold.co/800x450/e5e7eb/6b7280?text=Image");
 
-  return html;
+  // ── Schema.org ──
+  const schema = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: kw.title,
+    description: `${kw.keyword} — читайте на ${cfg.siteTitle}`,
+    author: { "@type": "Organization", name: cfg.siteTitle },
+    publisher: { "@type": "Organization", name: cfg.siteTitle },
+    datePublished: new Date().toISOString().split("T")[0],
+    breadcrumb: {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Главная", item: "/" },
+        { "@type": "ListItem", position: 2, name: cluster.name, item: `/${cluster.slug}/` },
+        { "@type": "ListItem", position: 3, name: kw.title },
+      ],
+    },
+  });
+
+  const nav = buildNav(cfg.siteTitle, cfg.clusters);
+  const footer = buildFooter(cfg.siteTitle, cfg.siteDescription, cfg.clusters);
+  const adHeadCode = cfg.adHeadCode || "";
+
+  return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${kw.title} | ${cfg.siteTitle}</title>
+<meta name="description" content="${kw.keyword} — подробная статья. ${cfg.siteDescription.slice(0, 100)}">
+<meta property="og:title" content="${kw.title} | ${cfg.siteTitle}">
+<meta property="og:description" content="${kw.keyword} — читайте на ${cfg.siteTitle}">
+<meta property="og:type" content="article">
+<link rel="canonical" href="/${cluster.slug}/${kw.slug}/">
+<link rel="stylesheet" href="/assets/style.css">
+<script type="application/ld+json">${schema}</script>
+${adHeadCode}
+</head>
+<body>
+${nav}
+<div class="article-page">
+  <div class="breadcrumb">
+    <a href="/">Главная</a><span class="sep">›</span>
+    <a href="/${cluster.slug}/">${cluster.name}</a><span class="sep">›</span>
+    <span class="cur">${kw.title}</span>
+  </div>
+  <div class="article-layout">
+    <main class="article-main">
+      ${articleContent}
+    </main>
+    ${sidebar}
+  </div>
+</div>
+${footer}
+<script>
+document.querySelectorAll('.faq-question').forEach(function(q){
+  q.addEventListener('click',function(){
+    var a=this.nextElementSibling;
+    var open=a&&a.style.display==='block';
+    if(a){a.style.display=open?'none':'block';}
+    var ic=this.querySelector('span');
+    if(ic)ic.textContent=open?'+':'−';
+  });
+});
+document.querySelectorAll('.toc a').forEach(function(a){
+  a.addEventListener('click',function(e){
+    e.preventDefault();
+    var t=document.querySelector(decodeURIComponent(this.getAttribute('href')||''));
+    if(t)t.scrollIntoView({behavior:'smooth',block:'start'});
+  });
+});
+</script>
+</body>
+</html>`;
 }
 
 export function registerSeoRoutes(app: Express, storage: IStorage) {
@@ -818,6 +1083,108 @@ Respond with ONLY valid JSON, no explanation:
     } catch (e: any) {
       res.status(500).json({ message: e?.message || "Publish failed" });
     }
+  });
+
+  // POST /api/seo/:id/add-keywords — merge a new keyword pack into existing site
+  app.post("/api/seo/:id/add-keywords", async (req, res) => {
+    const userId = requireAuth(req, res);
+    if (!userId) return;
+    const proj = await storage.getProject(parseInt(req.params.id));
+    if (!proj || proj.userId !== userId) return res.status(404).json({ message: "Not found" });
+    const cfg = proj.seoConfig as SeoConfig;
+    if (!cfg?.clusters) return res.status(400).json({ message: "No existing structure. Run analyze first." });
+
+    const { keywords }: { keywords: string[] } = req.body;
+    if (!Array.isArray(keywords) || keywords.length === 0) return res.status(400).json({ message: "keywords required" });
+    if (keywords.length > 500) return res.status(400).json({ message: "Max 500 keywords per pack" });
+
+    const existingClusters = cfg.clusters.map(c => `- ${c.name} (${c.slug}): ${c.description}`).join("\n");
+
+    const analyzePrompt = `You are an SEO architect merging new keywords into an existing website about "${cfg.niche}".
+
+EXISTING CATEGORIES:
+${existingClusters}
+
+NEW KEYWORDS TO INTEGRATE:
+${keywords.join("\n")}
+
+RULES:
+1. Map each keyword to the MOST RELEVANT existing category if it fits naturally
+2. If a keyword doesn't fit any existing category well, create a NEW category (new slug, name, description)
+3. For each keyword, generate: title (50-60 chars, SEO-optimized), slug (Latin, URL-safe), contentType (guide|tutorial|comparison|review|listicle), keyQuestions (3 real searcher questions)
+4. Avoid duplicating existing keywords/slugs
+
+Respond ONLY with valid JSON (no markdown):
+{
+  "assignments": [
+    {
+      "categorySlug": "existing-or-new-slug",
+      "categoryName": "Category Name",
+      "categoryDescription": "Description (required only for NEW categories)",
+      "isNew": false,
+      "keyword": "keyword text",
+      "slug": "keyword-slug",
+      "title": "SEO Article Title",
+      "contentType": "guide",
+      "keyQuestions": ["Q1?", "Q2?", "Q3?"]
+    }
+  ]
+}`;
+
+    let parsed: { assignments: any[] };
+    try {
+      const raw = await kieSync([
+        { role: "system", content: "You are an SEO architect. Output only valid JSON, no markdown, no explanation." },
+        { role: "user", content: analyzePrompt },
+      ], 120000);
+      const json = raw.replace(/```[a-zA-Z]*\n?/g, "").replace(/```\s*$/g, "").trim();
+      parsed = JSON.parse(json);
+    } catch (e: any) {
+      return res.status(500).json({ message: `AI analysis failed: ${e.message}` });
+    }
+
+    if (!parsed?.assignments?.length) return res.status(400).json({ message: "No assignments returned from AI" });
+
+    // Merge assignments into existing clusters
+    const allClusters: SeoCluster[] = [...cfg.clusters];
+    let added = 0;
+
+    for (const a of parsed.assignments) {
+      if (!a.keyword || !a.slug || !a.categorySlug) continue;
+
+      // Find or create cluster
+      let cluster = allClusters.find(c => c.slug === a.categorySlug);
+      if (!cluster) {
+        cluster = {
+          id: crypto.randomUUID(),
+          name: a.categoryName || a.categorySlug,
+          slug: a.categorySlug,
+          description: a.categoryDescription || "",
+          keywords: [],
+        };
+        allClusters.push(cluster);
+      }
+
+      // Skip if slug already exists in this cluster
+      if (cluster.keywords.some(k => k.slug === a.slug)) continue;
+
+      cluster.keywords.push({
+        id: crypto.randomUUID(),
+        keyword: a.keyword,
+        slug: a.slug,
+        title: a.title || a.keyword,
+        status: "pending",
+        contentType: a.contentType,
+        keyQuestions: Array.isArray(a.keyQuestions) ? a.keyQuestions : [],
+      });
+      added++;
+    }
+
+    const newTotal = cfg.pagesTotal + added;
+    const updatedCfg: SeoConfig = { ...cfg, clusters: allClusters, pagesTotal: newTotal };
+    await storage.updateProject(proj.id, { seoConfig: updatedCfg } as any);
+
+    res.json({ ok: true, added, pagesTotal: newTotal, clusters: allClusters.length });
   });
 
   // POST /api/seo/:id/update-config — save edited structure

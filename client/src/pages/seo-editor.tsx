@@ -6,7 +6,7 @@ import type { SeoConfig, SeoKeyword } from "@shared/schema";
 import {
   ChevronRight, ChevronDown, Globe, Zap, RefreshCw,
   CheckCircle2, XCircle, Clock, Loader2, ArrowLeft,
-  BarChart2, FileText, Layers,
+  BarChart2, FileText, Layers, PlusCircle, Settings2, X,
 } from "lucide-react";
 
 type Phase = "setup" | "structure" | "generating" | "done";
@@ -48,6 +48,13 @@ export default function SeoEditorPage() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [analyzeElapsed, setAnalyzeElapsed] = useState(0);
   const analyzeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const [addKwOpen, setAddKwOpen]     = useState(false);
+  const [addKwText, setAddKwText]     = useState("");
+  const [isAddingKw, setIsAddingKw]   = useState(false);
+  const [adOpen, setAdOpen]           = useState(false);
+  const [adHeadCode, setAdHeadCode]   = useState("");
+  const [adUnitCode, setAdUnitCode]   = useState("");
 
   /* ── single query, no polling — SSE provides live updates ── */
   const { data, isLoading, refetch } = useQuery<{
@@ -168,6 +175,49 @@ export default function SeoEditorPage() {
     }
   }
 
+  /* ── add keywords ── */
+  async function handleAddKeywords() {
+    const keywords = addKwText.split(/[\n,]+/).map(k => k.trim()).filter(Boolean);
+    if (!keywords.length) { toast({ title: "Введите ключевые слова", variant: "destructive" }); return; }
+    setIsAddingKw(true);
+    try {
+      const res = await fetch(`/api/seo/${id}/add-keywords`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keywords }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      const d = await res.json();
+      setAddKwOpen(false);
+      setAddKwText("");
+      await refetch();
+      setPhase("structure");
+      toast({ title: `Добавлено ${d.added} ключей ✓`, description: "Нажмите «Генерировать» для создания новых статей" });
+    } catch (e: any) {
+      toast({ title: "Ошибка", description: e.message, variant: "destructive" });
+    } finally {
+      setIsAddingKw(false);
+    }
+  }
+
+  /* ── save ad settings ── */
+  async function handleSaveAds() {
+    try {
+      const updatedCfg = { ...cfg, adHeadCode, adUnitCode };
+      const res = await fetch(`/api/seo/${id}/update-config`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seoConfig: updatedCfg }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      setAdOpen(false);
+      await refetch();
+      toast({ title: "Настройки рекламы сохранены ✓", description: "Перегенерируйте статьи или переопубликуйте сайт для применения" });
+    } catch (e: any) {
+      toast({ title: "Ошибка", description: e.message, variant: "destructive" });
+    }
+  }
+
   /* ── preview ── */
   async function loadPreview(filename: string) {
     setSelectedFile(filename);
@@ -217,6 +267,26 @@ export default function SeoEditorPage() {
             </span>
           )}
         </div>
+
+        {/* add keywords + ad settings — only after structure built */}
+        {phase !== "setup" && (
+          <>
+            <button
+              onClick={() => setAddKwOpen(true)}
+              title="Добавить новый пак ключей"
+              style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#818cf8", padding: "5px 10px", background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}
+            >
+              <PlusCircle className="w-3.5 h-3.5" /> Ключи
+            </button>
+            <button
+              onClick={() => { setAdHeadCode(cfg?.adHeadCode || ""); setAdUnitCode(cfg?.adUnitCode || ""); setAdOpen(true); }}
+              title="Настройки рекламных блоков"
+              style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#9ca3af", padding: "5px 10px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}
+            >
+              <Settings2 className="w-3.5 h-3.5" /> Реклама
+            </button>
+          </>
+        )}
 
         {/* publish button — only after structure built */}
         {phase !== "setup" && (
@@ -469,6 +539,100 @@ export default function SeoEditorPage() {
           )}
         </main>
       </div>
+
+      {/* ═══ MODAL: Add Keywords ═══ */}
+      {addKwOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ background: "#111118", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, width: "100%", maxWidth: 480, padding: 24, boxShadow: "0 24px 64px rgba(0,0,0,.7)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", letterSpacing: "-0.01em" }}>➕ Добавить ключи</div>
+                <div style={{ fontSize: 12, color: "#555", marginTop: 3 }}>ИИ встроит новые ключи в существующую структуру сайта</div>
+              </div>
+              <button onClick={() => setAddKwOpen(false)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", padding: 4 }}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <textarea
+              value={addKwText}
+              onChange={e => setAddKwText(e.target.value)}
+              placeholder={"новый запрос 1, новый запрос 2\n..."}
+              rows={12}
+              style={{ width: "100%", padding: "10px 11px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#e2e8f0", fontSize: 12.5, resize: "none", outline: "none", lineHeight: 1.65, boxSizing: "border-box", fontFamily: "inherit" }}
+              onFocus={e => (e.target.style.borderColor = "rgba(99,102,241,0.5)")}
+              onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
+            />
+            <div style={{ fontSize: 11, color: "#444", marginTop: 6 }}>
+              {addKwText.split(/[\n,]+/).filter(k => k.trim()).length} ключей
+            </div>
+            <button
+              onClick={handleAddKeywords}
+              disabled={isAddingKw || !addKwText.trim()}
+              style={{ marginTop: 14, width: "100%", padding: "11px", background: isAddingKw || !addKwText.trim() ? "rgba(255,255,255,0.04)" : "linear-gradient(135deg,#4f46e5,#7c3aed)", border: "none", borderRadius: 10, color: isAddingKw || !addKwText.trim() ? "#555" : "#fff", fontWeight: 700, fontSize: 13.5, cursor: isAddingKw || !addKwText.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            >
+              {isAddingKw ? <><Loader2 className="w-4 h-4 animate-spin" /> Анализирую...</> : <><Zap className="w-4 h-4" /> Добавить в структуру</>}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MODAL: Ad Settings ═══ */}
+      {adOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ background: "#111118", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, width: "100%", maxWidth: 560, padding: 24, boxShadow: "0 24px 64px rgba(0,0,0,.7)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", letterSpacing: "-0.01em" }}>📢 Рекламные блоки</div>
+                <div style={{ fontSize: 12, color: "#555", marginTop: 3 }}>AdSense, Яндекс РСЯ, партнёрские баннеры</div>
+              </div>
+              <button onClick={() => setAdOpen(false)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", padding: 4 }}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "#666", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
+                Код в &lt;head&gt; (скрипт AdSense / Яндекс init)
+              </label>
+              <textarea
+                value={adHeadCode}
+                onChange={e => setAdHeadCode(e.target.value)}
+                placeholder={'<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXX" crossorigin="anonymous"></script>'}
+                rows={4}
+                style={{ width: "100%", padding: "9px 11px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#e2e8f0", fontSize: 11.5, resize: "none", outline: "none", lineHeight: 1.6, boxSizing: "border-box", fontFamily: "monospace" }}
+                onFocus={e => (e.target.style.borderColor = "rgba(99,102,241,0.5)")}
+                onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
+              />
+              <div style={{ fontSize: 10.5, color: "#444", marginTop: 4 }}>Вставляется в &lt;head&gt; каждой страницы сайта</div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "#666", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
+                Рекламный блок (ins / div / iframe)
+              </label>
+              <textarea
+                value={adUnitCode}
+                onChange={e => setAdUnitCode(e.target.value)}
+                placeholder={'<ins class="adsbygoogle"\n  style="display:block"\n  data-ad-client="ca-pub-XXXXX"\n  data-ad-slot="XXXXXXXX"\n  data-ad-format="auto"></ins>\n<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>'}
+                rows={6}
+                style={{ width: "100%", padding: "9px 11px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#e2e8f0", fontSize: 11.5, resize: "none", outline: "none", lineHeight: 1.6, boxSizing: "border-box", fontFamily: "monospace" }}
+                onFocus={e => (e.target.style.borderColor = "rgba(99,102,241,0.5)")}
+                onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
+              />
+              <div style={{ fontSize: 10.5, color: "#444", marginTop: 4 }}>Размещается в 4 местах: под hero, в боковой панели (×2), в категориях. Подходит для AdSense, Яндекс РСЯ, любого iframe/баннера.</div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setAdOpen(false)} style={{ flex: 1, padding: "10px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "#666", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                Отмена
+              </button>
+              <button onClick={handleSaveAds} style={{ flex: 2, padding: "10px", background: "linear-gradient(135deg,#4f46e5,#7c3aed)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <Settings2 className="w-4 h-4" /> Сохранить настройки
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -45,6 +45,8 @@ export interface SeoConfig {
   pagesTotal: number;
   pagesGenerated: number;
   publishUrl?: string;
+  adHeadCode?: string;
+  adUnitCode?: string;
 }
 
 export const projects = pgTable("projects", {
