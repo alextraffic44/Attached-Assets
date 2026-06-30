@@ -41,6 +41,8 @@ export interface SeoConfig {
   clusters: SeoCluster[];
   siteTitle: string;
   siteDescription: string;
+  targetUrl?: string;
+  ctaLabel?: string;
   status: "idle" | "analyzing" | "generating" | "done" | "error";
   pagesTotal: number;
   pagesGenerated: number;

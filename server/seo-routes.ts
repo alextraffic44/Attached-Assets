@@ -259,6 +259,17 @@ footer{background:var(--nav);color:rgba(255,255,255,.65);padding:2.5rem 1.5rem;m
 @media(max-width:1024px){.article-layout{grid-template-columns:1fr}.sidebar{position:static}.articles-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:768px){.hero-grid{grid-template-columns:1fr}.hero-side{display:none}.footer-inner{grid-template-columns:1fr 1fr}.articles-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.articles-grid{grid-template-columns:1fr}.footer-inner{grid-template-columns:1fr}.nav-links{display:none}.pros-cons{grid-template-columns:1fr}.step-box{flex-direction:column;gap:.6rem}.comparison-table{font-size:.75rem}}
+/* ── CTA BLOCK ── */
+.cta-block{background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);border-radius:12px;padding:1.4rem 1.75rem;margin:2rem 0;display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;box-shadow:0 4px 24px rgba(79,70,229,.3)}
+.cta-block .cta-icon{font-size:2rem;flex-shrink:0}
+.cta-block .cta-text{flex:1;min-width:180px}
+.cta-block .cta-text strong{display:block;color:#fff;font-size:1rem;font-weight:800;margin-bottom:.2rem}
+.cta-block .cta-text span{color:rgba(255,255,255,.78);font-size:.84rem;line-height:1.45}
+.cta-btn{display:inline-flex;align-items:center;gap:.4rem;background:#fff;color:#4f46e5;font-weight:800;font-size:.875rem;padding:.6rem 1.25rem;border-radius:8px;white-space:nowrap;transition:.18s;text-decoration:none;flex-shrink:0}
+.cta-btn:hover{background:#ede9fe;transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,0,0,.25)}
+.cta-hero{background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:1.75rem;border-radius:12px;margin:1.5rem 0;display:flex;align-items:center;justify-content:space-between;gap:1.5rem;flex-wrap:wrap}
+.cta-hero-text h2{color:#fff;font-size:1.2rem;font-weight:800;margin-bottom:.3rem}
+.cta-hero-text p{color:rgba(255,255,255,.78);font-size:.875rem}
 `;
 
 const CARD_GRADS = [
@@ -428,6 +439,15 @@ ${recentCards ? `<div class="container">
   </div>
   <div class="articles-grid">
     ${recentCards}
+  </div>
+</div>` : ""}
+${cfg.targetUrl ? `<div class="container">
+  <div class="cta-hero">
+    <div class="cta-hero-text">
+      <h2>${cfg.siteTitle} — попробуйте прямо сейчас</h2>
+      <p>${cfg.siteDescription}</p>
+    </div>
+    <a href="${cfg.targetUrl}" class="cta-btn" target="_blank" rel="noopener sponsored">${cfg.ctaLabel || "Попробовать →"}</a>
   </div>
 </div>` : ""}
 <div class="container">
@@ -691,12 +711,22 @@ async function generateArticleHtml(
   const contentTypeBlock = getContentTypeInstructions(kw.contentType, kw.keyQuestions);
   const today = new Date().toLocaleDateString("ru-RU");
 
+  const ctaHtml = cfg.targetUrl ? `<div class="cta-block">
+  <div class="cta-icon">🚀</div>
+  <div class="cta-text">
+    <strong>[Write a compelling 8-12 word hook about ${cfg.siteTitle} related to "${kw.keyword}"]</strong>
+    <span>[One sentence: what the user gets by clicking — make it relevant to the article topic]</span>
+  </div>
+  <a href="${cfg.targetUrl}" class="cta-btn" target="_blank" rel="noopener sponsored">${cfg.ctaLabel || "Попробовать →"}</a>
+</div>` : "";
+
   const prompt = `You are a world-class SEO content writer. Write ONLY the inner article HTML fragment — NO <!DOCTYPE>, NO <html>, NO <head>, NO <nav>, NO <footer>, NO <body>.
 
 KEYWORD: "${kw.keyword}"
 TITLE (H1): "${kw.title}"
 CATEGORY: "${cluster.name}"
 SITE: "${cfg.siteTitle}" — ${cfg.siteDescription}
+${cfg.targetUrl ? `TARGET URL: ${cfg.targetUrl} | CTA BUTTON TEXT: "${cfg.ctaLabel || "Попробовать →"}"` : ""}
 
 ${contentTypeBlock}
 
@@ -710,6 +740,12 @@ CONTENT QUALITY (write in the same language as the keyword):
 
 INTERNAL LINKS (use naturally in body text):
 ${relatedLinks || "(none yet)"}
+${ctaHtml ? `
+CTA BLOCK — insert this EXACTLY TWICE:
+  1) Right after the opening paragraph (before first H2)
+  2) Right before the [author-box]
+Use this exact HTML (fill in the bracketed placeholders with compelling copy):
+${ctaHtml}` : ""}
 
 OUTPUT EXACTLY THIS STRUCTURE (no outer wrappers, no page-level tags):
 <div class="article-header">
@@ -724,7 +760,10 @@ OUTPUT EXACTLY THIS STRUCTURE (no outer wrappers, no page-level tags):
 [key-takeaways box if applicable]
 [toc if guide/tutorial/listicle]
 <div class="article-body">
-  [full content with h2 sections, blockquotes, IMG_PLACEHOLDER_2 and IMG_PLACEHOLDER_3 placed naturally; link to internal URLs where relevant]
+  [opening paragraph]
+  ${ctaHtml ? "[CTA BLOCK #1 — see above]" : ""}
+  [h2 sections with full content; IMG_PLACEHOLDER_2 and IMG_PLACEHOLDER_3 placed naturally; internal links where relevant]
+  ${ctaHtml ? "[CTA BLOCK #2 — see above]" : ""}
 </div>
 [author-box]
 <div class="faq-section">
@@ -890,7 +929,7 @@ export function registerSeoRoutes(app: Express, storage: IStorage) {
     const proj = await storage.getProject(parseInt(req.params.id));
     if (!proj || proj.userId !== userId) return res.status(404).json({ message: "Not found" });
 
-    const { keywords, niche } = req.body as { keywords: string[]; niche?: string };
+    const { keywords, niche, targetUrl, ctaLabel } = req.body as { keywords: string[]; niche?: string; targetUrl?: string; ctaLabel?: string };
     if (!keywords || keywords.length === 0) return res.status(400).json({ message: "keywords required" });
 
     const limited = keywords.slice(0, 1000).map(k => k.trim()).filter(Boolean);
@@ -979,6 +1018,8 @@ Respond with ONLY valid JSON, no explanation:
         clusters,
         siteTitle: parsed.siteTitle || proj.title,
         siteDescription: parsed.siteDescription || siteNiche,
+        targetUrl: targetUrl || (proj.seoConfig as SeoConfig)?.targetUrl || "",
+        ctaLabel: ctaLabel || (proj.seoConfig as SeoConfig)?.ctaLabel || "Попробовать →",
         status: "idle",
         pagesTotal: totalPages,
         pagesGenerated: 0,

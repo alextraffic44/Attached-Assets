@@ -49,6 +49,9 @@ export default function SeoEditorPage() {
   const [analyzeElapsed, setAnalyzeElapsed] = useState(0);
   const analyzeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [targetUrl, setTargetUrl]     = useState("");
+  const [ctaLabel, setCtaLabel]       = useState("Попробовать →");
+
   const [addKwOpen, setAddKwOpen]     = useState(false);
   const [addKwText, setAddKwText]     = useState("");
   const [isAddingKw, setIsAddingKw]   = useState(false);
@@ -78,6 +81,8 @@ export default function SeoEditorPage() {
     else setPhase("setup");
     if (cfg.niche) setNiche(cfg.niche);
     if (cfg.rawKeywords?.length) setKeywordsText(cfg.rawKeywords.join("\n"));
+    if (cfg.targetUrl) setTargetUrl(cfg.targetUrl);
+    if (cfg.ctaLabel) setCtaLabel(cfg.ctaLabel);
     if (cfg.clusters?.length > 0) setOpenClusters(new Set(cfg.clusters.slice(0, 2).map((c: any) => c.id)));
     setGenProgress({ done: cfg.pagesGenerated || 0, total: cfg.pagesTotal || 0 });
   }, [cfg?.status, cfg?.pagesGenerated, cfg?.clusters?.length]);
@@ -103,7 +108,7 @@ export default function SeoEditorPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ keywords, niche }),
+        body: JSON.stringify({ keywords, niche, targetUrl: targetUrl.trim(), ctaLabel: ctaLabel.trim() }),
       });
       if (!res.ok) throw new Error((await res.json()).message);
       await refetch();
@@ -369,6 +374,34 @@ export default function SeoEditorPage() {
                   onChange={e => setNiche(e.target.value)}
                   placeholder="напр. нейросети для бизнеса"
                   style={{ width: "100%", padding: "8px 11px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#e2e8f0", fontSize: 13, outline: "none", transition: "border-color 0.15s", boxSizing: "border-box" }}
+                  onFocus={e => (e.target.style.borderColor = "rgba(99,102,241,0.5)")}
+                  onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
+                />
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#666", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
+                  🔗 Ваша ссылка (куда вести трафик)
+                </label>
+                <input
+                  value={targetUrl}
+                  onChange={e => setTargetUrl(e.target.value)}
+                  placeholder="https://ваш-сервис.ru"
+                  style={{ width: "100%", padding: "8px 11px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                  onFocus={e => (e.target.style.borderColor = "rgba(99,102,241,0.5)")}
+                  onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
+                />
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#666", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
+                  🎯 Текст кнопки CTA
+                </label>
+                <input
+                  value={ctaLabel}
+                  onChange={e => setCtaLabel(e.target.value)}
+                  placeholder="Попробовать → / Играть → / Перейти →"
+                  style={{ width: "100%", padding: "8px 11px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box" }}
                   onFocus={e => (e.target.style.borderColor = "rgba(99,102,241,0.5)")}
                   onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
                 />
