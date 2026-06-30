@@ -745,7 +745,7 @@ Output ONLY the HTML fragment above — no markdown, no explanations, no page-le
     articleContent = await kieSync([
       { role: "system", content: "You are an expert SEO content writer. Output only a clean inner HTML fragment — no markdown, no page-level tags, no explanation." },
       { role: "user", content: prompt },
-    ], 240000);
+    ], 120000);
     // Strip any accidental page-level wrapping
     articleContent = articleContent.replace(/^\uFEFF/, "").replace(/```[a-zA-Z]*\n?/g, "").replace(/```\s*$/g, "").trim();
     articleContent = articleContent.replace(/<!DOCTYPE[^>]*>/gi, "").replace(/<\/?html[^>]*>/gi, "").replace(/<head>[\s\S]*?<\/head>/gi, "").replace(/<\/?body[^>]*>/gi, "").replace(/<\/?nav[^>]*>[\s\S]*?<\/nav>/gi, "").replace(/<footer[\s\S]*?<\/footer>/gi, "").trim();
@@ -946,7 +946,7 @@ Respond with ONLY valid JSON, no explanation:
       const responseText = await kieSync([
         { role: "system", content: "You are an SEO architecture expert. Respond only with valid JSON." },
         { role: "user", content: prompt },
-      ], 240000);
+      ], 120000);
 
       let parsed: any;
       try {

@@ -77,9 +77,10 @@ export default function SeoEditorPage() {
     else if (cfg.clusters?.length > 0) setPhase("structure");
     else setPhase("setup");
     if (cfg.niche) setNiche(cfg.niche);
+    if (cfg.rawKeywords?.length) setKeywordsText(cfg.rawKeywords.join("\n"));
     if (cfg.clusters?.length > 0) setOpenClusters(new Set(cfg.clusters.slice(0, 2).map((c: any) => c.id)));
-    setGenProgress({ done: cfg.pagesGenerated, total: cfg.pagesTotal });
-  }, [cfg?.status, cfg?.clusters?.length]);
+    setGenProgress({ done: cfg.pagesGenerated || 0, total: cfg.pagesTotal || 0 });
+  }, [cfg?.status, cfg?.pagesGenerated, cfg?.clusters?.length]);
 
   /* ── analyze ── */
   async function handleAnalyze() {
@@ -142,7 +143,11 @@ export default function SeoEditorPage() {
               setGenLog(l => [...l.slice(-99), `${evt.status === "done" ? "✅" : "❌"} ${evt.keyword}`]);
               setGenProgress({ done: evt.generated, total: evt.total });
             }
-            if (evt.type === "done")  { setPhase("done"); refetch(); }
+            if (evt.type === "done") {
+              setPhase("done");
+              refetch();
+              if (evt.partial) toast({ title: "Токены закончились", description: "Пополните баланс и нажмите «Продолжить»", variant: "destructive" });
+            }
             if (evt.type === "error") toast({ title: evt.message, variant: "destructive" });
           } catch {}
         }
