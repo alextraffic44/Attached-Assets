@@ -51,3 +51,20 @@ can load one day and fail the next with no code change.
 CDN/object storage (Yandex Object Storage — note `YC_KEY_ID`/`YC_SECRET` are configured-but-missing
 secrets) while keeping Netlify for HTML; full hosting migration is a larger billing/domain decision.
 This needs the user's sign-off — do NOT do it unilaterally.
+
+## RKN blocks Tailwind / framework CDNs in Russia
+
+`cdn.tailwindcss.com` (and other foreign CSS/JS framework CDNs) are RKN-blocked in Russia, so any
+GENERATED site that pulls a framework from a CDN breaks without a VPN. **Rule:** generated sites must
+ship only self-contained `<style>` CSS — no Tailwind/Bootstrap/unpkg/jsdelivr. `SYSTEM_PROMPT`
+forbids external CDNs/libraries and now names Tailwind explicitly; all generation paths (new/edit/
+mockup) reuse `SYSTEM_PROMPT`, so the rule is inherited everywhere. **Google Fonts is the one allowed
+external dependency** (works in RU, on every site).
+
+**The builder app's OWN Tailwind is fine** — it's compiled at build time (`tailwind.config.ts` +
+`@tailwind` directives → static bundled CSS on craft-ai.ru), so there is NO runtime call to
+`cdn.tailwindcss.com`. RKN blocking the CDN does not affect compiled Tailwind. Do NOT rip Tailwind
+out of the builder over this — only the CDN form is the problem, and the builder doesn't use it.
+**Do NOT auto-strip a Tailwind CDN `<script>` from generated HTML:** if a site relies on the Play
+CDN it's already broken in RU; stripping it would also break it everywhere else. Prevent at the
+prompt, don't sanitize after.

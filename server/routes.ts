@@ -1892,6 +1892,7 @@ const SYSTEM_PROMPT = `Ты — креативный frontend-разработч
 ТЕХНИЧЕСКИЕ ТРЕБОВАНИЯ:
 - Полный HTML: <!DOCTYPE html>, <head> с <style>, <body>, <script> перед </body>
 - Чистый HTML/CSS/JS — БЕЗ внешних CDN и библиотек
+- 🚫 КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО подключать Tailwind, Bootstrap или любые другие CSS/JS-фреймворки через CDN (например cdn.tailwindcss.com, unpkg, jsdelivr) — они заблокированы в РФ и сайт сломается без VPN. Пиши ТОЛЬКО собственный CSS внутри <style>. (Google Fonts через fonts.googleapis.com — можно.)
 - Мета-теги: description, viewport, charset, Open Graph
 
 ⚠️ ОБЯЗАТЕЛЬНАЯ МОБИЛЬНАЯ АДАПТИВНОСТЬ (КРИТИЧНО!):
