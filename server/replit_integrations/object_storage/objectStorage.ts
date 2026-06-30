@@ -114,12 +114,16 @@ export class ObjectStorageService {
       // Stream the file to the response
       const stream = file.createReadStream();
 
-      stream.on("error", (err) => {
+      stream.on("error", (err: NodeJS.ErrnoException) => {
+        if (err.code === "EPIPE" || err.code === "ECONNRESET") return; // client closed — normal
         console.error("Stream error:", err);
         if (!res.headersSent) {
           res.status(500).json({ error: "Error streaming file" });
         }
       });
+
+      // If client disconnects early, destroy the GCS read stream to avoid EPIPE
+      req.on("close", () => stream.destroy());
 
       stream.pipe(res);
     } catch (error) {
