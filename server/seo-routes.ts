@@ -170,7 +170,44 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:3rem 1.5
 .footer-col a{font-size:.875rem;color:var(--muted)}.footer-col a:hover{color:var(--brand)}
 .footer-bottom{max-width:var(--w);margin:2rem auto 0;padding-top:1.5rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem}
 .footer-bottom p{font-size:.8rem;color:var(--muted)}
-@media(max-width:640px){.footer-inner{grid-template-columns:1fr}.nav-links{display:none}.article-body h2{font-size:1.25rem}.home-hero h1{font-size:1.75rem}}`;
+@media(max-width:640px){.footer-inner{grid-template-columns:1fr}.nav-links{display:none}.article-body h2{font-size:1.25rem}.home-hero h1{font-size:1.75rem}}
+/* ── Key Takeaways / TL;DR ── */
+.key-takeaways{background:linear-gradient(135deg,#f0f0ff,#eaf0ff);border:1px solid #c8d0ff;border-left:4px solid var(--brand);border-radius:var(--r);padding:1.5rem 1.75rem;margin:1.75rem 0}
+.key-takeaways h3{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--brand);margin-bottom:.875rem}
+.key-takeaways ul{margin:0;padding-left:1.25rem;color:var(--text2)}.key-takeaways li{margin-bottom:.5rem;font-size:.975rem}
+/* ── Table of Contents ── */
+.toc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem 1.5rem;margin:1.75rem 0}
+.toc-title{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.875rem}
+.toc ol{margin:0;padding-left:1.25rem;counter-reset:none}.toc li{margin-bottom:.4rem}
+.toc a{font-size:.925rem;color:var(--text2);text-decoration:none;font-weight:500}.toc a:hover{color:var(--brand)}
+/* ── Reading time ── */
+.reading-time{display:inline-flex;align-items:center;gap:.35rem;font-size:.8rem;color:var(--muted);font-weight:500}
+/* ── Step boxes (tutorials) ── */
+.step-box{display:flex;gap:1.25rem;margin:2rem 0;padding:1.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)}
+.step-num{flex-shrink:0;width:2rem;height:2rem;border-radius:50%;background:var(--brand);color:#fff;font-weight:800;font-size:.9rem;display:flex;align-items:center;justify-content:center}
+.step-content h3{font-size:1.05rem;font-weight:700;margin-bottom:.5rem;color:var(--text)}.step-content p{color:var(--text2);margin:0}
+/* ── Comparison table ── */
+.comparison-table{width:100%;border-collapse:collapse;margin:2rem 0;font-size:.9rem;border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
+.comparison-table th{background:var(--brand);color:#fff;padding:.875rem 1rem;text-align:left;font-weight:700}
+.comparison-table td{padding:.75rem 1rem;border-bottom:1px solid var(--border)}.comparison-table tr:last-child td{border-bottom:none}
+.comparison-table tr:nth-child(even) td{background:var(--bg2)}.comparison-table .ct-winner{color:var(--brand);font-weight:700}
+/* ── Pros / Cons ── */
+.pros-cons{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:2rem 0}
+.pros-cons .pros,.pros-cons .cons{padding:1.25rem 1.5rem;border-radius:var(--r)}.pros-cons .pros{background:#f0fff8;border:1px solid #b6e8ce}
+.pros-cons .cons{background:#fff5f5;border:1px solid #f5c5c5}
+.pros-cons h4{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem}
+.pros-cons .pros h4{color:#087f5b}.pros-cons .cons h4{color:#c92a2a}
+.pros-cons ul{margin:0;padding-left:1.1rem;font-size:.9rem;color:var(--text2)}.pros-cons li{margin-bottom:.4rem}
+/* ── Author box (E-E-A-T) ── */
+.author-box{display:flex;gap:1.25rem;align-items:center;margin:3rem 0 1.5rem;padding:1.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)}
+.author-avatar{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--brand),#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.25rem;flex-shrink:0}
+.author-info .author-name{font-weight:700;font-size:.95rem;color:var(--text);margin-bottom:.25rem}
+.author-info .author-bio{font-size:.8rem;color:var(--muted);line-height:1.5}
+/* ── Verdict box ── */
+.verdict-box{background:linear-gradient(135deg,#fafafa,#f5f5ff);border:1px solid var(--border);border-left:4px solid #22c55e;border-radius:var(--r);padding:1.5rem 1.75rem;margin:2rem 0}
+.verdict-box h3{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#16a34a;margin-bottom:.75rem}
+@media(max-width:640px){.pros-cons{grid-template-columns:1fr}.step-box{flex-direction:column;gap:.75rem}.comparison-table{font-size:.8rem}}
+`;
 
 function buildNav(siteTitle: string, clusters: SeoCluster[], rootPath = "/"): string {
   const links = clusters.slice(0, 5).map(c =>
@@ -337,6 +374,61 @@ function cleanHtml(raw: string): string {
   return c;
 }
 
+function getContentTypeInstructions(contentType: string | undefined, keyQuestions: string[] | undefined): string {
+  const qt = contentType || "guide";
+  const qBlock = (keyQuestions && keyQuestions.length > 0)
+    ? `\nKEY QUESTIONS YOUR ARTICLE MUST ANSWER (based on real searcher intent):\n${keyQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}\n`
+    : "";
+
+  const structures: Record<string, string> = {
+    guide: `CONTENT TYPE: Comprehensive Guide
+- Open with a "Key Takeaways" box (class="key-takeaways"): <h3>Key Takeaways</h3><ul>3-5 bullet insights</ul>
+- Then a Table of Contents (class="toc"): <p class="toc-title">Contents</p><ol>one <li><a href="#section-id">Section title</a></li> per H2</ol>
+- 5-6 H2 sections with real depth — beginner-friendly first, advanced last
+- Each section has practical examples, data points, or real-world scenarios
+- Add 1-2 <blockquote> with expert-sounding insights
+- Author box before FAQ: <div class="author-box"><div class="author-avatar">✍</div><div class="author-info"><div class="author-name">Editorial Team</div><div class="author-bio">Verified by experts with 10+ years in the field. Last updated: ${new Date().toLocaleDateString("ru-RU")}.</div></div></div>`,
+
+    tutorial: `CONTENT TYPE: Step-by-Step Tutorial
+- Open with a "What You'll Learn" box (class="key-takeaways"): <h3>What You'll Learn</h3><ul>3-4 outcomes</ul>
+- Prerequisites paragraph (1-2 sentences)
+- Table of Contents (class="toc")
+- Number each step using <div class="step-box"><div class="step-num">1</div><div class="step-content"><h3>Step title</h3><p>Clear action + expected result</p></div></div>
+- "Common Mistakes to Avoid" H2 section
+- "Quick Reference" summary table at the end
+- Author box before FAQ`,
+
+    comparison: `CONTENT TYPE: Comparison Article
+- Open with "Quick Verdict" box (class="key-takeaways"): <h3>Quick Verdict</h3><ul>3 decisive bullet conclusions</ul>
+- Comparison table with HTML <table class="comparison-table">: columns for each option, rows for key features, mark winners with class="ct-winner"
+- One H2 per option with deep dive + <div class="pros-cons"><div class="pros"><h4>Pros</h4><ul>…</ul></div><div class="cons"><h4>Cons</h4><ul>…</ul></div></div>
+- "Which Should You Choose?" H2 with use-case matrix ("Choose X if… / Choose Y if…")
+- Verdict box: <div class="verdict-box"><h3>Our Verdict</h3><p>…</p></div>
+- Author box before FAQ`,
+
+    review: `CONTENT TYPE: Review
+- Open with verdict summary (class="key-takeaways"): <h3>Our Verdict</h3><ul>rating, key strengths, best for</ul>
+- Key features H2 with numbered highlights
+- <div class="pros-cons"> grid
+- "Who It's For / Who Should Avoid It" H2
+- Pricing & Value H2
+- Comparison with 2-3 top alternatives
+- Verdict box: <div class="verdict-box"><h3>Final Verdict</h3><p>…</p></div>
+- Author box before FAQ`,
+
+    listicle: `CONTENT TYPE: Listicle / Best-Of Article
+- Brief intro (2-3 sentences): methodology, what was tested, time/experience basis
+- Table of Contents (class="toc")
+- One H2 per list item (numbered: "1. Best X for Y", "2. …")
+- Each item: 150-200 words + pros/cons mini list + "Best for: …" sentence
+- Summary comparison table (class="comparison-table") after all items
+- "How to Choose" H2 with decision framework
+- Author box before FAQ`,
+  };
+
+  return (structures[qt] || structures.guide) + qBlock;
+}
+
 async function generateArticleHtml(
   kw: SeoKeyword,
   cluster: SeoCluster,
@@ -349,6 +441,8 @@ async function generateArticleHtml(
     .slice(0, 6)
     .join("\n");
 
+  const contentTypeBlock = getContentTypeInstructions(kw.contentType, kw.keyQuestions);
+
   const prompt = `You are a world-class SEO content writer. Write an engaging, deeply informative HTML article.
 
 KEYWORD: "${kw.keyword}"
@@ -356,26 +450,45 @@ TITLE (H1): "${kw.title}"
 CATEGORY: "${cluster.name}"
 SITE: "${cfg.siteTitle}" — ${cfg.siteDescription}
 
-CONTENT (write in the same language as the keyword):
-- 1800-2500 genuinely informative, engaging words
-- Hook readers from sentence one (surprising fact, story, or bold statement)
-- 5-6 H2 sections with real depth and practical examples
-- Mix tips, statistics, expert insights, and step-by-step guidance
-- Include exactly 3 image tags: <img src="IMG_PLACEHOLDER_1" alt="relevant description" class="article-img"> (also IMG_PLACEHOLDER_2 and IMG_PLACEHOLDER_3) — place naturally within content
-- FAQ section (5 practical Q&A) using collapsible .faq-item structure
-- "Related articles" section with links
+${contentTypeBlock}
 
-INTERNAL LINKS (use these hrefs):
+CONTENT QUALITY RULES (write in the same language as the keyword):
+- 2000-2800 genuinely informative words — NO filler, every sentence adds value
+- Hook readers from sentence one: surprising fact, bold statement, or relatable problem
+- Use real statistics, named examples, and concrete numbers where possible
+- Write with authority and warmth — like an expert explaining to a smart friend
+- Use <span class="reading-time">⏱ ~X min read</span> in article-meta (estimate from word count)
+- Include exactly 3 image tags at natural positions: <img src="IMG_PLACEHOLDER_1" alt="[vivid, keyword-rich description]" class="article-img"> (also IMG_PLACEHOLDER_2 and IMG_PLACEHOLDER_3)
+- FAQ section with 5 question-answer pairs (collapsible .faq-item structure)
+
+INTERNAL LINKS (use these hrefs naturally within body text):
 ${relatedLinks || "(none yet — site is new)"}
 
-REQUIRED HTML STRUCTURE (output complete <!DOCTYPE html> document, NO markdown fences):
-- <head>: charset, viewport, <title>${kw.title} | ${cfg.siteTitle}</title>, <meta name="description">, OG tags, <link rel="stylesheet" href="/assets/style.css">
-- Schema.org JSON-LD: Article + FAQPage + BreadcrumbList
-- <nav class="..."> with breadcrumb
-- <div class="breadcrumb">Home › ${cluster.name} › ${kw.title}</div>
-- <div class="article-container"><article><div class="article-header"><h1>...</h1></div><div class="article-body">...</div><div class="faq-section">...</div><div class="related-articles"><div class="related-grid">...</div></div></article></div>
-- <footer> with site links
-- At end of </body>: <script> that adds click toggle to .faq-question elements (show/hide .faq-answer)
+REQUIRED HTML STRUCTURE (output complete <!DOCTYPE html>, NO markdown fences):
+<head>: charset, viewport, canonical, <title>${kw.title} | ${cfg.siteTitle}</title>, <meta name="description" content="[150-160 chars, compelling]">, OG/Twitter tags, <link rel="stylesheet" href="/assets/style.css">
+Schema.org JSON-LD: Article (with author, datePublished) + FAQPage + BreadcrumbList
+<body>:
+  <nav> with site logo + category links
+  <div class="breadcrumb">… › ${cluster.name} › ${kw.title}</div>
+  <div class="article-container">
+    <article>
+      <div class="article-header">
+        <h1>${kw.title}</h1>
+        <div class="article-meta">
+          <span class="tag">${cluster.name}</span>
+          <span class="reading-time">⏱ ~X min read</span>
+          <span>Updated: ${new Date().toLocaleDateString("ru-RU")}</span>
+        </div>
+      </div>
+      [key-takeaways box, toc if applicable]
+      <div class="article-body">[main content]</div>
+      [author-box]
+      <div class="faq-section">…</div>
+      <div class="related-articles"><div class="related-grid">…</div></div>
+    </article>
+  </div>
+  <footer>…</footer>
+  <script>FAQ toggle + smooth scroll for TOC links</script>
 
 Output ONLY clean HTML — no markdown, no explanation text.`;
 
@@ -465,7 +578,7 @@ export function registerSeoRoutes(app: Express, storage: IStorage) {
     } as any);
 
     try {
-      const prompt = `You are an SEO architect. Cluster these ${limited.length} keywords into thematic categories for a website about "${siteNiche}".
+      const prompt = `You are an expert SEO architect and content strategist. Cluster these ${limited.length} keywords into thematic categories for a website about "${siteNiche}".
 
 KEYWORDS:
 ${limited.join("\n")}
@@ -475,8 +588,15 @@ RULES:
 - Each category should have a clear topic focus
 - Each keyword goes into exactly one category
 - Max 100 keywords per category (merge small groups)
-- Generate a good SEO article title for each keyword
+- Generate a compelling SEO article title for each keyword (50-60 chars)
 - Keep category and keyword slugs URL-safe (Latin, no spaces)
+- Classify each keyword's content type based on searcher intent:
+  * "guide" — broad informational ("what is X", "how X works", "complete guide to X")
+  * "tutorial" — how-to with steps ("how to do X", "step by step", "DIY")
+  * "comparison" — X vs Y, best alternatives, "or", "vs"
+  * "review" — specific product/service review, "rating", "pros cons", "worth it"
+  * "listicle" — top-N, best-of, "10 ways", "list of"
+- For each keyword, identify 3 real questions searchers have (short, 60 chars max each)
 
 Respond with ONLY valid JSON, no explanation:
 {
@@ -488,7 +608,13 @@ Respond with ONLY valid JSON, no explanation:
       "slug": "category-slug",
       "description": "What this category covers (1-2 sentences)",
       "keywords": [
-        { "keyword": "original keyword text", "slug": "keyword-slug", "title": "Full SEO article title (50-60 chars)" }
+        {
+          "keyword": "original keyword text",
+          "slug": "keyword-slug",
+          "title": "Full SEO article title (50-60 chars)",
+          "contentType": "guide|tutorial|comparison|review|listicle",
+          "keyQuestions": ["Question 1?", "Question 2?", "Question 3?"]
+        }
       ]
     }
   ]
@@ -518,6 +644,8 @@ Respond with ONLY valid JSON, no explanation:
           slug: slugify(k.slug || k.keyword || "page"),
           title: k.title || k.keyword || "",
           status: "pending" as const,
+          contentType: (["guide","tutorial","comparison","review","listicle"].includes(k.contentType) ? k.contentType : "guide") as SeoKeyword["contentType"],
+          keyQuestions: Array.isArray(k.keyQuestions) ? k.keyQuestions.slice(0, 3).map(String) : [],
         })),
       }));
 
