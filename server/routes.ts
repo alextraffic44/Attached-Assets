@@ -52,35 +52,11 @@ async function uploadToObjectStorage(buffer: Buffer, mimeType: string, ext: stri
   return `/objects/${objectName}`;
 }
 
-// Frame-specific compressor for scroll-animation frames. Frames are opaque video
-// stills shown briefly during a scroll-scrub, so they tolerate more compression than
-// hero images — we scale to the web-delivery width and re-encode as a moderate-quality
-// mozjpeg. This is the single highest-leverage lever for making interactive sites load
-// over throttled foreign-CDN connections (e.g. Russian ISPs without a VPN), and unlike
-// the frame-count/JS changes it ALSO shrinks already-published sites on re-publish
-// (their stored ~236KB-per-frame JPEGs drop to ~60-90KB each, ~21MB → ~6MB total).
-async function compressFrameForPublish(buffer: Buffer): Promise<Buffer> {
-  try {
-    const sharpMod = (await import("sharp")).default;
-    const meta = await sharpMod(buffer).metadata();
-    if (!meta.width || !meta.height) return buffer;
-    let p = sharpMod(buffer).rotate();
-    if (meta.width > SCROLL_FRAME_WIDTH) {
-      p = p.resize({ width: SCROLL_FRAME_WIDTH, withoutEnlargement: true });
-    }
-    const out = await p.jpeg({ quality: 72, mozjpeg: true }).toBuffer();
-    return out.length < buffer.length ? out : buffer; // never grow the file
-  } catch (e: any) {
-    console.warn(`[Publish] Frame compression skipped (using original):`, e?.message || e);
-    return buffer;
-  }
-}
-
 // Compress a raster image for publishing so it lands around 150-300KB while staying
 // visually lossless. Photos (no transparency) → mozjpeg; images with an alpha channel
 // → WebP (preserves transparency at a fraction of PNG size). Returns the original
 // buffer unchanged when it's already small, isn't a raster image, or can't be processed.
-// Animation frames are NEVER passed here — they go through compressFrameForPublish.
+// Animation frames are NEVER passed here — they are bundled at full quality (no compression).
 async function compressImageForPublish(buffer: Buffer): Promise<Buffer> {
   const TARGET_MAX = 300 * 1024;
   if (buffer.length <= TARGET_MAX) return buffer; // already light enough — keep as-is
@@ -163,7 +139,6 @@ const MAX_AUTO_IMAGE_CONCURRENCY = 6;
 // block. Mirrors the {{GENIMG:...}} marker system with {{SCROLLANIM:videoPrompt|T::S||T::S}}.
 const SCROLL_ANIM_COST = 120;
 const SCROLL_FRAME_COUNT = 90;     // target frames extracted from a 5s clip
-const SCROLL_FRAME_WIDTH = 1280;   // downscale width for web delivery
 const SCROLL_VIDEO_DURATION = 5;   // seconds
 // "Экшн" (action / Hollywood-blockbuster) mode: longer clip + more sliced frames for a
 // richer, smoother slow-motion / bullet-time scrub.
@@ -238,12 +213,11 @@ async function extractFramesWithFfmpeg(
   shouldStop: () => boolean = () => false,
 ): Promise<number> {
   const { spawn } = await import("child_process");
-  // Scale frames down to the web-delivery width at extraction time (the canvas covers
-  // the viewport, so 1280px is plenty) and use a high-but-not-lossless mjpeg quality.
-  // Full-1080p `-q:v 1` frames were ~236KB each; scaled `-q:v 4` frames are ~120KB,
-  // and publish-time compressFrameForPublish trims them further. SCROLL_FRAME_WIDTH was
-  // previously declared but never applied — that omission is why frames stayed huge.
-  const args = ["-y", "-i", videoPath, "-vf", `fps=${fps},scale='min(${SCROLL_FRAME_WIDTH},iw)':-2:flags=lanczos`, "-q:v", "4", path.join(framesDir, "frame_%04d.jpg")];
+  // Extract frames at full resolution and max mjpeg quality (-q:v 1). Frames are NOT
+  // downscaled or recompressed — per user request, any frame compression visibly
+  // degraded the scroll animation. (Heavy product photos are still compressed at
+  // publish; only the animation frames are kept lossless.)
+  const args = ["-y", "-i", videoPath, "-vf", `fps=${fps}`, "-q:v", "1", path.join(framesDir, "frame_%04d.jpg")];
   const MAX_TRIES = 3;
   let lastErr: any = null;
   for (let t = 0; t < MAX_TRIES; t++) {
@@ -4498,19 +4472,13 @@ ${designAnalysis}
             // pages (especially multi-frame scroll animations) fail to load over
             // throttled foreign-CDN connections (e.g. Russian ISPs without a VPN),
             // which is why interactive sites showed broken images while light
-            // description sites loaded fine. Animation frames get a frame-specific
-            // compressor (scale + moderate JPEG — good enough for scroll-scrubbing and,
-            // crucially, shrinks ALREADY-published sites on re-publish); other rasters
-            // get the aggressive ≤300KB compressor. GIFs (Sharp flattens animation) and
-            // non-raster assets (video/3D/svg) are left untouched.
+            // description sites loaded fine. Animation frames are bundled at FULL quality
+            // (no compression) — per user request, compressing them visibly degraded the
+            // scroll animation. Only non-frame rasters (e.g. heavy product photos) go through
+            // the ≤300KB compressor. GIFs (Sharp flattens animation), video, 3D and SVG are
+            // left untouched.
             const isRaster = /\.(jpe?g|png|webp)$/i.test(mediaUrl.split("?")[0]);
-            if (isRaster && frameUrls.has(mediaUrl)) {
-              const before = buffer.length;
-              buffer = await compressFrameForPublish(buffer);
-              if (buffer.length !== before) {
-                console.log(`[Publish] Frame ${mediaUrl}: ${(before/1024).toFixed(0)}KB → ${(buffer.length/1024).toFixed(0)}KB`);
-              }
-            } else if (isRaster) {
+            if (isRaster && !frameUrls.has(mediaUrl)) {
               const before = buffer.length;
               buffer = await compressImageForPublish(buffer);
               if (buffer.length !== before) {

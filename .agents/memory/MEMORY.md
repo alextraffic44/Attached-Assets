@@ -1,7 +1,7 @@
 # Memory Index
 
 - [Deploy media bundling](deploy-media-bundling.md) — local `/objects//uploads/` media must be downloaded & rebundled into the deploy/ZIP or it 404s on the static host (Netlify); 3rd regex catches bare URLs in `data-frames` JSON.
-- [Russia CDN throttling](russia-cdn-throttling.md) — heavy interactive deploys (20-40MB) show broken images for RU users w/o VPN (DPI throttles foreign CDN); fix = shrink payload (frames NOW compressed at publish); only helps existing sites on RE-publish after prod deploy.
+- [Russia CDN throttling](russia-cdn-throttling.md) — heavy interactive deploys break for RU users w/o VPN (DPI throttles foreign CDN); compress non-frame photos only (user vetoed frame compression); escalate to Yandex CDN.
 - [Generated-media markers + billing](genimg-photos.md) — `{{GENIMG}}`/`{{SCROLLANIM}}` resolved server-side to `/objects/` assets (never external URLs); refund ONLY when `!alreadyProcessed` or replays mint credits.
 - [Security invariants](security-invariants.md) — private routes need auth+ownership (no shared-user fallback); large-body parser allowlisted; webhook raw body; user-URL fetches via SSRF guard.
 - [Interactive-site nav transparency](interactive-nav-transparency.md) — fixed header forced transparent via `!important` while scroll-anim on screen; `craft-anim-passed` body class (set by `navCtl`) flips it colored after the animation scrolls past.

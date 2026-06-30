@@ -24,16 +24,20 @@ sustained transfers from foreign CDNs (Netlify). It is NOT a blocked domain or b
 can load one day and fail the next with no code change.
 
 **Fix applied (payload reduction, all `server/routes.ts`):**
-1. Frames compressed at publish via `compressFrameForPublish` (scale 1280 + mozjpeg q72) — the
-   key lever, because it ALSO shrinks already-published sites on re-publish.
-2. `extractFramesWithFfmpeg` now actually scales (`scale='min(1280,iw)':-2`) and uses `-q:v 4`
-   (was `-q:v 1`, no scale — `SCROLL_FRAME_WIDTH` was declared but never used).
-3. (Frame-count reduction was tried — 90→72 / 160→120 — but the user REVERTED it; counts stay
-   90 (`SCROLL_FRAME_COUNT`) and 160 (`SCROLL_ACTION_FRAME_COUNT`). Do not lower them: per-frame
-   compression already carries the payload win, and the user values scroll smoothness.)
-4. Canvas frame loader is windowed (MAXP=4, frame 0 first) with a per-frame 12s timeout +
+1. NON-frame rasters (product photos etc.) compressed at publish via `compressImageForPublish`
+   (≤300KB). For product-heavy sites (e.g. donut: 6 PNGs ~4MB each = 24MB) this is the dominant win.
+2. Canvas frame loader is windowed (MAXP=4, frame 0 first) with a per-frame 12s timeout +
    `settled` guard so a hung request always frees its slot and `signalReady()` always fires
    (no deadlock). New animations only.
+
+**Frame-specific levers were TRIED then REVERTED by the user (do not re-add without asking):**
+- Frame compression (`compressFrameForPublish` 1280px+q72 at publish) AND ffmpeg downscale/`-q:v 4`
+  at extraction — both REMOVED; frames are back to full-res `-q:v 1`, uncompressed. The user found
+  the quality loss too visible and accepted that heavy all-frame sites may need a VPN in Russia.
+- Frame-count reduction (90→72 / 160→120) — REVERTED; counts stay 90 / 160 for scroll smoothness.
+- Net: the load win now comes from #1 (+ #2). All-frame sites (e.g. bank: ~90 full-res frames)
+  may still be heavy. If they fail without VPN, the real fix is the Yandex CDN below, NOT
+  re-compressing frames.
 
 **Critical operational facts:**
 - Static Netlify sites do NOT change until a fresh **re-publish**. Code changes #2/#3/#4 only

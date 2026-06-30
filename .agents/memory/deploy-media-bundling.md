@@ -58,19 +58,18 @@ stay consistent.
 
 ## Publish-time compression
 
-Two compressors run at publish, both raster-only (`/\.(jpe?g|png|webp)$/i`), both never grow
-the file, both dynamic `import("sharp")`:
-- `compressImageForPublish(buffer)` — non-frame rasters → ≤300KB (mozjpeg q86→55 opaque,
-  WebP q86→50 alpha, resize max 1920px fit:inside, last-resort 1280px q72). Real test: 3.8MB PNG → 184KB.
-- `compressFrameForPublish(buffer)` — animation frames → scale to `SCROLL_FRAME_WIDTH` (1280),
-  mozjpeg q72. Frames are collected into a `frameUrls` Set parsed from `data-frames='...'` JSON arrays.
+`compressImageForPublish(buffer)` (raster-only `/\.(jpe?g|png|webp)$/i`, never grows the file,
+dynamic `import("sharp")`) → ≤300KB (mozjpeg q86→55 opaque, WebP q86→50 alpha, resize max 1920px
+fit:inside, last-resort 1280px q72). Real test: 3.8MB PNG → 184KB.
 
-**Gate:** frames (`frameUrls.has(url)`) → `compressFrameForPublish`; other rasters → `compressImageForPublish`.
+**Gate:** `isRaster && !frameUrls.has(url)` → compress; animation frames and `.gif` are skipped.
+`frameUrls` is a Set parsed from `data-frames='...'` JSON arrays.
 
-**Frames ARE now compressed at publish** (this REVERSES the old "never compress frames" rule).
-**Why:** heavy interactive sites (20-40MB of full-res frames + uncompressed product PNGs) failed
-to load over throttled Russian foreign-CDN connections — see `russia-cdn-throttling.md`. Compressing
-frames at publish is the one lever that also shrinks ALREADY-published sites on re-publish
-(~236KB/frame → ~70KB). `.gif` is still NEVER compressed (Sharp flattens animation to one frame).
-Because compression can change format (png→webp / png→jpg), the extension-forcing step above keeps
-the bundle valid afterwards.
+**Animation frames are NOT compressed — user decision, see `russia-cdn-throttling.md`.** A frame
+compressor (`compressFrameForPublish`, 1280px + mozjpeg q72) was tried to shrink heavy interactive
+deploys, but the user found the quality loss too visible and asked to keep frames fully lossless;
+frame extraction is back to `-q:v 1` full-res. The load-without-VPN win for product-heavy sites
+comes mostly from compressing the non-frame product photos here, not the frames. Do NOT re-add
+frame compression without asking. `.gif` is also never compressed (Sharp flattens animation to one
+frame). Because compression can change format (png→webp / png→jpg), the extension-forcing step
+above keeps the bundle valid afterwards.
