@@ -23,6 +23,7 @@ export interface SeoKeyword {
   title: string;
   status: "pending" | "generating" | "done" | "failed";
   filename?: string;
+  image?: string;
   contentType?: "guide" | "comparison" | "tutorial" | "review" | "listicle";
   keyQuestions?: string[];
 }

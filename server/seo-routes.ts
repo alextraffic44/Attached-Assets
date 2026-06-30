@@ -323,6 +323,27 @@ function buildFooter(siteTitle: string, siteDescription: string, clusters: SeoCl
 </footer>`;
 }
 
+// Validate an image URL is safe to embed in a CSS url('...') — only http(s)
+// absolute URLs or root-relative paths, with no characters that could break out
+// of the single-quoted url() and inject CSS. Returns null → caller uses gradient.
+function cssUrl(image: string | undefined): string | null {
+  if (!image) return null;
+  if (!/^(https?:\/\/|\/)[^\s'"()\\<>]+$/i.test(image)) return null;
+  return image;
+}
+
+function heroBg(image: string | undefined, gradIdx: number): string {
+  const url = cssUrl(image);
+  if (url) return `<div class="hero-grad" style="background-image:url('${url}');background-size:cover;background-position:center;position:absolute;inset:0"></div>`;
+  return `<div class="hero-grad" style="background:${CARD_GRADS[gradIdx % CARD_GRADS.length]};position:absolute;inset:0"></div>`;
+}
+
+function cardBg(image: string | undefined, gradIdx: number): string {
+  const url = cssUrl(image);
+  if (url) return `<div class="ac-img-grad" style="background-image:url('${url}');background-size:cover;background-position:center;width:100%;height:100%"></div>`;
+  return `<div class="ac-img-grad" style="background:${CARD_GRADS[gradIdx % CARD_GRADS.length]};width:100%;height:100%"></div>`;
+}
+
 function buildHomePage(cfg: SeoConfig): string {
   const nav = buildNav(cfg.siteTitle, cfg.clusters);
   const footer = buildFooter(cfg.siteTitle, cfg.siteDescription, cfg.clusters);
@@ -339,18 +360,18 @@ function buildHomePage(cfg: SeoConfig): string {
   // ── Hero grid (top 4 articles) ──
   const h = allDone.slice(0, 4);
   const heroMain = h[0] ? `<a href="/${h[0].cluster.slug}/${h[0].kw.slug}/" class="hero-main">
-    <div class="hero-grad" style="background:${CARD_GRADS[0]};position:absolute;inset:0"></div>
+    ${heroBg(h[0].kw.image, 0)}
     <div class="hero-overlay"></div>
     <div class="hero-content">
       <span class="cat-chip">${h[0].cluster.name}</span>
       <div class="hero-title">${h[0].kw.title}</div>
     </div>
-  </a>` : `<div class="hero-main"><div class="hero-grad" style="background:${CARD_GRADS[0]};position:absolute;inset:0"></div><div class="hero-overlay"></div><div class="hero-content"><div class="hero-title">${cfg.siteTitle}</div></div></div>`;
+  </a>` : `<div class="hero-main">${heroBg(undefined, 0)}<div class="hero-overlay"></div><div class="hero-content"><div class="hero-title">${cfg.siteTitle}</div></div></div>`;
 
   const heroSideItems = (h.length > 1 ? h.slice(1, 4) : cfg.clusters.slice(0, 3).map((c, i) => ({ kw: null as any, cluster: c, idx: i }))).map((a, i) =>
     a.kw
       ? `<a href="/${a.cluster.slug}/${a.kw.slug}/" class="hero-side-item">
-          <div class="hero-grad" style="background:${CARD_GRADS[(i+1)%CARD_GRADS.length]};position:absolute;inset:0"></div>
+          ${heroBg(a.kw.image, (i+1)%CARD_GRADS.length)}
           <div class="hero-overlay"></div>
           <div class="hero-content"><span class="cat-chip">${a.cluster.name}</span><div class="hero-title">${a.kw.title}</div></div>
         </a>`
@@ -375,7 +396,7 @@ function buildHomePage(cfg: SeoConfig): string {
   // ── Recent articles grid ──
   const recentCards = allDone.slice(4, 16).map((a, i) => `<a href="/${a.cluster.slug}/${a.kw.slug}/" class="article-card">
     <div class="ac-img-wrap">
-      <div class="ac-img-grad" style="background:${CARD_GRADS[i%CARD_GRADS.length]};width:100%;height:100%"></div>
+      ${cardBg(a.kw.image, i)}
     </div>
     <div class="ac-body">
       <span class="ac-cat">${a.cluster.name}</span>
@@ -470,7 +491,7 @@ function buildCategoryPage(cluster: SeoCluster, cfg: SeoConfig): string {
 
   const cards = done.map((k, i) => `<a href="/${cluster.slug}/${k.slug}/" class="article-card">
     <div class="ac-img-wrap">
-      <div class="ac-img-grad" style="background:${CARD_GRADS[i % CARD_GRADS.length]};width:100%;height:100%"></div>
+      ${cardBg(k.image, i)}
     </div>
     <div class="ac-body">
       <span class="ac-cat">${cluster.name}</span>
@@ -1129,6 +1150,7 @@ Respond with ONLY valid JSON, no explanation:
         } else {
           await storage.upsertProjectFile({ projectId: proj.id, filename, code: html });
           kw.status = "done"; kw.filename = filename;
+          if (images[0]) kw.image = images[0];
           generated++;
           send({ type: "page_done", keyword: kw.keyword, status: "done", generated, total: cfg.pagesTotal });
         }

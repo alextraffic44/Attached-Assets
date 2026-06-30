@@ -27,6 +27,11 @@ This app stores per-user data (projects, leads, images, files). The following ar
 - **Residual (accepted):** DNS-rebinding/TOCTOU — the guard resolves DNS, then `fetch` re-resolves at connect time. Closing it fully needs a connect-time lookup (undici Agent custom `lookup`). Not added because it couldn't be verified in-sandbox (external DNS hangs) and risks breaking image proxying. Recommended follow-up if SSRF hardening is revisited.
 - **Preferred pattern when feasible — read your own bytes, don't fetch:** the SCROLLANIM creative-concept vision step needs the product image bytes. Instead of HTTP-fetching the (user-controllable) product URL, it reads ONLY `/objects/...` paths straight from object storage by entity id (host part ignored), size-capped via metadata before download. Non-`/objects/` URLs are skipped (graceful fallback to the generic prompt), so there is NO server-side fetch of an external URL and thus no SSRF/redirect/rebind surface at all. **Why:** uploaded photos always live under `/objects/`, so the external-fetch branch was pure attack surface with no real benefit. Prefer this over re-hardening a `fetch` whenever the bytes are something we already host.
 
+## Generated/dynamic values interpolated into HTML/CSS
+- Any image URL or user/AI-derived string placed into generated-site markup must be escaped for its context. URLs going into an inline CSS `url('...')` are validated first (`cssUrl()` in seo-routes.ts: only `https?://` or root-relative `/...`, reject any whitespace/quote/paren/backslash/angle-bracket) and fall back to a gradient when they don't match.
+- **Why:** a URL containing a single quote/paren/backslash can break out of the `url('…')` and inject CSS into the published static site. Generated-site HTML is served verbatim from Netlify, so there is no framework auto-escaping.
+- **How to apply:** never interpolate a raw URL/string straight into a `style="…"` attribute or `<script>` in builder functions — route it through a validator/escaper and degrade gracefully on reject.
+
 ## Environment quirks (this repo)
 - `npx tsc --noEmit` and `npx tsx <one-off-script>` are too slow / time out on this project — verify changes by restarting the workflow and curling the running server instead.
 - Dev script runs `tsx server/index.ts` with NO watch — you MUST restart the `Start application` workflow after any server edit.

@@ -256,6 +256,7 @@ export default function DashboardPage() {
   const [multiPageEnabled, setMultiPageEnabled] = useState(false);
   const [pageNames, setPageNames] = useState<string[]>(["О нас", "Услуги", "Контакты"]);
   const [seoEnabled, setSeoEnabled] = useState(false);
+  const [creatingSeo, setCreatingSeo] = useState(false);
   const [leadFormEnabled, setLeadFormEnabled] = useState(true);
   const [agentVersion, setAgentVersion] = useState<"v1" | "v2">("v1");
   const [seoH1, setSeoH1] = useState("");
@@ -387,9 +388,23 @@ export default function DashboardPage() {
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/projects/${id}`);
     },
+    onMutate: async (id: number) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/projects"] });
+      const previous = queryClient.getQueryData<Project[]>(["/api/projects"]);
+      queryClient.setQueryData<Project[]>(["/api/projects"], (old) =>
+        (old || []).filter((p) => p.id !== id)
+      );
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(["/api/projects"], context.previous);
+      toast({ title: "Не удалось удалить", variant: "destructive" });
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       toast({ title: "Удалено" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
     },
   });
 
@@ -562,16 +577,26 @@ export default function DashboardPage() {
           </div>
           <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
             <button
-              onClick={() => {
-                fetch('/api/seo/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ title: 'SEO-сайт', niche: '' }) })
-                  .then(r => r.json()).then(d => { if (d.project?.id) setLocation(`/seo/${d.project.id}`); });
+              disabled={creatingSeo}
+              onClick={async () => {
+                if (creatingSeo) return;
+                setCreatingSeo(true);
+                try {
+                  const r = await fetch('/api/seo/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ title: 'SEO-сайт', niche: '' }) });
+                  const d = await r.json();
+                  if (d.project?.id) { setLocation(`/seo/${d.project.id}`); return; }
+                  throw new Error('no id');
+                } catch {
+                  toast({ title: 'Не удалось создать SEO-сайт', variant: 'destructive' });
+                  setCreatingSeo(false);
+                }
               }}
               className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
-              style={{ background: 'linear-gradient(135deg,#1a1a3e,#312e81)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 16, padding: '0.85rem 1.4rem', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', letterSpacing: '-0.01em' }}
+              style={{ background: 'linear-gradient(135deg,#1a1a3e,#312e81)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 16, padding: '0.85rem 1.4rem', fontSize: '0.88rem', fontWeight: 600, cursor: creatingSeo ? 'wait' : 'pointer', letterSpacing: '-0.01em', opacity: creatingSeo ? 0.7 : 1 }}
               title="Создать SEO-сайт из ключевых слов"
             >
-              <span style={{ fontSize: '1rem' }}>📊</span>
-              SEO-машина
+              {creatingSeo ? <Loader2 className="w-4 h-4 animate-spin" /> : <span style={{ fontSize: '1rem' }}>📊</span>}
+              {creatingSeo ? 'Создаём…' : 'SEO-машина'}
             </button>
             <button
               onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setSelectedStyleTemplate(null); setSelectedTemplate(""); setStyleCategory("buttons"); setShowCreateModal(true); }}
@@ -653,10 +678,13 @@ export default function DashboardPage() {
                     </div>
                     <button
                       className="opacity-0 group-hover:opacity-100 transition-all duration-300"
+                      disabled={deleteMutation.isPending && deleteMutation.variables === project.id}
                       onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(project.id); }}
                       style={{ background: 'rgba(255,59,48,0.08)', border: 'none', borderRadius: 10, padding: '0.4rem', cursor: 'pointer', color: '#FF3B30', flexShrink: 0 }}
                     >
-                      <Trash2 style={{ width: 16, height: 16 }} />
+                      {deleteMutation.isPending && deleteMutation.variables === project.id
+                        ? <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} />
+                        : <Trash2 style={{ width: 16, height: 16 }} />}
                     </button>
                   </div>
                 </div>
