@@ -1,66 +1,87 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import type { SeoConfig, SeoCluster, SeoKeyword } from "@shared/schema";
-import { ChevronRight, ChevronDown, Globe, Zap, RefreshCw, CheckCircle2, XCircle, Clock, Loader2, ArrowLeft, Plus, Trash2 } from "lucide-react";
+import type { SeoConfig, SeoKeyword } from "@shared/schema";
+import {
+  ChevronRight, ChevronDown, Globe, Zap, RefreshCw,
+  CheckCircle2, XCircle, Clock, Loader2, ArrowLeft,
+  BarChart2, FileText, Layers,
+} from "lucide-react";
 
 type Phase = "setup" | "structure" | "generating" | "done";
 
+/* ─── tiny helpers ─── */
 function StatusIcon({ status }: { status: SeoKeyword["status"] | "pending" }) {
-  if (status === "done") return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />;
-  if (status === "failed") return <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />;
-  if (status === "generating") return <Loader2 className="w-3.5 h-3.5 text-blue-400 shrink-0 animate-spin" />;
-  return <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />;
+  if (status === "done")      return <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />;
+  if (status === "failed")    return <XCircle      className="w-3 h-3 text-red-400   shrink-0" />;
+  if (status === "generating") return <Loader2     className="w-3 h-3 text-indigo-400 shrink-0 animate-spin" />;
+  return                              <Clock       className="w-3 h-3 text-zinc-600   shrink-0" />;
 }
 
+function Stat({ value, label, color }: { value: number; label: string; color: string }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span className="text-2xl font-black tabular-nums" style={{ color }}>{value}</span>
+      <span className="text-[10px] uppercase tracking-widest text-zinc-500 font-semibold">{label}</span>
+    </div>
+  );
+}
+
+/* ─── main component ─── */
 export default function SeoEditorPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [phase, setPhase] = useState<Phase>("setup");
+  const [phase, setPhase]           = useState<Phase>("setup");
   const [keywordsText, setKeywordsText] = useState("");
-  const [niche, setNiche] = useState("");
+  const [niche, setNiche]           = useState("");
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [openClusters, setOpenClusters] = useState<Set<string>>(new Set());
-  const [genLog, setGenLog] = useState<string[]>([]);
+  const [genLog, setGenLog]         = useState<string[]>([]);
   const [genProgress, setGenProgress] = useState({ done: 0, total: 0 });
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAnalyzing, setIsAnalyzing]   = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [analyzeElapsed, setAnalyzeElapsed] = useState(0);
+  const analyzeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { data, isLoading, refetch } = useQuery<{ project: any; files: { id: number; filename: string }[] }>({
+  /* ── single query, no polling — SSE provides live updates ── */
+  const { data, isLoading, refetch } = useQuery<{
+    project: any;
+    files: { id: number; filename: string }[];
+  }>({
     queryKey: ["/api/seo", id],
     queryFn: () => fetch(`/api/seo/${id}`, { credentials: "include" }).then(r => r.json()),
-    refetchInterval: isGenerating ? 5000 : false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   const project = data?.project;
-  const files = data?.files || [];
+  const files   = data?.files || [];
   const cfg: SeoConfig | null = project?.seoConfig || null;
 
   useEffect(() => {
     if (!cfg) return;
     if (cfg.status === "done" || cfg.pagesGenerated > 0) setPhase("done");
-    else if (cfg.clusters.length > 0) setPhase("structure");
+    else if (cfg.clusters?.length > 0) setPhase("structure");
     else setPhase("setup");
     if (cfg.niche) setNiche(cfg.niche);
-    if (cfg.clusters.length > 0) {
-      setOpenClusters(new Set(cfg.clusters.slice(0, 3).map(c => c.id)));
-    }
+    if (cfg.clusters?.length > 0) setOpenClusters(new Set(cfg.clusters.slice(0, 2).map((c: any) => c.id)));
     setGenProgress({ done: cfg.pagesGenerated, total: cfg.pagesTotal });
-  }, [cfg?.status, cfg?.clusters.length]);
+  }, [cfg?.status, cfg?.clusters?.length]);
 
+  /* ── analyze ── */
   async function handleAnalyze() {
     const keywords = keywordsText.split(/[\n,]+/).map(k => k.trim()).filter(Boolean);
-    if (keywords.length === 0) { toast({ title: "Введите ключевые слова", variant: "destructive" }); return; }
+    if (!keywords.length) { toast({ title: "Введите ключевые слова", variant: "destructive" }); return; }
     if (keywords.length > 1000) { toast({ title: "Максимум 1000 ключей", variant: "destructive" }); return; }
     setIsAnalyzing(true);
+    setAnalyzeElapsed(0);
+    analyzeTimerRef.current = setInterval(() => setAnalyzeElapsed(s => s + 1), 1000);
     try {
       const res = await fetch(`/api/seo/${id}/analyze`, {
         method: "POST",
@@ -71,14 +92,16 @@ export default function SeoEditorPage() {
       if (!res.ok) throw new Error((await res.json()).message);
       await refetch();
       setPhase("structure");
-      toast({ title: `Структура построена` });
+      toast({ title: "Структура построена ✓" });
     } catch (e: any) {
       toast({ title: "Ошибка анализа", description: e.message, variant: "destructive" });
     } finally {
       setIsAnalyzing(false);
+      if (analyzeTimerRef.current) clearInterval(analyzeTimerRef.current);
     }
   }
 
+  /* ── generate (SSE) ── */
   function startGeneration() {
     if (isGenerating) return;
     setIsGenerating(true);
@@ -86,15 +109,12 @@ export default function SeoEditorPage() {
     setGenLog([]);
     setGenProgress({ done: 0, total: cfg?.pagesTotal || 0 });
 
-    // Use fetch SSE
-    const ctrl = new AbortController();
     fetch(`/api/seo/${id}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({}),
-      signal: ctrl.signal,
-    }).then(async (res) => {
+    }).then(async res => {
       if (!res.ok || !res.body) throw new Error("Generation failed");
       const reader = res.body.getReader();
       const dec = new TextDecoder();
@@ -109,24 +129,18 @@ export default function SeoEditorPage() {
           if (!line.startsWith("data: ")) continue;
           try {
             const evt = JSON.parse(line.slice(6));
-            if (evt.type === "start") setGenProgress(p => ({ ...p, total: evt.total }));
-            if (evt.type === "progress") setGenLog(l => [...l.slice(-99), `⏳ ${evt.keyword}`]);
+            if (evt.type === "start")     setGenProgress(p => ({ ...p, total: evt.total }));
+            if (evt.type === "progress")  setGenLog(l => [...l.slice(-99), `⏳ ${evt.keyword}`]);
             if (evt.type === "page_done") {
-              const icon = evt.status === "done" ? "✅" : "❌";
-              setGenLog(l => [...l.slice(-99), `${icon} ${evt.keyword}`]);
+              setGenLog(l => [...l.slice(-99), `${evt.status === "done" ? "✅" : "❌"} ${evt.keyword}`]);
               setGenProgress({ done: evt.generated, total: evt.total });
             }
-            if (evt.type === "done") {
-              setPhase("done");
-              refetch();
-            }
-            if (evt.type === "error") {
-              toast({ title: evt.message, variant: "destructive" });
-            }
+            if (evt.type === "done")  { setPhase("done"); refetch(); }
+            if (evt.type === "error") toast({ title: evt.message, variant: "destructive" });
           } catch {}
         }
       }
-    }).catch((e) => {
+    }).catch(e => {
       if (e.name !== "AbortError") toast({ title: "Ошибка генерации", description: e.message, variant: "destructive" });
     }).finally(() => {
       setIsGenerating(false);
@@ -134,18 +148,18 @@ export default function SeoEditorPage() {
     });
   }
 
+  /* ── publish ── */
   async function handlePublish() {
     setIsPublishing(true);
     try {
       const res = await fetch(`/api/seo/${id}/publish`, {
-        method: "POST",
-        credentials: "include",
+        method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
-      toast({ title: "Сайт опубликован!", description: data.url });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message);
+      toast({ title: "Сайт опубликован!", description: d.url });
       refetch();
     } catch (e: any) {
       toast({ title: "Ошибка публикации", description: e.message, variant: "destructive" });
@@ -154,6 +168,7 @@ export default function SeoEditorPage() {
     }
   }
 
+  /* ── preview ── */
   async function loadPreview(filename: string) {
     setSelectedFile(filename);
     try {
@@ -163,204 +178,283 @@ export default function SeoEditorPage() {
   }
 
   function toggleCluster(cid: string) {
-    setOpenClusters(prev => { const next = new Set(prev); next.has(cid) ? next.delete(cid) : next.add(cid); return next; });
+    setOpenClusters(prev => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
   }
 
   const pct = genProgress.total > 0 ? Math.round((genProgress.done / genProgress.total) * 100) : 0;
-  const donePagesCount = files.filter(f => f.filename.endsWith("/index.html") && f.filename !== "index.html" && !f.filename.match(/^[^/]+\/index\.html$/)).length + files.filter(f => f.filename !== "index.html" && f.filename !== "robots.txt" && f.filename !== "sitemap.xml" && f.filename !== "assets/style.css" && f.filename.endsWith("index.html")).length;
+  const keywordCount = keywordsText.split(/[\n,]+/).filter(k => k.trim()).length;
+  const publishUrl = cfg?.publishUrl || project?.publishedUrl;
 
+  /* ── loading screen ── */
   if (isLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0f0f13]">
-      <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+    <div className="min-h-screen flex items-center justify-center" style={{ background: "#0f0f13" }}>
+      <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
     </div>
   );
 
+  /* ════════════════════════════════════════════════════════ */
   return (
-    <div className="min-h-screen bg-[#0f0f13] text-white flex flex-col" style={{ fontFamily: "'Inter', -apple-system, sans-serif" }}>
-      {/* Header */}
-      <div style={{ background: "#161620", borderBottom: "1px solid #2a2a3a", padding: "0 1.5rem", height: 56, display: "flex", alignItems: "center", gap: 16 }}>
-        <button onClick={() => setLocation("/dashboard")} style={{ background: "none", border: "none", color: "#888", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}>
-          <ArrowLeft className="w-4 h-4" /> Назад
+    <div className="min-h-screen flex flex-col text-white" style={{ background: "#0f0f13", fontFamily: "'Inter', -apple-system, sans-serif" }}>
+
+      {/* ── HEADER ── */}
+      <header style={{ background: "#111118", borderBottom: "1px solid rgba(255,255,255,0.06)", height: 52, display: "flex", alignItems: "center", padding: "0 16px", gap: 12, flexShrink: 0 }}>
+        <button
+          onClick={() => setLocation("/dashboard")}
+          style={{ background: "none", border: "none", color: "#666", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontSize: 13, padding: "4px 8px", borderRadius: 6, transition: "color 0.15s" }}
+          onMouseEnter={e => (e.currentTarget.style.color = "#aaa")}
+          onMouseLeave={e => (e.currentTarget.style.color = "#666")}
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Назад
         </button>
-        <div style={{ width: 1, height: 20, background: "#2a2a3a" }} />
-        <span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0" }}>SEO-машина</span>
-        <span style={{ fontSize: 13, color: "#666", flex: 1 }}>{project?.title}</span>
 
+        <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.08)" }} />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", letterSpacing: "-0.01em" }}>SEO-машина</span>
+          {project?.seoConfig?.niche && (
+            <span style={{ fontSize: 12, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}>
+              / {project.seoConfig.niche}
+            </span>
+          )}
+        </div>
+
+        {/* publish button — only after structure built */}
         {phase !== "setup" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {cfg?.publishUrl ? (
-              <a href={cfg.publishUrl} target="_blank" rel="noopener" style={{ fontSize: 13, color: "#6ee7b7", textDecoration: "none", display: "flex", alignItems: "center", gap: 6 }}>
-                <Globe className="w-4 h-4" /> {cfg.publishUrl.replace("https://", "")}
-              </a>
-            ) : (
-              <button onClick={handlePublish} disabled={isPublishing || files.length < 2} style={{
+          publishUrl ? (
+            <a
+              href={publishUrl} target="_blank" rel="noopener"
+              style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#34d399", textDecoration: "none", padding: "5px 12px", background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: 8, fontWeight: 600 }}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              {publishUrl.replace("https://", "").split("/")[0]}
+            </a>
+          ) : (
+            <button
+              onClick={handlePublish}
+              disabled={isPublishing || files.length < 2}
+              style={{
                 display: "flex", alignItems: "center", gap: 6, padding: "6px 14px",
-                background: isPublishing ? "#2a2a3a" : "#4f46e5", color: "#fff", border: "none",
-                borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: isPublishing ? "not-allowed" : "pointer",
-              }}>
-                {isPublishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Публикация...</> : <><Globe className="w-3.5 h-3.5" /> Опубликовать</>}
-              </button>
-            )}
-          </div>
+                background: isPublishing || files.length < 2 ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #2563eb, #4f46e5)",
+                border: "none", borderRadius: 8, color: isPublishing || files.length < 2 ? "#555" : "#fff",
+                fontSize: 13, fontWeight: 600, cursor: isPublishing || files.length < 2 ? "not-allowed" : "pointer",
+                boxShadow: files.length >= 2 && !isPublishing ? "0 2px 12px rgba(79,70,229,0.35)" : "none",
+                transition: "all 0.2s",
+              }}
+            >
+              {isPublishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Публикация...</> : <><Globe className="w-3.5 h-3.5" /> Опубликовать</>}
+            </button>
+          )
         )}
-      </div>
+      </header>
 
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", height: "calc(100vh - 56px)" }}>
-        {/* LEFT PANEL */}
-        <div style={{ width: 320, minWidth: 280, maxWidth: 380, background: "#161620", borderRight: "1px solid #2a2a3a", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* ── BODY ── */}
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", height: "calc(100vh - 52px)" }}>
+
+        {/* ════ LEFT PANEL ════ */}
+        <aside style={{ width: 300, minWidth: 260, maxWidth: 340, background: "#111118", borderRight: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+          {/* SETUP PHASE */}
           {phase === "setup" && (
-            <div style={{ padding: "1.5rem", overflowY: "auto", flex: 1 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>🚀 Запуск SEO-машины</h2>
-              <p style={{ fontSize: 13, color: "#888", marginBottom: 20, lineHeight: 1.6 }}>
-                Вставьте ключевые слова — через запятую или каждое на новой строке. ИИ кластеризует их и построит структуру сайта.
-              </p>
+            <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px 24px" }}>
+              <div style={{ marginBottom: 20 }}>
+                <h2 style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0", marginBottom: 6, letterSpacing: "-0.01em" }}>
+                  🚀 SEO-машина
+                </h2>
+                <p style={{ fontSize: 12, color: "#555", lineHeight: 1.65 }}>
+                  Вставьте ключевые слова — через запятую или каждое на новой строке. ИИ кластеризует их и построит структуру сайта.
+                </p>
+              </div>
 
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#aaa", display: "block", marginBottom: 6 }}>Ниша / тема сайта</label>
-              <input
-                value={niche}
-                onChange={e => setNiche(e.target.value)}
-                placeholder="напр. нейросети для бизнеса"
-                style={{ width: "100%", padding: "8px 12px", background: "#1e1e2e", border: "1px solid #2a2a3a", borderRadius: 8, color: "#e2e8f0", fontSize: 13, marginBottom: 14, outline: "none" }}
-              />
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#666", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
+                  Ниша / тема сайта
+                </label>
+                <input
+                  value={niche}
+                  onChange={e => setNiche(e.target.value)}
+                  placeholder="напр. нейросети для бизнеса"
+                  style={{ width: "100%", padding: "8px 11px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#e2e8f0", fontSize: 13, outline: "none", transition: "border-color 0.15s", boxSizing: "border-box" }}
+                  onFocus={e => (e.target.style.borderColor = "rgba(99,102,241,0.5)")}
+                  onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
+                />
+              </div>
 
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#aaa", display: "block", marginBottom: 6 }}>
-                Ключевые слова (до 1000 — через запятую или по строкам)
-              </label>
-              <textarea
-                value={keywordsText}
-                onChange={e => setKeywordsText(e.target.value)}
-                placeholder={"как пользоваться midjourney, midjourney бесплатно, chatgpt для бизнеса, ..."}
-                rows={14}
-                style={{ width: "100%", padding: "10px 12px", background: "#1e1e2e", border: "1px solid #2a2a3a", borderRadius: 8, color: "#e2e8f0", fontSize: 13, resize: "none", outline: "none", lineHeight: 1.6 }}
-              />
-              <div style={{ fontSize: 12, color: "#666", marginBottom: 16, marginTop: 6 }}>
-                {keywordsText.split(/[\n,]+/).filter(k => k.trim()).length} ключей
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "#666", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    Ключевые слова
+                  </label>
+                  <span style={{ fontSize: 11, color: keywordCount > 0 ? "#818cf8" : "#555", fontWeight: 600 }}>
+                    {keywordCount} / 1000
+                  </span>
+                </div>
+                <textarea
+                  value={keywordsText}
+                  onChange={e => setKeywordsText(e.target.value)}
+                  placeholder={"midjourney бесплатно, chatgpt для бизнеса, ..."}
+                  rows={16}
+                  style={{ width: "100%", padding: "10px 11px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#e2e8f0", fontSize: 12.5, resize: "none", outline: "none", lineHeight: 1.65, transition: "border-color 0.15s", boxSizing: "border-box" }}
+                  onFocus={e => (e.target.style.borderColor = "rgba(99,102,241,0.5)")}
+                  onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
+                />
               </div>
 
               <button
                 onClick={handleAnalyze}
                 disabled={isAnalyzing || !keywordsText.trim()}
                 style={{
-                  width: "100%", padding: "11px", background: isAnalyzing ? "#2a2a3a" : "linear-gradient(135deg,#4f46e5,#7c3aed)",
-                  border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, fontSize: 14,
-                  cursor: isAnalyzing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  marginTop: 12, width: "100%", padding: "11px",
+                  background: isAnalyzing || !keywordsText.trim()
+                    ? "rgba(255,255,255,0.04)"
+                    : "linear-gradient(135deg, #4f46e5, #7c3aed)",
+                  border: isAnalyzing || !keywordsText.trim() ? "1px solid rgba(255,255,255,0.06)" : "none",
+                  borderRadius: 10, color: isAnalyzing || !keywordsText.trim() ? "#555" : "#fff",
+                  fontWeight: 700, fontSize: 13.5, cursor: isAnalyzing || !keywordsText.trim() ? "not-allowed" : "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  boxShadow: !isAnalyzing && keywordsText.trim() ? "0 4px 16px rgba(99,102,241,0.4)" : "none",
+                  transition: "all 0.2s",
                 }}
               >
-                {isAnalyzing ? <><Loader2 className="w-4 h-4 animate-spin" /> Анализирую...</> : <><Zap className="w-4 h-4" /> Построить структуру</>}
+                {isAnalyzing
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Анализирую... {analyzeElapsed > 0 ? `${analyzeElapsed}с` : ""}</>
+                  : <><Zap className="w-4 h-4" /> Построить структуру</>}
               </button>
+
+              {isAnalyzing && (
+                <p style={{ marginTop: 10, fontSize: 11, color: "#555", textAlign: "center", lineHeight: 1.6 }}>
+                  ИИ кластеризует ключевые слова — это занимает до 2–3 минут
+                </p>
+              )}
             </div>
           )}
 
+          {/* STRUCTURE / GENERATING / DONE */}
           {(phase === "structure" || phase === "generating" || phase === "done") && cfg && (
             <>
               {/* Stats */}
-              <div style={{ padding: "12px 16px", borderBottom: "1px solid #2a2a3a", display: "flex", gap: 16 }}>
-                <div style={{ textAlign: "center", flex: 1 }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#6ee7b7" }}>{cfg.pagesGenerated}</div>
-                  <div style={{ fontSize: 11, color: "#666" }}>готово</div>
-                </div>
-                <div style={{ textAlign: "center", flex: 1 }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#e2e8f0" }}>{cfg.pagesTotal}</div>
-                  <div style={{ fontSize: 11, color: "#666" }}>всего</div>
-                </div>
-                <div style={{ textAlign: "center", flex: 1 }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#818cf8" }}>{cfg.clusters.length}</div>
-                  <div style={{ fontSize: 11, color: "#666" }}>категорий</div>
+              <div style={{ padding: "14px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ display: "flex", justifyContent: "space-around" }}>
+                  <Stat value={cfg.pagesGenerated} label="готово"    color="#34d399" />
+                  <div style={{ width: 1, background: "rgba(255,255,255,0.06)" }} />
+                  <Stat value={cfg.pagesTotal}     label="страниц"   color="#e2e8f0" />
+                  <div style={{ width: 1, background: "rgba(255,255,255,0.06)" }} />
+                  <Stat value={cfg.clusters.length} label="разделов" color="#818cf8" />
                 </div>
               </div>
 
               {/* Progress bar */}
               {(phase === "generating" || cfg.pagesGenerated > 0) && (
-                <div style={{ padding: "10px 16px", borderBottom: "1px solid #2a2a3a" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 12, color: "#888" }}>
-                    <span>Прогресс генерации</span><span>{genProgress.done}/{genProgress.total} ({pct}%)</span>
+                <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 11, color: "#555" }}>
+                    <span>Прогресс</span>
+                    <span style={{ color: pct === 100 ? "#34d399" : "#818cf8", fontWeight: 700 }}>
+                      {genProgress.done} / {genProgress.total} ({pct}%)
+                    </span>
                   </div>
-                  <div style={{ height: 6, background: "#2a2a3a", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${pct}%`, background: "linear-gradient(90deg,#4f46e5,#6ee7b7)", borderRadius: 99, transition: "width 0.5s" }} />
+                  <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${pct}%`, background: pct === 100 ? "#34d399" : "linear-gradient(90deg, #4f46e5, #818cf8)", borderRadius: 99, transition: "width 0.6s cubic-bezier(0.4,0,0.2,1)" }} />
                   </div>
                 </div>
               )}
 
-              {/* Buttons */}
-              <div style={{ padding: "10px 14px", borderBottom: "1px solid #2a2a3a", display: "flex", gap: 8 }}>
-                {phase !== "generating" && (
-                  <button onClick={startGeneration} disabled={isGenerating} style={{
-                    flex: 1, padding: "8px 12px", background: cfg.pagesGenerated > 0 ? "#1e1e2e" : "linear-gradient(135deg,#4f46e5,#7c3aed)",
-                    border: cfg.pagesGenerated > 0 ? "1px solid #4f46e5" : "none",
-                    borderRadius: 8, color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                  }}>
-                    {cfg.pagesGenerated > 0 ? <><RefreshCw className="w-3.5 h-3.5" /> Продолжить</> : <><Zap className="w-3.5 h-3.5" /> Генерировать</>}
+              {/* Action buttons */}
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8 }}>
+                {phase === "generating" ? (
+                  <div style={{ flex: 1, padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, color: "#555", fontSize: 12.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                    <span>Генерирую статьи...</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={startGeneration}
+                    disabled={isGenerating}
+                    style={{
+                      flex: 1, padding: "8px 12px",
+                      background: cfg.pagesGenerated > 0
+                        ? "rgba(99,102,241,0.08)"
+                        : "linear-gradient(135deg, #4f46e5, #7c3aed)",
+                      border: cfg.pagesGenerated > 0 ? "1px solid rgba(99,102,241,0.3)" : "none",
+                      borderRadius: 8, color: "#fff", fontWeight: 600, fontSize: 13,
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                      boxShadow: cfg.pagesGenerated === 0 ? "0 2px 12px rgba(99,102,241,0.3)" : "none",
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    {cfg.pagesGenerated > 0
+                      ? <><RefreshCw className="w-3.5 h-3.5" /> Продолжить</>
+                      : <><Zap className="w-3.5 h-3.5" /> Генерировать</>}
                   </button>
                 )}
-                {phase === "generating" && (
-                  <div style={{ flex: 1, padding: "8px 12px", background: "#1e1e2e", border: "1px solid #2a2a3a", borderRadius: 8, color: "#888", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" /> Генерирую...
-                  </div>
-                )}
-                <button onClick={() => { setPhase("setup"); setKeywordsText(cfg.rawKeywords.join("\n")); setNiche(cfg.niche); }} title="Изменить ключи" style={{ padding: "8px 10px", background: "#1e1e2e", border: "1px solid #2a2a3a", borderRadius: 8, color: "#888", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                <button
+                  title="Изменить ключевые слова"
+                  onClick={() => { setPhase("setup"); setKeywordsText(cfg.rawKeywords.join("\n")); setNiche(cfg.niche); }}
+                  style={{ padding: "8px 10px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, color: "#555", cursor: "pointer", display: "flex", alignItems: "center", transition: "color 0.15s" }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "#aaa")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "#555")}
+                >
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              {/* Structure tree */}
-              <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
-                {/* Homepage */}
-                <button onClick={() => loadPreview("index.html")} style={{
-                  width: "100%", padding: "6px 16px", background: selectedFile === "index.html" ? "#1e1e2e" : "none",
-                  border: "none", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, color: "#e2e8f0",
-                }}>
-                  <Globe className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Главная</span>
-                  {files.find(f => f.filename === "index.html") && <CheckCircle2 className="w-3 h-3 text-emerald-500 ml-auto" />}
-                </button>
+              {/* Site tree */}
+              <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+                {/* Home */}
+                <TreeRow
+                  icon={<Globe className="w-3 h-3 text-indigo-400 shrink-0" />}
+                  label="Главная"
+                  bold
+                  active={selectedFile === "index.html"}
+                  done={!!files.find(f => f.filename === "index.html")}
+                  indent={0}
+                  onClick={() => loadPreview("index.html")}
+                />
 
-                {cfg.clusters.map(cluster => (
-                  <div key={cluster.id}>
-                    <button
-                      onClick={() => { toggleCluster(cluster.id); loadPreview(`${cluster.slug}/index.html`); }}
-                      style={{
-                        width: "100%", padding: "6px 16px", background: selectedFile === `${cluster.slug}/index.html` ? "#1e1e2e" : "none",
-                        border: "none", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, color: "#e2e8f0",
-                      }}
-                    >
-                      {openClusters.has(cluster.id) ? <ChevronDown className="w-3.5 h-3.5 text-gray-500 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-500 shrink-0" />}
-                      <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{cluster.name}</span>
-                      <span style={{ fontSize: 11, color: "#666" }}>{cluster.keywords.filter(k => k.status === "done").length}/{cluster.keywords.length}</span>
-                    </button>
-
-                    {openClusters.has(cluster.id) && cluster.keywords.map(kw => (
-                      <button
-                        key={kw.id}
-                        onClick={() => kw.filename && loadPreview(kw.filename)}
-                        style={{
-                          width: "100%", padding: "4px 16px 4px 32px",
-                          background: selectedFile === kw.filename ? "#1e1e2e" : "none",
-                          border: "none", textAlign: "left", cursor: kw.filename ? "pointer" : "default",
-                          display: "flex", alignItems: "center", gap: 6, color: kw.status === "done" ? "#c4c4d4" : "#666",
-                        }}
-                      >
-                        <StatusIcon status={kw.status} />
-                        <span style={{ fontSize: 12, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{kw.title || kw.keyword}</span>
-                      </button>
-                    ))}
-                  </div>
-                ))}
+                {cfg.clusters.map(cluster => {
+                  const open = openClusters.has(cluster.id);
+                  const doneCount = cluster.keywords.filter((k: any) => k.status === "done").length;
+                  return (
+                    <div key={cluster.id}>
+                      <TreeRow
+                        icon={open
+                          ? <ChevronDown className="w-3 h-3 text-zinc-500 shrink-0" />
+                          : <ChevronRight className="w-3 h-3 text-zinc-500 shrink-0" />}
+                        label={cluster.name}
+                        badge={`${doneCount}/${cluster.keywords.length}`}
+                        bold
+                        active={selectedFile === `${cluster.slug}/index.html`}
+                        indent={0}
+                        onClick={() => { toggleCluster(cluster.id); loadPreview(`${cluster.slug}/index.html`); }}
+                      />
+                      {open && cluster.keywords.map((kw: any) => (
+                        <TreeRow
+                          key={kw.id}
+                          icon={<StatusIcon status={kw.status} />}
+                          label={kw.title || kw.keyword}
+                          active={selectedFile === kw.filename}
+                          indent={1}
+                          faded={kw.status !== "done"}
+                          onClick={() => kw.filename && loadPreview(kw.filename)}
+                        />
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Generation log */}
+              {/* Gen log */}
               {phase === "generating" && genLog.length > 0 && (
-                <div style={{ borderTop: "1px solid #2a2a3a", padding: "8px", maxHeight: 120, overflowY: "auto", background: "#0f0f13" }}>
-                  {genLog.slice(-8).map((line, i) => (
-                    <div key={i} style={{ fontSize: 11, color: "#888", lineHeight: 1.6 }}>{line}</div>
+                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "8px 12px", maxHeight: 110, overflowY: "auto", background: "#0a0a0f" }}>
+                  {genLog.slice(-7).map((line, i) => (
+                    <div key={i} style={{ fontSize: 10.5, color: "#555", lineHeight: 1.65, fontFamily: "monospace" }}>{line}</div>
                   ))}
                 </div>
               )}
             </>
           )}
-        </div>
+        </aside>
 
-        {/* RIGHT PANEL — Preview */}
-        <div style={{ flex: 1, background: "#0f0f13", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {/* ════ RIGHT PANEL — Preview ════ */}
+        <main style={{ flex: 1, background: "#0a0a0f", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {previewHtml ? (
             <iframe
               srcDoc={previewHtml}
@@ -368,30 +462,136 @@ export default function SeoEditorPage() {
               title="preview"
               sandbox="allow-scripts allow-same-origin"
             />
+          ) : isAnalyzing ? (
+            <AnalyzingScreen elapsed={analyzeElapsed} keywordCount={keywordCount} />
           ) : (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, color: "#444" }}>
-              {phase === "setup" ? (
-                <>
-                  <div style={{ fontSize: 48 }}>🔍</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "#666" }}>SEO-машина</div>
-                  <div style={{ fontSize: 14, color: "#555", textAlign: "center", maxWidth: 380, lineHeight: 1.6 }}>
-                    Вставьте ключевые слова слева. ИИ кластеризует их по темам, создаст структуру сайта и сгенерирует статьи с изображениями — готово к публикации.
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8, fontSize: 13, color: "#555" }}>
-                    {["⚡ 70 токенов / статья (включая 3 фото)", "📊 До 1000 ключевых слов", "🌐 Публикация на Netlify одной кнопкой"].map(s => (
-                      <div key={s} style={{ display: "flex", alignItems: "center", gap: 8 }}>{s}</div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: 40 }}>👈</div>
-                  <div style={{ fontSize: 15, color: "#555" }}>Нажмите на страницу в структуре для предпросмотра</div>
-                </>
-              )}
-            </div>
+            <EmptyScreen phase={phase} />
           )}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Tree row ─── */
+function TreeRow({ icon, label, bold = false, active, done, badge, faded, indent, onClick }: {
+  icon: any; label: string; bold?: boolean; active?: boolean; done?: boolean;
+  badge?: string; faded?: boolean; indent?: number; onClick?: () => void;
+}) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        width: "100%", border: "none", textAlign: "left", cursor: onClick ? "pointer" : "default",
+        display: "flex", alignItems: "center", gap: 7,
+        padding: `5px 14px 5px ${14 + (indent || 0) * 16}px`,
+        background: active ? "rgba(99,102,241,0.1)" : hov ? "rgba(255,255,255,0.02)" : "transparent",
+        borderLeft: active ? "2px solid rgba(99,102,241,0.6)" : "2px solid transparent",
+        transition: "background 0.1s",
+      }}
+    >
+      {icon}
+      <span style={{
+        fontSize: indent ? 12 : 13, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        fontWeight: bold ? 600 : 400,
+        color: active ? "#e2e8f0" : faded ? "#555" : "#a0a0b0",
+        letterSpacing: bold ? "-0.01em" : undefined,
+      }}>{label}</span>
+      {done && !badge && <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 opacity-70" />}
+      {badge && <span style={{ fontSize: 10, color: "#555", fontWeight: 600, flexShrink: 0 }}>{badge}</span>}
+    </button>
+  );
+}
+
+/* ─── Analyzing screen (shown in right panel while AI clusters) ─── */
+function AnalyzingScreen({ elapsed, keywordCount }: { elapsed: number; keywordCount: number }) {
+  const phases = [
+    { at: 0,  label: "Отправляю ключевые слова в ИИ..." },
+    { at: 5,  label: "Анализирую семантику ключей..." },
+    { at: 20, label: "Кластеризую по темам..." },
+    { at: 60, label: "Формирую структуру сайта..." },
+    { at: 100, label: "Генерирую заголовки статей..." },
+    { at: 150, label: "Финализирую структуру..." },
+  ];
+  const currentPhase = [...phases].reverse().find(p => elapsed >= p.at) || phases[0];
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24, padding: 40 }}>
+      {/* animated rings */}
+      <div style={{ position: "relative", width: 80, height: 80, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "2px solid rgba(99,102,241,0.15)", animation: "spin 3s linear infinite" }} />
+        <div style={{ position: "absolute", inset: 6, borderRadius: "50%", border: "2px solid rgba(124,58,237,0.25)", animation: "spin 2s linear infinite reverse" }} />
+        <Layers className="w-7 h-7 text-indigo-400" />
+      </div>
+
+      <div style={{ textAlign: "center", maxWidth: 360 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#e2e8f0", marginBottom: 8, letterSpacing: "-0.02em" }}>
+          Анализирую {keywordCount} ключей
         </div>
+        <div style={{ fontSize: 13.5, color: "#818cf8", marginBottom: 6, minHeight: 20 }}>
+          {currentPhase.label}
+        </div>
+        <div style={{ fontSize: 12, color: "#444" }}>
+          Прошло: {elapsed < 60 ? `${elapsed}с` : `${Math.floor(elapsed / 60)}м ${elapsed % 60}с`}
+          {" · "}обычно занимает 1–3 мин
+        </div>
+      </div>
+
+      {/* progress dots */}
+      <div style={{ display: "flex", gap: 6 }}>
+        {[0, 1, 2, 3, 4].map(i => (
+          <div key={i} style={{
+            width: 6, height: 6, borderRadius: "50%",
+            background: i <= Math.min(4, Math.floor(elapsed / 30)) ? "#4f46e5" : "rgba(255,255,255,0.08)",
+            transition: "background 0.5s",
+          }} />
+        ))}
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+/* ─── Empty state ─── */
+function EmptyScreen({ phase }: { phase: Phase }) {
+  if (phase === "setup") return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, padding: 40 }}>
+      <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <BarChart2 className="w-7 h-7 text-indigo-400" />
+      </div>
+      <div style={{ textAlign: "center", maxWidth: 360 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#555", marginBottom: 10, letterSpacing: "-0.02em" }}>
+          SEO-машина
+        </div>
+        <div style={{ fontSize: 13.5, color: "#444", lineHeight: 1.7, marginBottom: 20 }}>
+          Вставьте ключевые слова слева. ИИ кластеризует их по темам, создаст структуру и сгенерирует статьи с изображениями.
+        </div>
+        <div style={{ display: "inline-flex", flexDirection: "column", gap: 8, textAlign: "left" }}>
+          {[
+            ["⚡", "70 токенов / статья (вкл. 3 фото)"],
+            ["📊", "До 1000 ключевых слов"],
+            ["🌐", "Публикация на Netlify одной кнопкой"],
+          ].map(([icon, text]) => (
+            <div key={text} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, color: "#444" }}>
+              <span>{icon}</span><span>{text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 40 }}>
+      <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <FileText className="w-6 h-6 text-zinc-600" />
+      </div>
+      <div style={{ fontSize: 13.5, color: "#555", textAlign: "center" }}>
+        Нажмите на страницу в структуре для предпросмотра
       </div>
     </div>
   );
