@@ -1287,6 +1287,7 @@ Respond ONLY with valid JSON (no markdown):
     if (!filename) return res.status(400).json({ message: "filename required" });
     const file = await storage.getProjectFile(proj.id, filename);
     if (!file) return res.status(404).json({ message: "File not found" });
-    res.type("text/html").send(file.code);
+    const ct = filename.endsWith(".css") ? "text/css" : filename.endsWith(".txt") ? "text/plain" : "text/html";
+    res.type(ct).send(file.code);
   });
 }

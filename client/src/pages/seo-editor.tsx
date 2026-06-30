@@ -82,6 +82,14 @@ export default function SeoEditorPage() {
     setGenProgress({ done: cfg.pagesGenerated || 0, total: cfg.pagesTotal || 0 });
   }, [cfg?.status, cfg?.pagesGenerated, cfg?.clusters?.length]);
 
+  // Auto-load homepage preview when project is done
+  useEffect(() => {
+    if (phase === "done" && !previewHtml && files.length > 0) {
+      const home = files.find(f => f.filename === "index.html") || files[0];
+      if (home) loadPreview(home.filename);
+    }
+  }, [phase, files.length]);
+
   /* ── analyze ── */
   async function handleAnalyze() {
     const keywords = keywordsText.split(/[\n,]+/).map(k => k.trim()).filter(Boolean);
@@ -227,8 +235,20 @@ export default function SeoEditorPage() {
   async function loadPreview(filename: string) {
     setSelectedFile(filename);
     try {
-      const res = await fetch(`/api/seo/${id}/file?filename=${encodeURIComponent(filename)}`, { credentials: "include" });
-      if (res.ok) setPreviewHtml(await res.text());
+      const [pageRes, cssRes] = await Promise.all([
+        fetch(`/api/seo/${id}/file?filename=${encodeURIComponent(filename)}`, { credentials: "include" }),
+        fetch(`/api/seo/${id}/file?filename=assets%2Fstyle.css`, { credentials: "include" }),
+      ]);
+      if (!pageRes.ok) return;
+      let html = await pageRes.text();
+      if (cssRes.ok) {
+        const css = await cssRes.text();
+        html = html.replace(
+          /<link[^>]+href=["'][^"']*assets\/style\.css["'][^>]*>/gi,
+          `<style>${css}</style>`
+        );
+      }
+      setPreviewHtml(html);
     } catch {}
   }
 
