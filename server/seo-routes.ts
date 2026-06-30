@@ -8,7 +8,7 @@ const KIE_API_KEY = process.env.KIE_API_KEY || "";
 const KIE_BASE = "https://api.kie.ai/codex/v1";
 const KIE_TASKS_URL = `${KIE_BASE}/tasks`;
 const KIE_GEMINI_MODEL = "gemini-3-5-flash";
-const KIE_GEMINI_URL = `https://api.kie.ai/gemini/v1/models/${KIE_GEMINI_MODEL}:streamGenerateContent`;
+const KIE_GEMINI_URL = `https://api.kie.ai/gemini/v1/models/${KIE_GEMINI_MODEL}:generateContent`;
 
 const SEO_ARTICLE_COST = 70;
 const IMG_PER_ARTICLE = 3;
@@ -26,9 +26,9 @@ function slugify(text: string): string {
     .slice(0, 60) || "page";
 }
 
-// Uses the same KIE Gemini flash endpoint as the main site generator. The Gemini
-// stream endpoint is the proven-working path on KIE, so we consume the stream and
-// accumulate it into the full response text (sync-style for JSON parsing).
+// Uses KIE Gemini flash via the non-streaming generateContent endpoint.
+// Non-streaming avoids stream-accumulation overhead and returns a single JSON
+// response — much faster for large keyword clusters and long articles.
 async function kieSync(messages: { role: string; content: string }[], timeout = 90000): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
@@ -42,7 +42,7 @@ async function kieSync(messages: { role: string; content: string }[], timeout = 
       }
       contents.push({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] });
     }
-    const body: any = { stream: true, contents };
+    const body: any = { contents };
     if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
 
     const resp = await fetch(KIE_GEMINI_URL, {
@@ -56,36 +56,11 @@ async function kieSync(messages: { role: string; content: string }[], timeout = 
       throw new Error(`KIE Gemini ${resp.status}${errText ? `: ${errText.slice(0, 300)}` : ""}`);
     }
 
+    const data = await resp.json() as any;
     let text = "";
-    const consume = (jsonStr: string) => {
-      if (!jsonStr || jsonStr === "[DONE]") return;
-      try {
-        const parsed = JSON.parse(jsonStr);
-        for (const part of parsed?.candidates?.[0]?.content?.parts ?? []) {
-          if (part.text) text += part.text as string;
-        }
-      } catch { /* incomplete chunk — buffered for next iteration */ }
-    };
-    const reader = (resp.body as any).getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        consume(trimmed.startsWith("data: ") ? trimmed.slice(6) : trimmed);
-      }
+    for (const part of data?.candidates?.[0]?.content?.parts ?? []) {
+      if (part.text) text += part.text as string;
     }
-    if (buffer.trim()) {
-      const t = buffer.trim();
-      consume(t.startsWith("data: ") ? t.slice(6) : t);
-    }
-
     if (!text) throw new Error("Empty KIE response");
     return text;
   } finally {
@@ -409,7 +384,7 @@ Output ONLY clean HTML — no markdown, no explanation text.`;
     html = await kieSync([
       { role: "system", content: "You are an expert SEO content writer. Output only clean HTML without any markdown fences or explanation." },
       { role: "user", content: prompt },
-    ], 120000);
+    ], 240000);
     html = cleanHtml(html);
   } catch (e: any) {
     console.warn(`[SEO] Article gen failed for ${kw.keyword}:`, e?.message);
@@ -522,7 +497,7 @@ Respond with ONLY valid JSON, no explanation:
       const responseText = await kieSync([
         { role: "system", content: "You are an SEO architecture expert. Respond only with valid JSON." },
         { role: "user", content: prompt },
-      ], 120000);
+      ], 240000);
 
       let parsed: any;
       try {
