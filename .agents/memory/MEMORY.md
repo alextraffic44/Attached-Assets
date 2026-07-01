@@ -13,6 +13,7 @@
 - [Cyrillic web fonts](cyrillic-fonts.md) — generated RU text needs Cyrillic-capable fonts; use Unbounded+Manrope, AVOID Space Grotesk/Syne (Latin-only, silently break).
 - [Interactive loading UX](interactive-loading-ux.md) — keep ONE robot loader up until SCROLLANIM video is fully ready, then reveal; iframe `src` blob overrides `srcDoc` so clear it at each generation start.
 - [Injected browser scripts](injected-browser-scripts.md) — `<script>` strings injected into generated sites run in the browser & aren't transpiled; TS syntax (`as HTMLElement`) = SyntaxError that kills the whole block.
+- [Editor diff-patch no-op](editor-diff-patch-noop.md) — SEARCH/REPLACE edits: 0 applied ≠ success (silent no-op was the "nothing changes" bug); match must be whitespace/CRLF-tolerant; refund only when `billed`.
 - [SEO machine article split](seo-article-split.md) — AI generates ONLY inner article content fragment; TypeScript wraps nav+sidebar+footer; sidebar built in TS (reliable ad slots, category links); prevents AI hallucinating nav/footer structure.
 - [ffmpeg deploy EIO](ffmpeg-deploy-eio.md) — fluent-ffmpeg pipe-read throws `EIO: i/o error, read` in deploy, dropping frames despite a downloaded mp4; use direct spawn w/ stdio ignored + retry + tmp-copy binary.
 - [Preloader id mismatch](preloader-id-mismatch.md) — stuck splash = model named it ≠`#site-preloader`; hide net must fall back to fullscreen-guarded selectors + keep hard cap (5s), never one exact id.

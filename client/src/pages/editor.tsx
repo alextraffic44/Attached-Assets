@@ -668,6 +668,9 @@ export default function EditorPage() {
           }
           if (data.error) {
             errorShown = true;
+            if (data.newBalance !== undefined) {
+              queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
+            }
             toast({ title: "Ошибка генерации", description: data.error, variant: "destructive" });
           }
         }

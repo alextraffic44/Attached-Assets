@@ -3065,38 +3065,66 @@ ${designAnalysis}
       const diffBlockCount = (fullResponse.match(/```diff/g) || []).length;
       console.log("Full response length:", fullResponse.length, "Has FILE markers:", hasFileMarkers, "HTML blocks:", htmlBlockCount, "Diff blocks:", diffBlockCount, "Has SEARCH/REPLACE:", hasDiffBlocks);
 
-      const applyDiffPatches = (originalCode: string, response: string): string => {
+      // Apply SEARCH/REPLACE diff blocks. Matching is tolerant of whitespace /
+      // indentation differences (the #1 reason a patch silently failed to match
+      // before), and all replacement is index/slice based so `$`, `$1`, `$&` etc.
+      // in the new code are inserted literally instead of being interpreted by
+      // String.replace. Returns how many patches actually applied so the caller
+      // can detect a total no-op instead of reporting a phantom success.
+      const applyDiffPatches = (originalCode: string, response: string): { code: string; applied: number; total: number } => {
         const diffRegex = /```diff\s*\n([\s\S]*?)```/g;
         let patchedCode = originalCode;
-        let patchCount = 0;
+        let applied = 0;
+        let total = 0;
         let dm;
         while ((dm = diffRegex.exec(response)) !== null) {
           const diffContent = dm[1];
-          const searchReplaceRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
+          // Tolerate CRLF vs LF, trailing spaces after the markers, and small
+          // deviations in the number of </=/> characters the model emits — any of
+          // which previously made the pair fail to parse (total stayed 0) and the
+          // route reported a phantom success with unchanged code.
+          const searchReplaceRegex = /<{5,}[ \t]*SEARCH[ \t]*\r?\n([\s\S]*?)\r?\n={5,}[ \t]*\r?\n([\s\S]*?)\r?\n>{5,}[ \t]*REPLACE/g;
           let sr;
           while ((sr = searchReplaceRegex.exec(diffContent)) !== null) {
+            total++;
             const searchBlock = sr[1];
             const replaceBlock = sr[2];
-            if (patchedCode.includes(searchBlock)) {
-              patchedCode = patchedCode.replace(searchBlock, replaceBlock);
-              patchCount++;
-            } else {
-              const trimmedSearch = searchBlock.replace(/^\s+/gm, (m) => m.replace(/ /g, ' ')).trim();
-              const trimmedCode = patchedCode.replace(/^\s+/gm, (m) => m.replace(/ /g, ' '));
-              if (trimmedCode.includes(trimmedSearch)) {
-                const idx = trimmedCode.indexOf(trimmedSearch);
-                const before = patchedCode.substring(0, idx);
-                const after = patchedCode.substring(idx + trimmedSearch.length);
-                patchedCode = before + replaceBlock + after;
-                patchCount++;
-              } else {
-                console.warn("SEARCH block not found in code, skipping patch. First 80 chars:", searchBlock.substring(0, 80));
+            if (!searchBlock.trim()) {
+              console.warn("Empty SEARCH block, skipping patch.");
+              continue;
+            }
+            // 1) Exact match (fast path) — slice-based so replacement is literal.
+            const exactIdx = patchedCode.indexOf(searchBlock);
+            if (exactIdx !== -1) {
+              patchedCode = patchedCode.slice(0, exactIdx) + replaceBlock + patchedCode.slice(exactIdx + searchBlock.length);
+              applied++;
+              continue;
+            }
+            // 2) Whitespace-tolerant match: build a regex where every run of
+            //    whitespace in the SEARCH block matches any whitespace run in the
+            //    code, and everything else matches literally. Handles reindented /
+            //    reformatted output from the model (CRLF vs LF, tabs vs spaces, etc.).
+            const pattern = searchBlock
+              .trim()
+              .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+              .replace(/\s+/g, "\\s+");
+            let matched = false;
+            try {
+              const re = new RegExp(pattern);
+              const m = re.exec(patchedCode);
+              if (m) {
+                patchedCode = patchedCode.slice(0, m.index) + replaceBlock + patchedCode.slice(m.index + m[0].length);
+                applied++;
+                matched = true;
               }
+            } catch {}
+            if (!matched) {
+              console.warn("SEARCH block not found (exact+fuzzy), skipping patch. First 80 chars:", searchBlock.substring(0, 80));
             }
           }
         }
-        console.log(`Applied ${patchCount} diff patches`);
-        return patchedCode;
+        console.log(`Applied ${applied}/${total} diff patches`);
+        return { code: patchedCode, applied, total };
       };
 
       let aiTextReply = "";
@@ -3122,7 +3150,36 @@ ${designAnalysis}
           : existingFiles.find(f => f.filename === editingFile)?.code || project.generatedCode || "";
 
         const { stripped: editingFileCode } = stripBase64(editingFileCodeRaw);
-        const patchedStripped = applyDiffPatches(editingFileCode, fullResponse);
+        const patchResult = applyDiffPatches(editingFileCode, fullResponse);
+
+        // Nothing applied — the AI returned diff blocks but not a single SEARCH block
+        // matched (or none parsed). Applying it would be a silent no-op: unchanged code
+        // saved, credits charged, and the model's "я изменил…" reply shown, so the user
+        // sees no change (the reported bug). Instead: refund (only if this request
+        // actually billed — an idempotent replay charged nothing), record the failure in
+        // chat history, and tell the user to retry.
+        if (patchResult.applied === 0) {
+          const billed = genDeduction.success && !genDeduction.alreadyProcessed;
+          if (billed && user?.id) { try { await storage.refundCredits(user.id, GENERATION_COST); } catch {} }
+          const freshBal = user?.id ? (await storage.getUser(user.id))?.credits : undefined;
+          const failMsg = "Не удалось применить изменения к коду — попробуйте переформулировать запрос или повторить. Токены за эту попытку возвращены.";
+          try {
+            await storage.createProjectMessage({ projectId: project.id, role: "model", content: failMsg });
+          } catch {}
+          console.warn(`[EDIT] 0/${patchResult.total} diff patches applied for project ${project.id} — no-op, ${billed ? "credits refunded" : "no charge (replay)"}`);
+          res.write(`data: ${JSON.stringify({ error: failMsg, newBalance: freshBal })}\n\n`);
+          res.end();
+          return;
+        }
+
+        // Some (but not all) patches landed — tell the user so a partial edit doesn't
+        // read as a phantom success for the parts that didn't match.
+        if (patchResult.applied < patchResult.total) {
+          const note = `⚠️ Применено ${patchResult.applied} из ${patchResult.total} изменений — остальные не удалось точно сопоставить с кодом. Если чего-то не хватает, переформулируйте запрос.`;
+          aiTextReply = aiTextReply ? `${aiTextReply}\n\n${note}` : note;
+        }
+
+        const patchedStripped = patchResult.code;
         const patchedCode = replaceImgMarkers(restoreBase64(patchedStripped, base64Map));
 
         if (editingFile !== "index.html") {
