@@ -333,7 +333,7 @@ export default function DashboardPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       setShowCreateModal(false);
       const prompt = selectedMode === "photo"
-        ? (description || "Создай профессиональный сайт, вдохновляясь приложенными референсами")
+        ? (description || (photoImages.length > 0 ? "Создай профессиональный сайт, вдохновляясь приложенными референсами" : "Создай стильный профессиональный сайт"))
         : description || title;
       const interactiveParam = selectedMode === "interactive" ? `&interactive=1&istyle=${interactiveStyle}` : "";
       const enhancedParam = isEnhanced ? "&enhanced=1" : "";
@@ -1009,7 +1009,7 @@ export default function DashboardPage() {
                         </div>
                       ) : selectedMode === "photo" ? (
                         <div className="flex flex-col gap-3 flex-1">
-                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Референсы (дизайн и/или фото товара)</div>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Референсы (дизайн и/или фото товара) — необязательно</div>
                           <input
                             ref={photoInputRef}
                             type="file"
@@ -1091,7 +1091,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div className="text-center">
                                   <p className="text-sm font-semibold" style={{ color: '#6D28D9' }}>Загрузить референсы</p>
-                                  <p className="text-xs mt-0.5" style={{ color: '#A78BFA' }}>Дизайн и/или фото товара — до 5 файлов, PNG/JPG/WEBP до 5 МБ</p>
+                                  <p className="text-xs mt-0.5" style={{ color: '#A78BFA' }}>Необязательно — дизайн и/или фото товара, до 5 файлов, PNG/JPG/WEBP до 5 МБ</p>
                                 </div>
                               </button>
                               <div className="rounded-xl p-2.5" data-tour="photo-ai-gen" style={{ background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.15)' }}>
@@ -1315,10 +1315,6 @@ export default function DashboardPage() {
                       className="h-10 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                       style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
                       onClick={() => {
-                        if (selectedMode === "photo" && photoImages.length === 0) {
-                          toast({ title: "Загрузите референс", description: "Для режима «Профессионал» нужно загрузить хотя бы одно изображение", variant: "destructive" });
-                          return;
-                        }
                         createMutation.mutate();
                       }}
                       disabled={createMutation.isPending || isEnhancing || isResearching}
