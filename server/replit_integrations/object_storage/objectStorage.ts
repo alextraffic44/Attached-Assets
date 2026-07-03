@@ -1,5 +1,5 @@
 import { Storage, File } from "@google-cloud/storage";
-import { Response } from "express";
+import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import {
   ObjectAclPolicy,
@@ -95,7 +95,7 @@ export class ObjectStorageService {
   }
 
   // Downloads an object to the response.
-  async downloadObject(file: File, res: Response, cacheTtlSec: number = 3600) {
+  async downloadObject(file: File, res: Response, cacheTtlSec: number = 3600, req?: Request) {
     try {
       // Get file metadata
       const [metadata] = await file.getMetadata();
@@ -123,7 +123,7 @@ export class ObjectStorageService {
       });
 
       // If client disconnects early, destroy the GCS read stream to avoid EPIPE
-      req.on("close", () => stream.destroy());
+      req?.on("close", () => stream.destroy());
 
       stream.pipe(res);
     } catch (error) {
