@@ -1,5 +1,6 @@
 # Memory Index
 
+- [Claude Sonnet 5 KIE adapter](claude-sonnet-5-kie-adapter.md) — v1 code-gen agent now calls KIE's Anthropic Messages API proxy; Bearer auth, `system` top-level field, `content_block_delta`/`text_delta` SSE.
 - [Deploy media bundling](deploy-media-bundling.md) — local `/objects//uploads/` media must be downloaded & rebundled into the deploy/ZIP or it 404s on the static host (Netlify); 3rd regex catches bare URLs in `data-frames` JSON.
 - [Russia CDN throttling](russia-cdn-throttling.md) — heavy interactive deploys break for RU users w/o VPN (DPI throttles foreign CDN); compress non-frame photos only (user vetoed frame compression); escalate to Yandex CDN.
 - [Generated-media markers + billing](genimg-photos.md) — `{{GENIMG}}`/`{{SCROLLANIM}}` resolved server-side to `/objects/` assets (never external URLs); refund ONLY when `!alreadyProcessed` or replays mint credits.

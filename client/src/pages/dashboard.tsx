@@ -1148,7 +1148,7 @@ export default function DashboardPage() {
                         <button type="button" onClick={() => setAgentVersion("v1")}
                           className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all"
                           style={{ background: agentVersion === "v1" ? '#fff' : 'transparent', color: agentVersion === "v1" ? '#1d1d1f' : '#86868B', boxShadow: agentVersion === "v1" ? '0 1px 4px rgba(0,0,0,0.12)' : 'none', cursor: 'pointer' }}>
-                          V1 · GPT-5.5
+                          V1 · Claude Sonnet 5
                         </button>
                         <button type="button" onClick={() => setAgentVersion("v2")}
                           className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all"

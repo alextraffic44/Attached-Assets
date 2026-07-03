@@ -7,11 +7,11 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - **Frontend**: React with Tailwind CSS, Framer Motion, shadcn/ui components
 - **Backend**: Express.js with session-based authentication (Passport.js)
 - **Database**: PostgreSQL with Drizzle ORM
-- **AI Code (new site)**: GPT-5.5 via KIE API (KIE_API_KEY env var, POST https://api.kie.ai/codex/v1/responses, streaming SSE, manual conversation history)
-- **AI Code (edit)**: GPT-5.5 via KIE API for editing with SEARCH/REPLACE diff patches (falls back to full HTML if needed); base64 images stripped before sending to reduce context size
+- **AI Code (new site)**: Claude Sonnet 5 via KIE API (KIE_API_KEY env var, POST https://api.kie.ai/claude/v1/messages, Anthropic Messages API shape — `system` field + `messages` array, `max_tokens`, `thinkingFlag`, streaming SSE with `content_block_delta`/`text_delta` events, manual conversation history)
+- **AI Code (edit)**: Claude Sonnet 5 via KIE API for editing with SEARCH/REPLACE diff patches (falls back to full HTML if needed); base64 images stripped before sending to reduce context size
 - **Design-to-Code (Mockup Mode)**: Toggle in chat when images attached — sends specialized prompt to KIE Vision to analyze screenshot/mockup and recreate exact layout as HTML/CSS/JS (not embed as img)
 - **Two-Step Mockup Analysis**: Step 1 extracts detailed JSON design spec (colors, typography, layout, sections, effects) via separate KIE sync call; Step 2 uses that structured analysis to generate pixel-perfect code
-- **AI Enhance**: GPT-5.5 via KIE API for prompt enhancement (5 tokens)
+- **AI Enhance**: Claude Sonnet 5 via KIE API for prompt enhancement (5 tokens)
 - **Deep Research**: Gemini Interactions API with deep-research-pro-preview-12-2025 agent (10 tokens, optional toggle)
 - **AI Images**: GPT Image-2 (primary) via KIE API (model `gpt-image-2-text-to-image`, 2K resolution, 15 tokens); falls back to Nano Banana 2 on creation error or when reference images provided (gpt-image-2 is text-to-image only)
 - **AI 3D Models**: Hunyuan3D V3 via WaveSpeed API (WAVESPEED_API_KEY env var, image-to-3D, GLB output, 100 tokens)

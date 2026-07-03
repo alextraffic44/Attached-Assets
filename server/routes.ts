@@ -119,8 +119,10 @@ async function extractTextFromFile(base64Data: string, mimeType: string): Promis
 const KIE_API_KEY = process.env.KIE_API_KEY;
 const NANO_BANANA_CREATE_URL = "https://api.kie.ai/api/v1/jobs/createTask";
 const NANO_BANANA_STATUS_URL = "https://api.kie.ai/api/v1/jobs/recordInfo";
-const KIE_LLM_URL = "https://api.kie.ai/codex/v1/responses";
-const KIE_LLM_MODEL = "gpt-5-5";
+// Agent v1 = Claude Sonnet 5 via KIE's Anthropic-style Messages API proxy.
+const KIE_LLM_URL = "https://api.kie.ai/claude/v1/messages";
+const KIE_LLM_MODEL = "claude-sonnet-5";
+const KIE_LLM_MAX_TOKENS = 64000;
 const KIE_GEMINI_URL = "https://api.kie.ai/gemini/v1/models/gemini-3-5-flash:streamGenerateContent";
 
 const AUTO_IMAGE_COST = 15;
@@ -1716,32 +1718,51 @@ type KieContentItem =
 
 type KieMessage = { role: "user" | "assistant" | "developer" | "system"; content: KieContentItem[] };
 
+// Converts our provider-agnostic KieMessage[] into Anthropic Messages API blocks.
+// Developer/system role entries are skipped here — system content is sent via the
+// top-level `system` field instead, since Claude's `messages` only accepts user/assistant.
+function toClaudeMessages(messages: KieMessage[]): any[] {
+  return messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({
+      role: m.role,
+      content: m.content.map((c: any) => {
+        if (c.type === "input_text") return { type: "text", text: c.text };
+        if (c.type === "input_image") return { type: "image", source: { type: "url", url: c.image_url } };
+        if (c.type === "input_image_inline") {
+          return { type: "image", source: { type: "base64", media_type: c.mime_type, data: c.base64 } };
+        }
+        return { type: "text", text: "" };
+      }),
+    }));
+}
+
 async function kieGenerateSync(
   messages: KieMessage[],
   systemPrompt: string
 ): Promise<string> {
-  const input: KieMessage[] = [
-    { role: "developer", content: [{ type: "input_text", text: systemPrompt }] },
-    ...messages,
-  ];
   const resp = await fetch(KIE_LLM_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${KIE_API_KEY}` },
-    body: JSON.stringify({ model: KIE_LLM_MODEL, stream: false, input, reasoning: { effort: "medium" } }),
+    body: JSON.stringify({
+      model: KIE_LLM_MODEL,
+      stream: false,
+      system: systemPrompt,
+      messages: toClaudeMessages(messages),
+      max_tokens: KIE_LLM_MAX_TOKENS,
+      thinkingFlag: false,
+    }),
   });
   if (!resp.ok) {
     const err = await resp.text();
     throw new Error(`KIE API error ${resp.status}: ${err}`);
   }
   const data = await resp.json() as any;
-  for (const item of data.output || []) {
-    if (item.type === "message" && Array.isArray(item.content)) {
-      for (const c of item.content) {
-        if (c.type === "output_text" && c.text) return c.text as string;
-      }
-    }
+  let text = "";
+  for (const c of data.content || []) {
+    if (c.type === "text" && c.text) text += c.text as string;
   }
-  return "";
+  return text;
 }
 
 async function* kieGenerateStream(
@@ -1749,14 +1770,19 @@ async function* kieGenerateStream(
   systemPrompt: string,
   reasoningEffort: "low" | "medium" | "high" | "xhigh" = "high"
 ): AsyncGenerator<string> {
-  const input: KieMessage[] = [
-    { role: "developer", content: [{ type: "input_text", text: systemPrompt }] },
-    ...messages,
-  ];
+  // Claude adapter only exposes a boolean "extended thinking" toggle — map effort onto it.
+  const thinkingFlag = reasoningEffort === "high" || reasoningEffort === "xhigh";
   const resp = await fetch(KIE_LLM_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${KIE_API_KEY}` },
-    body: JSON.stringify({ model: KIE_LLM_MODEL, stream: true, input, reasoning: { effort: reasoningEffort } }),
+    body: JSON.stringify({
+      model: KIE_LLM_MODEL,
+      stream: true,
+      system: systemPrompt,
+      messages: toClaudeMessages(messages),
+      max_tokens: KIE_LLM_MAX_TOKENS,
+      thinkingFlag,
+    }),
   });
   if (!resp.ok) {
     const errText = await resp.text();
@@ -1778,11 +1804,19 @@ async function* kieGenerateStream(
       } else if (line.startsWith("data: ")) {
         const raw = line.slice(6).trim();
         if (raw === "[DONE]") return;
-        if (eventType === "response.output_text.delta") {
-          try {
-            const parsed = JSON.parse(raw);
-            if (parsed.delta) yield parsed.delta as string;
-          } catch {}
+        try {
+          const parsed = JSON.parse(raw);
+          if (eventType === "content_block_delta" && parsed?.delta?.type === "text_delta" && parsed.delta.text) {
+            yield parsed.delta.text as string;
+          } else if (eventType === "error" || parsed?.type === "error") {
+            const errMsg = parsed?.error?.message || raw;
+            throw new Error(`KIE Claude stream error: ${errMsg}`);
+          } else if (eventType === "message_stop" || parsed?.type === "message_stop") {
+            return;
+          }
+        } catch (parseErr: any) {
+          if (parseErr instanceof Error && parseErr.message.startsWith("KIE Claude stream error")) throw parseErr;
+          // ignore malformed/partial JSON chunks
         }
       } else if (line === "") {
         eventType = "";
@@ -2967,7 +3001,7 @@ ${designAnalysis}
 
       conversationHistory.push({ role: "user", content: userContent });
 
-      console.log(`[KIE] Generate call. Agent: ${useGemini ? "v2/Gemini-Flash" : "v1/GPT-5.5"}, History: ${conversationHistory.length}, Edit: ${isEditMode}`);
+      console.log(`[KIE] Generate call. Agent: ${useGemini ? "v2/Gemini-Flash" : "v1/Claude-Sonnet-5"}, History: ${conversationHistory.length}, Edit: ${isEditMode}`);
 
       const MAX_RETRIES = 3;
       let lastError: any = null;
