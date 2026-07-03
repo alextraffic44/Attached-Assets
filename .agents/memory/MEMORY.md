@@ -14,6 +14,7 @@
 - [Cyrillic web fonts](cyrillic-fonts.md) — generated RU text needs Cyrillic-capable fonts; use Unbounded+Manrope, AVOID Space Grotesk/Syne (Latin-only, silently break).
 - [Interactive loading UX](interactive-loading-ux.md) — keep ONE robot loader up until SCROLLANIM video is fully ready, then reveal; iframe `src` blob overrides `srcDoc` so clear it at each generation start.
 - [Injected browser scripts](injected-browser-scripts.md) — `<script>` strings injected into generated sites run in the browser & aren't transpiled; TS syntax (`as HTMLElement`) = SyntaxError that kills the whole block.
+- [Dashboard thumbnail perf](dashboard-thumbnail-perf.md) — list/thumbnail iframes must use `sandbox="allow-same-origin"` (no scripts) or 100+ live pages run at once; also add query retry so transient fetch fails don't look like "no site".
 - [Editor diff-patch no-op](editor-diff-patch-noop.md) — SEARCH/REPLACE edits: 0 applied ≠ success (silent no-op was the "nothing changes" bug); match must be whitespace/CRLF-tolerant; refund only when `billed`.
 - [SEO machine article split](seo-article-split.md) — AI generates ONLY inner article content fragment; TypeScript wraps nav+sidebar+footer; sidebar built in TS (reliable ad slots, category links); prevents AI hallucinating nav/footer structure.
 - [ffmpeg deploy EIO](ffmpeg-deploy-eio.md) — fluent-ffmpeg pipe-read throws `EIO: i/o error, read` in deploy, dropping frames despite a downloaded mp4; use direct spawn w/ stdio ignored + retry + tmp-copy binary.

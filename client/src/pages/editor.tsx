@@ -248,7 +248,7 @@ export default function EditorPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const animPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { data: project, isLoading: projectLoading } = useQuery<Project>({
+  const { data: project, isLoading: projectLoading, isError: projectError, refetch: refetchProject } = useQuery<Project>({
     queryKey: ["/api/projects", projectId],
   });
 
@@ -2048,6 +2048,19 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
   }, [applyImageToIframe]);
 
   if (projectLoading) return <div className="h-screen flex items-center justify-center bg-[#F6F7FB] dark:bg-[#0F172A]"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
+
+  if (projectError || (!project && !projectLoading)) return (
+    <div className="h-screen flex flex-col items-center justify-center gap-4 bg-[#F6F7FB] dark:bg-[#0F172A] text-center px-6">
+      <p className="text-slate-500 dark:text-slate-400 text-sm max-w-xs">Не удалось загрузить проект. Проверьте соединение и попробуйте ещё раз.</p>
+      <button
+        onClick={() => refetchProject()}
+        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-semibold transition-colors"
+        data-testid="button-retry-project-load"
+      >
+        Повторить попытку
+      </button>
+    </div>
+  );
 
   return (
     <div className="h-screen bg-[#F6F7FB] dark:bg-[#0F172A] flex flex-col p-3 gap-3 overflow-hidden">
