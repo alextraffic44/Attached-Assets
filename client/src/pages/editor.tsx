@@ -299,28 +299,32 @@ export default function EditorPage() {
     const initialInteractiveStyle = urlParams.get("istyle") || "parallax";
     const initialProductImageUrl = urlParams.get("iproductUrl") || "";
     const isMockup = urlParams.get("mockup") === "1";
-    const mockupUrl = urlParams.get("mockupUrl") || "";
+    const mockupUrlsParam = urlParams.get("mockupUrls") || urlParams.get("mockupUrl") || "";
+    const mockupUrlList = mockupUrlsParam.split(",").map(s => s.trim()).filter(Boolean);
     if (initialPrompt && !project?.generatedCode && messages.length === 0) {
       const initMockup = async () => {
         let mockupImages: Array<{base64: string, mimeType: string, preview: string | null, fileName: string}> | undefined;
-        if (isMockup && mockupUrl) {
+        if (isMockup && mockupUrlList.length > 0) {
           try {
-            const imgResp = await fetch(mockupUrl);
-            const blob = await imgResp.blob();
-            const loaded = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.readAsDataURL(blob);
-            });
-            const base64 = loaded.split(",")[1];
-            const mimeType = blob.type || "image/jpeg";
-            mockupImages = [{ base64, mimeType, preview: loaded, fileName: "mockup.jpg" }];
+            const loaded = await Promise.all(mockupUrlList.map(async (url, i) => {
+              const imgResp = await fetch(url);
+              const blob = await imgResp.blob();
+              const dataUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+              });
+              const base64 = dataUrl.split(",")[1];
+              const mimeType = blob.type || "image/jpeg";
+              return { base64, mimeType, preview: dataUrl, fileName: `reference_${i + 1}.jpg` };
+            }));
+            mockupImages = loaded;
             setMockupMode(true);
           } catch (e) {
-            console.error("Failed to load mockup image from server:", e);
+            console.error("Failed to load mockup image(s) from server:", e);
           }
           if (!mockupImages) {
-            toast({ title: "Изображение не найдено", description: "Прикрепите скриншот макета вручную и включите режим «Макет → Код»", variant: "destructive" });
+            toast({ title: "Изображения не найдены", description: "Прикрепите референсы вручную и включите режим «Профессионал»", variant: "destructive" });
           }
         }
         setPrompt(initialPrompt);
@@ -2597,10 +2601,10 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                     onClick={() => setMockupMode(!mockupMode)}
                     className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${mockupMode ? 'bg-gradient-to-r from-primary to-blue-400 text-white shadow-md shadow-primary/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                     data-testid="button-mockup-mode"
-                    title="Включите, чтобы ИИ воссоздал дизайн с вашего скриншота/макета как HTML/CSS/JS код"
+                    title="Включите, чтобы ИИ вдохновился вашими референсами (дизайн и/или фото товара) и создал профессиональный сайт"
                   >
                     <Layout className="w-3.5 h-3.5" />
-                    {mockupMode ? 'Макет → Код (вкл)' : 'Макет → Код'}
+                    {mockupMode ? 'Профессионал (вкл)' : 'Профессионал'}
                   </button>
                 )}
               </div>

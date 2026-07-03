@@ -9,8 +9,9 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - **Database**: PostgreSQL with Drizzle ORM
 - **AI Code (new site)**: Claude Sonnet 5 via KIE API (KIE_API_KEY env var, POST https://api.kie.ai/claude/v1/messages, Anthropic Messages API shape — `system` field + `messages` array, `max_tokens`, `thinkingFlag`, streaming SSE with `content_block_delta`/`text_delta` events, manual conversation history)
 - **AI Code (edit)**: Claude Sonnet 5 via KIE API for editing with SEARCH/REPLACE diff patches (falls back to full HTML if needed); base64 images stripped before sending to reduce context size
-- **Design-to-Code (Mockup Mode)**: Toggle in chat when images attached — sends specialized prompt to KIE Vision to analyze screenshot/mockup and recreate exact layout as HTML/CSS/JS (not embed as img)
-- **Two-Step Mockup Analysis**: Step 1 extracts detailed JSON design spec (colors, typography, layout, sections, effects) via separate KIE sync call; Step 2 uses that structured analysis to generate pixel-perfect code
+- **"Профессионал" mode (formerly "По фото" / Mockup Mode)**: Dashboard start mode + in-editor toggle for attaching reference images. Supports MULTIPLE reference images (up to 5) — any mix of design-reference screenshots (competitor sites, mockups) and/or real product/brand/person photos. AI is given MAXIMUM CREATIVE FREEDOM (no pixel-perfect/exact-recreation rules) — treats references as inspiration only, and is free to improve layout, copy, and visual details.
+- **Two-Step Mockup Analysis**: Step 1 extracts a JSON design spec (colors, typography, layout, sections, effects) via a separate KIE sync call, plus a `reference_photos` array describing EACH attached image with its role (`design_reference` vs `product_photo`/`logo`/`person`/`brand_asset`); Step 2 uses that analysis as inspiration (not a strict blueprint) to generate the site
+- **Reference-aware image generation (REF markers)**: When the AI decides a generated site photo should feature the user's actual uploaded product/brand/person (not an invented stock photo), it emits `{{GENIMG:<prompt>|<ratio>|REF<n>}}` (or `REF<n>,<m>` for multiple refs) where `<n>` is the 1-based index of the reference image (matching upload/`reference_photos` order). `resolveGenImgMarkers` resolves `REF` indices against the reference image URLs passed in and calls `generateGptImage` with `refUrls`, which switches KIE model to `gpt-image-2-image-to-image` (`input_urls`) for true image-to-image generation — preserving the real product/brand/person while placing it in a new professional scene. Markers without `REF` use plain text-to-image as before. This mirrors the "Интерактивный" mode's `generateProductStill` pattern but generalized to any GENIMG marker.
 - **AI Enhance**: Claude Sonnet 5 via KIE API for prompt enhancement (5 tokens)
 - **Deep Research**: Gemini Interactions API with deep-research-pro-preview-12-2025 agent (10 tokens, optional toggle)
 - **AI Images**: GPT Image-2 (primary) via KIE API (model `gpt-image-2-text-to-image`, 2K resolution, 15 tokens); falls back to Nano Banana 2 on creation error or when reference images provided (gpt-image-2 is text-to-image only)
@@ -50,7 +51,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - "Интерактивный" start mode: auto-generated scroll-bound Canvas animation ("3D Sexy Scroll") injected under the Hero (KIE video → ffmpeg frames → Object Storage → Canvas)
 - Auto web research before first generation (Google Search grounding, 7+ sources)
 - High-end design output: Awwwards-level quality with scroll animations, glassmorphism, noise textures, deep shadows
-- Photo/screenshot to website (Vision API)
+- "Профессионал" start mode: multi-reference-image (design screenshots + product/brand photos) to website with full creative freedom (Vision API)
 - Video upload support: attach video files in chat → uploaded to object storage → AI embeds `<video>` tags (mp4/webm/mov/ogg, max 100MB)
 - Manual AI image generation via Nano Banana 2 (create task → poll → insert into HTML, 2K resolution, 10 tokens)
 - Named image library with {{IMG:name}} marker system

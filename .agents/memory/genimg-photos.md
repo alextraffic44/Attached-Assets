@@ -89,3 +89,14 @@ generation, storage, deployability, cap, billing, and fallback.
   frames) — in try/catch and `continue`, refunding billed credits on throw. A single helper
   throw must NOT abort the whole function: that skips finalize() (raw marker can survive),
   strands the 2nd block, and leaks the charge. Per-block isolation = "animation always resolves".
+- GENIMG REF-INDEX convention (added for "Профессионал"/multi-reference-image mode): a marker
+  can carry a 3rd pipe segment, `{{GENIMG:prompt|ratio|REF<n>}}` (or `REF<n>,<m>`), where `<n>` is
+  the 1-based index into the reference images the user uploaded for this generation (same order
+  as upload / same order as the `reference_photos` array from mockup analysis). The resolver looks
+  up `referenceImageUrls[n-1]` and passes it as `refUrls` to `generateGptImage`, which then calls
+  KIE's `gpt-image-2-image-to-image` (`input_urls`) instead of the text-to-image model — this is
+  how a generated site photo can preserve a REAL uploaded product/brand/person instead of the AI
+  inventing one from scratch. Markers with no REF segment behave exactly as before (text-to-image).
+  **Why:** generalizes the "Интерактивный" mode's dedicated `generateProductStill` image-to-image
+  pattern into the shared GENIMG marker system, so any generation flow (not just scroll-anim) can
+  opt a specific photo into image-to-image by referencing an uploaded image's index.

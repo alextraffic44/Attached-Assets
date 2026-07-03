@@ -95,7 +95,7 @@ interface TourStep {
 }
 
 const CHOOSE_TOUR_STEPS: TourStep[] = [
-  { target: '[data-tour="mode-photo"]', title: "По фото", text: "Загрузите скриншот или макет — ИИ воссоздаст его в виде HTML/CSS/JS сайта.", position: "bottom" },
+  { target: '[data-tour="mode-photo"]', title: "Профессионал", text: "Загрузите референсы (скриншот дизайна и/или фото товара) — ИИ вдохновится ими и создаст свой профессиональный сайт.", position: "bottom" },
   { target: '[data-tour="mode-prompt"]', title: "По описанию", text: "Просто напишите текстом, что вам нужно — ИИ сделает сайт по вашему описанию.", position: "bottom" },
   { target: '[data-tour="mode-interactive"]', title: "Интерактивный", text: "Сайт с кинематографичной анимацией, которая разворачивается по мере прокрутки.", position: "bottom" },
 ];
@@ -261,7 +261,7 @@ export default function DashboardPage() {
   const [agentVersion, setAgentVersion] = useState<"v1" | "v2">("v1");
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
-  const [photoImage, setPhotoImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
+  const [photoImages, setPhotoImages] = useState<Array<{ base64: string; mimeType: string; preview: string }>>([]);
   const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split" | "action">("parallax");
   const [interactiveProductImage, setInteractiveProductImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const [tourStep, setTourStep] = useState(-1);
@@ -333,7 +333,7 @@ export default function DashboardPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       setShowCreateModal(false);
       const prompt = selectedMode === "photo"
-        ? (description || "Воссоздай дизайн с загруженного скриншота")
+        ? (description || "Создай профессиональный сайт, вдохновляясь приложенными референсами")
         : description || title;
       const interactiveParam = selectedMode === "interactive" ? `&interactive=1&istyle=${interactiveStyle}` : "";
       const enhancedParam = isEnhanced ? "&enhanced=1" : "";
@@ -347,20 +347,24 @@ export default function DashboardPage() {
       const leadFormParam = leadFormEnabled ? "" : "&leadform=0";
       const agentParam = agentVersion === "v2" ? "&agent=v2" : "";
       let mockupParam = "";
-      if (selectedMode === "photo" && photoImage) {
+      if (selectedMode === "photo" && photoImages.length > 0) {
         try {
-          const uploadResp = await fetch("/api/upload-image", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ base64: photoImage.base64, mimeType: photoImage.mimeType, name: "mockup" }),
-            credentials: "include",
-          });
-          const uploadData = await uploadResp.json();
-          if (!uploadResp.ok) throw new Error(uploadData.message);
-          mockupParam = `&mockup=1&mockupUrl=${encodeURIComponent(uploadData.url)}`;
+          const urls: string[] = [];
+          for (const img of photoImages) {
+            const uploadResp = await fetch("/api/upload-image", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ base64: img.base64, mimeType: img.mimeType, name: "mockup" }),
+              credentials: "include",
+            });
+            const uploadData = await uploadResp.json();
+            if (!uploadResp.ok) throw new Error(uploadData.message);
+            urls.push(uploadData.url);
+          }
+          mockupParam = `&mockup=1&mockupUrls=${encodeURIComponent(urls.join(","))}`;
         } catch (e: any) {
-          console.error("Failed to upload mockup image:", e);
-          toast({ title: "Ошибка", description: "Не удалось загрузить изображение на сервер", variant: "destructive" });
+          console.error("Failed to upload mockup image(s):", e);
+          toast({ title: "Ошибка", description: "Не удалось загрузить изображения на сервер", variant: "destructive" });
           return;
         }
       }
@@ -599,7 +603,7 @@ export default function DashboardPage() {
               {creatingSeo ? 'Создаём…' : 'SEO-машина'}
             </button>
             <button
-              onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImage(null); setSelectedStyleTemplate(null); setSelectedTemplate(""); setStyleCategory("buttons"); setShowCreateModal(true); }}
+              onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImages([]); setSelectedStyleTemplate(null); setSelectedTemplate(""); setStyleCategory("buttons"); setShowCreateModal(true); }}
               className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
               style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.85rem 1.6rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
             >
@@ -741,8 +745,8 @@ export default function DashboardPage() {
                     },
                     {
                       m: "photo",
-                      t: "По фото",
-                      d: "Загрузите скриншот-пример",
+                      t: "Профессионал",
+                      d: "Референсы + ИИ-креатив",
                       icon: (
                         <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
                           <defs><clipPath id="pm"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /></clipPath></defs>
@@ -871,7 +875,7 @@ export default function DashboardPage() {
                           )}
                         </div>
                         <Textarea
-                          placeholder={selectedMode === "photo" ? "Воссоздай этот дизайн, замени текст на русский" : "Сайт SPA студии, в бежевых тонах, с картинкой в Hero секции, и плавной анимацией"}
+                          placeholder={selectedMode === "photo" ? "Сделай сайт как у референса, но с моим товаром" : "Сайт SPA студии, в бежевых тонах, с картинкой в Hero секции, и плавной анимацией"}
                           value={description}
                           onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
                           className="rounded-xl font-medium text-gray-900 placeholder:text-gray-400 text-sm flex-1"
@@ -1005,47 +1009,72 @@ export default function DashboardPage() {
                         </div>
                       ) : selectedMode === "photo" ? (
                         <div className="flex flex-col gap-3 flex-1">
-                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Скриншот / макет</div>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Референсы (дизайн и/или фото товара)</div>
                           <input
                             ref={photoInputRef}
                             type="file"
                             accept="image/*"
+                            multiple
                             className="hidden"
                             data-testid="input-photo-upload"
                             onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              if (file.size > 5 * 1024 * 1024) {
-                                toast({ title: "Файл слишком большой", description: "Максимум 5 МБ", variant: "destructive" });
-                                return;
+                              const files = Array.from(e.target.files || []);
+                              if (files.length === 0) return;
+                              const remaining = Math.max(0, 5 - photoImages.length);
+                              if (files.length > remaining) {
+                                toast({ title: "Слишком много файлов", description: "Максимум 5 референсов", variant: "destructive" });
                               }
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                const dataUrl = reader.result as string;
-                                const base64 = dataUrl.split(",")[1];
-                                const mimeType = file.type || "image/jpeg";
-                                setPhotoImage({ base64, mimeType, preview: dataUrl });
-                              };
-                              reader.readAsDataURL(file);
+                              files.slice(0, remaining).forEach(file => {
+                                if (file.size > 5 * 1024 * 1024) {
+                                  toast({ title: "Файл слишком большой", description: `${file.name}: максимум 5 МБ`, variant: "destructive" });
+                                  return;
+                                }
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  const dataUrl = reader.result as string;
+                                  const base64 = dataUrl.split(",")[1];
+                                  const mimeType = file.type || "image/jpeg";
+                                  setPhotoImages(prev => [...prev, { base64, mimeType, preview: dataUrl }]);
+                                };
+                                reader.readAsDataURL(file);
+                              });
+                              if (photoInputRef.current) photoInputRef.current.value = '';
                             }}
                           />
-                          {photoImage ? (
-                            <div className="relative flex-1 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.04)' }}>
-                              <img src={photoImage.preview} alt="Макет" className="w-full h-full object-contain" style={{ maxHeight: 200 }} />
-                              <button
-                                type="button"
-                                data-testid="button-remove-photo"
-                                onClick={() => { setPhotoImage(null); if (photoInputRef.current) photoInputRef.current.value = ''; }}
-                                className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full transition-all hover:scale-110"
-                                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer' }}
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                              <div className="absolute bottom-2 left-2 px-2 py-1 rounded-md" style={{ background: 'rgba(139,92,246,0.85)', backdropFilter: 'blur(8px)' }}>
-                                <span className="text-white text-[10px] font-semibold flex items-center gap-1">
-                                  <ImageIcon className="w-3 h-3" /> Макет загружен
-                                </span>
+                          {photoImages.length > 0 ? (
+                            <div className="flex flex-col gap-2 flex-1">
+                              <div className="grid grid-cols-3 gap-2">
+                                {photoImages.map((img, i) => (
+                                  <div key={i} className="relative rounded-xl overflow-hidden" style={{ border: '1px solid rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.04)', aspectRatio: '1/1' }}>
+                                    <img src={img.preview} alt={`Референс ${i + 1}`} className="w-full h-full object-cover" />
+                                    <button
+                                      type="button"
+                                      data-testid={`button-remove-photo-${i}`}
+                                      onClick={() => setPhotoImages(prev => prev.filter((_, idx) => idx !== i))}
+                                      className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full transition-all hover:scale-110"
+                                      style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer' }}
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                    <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(139,92,246,0.85)', backdropFilter: 'blur(8px)' }}>
+                                      <span className="text-white text-[9px] font-semibold">#{i + 1}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                                {photoImages.length < 5 && (
+                                  <button
+                                    type="button"
+                                    data-testid="button-add-more-photos"
+                                    onClick={() => photoInputRef.current?.click()}
+                                    className="flex flex-col items-center justify-center gap-1 rounded-xl transition-all hover:border-purple-400"
+                                    style={{ border: '2px dashed rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.02)', aspectRatio: '1/1', cursor: 'pointer' }}
+                                  >
+                                    <Upload className="w-4 h-4" style={{ color: '#8B5CF6' }} />
+                                    <span className="text-[9px] font-semibold" style={{ color: '#6D28D9' }}>Добавить</span>
+                                  </button>
+                                )}
                               </div>
+                              <p className="text-[10px]" style={{ color: '#A78BFA' }}>Приложите скриншот дизайна-референса и/или реальные фото товара/бренда — ИИ сам решит, что использовать как вдохновение, а что сохранить как есть</p>
                             </div>
                           ) : (
                             <div className="flex flex-col gap-2 flex-1">
@@ -1061,8 +1090,8 @@ export default function DashboardPage() {
                                   <Upload className="w-5 h-5" style={{ color: '#8B5CF6' }} />
                                 </div>
                                 <div className="text-center">
-                                  <p className="text-sm font-semibold" style={{ color: '#6D28D9' }}>Загрузить скриншот</p>
-                                  <p className="text-xs mt-0.5" style={{ color: '#A78BFA' }}>PNG, JPG, WEBP до 5 МБ</p>
+                                  <p className="text-sm font-semibold" style={{ color: '#6D28D9' }}>Загрузить референсы</p>
+                                  <p className="text-xs mt-0.5" style={{ color: '#A78BFA' }}>Дизайн и/или фото товара — до 5 файлов, PNG/JPG/WEBP до 5 МБ</p>
                                 </div>
                               </button>
                               <div className="rounded-xl p-2.5" data-tour="photo-ai-gen" style={{ background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.15)' }}>
@@ -1109,7 +1138,7 @@ export default function DashboardPage() {
                                               reader.onload = () => {
                                                 const dataUrl = reader.result as string;
                                                 const base64 = dataUrl.split(",")[1];
-                                                setPhotoImage({ base64, mimeType: "image/jpeg", preview: dataUrl });
+                                                setPhotoImages(prev => [...prev, { base64, mimeType: "image/jpeg", preview: dataUrl }]);
                                                 setMockupGenerating(false);
                                               };
                                               reader.readAsDataURL(blob);
@@ -1286,8 +1315,8 @@ export default function DashboardPage() {
                       className="h-10 font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                       style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
                       onClick={() => {
-                        if (selectedMode === "photo" && !photoImage) {
-                          toast({ title: "Загрузите скриншот", description: "Для режима «По фото» нужно загрузить изображение макета", variant: "destructive" });
+                        if (selectedMode === "photo" && photoImages.length === 0) {
+                          toast({ title: "Загрузите референс", description: "Для режима «Профессионал» нужно загрузить хотя бы одно изображение", variant: "destructive" });
                           return;
                         }
                         createMutation.mutate();
