@@ -3025,7 +3025,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   Nano Banana 2
                 </DialogTitle>
                 <DialogDescription id="img-gen-description" className="text-slate-400 dark:text-slate-500 text-[13px] mt-1.5 ml-[52px] leading-relaxed">
-                  Создавайте невероятные изображения в разрешении 2K, добавляйте референсы для похожего результата
+                  Создавайте невероятные изображения в разрешении 1K, добавляйте референсы для похожего результата
                 </DialogDescription>
               </DialogHeader>
             </div>
@@ -3144,7 +3144,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                         <img src={url} alt={imgPrompt} className="w-full" data-testid={`img-result-${i}`} />
                         <div className="absolute top-2.5 left-2.5 bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg shadow-blue-500/30">
                           <CheckCircle2 className="w-3 h-3" />
-                          2K
+                          1K
                         </div>
                       </div>
                       <Button

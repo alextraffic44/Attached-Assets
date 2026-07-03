@@ -325,7 +325,7 @@ async function generateStillForVideo(
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({ model: "nano-banana-2", input: { prompt: imagePrompt, aspect_ratio: "16:9", resolution: "2K" } }),
+        body: JSON.stringify({ model: "nano-banana-2", input: { prompt: imagePrompt, aspect_ratio: "16:9", resolution: "1K" } }),
       },
       { label: "SCROLLANIM still-create", retries: 4, shouldStop },
     );
@@ -693,7 +693,7 @@ async function generateProductStill(
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({ model: "gpt-image-2-image-to-image", input: { prompt, input_urls: [productImageUrl], aspect_ratio: "16:9", resolution: "2K" } }),
+        body: JSON.stringify({ model: "gpt-image-2-image-to-image", input: { prompt, input_urls: [productImageUrl], aspect_ratio: "16:9", resolution: "1K" } }),
       },
       { label: "SCROLLANIM product-create", retries: 4, shouldStop },
     );
@@ -1496,8 +1496,8 @@ async function generateGptImage(
             body: JSON.stringify({
               model: useRefs ? "gpt-image-2-image-to-image" : "gpt-image-2-text-to-image",
               input: useRefs
-                ? { prompt, input_urls: refUrls, aspect_ratio: aspectRatio, resolution: "2K" }
-                : { prompt, aspect_ratio: aspectRatio, resolution: "2K" },
+                ? { prompt, input_urls: refUrls, aspect_ratio: aspectRatio, resolution: "1K" }
+                : { prompt, aspect_ratio: aspectRatio, resolution: "1K" },
             }),
           });
           if (createResp.status >= 500 && cr < 2) {
@@ -3747,7 +3747,7 @@ ${designAnalysis}
       // Try GPT Image-2 first (text-to-image only, no reference images support)
       if (!hasRefImages) {
         try {
-          const gptResolution = aspectRatio === "auto" || aspectRatio === "1:1" ? "2K" : "2K";
+          const gptResolution = aspectRatio === "auto" || aspectRatio === "1:1" ? "1K" : "1K";
           const gptInput: any = {
             prompt,
             aspect_ratio: aspectRatio === "auto" ? "1:1" : aspectRatio,
@@ -3783,7 +3783,7 @@ ${designAnalysis}
           prompt,
           output_format: outputFormat,
           aspect_ratio: aspectRatio,
-          resolution: "2K",
+          resolution: "1K",
         };
         if (hasRefImages) nbInput.image_url = refUrlsFull;
 
