@@ -1184,17 +1184,23 @@ ${layers}
     var canvas=root.querySelector('.${cid}-canvas');
     var ctx=canvas.getContext('2d');
     var texts=[].slice.call(root.querySelectorAll('.${cid}-text'));
-    var imgs=new Array(frames.length),cur=-1;
+    var imgs=new Array(frames.length),started=new Array(frames.length),cur=-1;
     var dpr=Math.min(window.devicePixelRatio||1,2);
     function cover(img){var cw=sticky.clientWidth,ch=sticky.clientHeight,iw=img.naturalWidth,ih=img.naturalHeight;if(!iw||!ih)return;var s=Math.max(cw/iw,ch/ih),dw=iw*s,dh=ih*s,dx=(cw-dw)/2,dy=(ch-dh)/2;ctx.clearRect(0,0,cw,ch);ctx.drawImage(img,dx,dy,dw,dh);}
-    function paint(i){i=Math.max(0,Math.min(frames.length-1,i));var im=imgs[i];if(im&&im.complete&&im.naturalWidth){cover(im);cur=i;}}
+    function nearest(i){if(imgs[i]&&imgs[i].complete&&imgs[i].naturalWidth)return i;for(var d=1;d<frames.length;d++){var a=i-d,b=i+d;if(a>=0&&imgs[a]&&imgs[a].complete&&imgs[a].naturalWidth)return a;if(b<frames.length&&imgs[b]&&imgs[b].complete&&imgs[b].naturalWidth)return b;}return -1;}
+    function paint(i){i=Math.max(0,Math.min(frames.length-1,i));cur=i;var use=nearest(i);if(use!==-1)cover(imgs[use]);ensure(i);}
     function resize(){var w=sticky.clientWidth,h=sticky.clientHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);paint(cur<0?0:cur);}
     function signalReady(){try{window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));window.dispatchEvent(new Event('craft:frames-ready'));}catch(e){}}
-    // Windowed loader: cap concurrent frame requests (MAXP) and load in index order so
-    // frame 0 paints FIRST. On a throttled connection, loading all frames at once starved
-    // frame 0 and left a black hero; prioritising it means the hero shows immediately and
-    // the rest stream in behind it. signalReady() still fires once every frame settles.
-    var loaded=0,total=frames.length,started=0,MAXP=4;function _fin(){loaded++;if(loaded>=total)signalReady();}function _pump(){while(started<total&&(started-loaded)<MAXP){(function(idx){var im=new Image(),settled=false;function _done(){if(settled)return;settled=true;_fin();_pump();}im.decoding='async';imgs[idx]=im;im.onload=function(){if(idx===0)paint(0);_done();};im.onerror=function(){_done();};setTimeout(_done,12000);im.src=frames[idx];})(started++);}}_pump();
+    // Priority loader: frames near the CURRENT scroll target load first (ensure()), jumping
+    // ahead of the plain sequential queue — a fast scroller no longer freezes waiting for a
+    // strict index-order backlog to catch up. paint() also falls back to the nearest already-
+    // loaded frame instead of leaving the canvas stuck on a stale one while the exact target
+    // streams in. signalReady() still fires once every frame has settled (loaded or failed).
+    var loadedCount=0,total=frames.length,activeCount=0,MAXP=6,nextSeq=0;
+    function startLoad(idx){if(started[idx])return;started[idx]=true;activeCount++;var im=new Image(),settled=false;function _done(){if(settled)return;settled=true;activeCount--;loadedCount++;if(loadedCount>=total)signalReady();if(idx===cur||nearest(cur)===idx)paint(cur<0?0:cur);pump();}im.decoding='async';imgs[idx]=im;im.onload=_done;im.onerror=_done;setTimeout(_done,12000);im.src=frames[idx];}
+    function pump(){while(activeCount<MAXP&&nextSeq<total){if(started[nextSeq]){nextSeq++;continue;}startLoad(nextSeq++);}}
+    function ensure(i){var lo=Math.max(0,i-2),hi=Math.min(total-1,i+8);for(var k=lo;k<=hi;k++){if(!started[k])startLoad(k);}}
+    startLoad(0);pump();
     function setP(p){
       p=Math.max(0,Math.min(1,p));
       var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);
@@ -1244,17 +1250,23 @@ ${layers}
     var canvas=root.querySelector('.${cid}-canvas');
     var ctx=canvas.getContext('2d');
     var texts=[].slice.call(root.querySelectorAll('.${cid}-text'));
-    var imgs=new Array(frames.length),cur=-1;
+    var imgs=new Array(frames.length),started=new Array(frames.length),cur=-1;
     var dpr=Math.min(window.devicePixelRatio||1,2);
     function cover(img){var cw=sticky.clientWidth,ch=sticky.clientHeight,iw=img.naturalWidth,ih=img.naturalHeight;if(!iw||!ih)return;var s=Math.max(cw/iw,ch/ih),dw=iw*s,dh=ih*s,dx=(cw-dw)/2,dy=(ch-dh)/2;ctx.clearRect(0,0,cw,ch);ctx.drawImage(img,dx,dy,dw,dh);}
-    function paint(i){i=Math.max(0,Math.min(frames.length-1,i));var im=imgs[i];if(im&&im.complete&&im.naturalWidth){cover(im);cur=i;}}
+    function nearest(i){if(imgs[i]&&imgs[i].complete&&imgs[i].naturalWidth)return i;for(var d=1;d<frames.length;d++){var a=i-d,b=i+d;if(a>=0&&imgs[a]&&imgs[a].complete&&imgs[a].naturalWidth)return a;if(b<frames.length&&imgs[b]&&imgs[b].complete&&imgs[b].naturalWidth)return b;}return -1;}
+    function paint(i){i=Math.max(0,Math.min(frames.length-1,i));cur=i;var use=nearest(i);if(use!==-1)cover(imgs[use]);ensure(i);}
     function resize(){var w=sticky.clientWidth,h=sticky.clientHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);paint(cur<0?0:cur);}
     function signalReady(){try{window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));window.dispatchEvent(new Event('craft:frames-ready'));}catch(e){}}
-    // Windowed loader: cap concurrent frame requests (MAXP) and load in index order so
-    // frame 0 paints FIRST. On a throttled connection, loading all frames at once starved
-    // frame 0 and left a black hero; prioritising it means the hero shows immediately and
-    // the rest stream in behind it. signalReady() still fires once every frame settles.
-    var loaded=0,total=frames.length,started=0,MAXP=4;function _fin(){loaded++;if(loaded>=total)signalReady();}function _pump(){while(started<total&&(started-loaded)<MAXP){(function(idx){var im=new Image(),settled=false;function _done(){if(settled)return;settled=true;_fin();_pump();}im.decoding='async';imgs[idx]=im;im.onload=function(){if(idx===0)paint(0);_done();};im.onerror=function(){_done();};setTimeout(_done,12000);im.src=frames[idx];})(started++);}}_pump();
+    // Priority loader: frames near the CURRENT scroll target load first (ensure()), jumping
+    // ahead of the plain sequential queue — a fast scroller no longer freezes waiting for a
+    // strict index-order backlog to catch up. paint() also falls back to the nearest already-
+    // loaded frame instead of leaving the canvas stuck on a stale one while the exact target
+    // streams in. signalReady() still fires once every frame has settled (loaded or failed).
+    var loadedCount=0,total=frames.length,activeCount=0,MAXP=6,nextSeq=0;
+    function startLoad(idx){if(started[idx])return;started[idx]=true;activeCount++;var im=new Image(),settled=false;function _done(){if(settled)return;settled=true;activeCount--;loadedCount++;if(loadedCount>=total)signalReady();if(idx===cur||nearest(cur)===idx)paint(cur<0?0:cur);pump();}im.decoding='async';imgs[idx]=im;im.onload=_done;im.onerror=_done;setTimeout(_done,12000);im.src=frames[idx];}
+    function pump(){while(activeCount<MAXP&&nextSeq<total){if(started[nextSeq]){nextSeq++;continue;}startLoad(nextSeq++);}}
+    function ensure(i){var lo=Math.max(0,i-2),hi=Math.min(total-1,i+8);for(var k=lo;k<=hi;k++){if(!started[k])startLoad(k);}}
+    startLoad(0);pump();
     function setP(p){
       p=Math.max(0,Math.min(1,p));
       var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);
