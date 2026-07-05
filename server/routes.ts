@@ -2480,7 +2480,8 @@ export async function registerRoutes(
       let clientGone = false;
       req.on("close", () => { clientGone = true; });
 
-      const GENERATION_COST = 100;
+      const NEW_SITE_GENERATION_COST = 100;
+      const EDIT_GENERATION_COST = 30;
 
       const { prompt, images, imageBase64, imageMimeType, activeFile, skipEnhance, deepResearchData, idempotencyKey, multiPagesData, seoH1, seoH2s, mockupMode, imageUrls, videoUrls, modelUrls, audioUrls, leadForm, agentVersion, interactiveMode, interactiveStyle, interactiveProductImageUrl } = req.body;
       // Make product image URL absolute so external services (Kling) can fetch it
@@ -2510,6 +2511,9 @@ export async function registerRoutes(
         content: prompt,
       });
 
+      const isNewSite = !project.generatedCode;
+      const GENERATION_COST = isNewSite ? NEW_SITE_GENERATION_COST : EDIT_GENERATION_COST;
+
       const genIkey = idempotencyKey || `gen-${project.id}-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
       const genDeduction = await storage.deductCredits(user.id, GENERATION_COST, "generate", genIkey);
       if (!genDeduction.success) {
@@ -2527,7 +2531,6 @@ export async function registerRoutes(
       res.setHeader("Connection", "keep-alive");
 
       let researchData = deepResearchData || "";
-      const isNewSite = !project.generatedCode;
 
       let enhancedPrompt = prompt;
 
