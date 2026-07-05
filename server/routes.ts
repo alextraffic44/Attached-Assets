@@ -144,8 +144,8 @@ const SCROLL_FRAME_COUNT = 90;     // target frames extracted from a 5s clip
 const SCROLL_VIDEO_DURATION = 5;   // seconds
 // "Экшн" (action / Hollywood-blockbuster) mode: longer clip + more sliced frames for a
 // richer, smoother slow-motion / bullet-time scrub.
-const SCROLL_ACTION_VIDEO_DURATION = 10; // seconds (user wants 6-10s blockbuster shots)
-const SCROLL_ACTION_FRAME_COUNT = 160;   // more sliced frames for the longer cinematic clip
+const SCROLL_ACTION_VIDEO_DURATION = 6;  // seconds (blockbuster shot length)
+const SCROLL_ACTION_FRAME_COUNT = 96;    // sliced frames for the clip (matches ~16fps density used at 10s)
 const KLING_IMG2VID_MODEL = "kling/v3-turbo-image-to-video";
 
 function csaEsc(s: string): string {
