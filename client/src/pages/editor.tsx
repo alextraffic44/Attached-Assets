@@ -1665,9 +1665,10 @@ window.__PROJECT_ID__=${projectId};
     var href=a.getAttribute('href');
     if(!href||href==='#'||href===''){e.preventDefault();return;}
     if(href.startsWith('#')){e.preventDefault();var el=document.querySelector(href);if(el)el.scrollIntoView({behavior:'smooth'});return;}
-    if(href.match(/^[a-zA-Z0-9_-]+\.html$/)){
+    var pm=href.match(/^([a-zA-Z0-9_-]+\.html)(#[a-zA-Z0-9_-]+)?$/);
+    if(pm){
       e.preventDefault();
-      window.parent.postMessage({type:'nz-navigate-file',filename:href},'*');
+      window.parent.postMessage({type:'nz-navigate-file',filename:pm[1],anchor:pm[2]||''},'*');
       return;
     }
     e.preventDefault();

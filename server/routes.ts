@@ -2026,6 +2026,13 @@ const SYSTEM_PROMPT = `Ты — креативный frontend-разработч
 - Если на index.html есть кнопка "Бронь" в навбаре — она ОБЯЗАНА быть на ВСЕХ страницах
 - НЕ упрощай и НЕ сокращай навбар/футер на вторичных страницах
 
+⚠️ ССЫЛКИ И ЯКОРЯ (КРИТИЧНО ДЛЯ РАБОЧЕЙ НАВИГАЦИИ):
+- На index.html ссылки на секции пиши как якоря: href="#cases", href="#about" — плавный скролл внутри страницы.
+- На ВСЕХ остальных страницах (about.html, contacts.html и т.д.) те же ссылки на секции ГЛАВНОЙ пиши как href="index.html#cases", href="index.html#about" — иначе на подстранице якорь ведёт в никуда.
+- Ссылки на страницы — просто имя файла: href="about.html", href="contacts.html".
+- Логотип в шапке: на index.html — href="#" или href="index.html"; на подстраницах — href="index.html" (клик по лого возвращает на главную).
+- НЕ добавляй в меню пункт "Index"/"Главная" со ссылкой на сам файл index.html, если пользователь об этом не просил.
+
 - Формат ответа:
 --- FILE: index.html ---
 \`\`\`html
@@ -2538,7 +2545,7 @@ export async function registerRoutes(
           const slug = p.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
           return `${slug}.html (${p})`;
         });
-        systemContent += `\n\n═══ СТРУКТУРА САЙТА ═══\nСоздай МНОГОСТРАНИЧНЫЙ сайт. ОБЯЗАТЕЛЬНО сгенерируй ВСЕ перечисленные страницы:\n- index.html (главная)\n- ${fileNames.join("\n- ")}\nКаждая страница — полный отдельный HTML-документ. В навигации всех страниц должны быть ссылки на ВСЕ страницы. Используй формат --- FILE: имя.html --- для каждого файла.\n\n⚠️ HEADER/FOOTER: Сначала создай полный <header> и <footer> для index.html, затем СКОПИРУЙ ИХ ДОСЛОВНО во все остальные файлы. Все кнопки, ссылки и стили навбара и футера должны быть ИДЕНТИЧНЫ на каждой странице. Отличается только класс/стиль активной ссылки.\n═══ КОНЕЦ СТРУКТУРЫ ═══\n`;
+        systemContent += `\n\n═══ СТРУКТУРА САЙТА ═══\nСоздай МНОГОСТРАНИЧНЫЙ сайт. ОБЯЗАТЕЛЬНО сгенерируй ВСЕ перечисленные страницы:\n- index.html (главная)\n- ${fileNames.join("\n- ")}\nКаждая страница — полный отдельный HTML-документ. В навигации всех страниц должны быть ссылки на ВСЕ страницы. Используй формат --- FILE: имя.html --- для каждого файла.\n\n⚠️ HEADER/FOOTER: Сначала создай полный <header> и <footer> для index.html, затем СКОПИРУЙ ИХ ДОСЛОВНО во все остальные файлы. Все кнопки, ссылки и стили навбара и футера должны быть ИДЕНТИЧНЫ на каждой странице. Отличается только класс/стиль активной ссылки.\n⚠️ ЯКОРЯ: на index.html секции — href="#section"; на подстраницах те же ссылки на секции главной — href="index.html#section"; ссылки на страницы — href="имя.html"; логотип на подстраницах — href="index.html". НЕ добавляй пункт меню "Index".\n═══ КОНЕЦ СТРУКТУРЫ ═══\n`;
       } else {
         systemContent += `\n\n⚠️ ОДНОСТРАНИЧНЫЙ РЕЖИМ: Создай ОДИН файл index.html. ЗАПРЕЩЕНО использовать маркеры --- FILE: --- или разбивать на несколько файлов. Весь сайт — один HTML-документ.`;
       }
@@ -4349,63 +4356,117 @@ ${designAnalysis}
       ];
 
       const indexCode = project.generatedCode || "";
-      const navMatch = indexCode.match(/<nav[^>]*>([\s\S]*?)<\/nav>/i);
+      const navMatch = indexCode.match(/<nav[^>]*>[\s\S]*?<\/nav>/i);
       if (!navMatch) return res.json({ success: true, message: "Nav not found" });
 
-      const existingNav = navMatch[0];
+      const pageTitles: Record<string, string> = req.body?.pageTitles || {};
+      const subPages = files.filter(f => f.filename !== "index.html");
 
+      // ── Ghost cleanup: earlier buggy syncs added a raw <a href="index.html">Index</a>
+      //    link (index treated as a "missing page"). Strip any such ghost from EVERY page.
+      const ghostRe = /\s*<a\b[^>]*href=["']index\.html["'][^>]*>\s*index\s*<\/a>/gi;
+
+      // 1) Clean the ghost out of the index nav, then parse its links.
+      const cleanIndexNav = navMatch[0].replace(ghostRe, "");
       const existingLinks: { href: string; text: string; full: string }[] = [];
-      const linkRegex = /<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+      const linkRegex = /<a\s[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
       let m;
-      while ((m = linkRegex.exec(existingNav)) !== null) {
+      while ((m = linkRegex.exec(cleanIndexNav)) !== null) {
         existingLinks.push({ href: m[1], text: m[2], full: m[0] });
       }
 
-      const pageTitles: Record<string, string> = req.body?.pageTitles || {};
-
-      const missingPages = allPages.filter(
-        p => !existingLinks.some(l => l.href === p.filename)
+      // 2) Which real sub-pages have no nav link yet? (index.html is NEVER added as a link —
+      //    the homepage is reached via the logo / section links, not a raw "Index" item.)
+      const missingPages = subPages.filter(
+        p => !existingLinks.some(l => l.href.replace(/^\.\//, "").split("#")[0] === p.filename)
       );
 
-      if (missingPages.length === 0) return res.json({ success: true, message: "Already synced" });
-
+      // 3) Build the canonical header nav (index-context hrefs) with missing sub-page links appended.
       let newNavLinks = "";
       for (const mp of missingPages) {
-        const label = mp.filename.replace(".html", "");
+        const label = mp.filename.replace(/\.html$/, "");
         const displayName = pageTitles[mp.filename] || label.charAt(0).toUpperCase() + label.slice(1);
         if (existingLinks.length > 0) {
           const sample = existingLinks[existingLinks.length - 1].full;
-          const newLink = sample.replace(/href="[^"]*"/, `href="${mp.filename}"`).replace(/>[\s\S]*?<\/a>/, `>${displayName}</a>`);
+          const newLink = sample
+            .replace(/href=["'][^"']*["']/, `href="${mp.filename}"`)
+            .replace(/>[\s\S]*?<\/a>/, `>${displayName}</a>`);
           newNavLinks += "\n                " + newLink;
         } else {
           newNavLinks += `\n                <a href="${mp.filename}">${displayName}</a>`;
         }
       }
-
-      const lastLinkIdx = existingNav.lastIndexOf("</a>");
-      if (lastLinkIdx === -1) return res.json({ success: true, message: "No links found in nav" });
-
-      const insertPos = lastLinkIdx + 4;
-      const updatedNav = existingNav.substring(0, insertPos) + newNavLinks + existingNav.substring(insertPos);
-
-      for (const page of allPages) {
-        const pageNavMatch = page.code.match(/<nav[^>]*>([\s\S]*?)<\/nav>/i);
-        if (!pageNavMatch) continue;
-        const updatedCode = page.code.replace(pageNavMatch[0], updatedNav);
-        if (updatedCode === page.code) continue;
-
-        if (page.filename === "index.html") {
-          await storage.updateProject(project.id, { generatedCode: updatedCode });
-        } else {
-          await storage.upsertProjectFile({
-            projectId: project.id,
-            filename: page.filename,
-            code: updatedCode,
-          });
+      let canonicalNav = cleanIndexNav;
+      if (newNavLinks) {
+        const lastLinkIdx = cleanIndexNav.lastIndexOf("</a>");
+        if (lastLinkIdx !== -1) {
+          const insertPos = lastLinkIdx + 4;
+          canonicalNav = cleanIndexNav.slice(0, insertPos) + newNavLinks + cleanIndexNav.slice(insertPos);
         }
       }
+      const canonicalInner = canonicalNav.replace(/^<nav[^>]*>/i, "").replace(/<\/nav>\s*$/i, "");
 
-      res.json({ success: true, updated: allPages.length });
+      // 4) Collect element ids that exist on the homepage — these are the valid targets for
+      //    cross-page section links (e.g. #cases → index.html#cases from a sub-page).
+      const collectIds = (code: string): Set<string> => {
+        const ids = new Set<string>();
+        const re = /\bid\s*=\s*["']([^"']+)["']/gi;
+        let mm: RegExpExecArray | null;
+        while ((mm = re.exec(code)) !== null) ids.add(mm[1]);
+        return ids;
+      };
+      const indexIds = collectIds(indexCode);
+
+      // Rewrite every href so navigation works from `filename`'s context.
+      //  - sub-page:  #section → index.html#section  (only for sections that live on the homepage
+      //               and are NOT present on this page), index.html#x stays absolute.
+      //  - index:     index.html#section → #section  (smooth in-page scroll, no full reload).
+      // Root-absolute (/…), external, mailto/tel, bare "#" and other .html pages are left intact.
+      const fixHrefs = (code: string, filename: string): string => {
+        const isIndex = filename === "index.html";
+        const pageIds = isIndex ? indexIds : collectIds(code);
+        const transform = (raw: string): string | null => {
+          const v = raw.trim();
+          if (!v || v === "#") return null;
+          if (/^(https?:|mailto:|tel:|data:|\/\/|\/)/i.test(v)) return null;
+          if (v.startsWith("#")) {
+            const id = v.slice(1);
+            if (!id || isIndex) return null;
+            if (indexIds.has(id) && !pageIds.has(id)) return "index.html#" + id;
+            return null;
+          }
+          const idxM = v.match(/^index\.html(#([\w-]+))?$/i);
+          if (idxM) return isIndex ? (idxM[2] ? "#" + idxM[2] : null) : null;
+          return null;
+        };
+        return code
+          .replace(/href\s*=\s*"([^"]*)"/gi, (full, h) => { const t = transform(h); return t === null ? full : `href="${t}"`; })
+          .replace(/href\s*=\s*'([^']*)'/gi, (full, h) => { const t = transform(h); return t === null ? full : `href='${t}'`; });
+      };
+
+      // 5) Apply to every page: strip ghosts, swap the header nav for the canonical menu
+      //    (preserving that page's own <nav …> opening tag), then fix all hrefs for its context.
+      let updatedCount = 0;
+      for (const page of allPages) {
+        let code = page.code.replace(ghostRe, "");
+        const pageNavMatch = code.match(/<nav[^>]*>[\s\S]*?<\/nav>/i);
+        if (pageNavMatch) {
+          const openTag = pageNavMatch[0].match(/^<nav[^>]*>/i)?.[0] || "<nav>";
+          // Use a replacer function so any `$`-sequences in the nav HTML aren't expanded.
+          code = code.replace(pageNavMatch[0], () => openTag + canonicalInner + "</nav>");
+        }
+        code = fixHrefs(code, page.filename);
+        if (code === page.code) continue;
+
+        if (page.filename === "index.html") {
+          await storage.updateProject(project.id, { generatedCode: code });
+        } else {
+          await storage.upsertProjectFile({ projectId: project.id, filename: page.filename, code });
+        }
+        updatedCount++;
+      }
+
+      res.json({ success: true, updated: updatedCount });
     } catch (err) {
       console.error("Sync nav error:", err);
       res.status(500).json({ message: "Ошибка синхронизации навигации" });
