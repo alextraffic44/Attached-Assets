@@ -308,14 +308,24 @@ async function kieRequestJson(
 async function generateStillForVideo(
   scenePrompt: string,
   shouldStop: () => boolean = () => false,
+  layout: "parallax" | "split" | "action" = "parallax",
 ): Promise<string | null> {
   if (!KIE_API_KEY) return null;
-  const imagePrompt =
-    `${scenePrompt.trim()}. A complete immersive cinematic SCENE with a real environment and layered depth (NOT a plain solid backdrop). ` +
-    `Ultra-cinematic widescreen film still, shot on ARRI Alexa with an anamorphic lens, photorealistic, breathtaking dramatic ` +
-    `composition that draws the eye deep into the scene, with a slightly calmer focal area where large overlay text can stay legible. ` +
-    `Bold directional key light with soft volumetric god rays, rich filmic color grading, deep elegant shadows and luminous ` +
-    `highlights, gentle atmospheric haze for depth, immersive premium Hollywood mood. No text, no watermark, no logos, ultra-high detail, 8K, 16:9 aspect ratio.`;
+  const imagePrompt = layout === "action"
+    ? `${scenePrompt.trim()}. Freeze-frame the PEAK moment of the action already in full swing — debris, shards, sparks, dust, splashes ` +
+      `or particles described in the scene must be VISIBLY ALREADY suspended/exploding/shattering in this exact frame (not implied, not about ` +
+      `to happen — physically present and mid-motion right now), so the shot reads as a paused instant of a Hollywood action sequence, not a calm ` +
+      `product photo. A complete immersive cinematic SCENE with a real environment and layered depth (NOT a plain solid backdrop). ` +
+      `Ultra-cinematic widescreen film still, shot on ARRI Alexa with an anamorphic lens, photorealistic, breathtaking dramatic ` +
+      `composition that draws the eye deep into the scene, with a slightly calmer focal area where large overlay text can stay legible. ` +
+      `Bold directional key light with soft volumetric god rays, rich filmic color grading, deep elegant shadows and luminous ` +
+      `highlights, gentle atmospheric haze for depth, immersive premium Hollywood blockbuster mood, IMAX-grade spectacle. ` +
+      `No text, no watermark, no logos, ultra-high detail, 8K, 16:9 aspect ratio.`
+    : `${scenePrompt.trim()}. A complete immersive cinematic SCENE with a real environment and layered depth (NOT a plain solid backdrop). ` +
+      `Ultra-cinematic widescreen film still, shot on ARRI Alexa with an anamorphic lens, photorealistic, breathtaking dramatic ` +
+      `composition that draws the eye deep into the scene, with a slightly calmer focal area where large overlay text can stay legible. ` +
+      `Bold directional key light with soft volumetric god rays, rich filmic color grading, deep elegant shadows and luminous ` +
+      `highlights, gentle atmospheric haze for depth, immersive premium Hollywood mood. No text, no watermark, no logos, ultra-high detail, 8K, 16:9 aspect ratio.`;
   for (let attempt = 0; attempt < 4; attempt++) {
     if (shouldStop()) return null;
     if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
@@ -761,7 +771,7 @@ async function generateScrollFrames(
     stillUrl = referenceStillUrl;
     console.log(`[SCROLLANIM] using provided reference still: ${stillUrl}`);
   } else {
-    stillUrl = await generateStillForVideo(videoPrompt, shouldStop);
+    stillUrl = await generateStillForVideo(videoPrompt, shouldStop, layout);
   }
   if (!stillUrl) { console.warn("[SCROLLANIM] aborting: no still image"); return []; }
   if (shouldStop()) { console.warn("[SCROLLANIM] aborted by shouldStop() after still image"); return []; }
@@ -790,7 +800,7 @@ async function generateScrollFrames(
   const cameraGuidance = layout === "split"
     ? `with an elegant slow cinematic camera push-in only — no pan, no tilt, no pull-back, no frame-edge reveal — keeping the product perfectly intact and the left side calm for text`
     : layout === "action"
-    ? `with a bold Hollywood-blockbuster camera move — a dramatic slow-motion orbit/arc that flies AROUND the subject (bullet-time feel) or an explosive dynamic push-in, capturing the peak moment in cinematic slow motion with suspended particles, debris, sparks or shattering shards drifting through the air, sweeping anamorphic lens flares, motion-blur streaks and deep dramatic contrast — epic, powerful and fluid, never shaky`
+    ? `the debris, shards, sparks, dust or particles already visible in the frame must keep physically moving and evolving throughout the whole clip — drifting, spinning, falling, colliding or scattering further in slow motion (the scene action must be the main event, not just the camera), combined with a bold Hollywood-blockbuster camera move — a dramatic slow-motion orbit/arc that flies AROUND the subject (bullet-time feel) or an explosive dynamic push-in, sweeping anamorphic lens flares, motion-blur streaks and deep dramatic contrast — epic, powerful and fluid, never shaky, camera movement alone is NOT enough`
     : `with bold immersive cinematic camera movement that pulls the viewer INTO the scene — a smooth forward dolly / push-in that glides deeper and naturally reveals depth and detail (e.g. gliding toward a doorway or through the space) — graceful and steady, never shaky`;
   const styleLead = layout === "action"
     ? `Render as an epic Hollywood blockbuster action sequence in dramatic slow motion (bullet-time): powerful, clearly visible motion that builds across the whole clip, IMAX-grade cinematic spectacle`
@@ -2566,7 +2576,11 @@ export async function registerRoutes(
 → СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
 {{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|Заголовок1::Подзаголовок1||Заголовок2::Подзаголовок2||Заголовок3::Подзаголовок3}}
 
-VIDEO_PROMPT (на английском) — ты РЕЖИССЁР голливудского ЭКШН-блокбастера и ставишь САМЫЙ эффектный кадр фильма. Придумай ОДИН взрывной кинокадр под нишу сайта, который при скролле смотрится как сцена из дорогого боевика. Думай приёмами большого кино: BULLET-TIME (время будто застыло), СЛОУ-МО (замедленная съёмка), камера ОБЛЕТАЕТ объект по дуге/орбите, что-то эффектно РАЗЛЕТАЕТСЯ / РАЗБИВАЕТСЯ / ВЗРЫВАЕТСЯ, частицы, осколки, искры, брызги и пыль зависают в воздухе, анаморфные блики, моушн-блюр, глубокий драматичный контраст. Движение мощное, заметное и развивается по всему ролику (зритель сам прокручивает кадры скроллом — вялое движение убивает эффект). Адаптируй идею ПОД КОНКРЕТНУЮ НИШУ — эффектно для ЛЮБОГО бизнеса. Оставь зону поспокойнее, где ляжет крупный текст (он накладывается поверх и подсвечивается автоматически). Пиши развёрнуто, ТОЛЬКО запятые (без | :: и фигурных скобок):
+VIDEO_PROMPT (на английском) — ты РЕЖИССЁР голливудского ЭКШН-блокбастера и ставишь САМЫЙ эффектный кадр фильма. Придумай ОДИН взрывной кинокадр под нишу сайта, который при скролле смотрится как сцена из дорогого боевика.
+
+🚨 КРИТИЧЕСКИ ВАЖНО: внутри сцены ДОЛЖНО что-то физически ПРОИСХОДИТЬ — это не просто облёт камерой статичного объекта! Опиши момент, когда действие УЖЕ В ПОЛНОМ РАЗГАРЕ: объект уже разлетается/разбивается/взрывается, частицы/осколки/искры/брызги/пыль уже висят в воздухе или летят, жидкость уже расплёскивается, поверхность уже трескается. Камера (облёт по дуге, bullet-time) — это ДОПОЛНЕНИЕ к происходящему в кадре, а не замена ему. Если в промпте нет конкретного физического события с объектом — считай задание невыполненным.
+
+Думай приёмами большого кино: BULLET-TIME (время будто застыло), СЛОУ-МО (замедленная съёмка), камера ОБЛЕТАЕТ объект по дуге/орбите, ПОКА что-то эффектно РАЗЛЕТАЕТСЯ / РАЗБИВАЕТСЯ / ВЗРЫВАЕТСЯ, частицы, осколки, искры, брызги и пыль зависают в воздухе или продолжают лететь, анаморфные блики, моушн-блюр, глубокий драматичный контраст. Движение мощное, заметное и развивается по всему ролику — и в самом объекте, и в камере (зритель сам прокручивает кадры скроллом — вялое движение убивает эффект). Адаптируй идею ПОД КОНКРЕТНУЮ НИШУ — эффектно для ЛЮБОГО бизнеса. Оставь зону поспокойнее, где ляжет крупный текст (он накладывается поверх и подсвечивается автоматически). Пиши развёрнуто, ТОЛЬКО запятые (без | :: и фигурных скобок):
 - Авто: "epic slow-motion bullet-time shot orbiting a luxury sports car as it powerslides through exploding clouds of dust and sparks, debris frozen mid-air, sweeping anamorphic lens flares, dramatic high-contrast lighting, photorealistic cinematic"
 - Ресторан/еда: "ultra slow-motion macro of a gourmet burger assembling in mid-air as fresh ingredients and droplets float and the camera arcs around it, seasoning sparks suspended, dramatic studio lighting, mouth-watering cinematic"
 - Спорт/фитнес: "explosive slow-motion bullet-time shot circling an athlete mid-jump, sweat droplets and chalk dust frozen in the air as the camera flies around in a full arc, dramatic stadium lighting, epic cinematic"
@@ -3430,8 +3444,8 @@ ${designAnalysis}
           textsAuto = "Познакомьтесь с нами::Откройте для себя наш продукт||Качество и стиль::Только лучшее для вас||Начните сейчас::Сделайте первый шаг";
         } else if (isActionAuto) {
           videoPromptAuto = absoluteProductImageUrl
-            ? "epic slow-motion bullet-time orbit around the product as a splash of liquid and sparks explode outward and freeze mid-air while the camera arcs around it, luminous beams and suspended particles, dramatic premium lighting, cinematic macro"
-            : "epic cinematic bullet-time shot orbiting the themed subject as particles, debris and light streaks burst and freeze in slow motion, the camera flying around in a dramatic arc, IMAX-grade blockbuster lighting, photorealistic";
+            ? "epic slow-motion bullet-time orbit around the product as a splash of liquid and sparks are already exploding outward, frozen mid-air and still drifting further apart while the camera arcs around it, luminous beams and suspended particles continuing to scatter, dramatic premium lighting, cinematic macro"
+            : "epic cinematic bullet-time shot orbiting the themed subject as particles, debris and light streaks are already bursting outward mid-air and keep drifting, spinning and scattering further in slow motion, the camera flying around in a dramatic arc, IMAX-grade blockbuster lighting, photorealistic";
           textsAuto = "Почувствуй мощь::Эффект, который впечатляет||Каждая деталь::Снято как в кино||Начни прямо сейчас::Сделай первый шаг";
         } else {
           videoPromptAuto = absoluteProductImageUrl
