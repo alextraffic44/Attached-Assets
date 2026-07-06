@@ -98,12 +98,12 @@ function DnsInstructions({ customDomain, cname, txtRecord, domainChecking, domai
           <a href={`https://${apex}`} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>{apex}</a>
         </div>
         <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.9 }}>
-          <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> (или панель вашего регистратора) → <b>Домены</b> → выберите <b>{apex}</b></div>
-          <div><b>2.</b> Откройте раздел «<b>DNS-записи</b>» (или «<b>Управление зоной</b>»)</div>
-          <div><b>3.</b> Добавьте CNAME-запись:</div>
+          <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> (или панель вашего регистратора) → <b>Домены</b> → нажмите на <b>{apex}</b> — откроется страница «DNS-серверы и управление зоной»</div>
+          <div><b>2.</b> В блоке «<b>Ресурсные записи</b>» удалите (🗑) старую A-запись для <b>@</b> — она указывает на другой сервер и будет конфликтовать</div>
+          <div><b>3.</b> Нажмите «<b>Добавить запись</b>», выберите тип <b>CNAME</b> и заполните:</div>
           <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem", display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span>Тип: <b>CNAME</b>, Имя: <b>@</b> (или {apex}), Значение: {cnameTarget}</span>
+              <span>Имя: <b>@</b>, Значение: {cnameTarget}</span>
               <button
                 onClick={() => navigator.clipboard?.writeText(cnameTarget)}
                 style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: "0.7rem", padding: "2px 6px" }}
@@ -111,9 +111,12 @@ function DnsInstructions({ customDomain, cname, txtRecord, domainChecking, domai
               >📋</button>
             </div>
           </div>
+          <div style={{ color: "#9ca3af", fontSize: "0.72rem", marginBottom: 6 }}>
+            Если reg.ru не даёт сохранить CNAME для «@» (некоторые регистраторы это не разрешают) — удалите A-запись для <b>www</b> вместо «@», создайте CNAME с именем <b>www</b> и тем же значением, и используйте адрес www.{apex} как рабочий домен сайта.
+          </div>
           {txtRecord && (
             <>
-              <div><b>4.</b> Для выпуска SSL-сертификата добавьте TXT-запись:</div>
+              <div><b>4.</b> Ещё раз нажмите «Добавить запись», выберите тип <b>TXT</b> — это нужно для выпуска SSL-сертификата:</div>
               <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem", display: "flex", flexDirection: "column", gap: 4 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span style={{ wordBreak: "break-all" }}>Имя: {txtRecord.name}</span>
@@ -135,8 +138,7 @@ function DnsInstructions({ customDomain, cname, txtRecord, domainChecking, domai
             </>
           )}
           <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>
-            После добавления записей DNS обновляется от 30 минут до нескольких часов. Яндекс автоматически выдаст SSL-сертификат.
-            Сайт будет работать по всей России через Yandex CDN.
+            После добавления записей DNS обновляется от 30 минут до нескольких часов, и Яндекс автоматически выдаст SSL-сертификат.
           </div>
         </div>
       </div>
