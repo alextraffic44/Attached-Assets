@@ -77,9 +77,10 @@ const SkeuoPanel = ({ children, className = "" }: { children: React.ReactNode; c
   </div>
 );
 
-function DnsInstructions({ customDomain, nameservers, domainChecking, domainVerified, domainDnsReady, domainStatusMessage, onCheck, testId }: {
+function DnsInstructions({ customDomain, cname, txtRecord, domainChecking, domainVerified, domainDnsReady, domainStatusMessage, onCheck, testId }: {
   customDomain: string;
-  nameservers: string[];
+  cname: string;
+  txtRecord: { name: string; value: string } | null;
   domainChecking: boolean;
   domainVerified: boolean | null;
   domainDnsReady: boolean;
@@ -88,7 +89,7 @@ function DnsInstructions({ customDomain, nameservers, domainChecking, domainVeri
   testId?: string;
 }) {
   const apex = customDomain.replace(/^www\./, "");
-  const ns = nameservers.length ? nameservers : ["dns1.p04.nsone.net", "dns2.p04.nsone.net", "dns3.p04.nsone.net", "dns4.p04.nsone.net"];
+  const cnameTarget = cname || "craft-ai.yandex-cdn.net";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
@@ -97,24 +98,45 @@ function DnsInstructions({ customDomain, nameservers, domainChecking, domainVeri
           <a href={`https://${apex}`} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>{apex}</a>
         </div>
         <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.9 }}>
-          <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → выберите <b>{apex}</b></div>
-          <div><b>2.</b> Раздел «<b>DNS-серверы и управление зоной</b>» → «<b>Изменить DNS-серверы</b>»</div>
-          <div><b>3.</b> Удалите текущие NS и укажите 4 сервера Netlify:</div>
+          <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> (или панель вашего регистратора) → <b>Домены</b> → выберите <b>{apex}</b></div>
+          <div><b>2.</b> Откройте раздел «<b>DNS-записи</b>» (или «<b>Управление зоной</b>»)</div>
+          <div><b>3.</b> Добавьте CNAME-запись:</div>
           <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem", display: "flex", flexDirection: "column", gap: 4 }}>
-            {ns.map((s, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span>{s}</span>
-                <button
-                  onClick={() => navigator.clipboard?.writeText(s)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: "0.7rem", padding: "2px 6px" }}
-                  title="Скопировать"
-                >📋</button>
-              </div>
-            ))}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span>Тип: <b>CNAME</b>, Имя: <b>@</b> (или {apex}), Значение: {cnameTarget}</span>
+              <button
+                onClick={() => navigator.clipboard?.writeText(cnameTarget)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: "0.7rem", padding: "2px 6px" }}
+                title="Скопировать"
+              >📋</button>
+            </div>
           </div>
+          {txtRecord && (
+            <>
+              <div><b>4.</b> Для выпуска SSL-сертификата добавьте TXT-запись:</div>
+              <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem", display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ wordBreak: "break-all" }}>Имя: {txtRecord.name}</span>
+                  <button
+                    onClick={() => navigator.clipboard?.writeText(txtRecord.name)}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: "0.7rem", padding: "2px 6px" }}
+                    title="Скопировать"
+                  >📋</button>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ wordBreak: "break-all" }}>Значение: {txtRecord.value}</span>
+                  <button
+                    onClick={() => navigator.clipboard?.writeText(txtRecord.value)}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: "0.7rem", padding: "2px 6px" }}
+                    title="Скопировать"
+                  >📋</button>
+                </div>
+              </div>
+            </>
+          )}
           <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>
-            После смены NS-серверов DNS обновляется 1–24 часа. Netlify автоматически выдаст SSL-сертификат.
-            Сайт будет работать по всей России через Netlify CDN.
+            После добавления записей DNS обновляется от 30 минут до нескольких часов. Яндекс автоматически выдаст SSL-сертификат.
+            Сайт будет работать по всей России через Yandex CDN.
           </div>
         </div>
       </div>
@@ -124,10 +146,10 @@ function DnsInstructions({ customDomain, nameservers, domainChecking, domainVeri
           Проверить DNS
         </Button>
         {domainChecking === false && domainVerified === false && !domainDnsReady && domainVerified !== null && (
-          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>NS-серверы ещё не обновились — подождите 1-2 часа</span>
+          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>DNS-запись ещё не обновилась — подождите 30-60 минут</span>
         )}
         {domainChecking === false && domainVerified === false && domainDnsReady && (
-          <span style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: 500 }}>🔒 {domainStatusMessage || "DNS готов, SSL выдаётся (1-15 минут)"}</span>
+          <span style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: 500 }}>🔒 {domainStatusMessage || "DNS готов, SSL выдаётся (может занять до 30 минут)"}</span>
         )}
         {domainChecking === false && domainVerified === true && (
           <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 500 }}>✓ Домен полностью работает!</span>
@@ -243,7 +265,8 @@ export default function EditorPage() {
   const [domainDnsReady, setDomainDnsReady] = useState<boolean>(false);
   const [domainStatusMessage, setDomainStatusMessage] = useState<string>("");
   const [domainChecking, setDomainChecking] = useState(false);
-  const [domainNameservers, setDomainNameservers] = useState<string[]>([]);
+  const [domainCname, setDomainCname] = useState<string>("");
+  const [domainTxtRecord, setDomainTxtRecord] = useState<{ name: string; value: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const animPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1000,7 +1023,8 @@ export default function EditorPage() {
       if (!res.ok) throw new Error(data.message || "Ошибка привязки домена");
       setDomainResult({ added: true, instructions: true });
       setDomainVerified(data.verified || false);
-      if (data.nameservers?.length) setDomainNameservers(data.nameservers);
+      if (data.cname) setDomainCname(data.cname);
+      setDomainTxtRecord(data.txtRecord || null);
     } catch (e: any) {
       setDomainError(e.message);
     } finally {
@@ -3773,7 +3797,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   ) : (
                     <DnsInstructions
                       customDomain={customDomain}
-                      nameservers={domainNameservers}
+                      cname={domainCname}
+                      txtRecord={domainTxtRecord}
                       domainChecking={domainChecking}
                       domainVerified={domainVerified}
                       domainDnsReady={domainDnsReady}
@@ -3801,7 +3826,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <Loader2 className="w-10 h-10 animate-spin" style={{ color: "#764ba2" }} />
                 <div style={{ textAlign: "center" }}>
                   <div style={{ fontWeight: 700, color: "#1D1D1F", marginBottom: 4 }}>Публикуем сайт…</div>
-                  <div style={{ fontSize: "0.82rem", color: "#86868B" }}>Загружаем файлы на Netlify CDN</div>
+                  <div style={{ fontSize: "0.82rem", color: "#86868B" }}>Загружаем файлы в Yandex Cloud</div>
                 </div>
               </div>
             )}
@@ -3866,7 +3891,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   ) : (
                     <DnsInstructions
                       customDomain={customDomain}
-                      nameservers={domainNameservers}
+                      cname={domainCname}
+                      txtRecord={domainTxtRecord}
                       domainChecking={domainChecking}
                       domainVerified={domainVerified}
                       domainDnsReady={domainDnsReady}
