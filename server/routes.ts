@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
-import { deployToNetlify, addCustomDomain, checkDomainStatus, unpublishFromNetlify } from "./netlify-deploy";
+import { deployToYandex, addCustomDomain, checkDomainStatus, unpublishFromYandex } from "./yandex-deploy";
 import { registerSeoRoutes } from "./seo-routes";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -26,7 +26,7 @@ const objectStorage = new ObjectStorageService();
 async function uploadToObjectStorage(buffer: Buffer, mimeType: string, ext: string): Promise<string> {
   // Auto-detect actual image format from magic bytes so PNG data never gets saved
   // with a .jpg extension (Nano Banana often returns PNG regardless of outputFormat).
-  // Netlify serves files with Content-Type based on extension, so a wrong extension
+  // Object Storage serves files with Content-Type based on extension, so a wrong extension
   // causes strict browsers (Yandex, Safari) to reject the image as invalid.
   if (buffer.length >= 12) {
     if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
@@ -4693,8 +4693,8 @@ ${designAnalysis}
             }
             // Detect real format from magic bytes — Nano Banana returns PNG even when
             // requested as JPEG, so the stored file may have .jpg extension but PNG content.
-            // Compression above may also have changed the format. Netlify assigns
-            // Content-Type from extension, so the extension must match the real bytes.
+            // Compression above may also have changed the format. Yandex Object Storage
+            // assigns Content-Type from extension, so the extension must match the real bytes.
             let base = (mediaUrl.split("/").pop() || "").split("?")[0].replace(/[^a-zA-Z0-9._-]/g, "_");
             if (!base || base === "_") base = `asset_${counter}`;
             // Fix extension if actual format differs from file extension
@@ -4738,12 +4738,12 @@ ${designAnalysis}
         }
       }
 
-      const { url, netlifyProjectId } = await deployToNetlify(projectId, files);
+      const { url, yandexProjectId } = await deployToYandex(projectId, files);
 
       await storage.updateProject(projectId, {
         publishStatus: "published",
         publishedUrl: url,
-        vercelProjectId: netlifyProjectId,
+        vercelProjectId: yandexProjectId,
       });
 
       res.json({ url });
@@ -4923,31 +4923,9 @@ ${fullHtml}`;
       if (!domain) return res.status(400).json({ message: "Домен обязателен" });
       if (!project.vercelProjectId) return res.status(400).json({ message: "Сначала опубликуйте сайт" });
 
-      try {
-        const result = await addCustomDomain(project.vercelProjectId, domain);
-        await storage.updateProject(projectId, { customDomain: domain });
-        res.json(result);
-      } catch (domainErr: any) {
-        if (domainErr.message?.includes("already in use") || domainErr.message?.includes("already exists")) {
-          await storage.updateProject(projectId, { customDomain: domain });
-          // Fetch existing DNS zone nameservers for this domain
-          let nameservers: string[] = [];
-          try {
-            const apex = domain.replace(/^www\./, "");
-            const listRes = await fetch("https://api.netlify.com/api/v1/dns_zones", {
-              headers: { Authorization: `Bearer ${process.env.NETLIFY_TOKEN}`, "Content-Type": "application/json" },
-            });
-            if (listRes.ok) {
-              const zones = await listRes.json() as any[];
-              const zone = zones.find((z: any) => z.name === apex);
-              if (zone?.dns_servers?.length) nameservers = zone.dns_servers;
-            }
-          } catch {}
-          res.json({ verified: false, cname: `craft-ai-p${projectId}.netlify.app`, alreadyAdded: true, nameservers });
-        } else {
-          throw domainErr;
-        }
-      }
+      const result = await addCustomDomain(project.vercelProjectId, domain);
+      await storage.updateProject(projectId, { customDomain: domain });
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Ошибка добавления домена" });
     }
@@ -5113,7 +5091,7 @@ ${fullHtml}`;
       if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
       if (project.publishStatus !== "published") return res.status(400).json({ message: "Проект не опубликован" });
 
-      await unpublishFromNetlify(projectId);
+      await unpublishFromYandex(projectId);
       await storage.updateProject(projectId, { publishStatus: "suspended" });
 
       res.json({ success: true });
@@ -5433,7 +5411,7 @@ ${fullHtml}`;
           if (result.success) {
             console.log(`[Billing] User ${userId}: charged ${DAILY_PUBLISH_COST} tokens for project ${proj.id} (${proj.title}). Balance: ${result.newBalance}`);
           } else {
-            await unpublishFromNetlify(proj.id);
+            await unpublishFromYandex(proj.id);
             await storage.updateProject(proj.id, { publishStatus: "suspended" });
             console.log(`[Billing] User ${userId}: suspended project ${proj.id} (${proj.title}) — insufficient balance (${result.newBalance} tokens)`);
           }

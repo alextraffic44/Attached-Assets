@@ -47,10 +47,13 @@ can load one day and fail the next with no code change.
 - Verify with the publish log line `total media payload X MB` and test from a real Russian
   network WITHOUT a VPN (a non-RU vantage / VPN always works and proves nothing).
 
-**Escalation if payload reduction is not enough:** serve heavy assets from a Russia-accessible
-CDN/object storage (Yandex Object Storage — note `YC_KEY_ID`/`YC_SECRET` are configured-but-missing
-secrets) while keeping Netlify for HTML; full hosting migration is a larger billing/domain decision.
-This needs the user's sign-off — do NOT do it unilaterally.
+**Update:** Full hosting migration off Netlify to Yandex Cloud (Object Storage + CDN +
+Certificate Manager) was completed with user sign-off. See
+[Yandex CDN per-project buckets](yandex-cdn-per-project-buckets.md) and
+[Yandex CDN SSL cert attach](yandex-cdn-ssl-cert.md) for the resulting architecture. All
+publishing (default URL + custom domains) now serves from Russia-accessible Yandex
+infrastructure, so this whole throttling class of bug should no longer occur for newly
+published sites.
 
 ## RKN blocks Tailwind / framework CDNs in Russia
 

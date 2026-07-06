@@ -1,6 +1,6 @@
 import { type Express } from "express";
 import type { IStorage } from "./storage";
-import { deployToNetlify } from "./netlify-deploy";
+import { deployToYandex } from "./yandex-deploy";
 import type { SeoConfig, SeoCluster, SeoKeyword, SeoTheme } from "@shared/schema";
 import crypto from "crypto";
 
@@ -1339,7 +1339,7 @@ Respond with ONLY valid JSON, no explanation:
     res.end();
   });
 
-  // POST /api/seo/:id/publish — deploy to Netlify
+  // POST /api/seo/:id/publish — deploy to Yandex Cloud Object Storage
   app.post("/api/seo/:id/publish", async (req, res) => {
     const userId = requireAuth(req, res);
     if (!userId) return;
@@ -1350,7 +1350,7 @@ Respond with ONLY valid JSON, no explanation:
     if (files.length === 0) return res.status(400).json({ message: "No pages generated yet" });
 
     const cfg = proj.seoConfig as SeoConfig;
-    const baseUrl = `https://craft-ai-seo-${proj.id}.netlify.app`;
+    const baseUrl = `https://craft-ai-p${proj.id}.website.yandexcloud.net`;
 
     // Generate final sitemap before deploy
     const sitemapContent = buildSitemap(cfg, baseUrl);
@@ -1363,14 +1363,14 @@ Respond with ONLY valid JSON, no explanation:
     const deployFiles = allFiles.map(f => ({ filename: f.filename, content: f.code }));
 
     try {
-      const { url, netlifyProjectId } = await deployToNetlify(proj.id, deployFiles);
+      const { url, yandexProjectId } = await deployToYandex(proj.id, deployFiles);
       const finalUrl = url;
 
       const updatedCfg: SeoConfig = { ...cfg, publishUrl: finalUrl };
       await storage.updateProject(proj.id, {
         publishedUrl: finalUrl,
         publishStatus: "published",
-        vercelProjectId: netlifyProjectId,
+        vercelProjectId: yandexProjectId,
         seoConfig: updatedCfg,
       } as any);
 

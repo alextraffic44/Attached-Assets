@@ -105,24 +105,26 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `window.__PROJECT_ID__` is injected into iframe via `injectProjectId()` in editor
 - Dashboard shows unread lead count badge, `/leads` page shows full lead management
 
-## Publishing (Vercel)
+## Publishing (Yandex Cloud)
 - Button "Опубликовать" in editor header → publish modal
-- `POST /api/projects/:id/publish` — deploys to Vercel via API, uploads all pages + images
-- `POST /api/projects/:id/unpublish` — suspends site (deploys "suspended" placeholder)
-- `POST /api/projects/:id/domain` — add custom domain to Vercel project
-- `GET /api/projects/:id/domain/status` — check domain verification status
-- `VERCEL_TOKEN` secret + `VERCEL_TEAM_ID` env var required
-- Published URL stored in `projects.published_url`, status in `projects.publish_status`
+- `POST /api/projects/:id/publish` — deploys to a dedicated Yandex Object Storage bucket (`craft-ai-p{projectId}`) with static website hosting enabled, uploads all pages + images
+- `POST /api/projects/:id/unpublish` — suspends site (overwrites bucket with "suspended" placeholder page)
+- `POST /api/projects/:id/domain` — attaches a custom domain: creates a per-project CDN origin group + CDN resource pointed at the bucket, and requests a free Certificate Manager (Let's Encrypt) certificate via DNS challenge
+- `GET /api/projects/:id/domain/status` — checks CNAME DNS propagation, then certificate issuance status; auto-attaches the certificate to the CDN resource once issued
+- Default publish URL (no custom domain): `https://craft-ai-p{projectId}.website.yandexcloud.net/` — served directly from Object Storage, no CDN needed
+- Custom domains: only these go through Yandex CDN (for the CNAME + SSL termination)
+- Env vars/secrets required: `YC_FOLDER_ID`, `YC_KEY_ID`, `YC_SECRET` (S3-compatible static keys for Object Storage), `YC_SERVICE_ACCOUNT_KEY` (JSON service account key used to mint IAM tokens for CDN/Certificate Manager API calls)
+- Published URL stored in `projects.published_url`, status in `projects.publish_status`, bucket name stored in `projects.vercel_project_id` (column name kept from the earlier Vercel/Netlify integration, now holds the Yandex bucket name)
 - Publish statuses: `draft`, `publishing`, `published`, `suspended`, `error`
 - Dashboard cards show green "Live" badge when published, red "Приостановлен" when suspended
 - Editor button changes to "Опубликован" with green checkmark when published
-- Vercel helper: `server/vercel-deploy.ts`
+- Yandex helper: `server/yandex-deploy.ts` (`deployToYandex`, `unpublishFromYandex`, `addCustomDomain`, `checkDomainStatus`)
 
 ## Publish Limits & Billing
 - Plan limits: bronze=1 site, silver=2, gold=3, platinum=5
 - Publish endpoint checks current published count vs plan limit before allowing new publish
 - Daily cost: 20 tokens per published site, charged at 03:00 via setInterval/setTimeout cron
-- If user has insufficient balance: sites are suspended (unpublished from Vercel with placeholder page)
+- If user has insufficient balance: sites are suspended (unpublished from Yandex Cloud with placeholder page)
 - Suspended sites can be re-published when user tops up balance
 - `PLAN_PUBLISH_LIMITS` and `DAILY_PUBLISH_COST` constants in server/routes.ts
 
