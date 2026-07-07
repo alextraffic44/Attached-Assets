@@ -1197,6 +1197,17 @@ export default function EditorPage() {
     }
   };
 
+  const handleChangeDomain = () => {
+    setDomainResult(null);
+    setCustomDomain("");
+    setDomainCname("");
+    setDomainTxtRecord(null);
+    setDomainVerified(null);
+    setDomainDnsReady(false);
+    setDomainStatusMessage("");
+    setDomainError(null);
+  };
+
   const handleCheckDomain = async () => {
     if (!project || !customDomain.trim()) return;
     setDomainChecking(true);
@@ -3770,6 +3781,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                         Добавлен
                       </span>
                     )}
+                    {domainResult && (
+                      <button
+                        onClick={handleChangeDomain}
+                        style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#6b7280", background: "none", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 500 }}
+                        data-testid="button-change-domain"
+                      >
+                        Сменить домен
+                      </button>
+                    )}
                   </div>
                   {!domainResult ? (
                     <>
@@ -3863,6 +3883,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                         <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#f59e0b", display: "inline-block", boxShadow: "0 0 6px #f59e0b" }} />
                         Добавлен
                       </span>
+                    )}
+                    {domainResult && (
+                      <button
+                        onClick={handleChangeDomain}
+                        style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#6b7280", background: "none", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 500 }}
+                        data-testid="button-change-domain-2"
+                      >
+                        Сменить домен
+                      </button>
                     )}
                   </div>
                   {!domainResult ? (

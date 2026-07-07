@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
-import { deployToYandex, addCustomDomain, checkDomainStatus, unpublishFromYandex } from "./yandex-deploy";
+import { deployToYandex, addCustomDomain, removeCustomDomain, checkDomainStatus, unpublishFromYandex } from "./yandex-deploy";
 import { registerSeoRoutes } from "./seo-routes";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -4923,6 +4923,10 @@ ${fullHtml}`;
       if (!domain) return res.status(400).json({ message: "Домен обязателен" });
       if (!project.vercelProjectId) return res.status(400).json({ message: "Сначала опубликуйте сайт" });
 
+      const oldDomain = project.customDomain;
+      if (oldDomain && oldDomain.replace(/^www\./, "") !== domain.replace(/^www\./, "")) {
+        removeCustomDomain(oldDomain).catch((e) => console.warn("[domain change] cleanup old domain non-fatal:", e));
+      }
       const result = await addCustomDomain(project.vercelProjectId, domain);
       await storage.updateProject(projectId, { customDomain: domain });
       res.json(result);

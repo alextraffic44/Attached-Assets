@@ -275,6 +275,37 @@ async function findCdnResourceByCname(domain: string): Promise<any | null> {
 }
 
 /**
+ * Removes the CDN resource (and its origin group) for a domain so a new domain
+ * can be attached to the same bucket cleanly.
+ */
+export async function removeCustomDomain(domain: string): Promise<void> {
+  const apex = domain.replace(/^www\./, "");
+  try {
+    const resource = await findCdnResourceByCname(apex);
+    if (resource?.id) {
+      await cdnRequest(`/resources/${resource.id}`, { method: "DELETE" });
+      if (resource.originGroupId) {
+        await cdnRequest(`/originGroups/${resource.originGroupId}?folderId=${YC_FOLDER_ID}`, { method: "DELETE" }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn("[Yandex] removeCustomDomain non-fatal:", err);
+  }
+  try {
+    const cert = await findCertificateByDomain(apex);
+    if (cert?.id) {
+      const token = await getIamToken();
+      await fetch(`${CM_API}/certificates/${cert.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("[Yandex] removeCustomDomain cert cleanup non-fatal:", err);
+  }
+}
+
+/**
  * Attach a custom domain to a project by creating (or reusing) a dedicated CDN
  * resource whose origin is the project's Object Storage bucket. Also kicks off a
  * free Let's Encrypt certificate via Certificate Manager (DNS challenge).
