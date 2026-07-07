@@ -3736,20 +3736,22 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
       {/* Publish Modal */}
       <Dialog open={showPublishModal} onOpenChange={setShowPublishModal}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden" style={{ borderRadius: 24 }}>
-          <div style={{ background: "linear-gradient(135deg,#0f0c29,#302b63,#24243e)", padding: "2rem 2rem 1.5rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-              <div style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <ExternalLink className="w-5 h-5 text-white" />
+        <DialogContent className="w-[min(480px,calc(100vw-1rem))] p-0 flex flex-col" style={{ borderRadius: 0, maxHeight: "calc(100dvh - 2rem)", overflow: "hidden" }}>
+          {/* sticky header */}
+          <div style={{ background: "linear-gradient(135deg,#0f0c29,#302b63,#24243e)", padding: "1rem 1.25rem", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <ExternalLink className="w-4 h-4 text-white" />
               </div>
               <div>
-                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.025em" }}>Публикация сайта</div>
-                <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)" }}>Хостинг сайта · 20 токенов/день</div>
+                <div style={{ fontSize: "1rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}>Публикация сайта</div>
+                <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.5)" }}>Хостинг сайта · 20 токенов/день</div>
               </div>
             </div>
           </div>
 
-          <div style={{ padding: "1.5rem 2rem 2rem" }}>
+          {/* scrollable body */}
+          <div style={{ overflowY: "auto", flex: 1, padding: "1rem 1.25rem 1.25rem" }}>
             {!publishResult && !isPublishing && !publishError && project?.publishedUrl && (
               <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#16a34a" }}>
