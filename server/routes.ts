@@ -8,9 +8,9 @@ import { registerSeoRoutes } from "./seo-routes";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { db } from "./db";
-import { creditTransactions } from "@shared/schema";
 import { rateLimit, userOrIpKey } from "./rate-limit";
 import { assertPublicHttpUrl } from "./url-guard";
+import { domainToASCII } from "node:url";
 import path from "path";
 import fs from "fs";
 import os from "os";
@@ -4513,6 +4513,23 @@ ${designAnalysis}
         return res.status(403).json({ message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 20 токенов/сайт." });
       }
 
+      // Enforce per-plan published-site limit (only for a NEW publish, not re-publishing this project).
+      const alreadyLive = project.publishStatus === "published" || project.publishStatus === "publishing" || project.publishStatus === "suspended";
+      if (!alreadyLive) {
+        const planLimit = PLAN_PUBLISH_LIMITS[user.plan] ?? PLAN_PUBLISH_LIMITS.bronze;
+        const userProjects = await storage.getProjectsByUser(user.id);
+        const liveCount = userProjects.filter(
+          (p) => p.id !== projectId && (p.publishStatus === "published" || p.publishStatus === "publishing" || p.publishStatus === "suspended"),
+        ).length;
+        if (liveCount >= planLimit) {
+          return res.status(403).json({
+            message: planLimit === 0
+              ? "На вашем тарифе публикация сайтов недоступна. Обновите тариф, чтобы опубликовать сайт."
+              : `Достигнут лимит опубликованных сайтов для вашего тарифа (${planLimit}). Снимите с публикации другой сайт или обновите тариф.`,
+          });
+        }
+      }
+
       await storage.updateProject(projectId, { publishStatus: "publishing" });
 
       const extraFiles = await storage.getProjectFiles(projectId);
@@ -4920,15 +4937,21 @@ ${fullHtml}`;
       if (!project) return res.status(404).json({ message: "Проект не найден" });
       if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
       const { domain } = req.body;
-      if (!domain) return res.status(400).json({ message: "Домен обязателен" });
+      if (!domain || typeof domain !== "string") return res.status(400).json({ message: "Домен обязателен" });
+      // Convert IDN (e.g. Cyrillic .рф) to ASCII/punycode — that is what Yandex CDN & the cert need.
+      const normalizedDomain = domainToASCII(domain.trim().toLowerCase());
+      const DOMAIN_RE = /^(?!-)(?:[a-z0-9-]{1,63}(?<!-)\.)+(?:[a-z]{2,}|xn--[a-z0-9-]{2,})$/;
+      if (!normalizedDomain || !DOMAIN_RE.test(normalizedDomain) || normalizedDomain.length > 253) {
+        return res.status(400).json({ message: "Некорректный домен. Пример: example.ru или мойсайт.рф" });
+      }
       if (!project.vercelProjectId) return res.status(400).json({ message: "Сначала опубликуйте сайт" });
 
       const oldDomain = project.customDomain;
-      if (oldDomain && oldDomain.replace(/^www\./, "") !== domain.replace(/^www\./, "")) {
+      if (oldDomain && oldDomain.replace(/^www\./, "") !== normalizedDomain.replace(/^www\./, "")) {
         removeCustomDomain(oldDomain).catch((e) => console.warn("[domain change] cleanup old domain non-fatal:", e));
       }
-      const result = await addCustomDomain(project.vercelProjectId, domain);
-      await storage.updateProject(projectId, { customDomain: domain });
+      const result = await addCustomDomain(project.vercelProjectId, normalizedDomain);
+      await storage.updateProject(projectId, { customDomain: normalizedDomain });
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Ошибка добавления домена" });
@@ -5096,7 +5119,9 @@ ${fullHtml}`;
       if (project.publishStatus !== "published") return res.status(400).json({ message: "Проект не опубликован" });
 
       await unpublishFromYandex(projectId);
-      await storage.updateProject(projectId, { publishStatus: "suspended" });
+      // Voluntary unpublish frees the plan slot → "draft". "suspended" is reserved for
+      // billing suspension (insufficient balance), which legitimately keeps holding a slot.
+      await storage.updateProject(projectId, { publishStatus: "draft" });
 
       res.json({ success: true });
     } catch (err: any) {
@@ -5218,17 +5243,15 @@ ${fullHtml}`;
 
         const user = await storage.getUser(order.userId);
         if (user) {
-          await storage.updateUserCredits(order.userId, user.credits + order.tokens);
-
-          const idempotencyKey = `payment_${order.id}`;
-          await db.insert(creditTransactions).values({
-            userId: order.userId,
-            amount: order.tokens,
-            type: "credit",
-            operation: "payment",
-            note: `Оплата ${order.amount}₽ — ${order.tokens} токенов`,
-            idempotencyKey,
-          }).onConflictDoNothing();
+          // Exactly-once, atomic: insert the idempotency row + credit in ONE transaction.
+          // If the check-status path (or a duplicate webhook) already credited this order,
+          // the unique idempotencyKey no-ops the insert and no credit is applied.
+          await storage.creditPayment(
+            order.userId,
+            order.tokens,
+            `payment_${order.id}`,
+            `Оплата ${order.amount}₽ — ${order.tokens} токенов`,
+          );
         }
 
         console.log(`[Payment] User ${order.userId} credited ${order.tokens} tokens (order ${order.id})`);
@@ -5296,16 +5319,13 @@ ${fullHtml}`;
         await storage.updatePaymentOrderStatus(order.id, "paid", order.orderId, new Date());
         const user = await storage.getUser(order.userId);
         if (user) {
-          await storage.updateUserCredits(order.userId, user.credits + order.tokens);
-          const idempotencyKey = `payment_${order.id}`;
-          await db.insert(creditTransactions).values({
-            userId: order.userId,
-            amount: order.tokens,
-            type: "credit",
-            operation: "payment",
-            note: `Оплата ${order.amount}₽ — ${order.tokens} токенов`,
-            idempotencyKey,
-          }).onConflictDoNothing();
+          // Exactly-once, atomic (see webhook path).
+          await storage.creditPayment(
+            order.userId,
+            order.tokens,
+            `payment_${order.id}`,
+            `Оплата ${order.amount}₽ — ${order.tokens} токенов`,
+          );
         }
         return res.json({ status: "paid", tokens: order.tokens });
       } else if (Number(data.status) === 4) {

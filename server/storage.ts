@@ -13,6 +13,8 @@ export interface IStorage {
   updateUserCredits(id: number, credits: number): Promise<User | undefined>;
   deductCredits(userId: number, amount: number, operation: string, idempotencyKey: string): Promise<{ success: boolean; newBalance: number; alreadyProcessed?: boolean }>;
   refundCredits(userId: number, amount: number): Promise<number>;
+  addCredits(userId: number, amount: number): Promise<number>;
+  creditPayment(userId: number, amount: number, idempotencyKey: string, note: string): Promise<{ credited: boolean; newBalance: number }>;
 
   getProject(id: number): Promise<Project | undefined>;
   getProjectsByUser(userId: number): Promise<Project[]>;
@@ -145,6 +147,42 @@ export class DatabaseStorage implements IStorage {
     );
     const rows = result.rows as Array<{ credits: number }>;
     return rows?.[0]?.credits ?? 0;
+  }
+
+  async addCredits(userId: number, amount: number): Promise<number> {
+    const result = await db.execute(
+      sql`UPDATE users SET credits = credits + ${amount} WHERE id = ${userId} RETURNING credits`
+    );
+    const rows = result.rows as Array<{ credits: number }>;
+    return rows?.[0]?.credits ?? 0;
+  }
+
+  // Exactly-once payment crediting: insert the idempotency row and add credits in ONE
+  // transaction. If the row already exists (webhook + check-status race, or duplicate
+  // webhook), the insert no-ops and NO credit is applied. Because both statements share
+  // one transaction, a crash can never leave the idempotency row without its credit.
+  async creditPayment(userId: number, amount: number, idempotencyKey: string, note: string): Promise<{ credited: boolean; newBalance: number }> {
+    return await db.transaction(async (tx) => {
+      const inserted = await tx.insert(creditTransactions).values({
+        userId,
+        amount,
+        type: "credit",
+        operation: "payment",
+        note,
+        idempotencyKey,
+      }).onConflictDoNothing().returning();
+
+      if (inserted.length === 0) {
+        const [user] = await tx.select().from(users).where(eq(users.id, userId));
+        return { credited: false, newBalance: user?.credits ?? 0 };
+      }
+
+      const result = await tx.execute(
+        sql`UPDATE users SET credits = credits + ${amount} WHERE id = ${userId} RETURNING credits`
+      );
+      const rows = result.rows as Array<{ credits: number }>;
+      return { credited: true, newBalance: rows?.[0]?.credits ?? 0 };
+    });
   }
 
   async getProject(id: number): Promise<Project | undefined> {
