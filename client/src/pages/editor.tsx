@@ -3814,6 +3814,17 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                           {domainAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Привязать"}
                         </Button>
                       </div>
+                      <div style={{ marginTop: 7, fontSize: "0.8rem", color: "#6b7280" }}>
+                        Нет домена?{" "}
+                        <a
+                          href="https://www.reg.ru/domain/new/?rlink=reflink-32024207"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "underline", textDecorationColor: "#c4b5fd" }}
+                        >
+                          Купить
+                        </a>
+                      </div>
                       {domainError && (
                         <div style={{ marginTop: 8, fontSize: "0.78rem", color: "#dc2626" }}>{domainError}</div>
                       )}
@@ -3916,6 +3927,17 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                         >
                           {domainAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Привязать"}
                         </Button>
+                      </div>
+                      <div style={{ marginTop: 7, fontSize: "0.8rem", color: "#6b7280" }}>
+                        Нет домена?{" "}
+                        <a
+                          href="https://www.reg.ru/domain/new/?rlink=reflink-32024207"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "underline", textDecorationColor: "#c4b5fd" }}
+                        >
+                          Купить
+                        </a>
                       </div>
                       {domainError && (
                         <div style={{ marginTop: 8, fontSize: "0.78rem", color: "#dc2626" }}>{domainError}</div>
