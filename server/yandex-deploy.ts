@@ -15,6 +15,9 @@ const YC_SECRET = process.env.YC_SECRET;
 const IAM_URL = "https://iam.api.cloud.yandex.net/iam/v1/tokens";
 const CDN_API = "https://cdn.api.cloud.yandex.net/cdn/v1";
 const CM_API = "https://certificate-manager.api.cloud.yandex.net/certificate-manager/v1";
+const DNS_API = "https://dns.api.cloud.yandex.net/dns/v1";
+
+export const YANDEX_NAMESERVERS = ["ns1.yandexcloud.net", "ns2.yandexcloud.net"];
 
 // ═══ IAM token (cached, refreshed before the 12h expiry) ═══
 
@@ -227,7 +230,7 @@ a{color:#3b82f6;text-decoration:none}
   }
 }
 
-// ═══ Custom domains (CDN + Certificate Manager) ═══
+// ═══ Custom domains (CDN + Certificate Manager + Cloud DNS) ═══
 
 async function cdnRequest(path: string, init: RequestInit = {}): Promise<any> {
   const token = await getIamToken();
@@ -247,6 +250,91 @@ async function cdnRequest(path: string, init: RequestInit = {}): Promise<any> {
     throw new Error(`Yandex CDN error: ${data.error.message || JSON.stringify(data.error)}`);
   }
   return data;
+}
+
+async function dnsRequest(path: string, init: RequestInit = {}): Promise<any> {
+  const token = await getIamToken();
+  const res = await fetch(`${DNS_API}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(init.headers || {}),
+    },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(`Yandex DNS API error (${res.status}): ${JSON.stringify(data)}`);
+  }
+  return data;
+}
+
+function dnsZoneNameFor(domain: string): string {
+  return `craft-ai-${domain.replace(/[^a-z0-9]/gi, "-")}`.slice(0, 60).toLowerCase();
+}
+
+/** Find an existing Yandex Cloud DNS zone for the domain, returns zone id or null. */
+async function findDnsZone(domain: string): Promise<string | null> {
+  try {
+    const apex = domain.replace(/^www\./, "");
+    const name = dnsZoneNameFor(apex);
+    const list = await dnsRequest(`/zones?folderId=${YC_FOLDER_ID}&pageSize=1000`);
+    const found = (list.dnsZones || []).find((z: any) => z.name === name);
+    return found?.id || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Create (or reuse) a public DNS zone in Yandex Cloud DNS for the domain, returns zone id. */
+async function ensureDnsZone(domain: string): Promise<string> {
+  const apex = domain.replace(/^www\./, "");
+  const name = dnsZoneNameFor(apex);
+
+  // Reuse if already exists
+  const existing = await findDnsZone(apex);
+  if (existing) return existing;
+
+  // Create new public zone
+  const op = await dnsRequest(`/zones`, {
+    method: "POST",
+    body: JSON.stringify({
+      folderId: YC_FOLDER_ID,
+      name,
+      zone: `${apex}.`,   // trailing dot required by DNS standard
+      publicVisibility: {},
+    }),
+  });
+
+  // The API returns an Operation; zone id is in metadata or response
+  const zoneId: string | undefined =
+    op?.metadata?.dnsZoneId ||
+    op?.response?.id ||
+    op?.id;
+
+  if (!zoneId) {
+    // Wait briefly and re-list as last resort
+    await new Promise((r) => setTimeout(r, 1500));
+    const list = await dnsRequest(`/zones?folderId=${YC_FOLDER_ID}&pageSize=1000`);
+    const found = (list.dnsZones || []).find((z: any) => z.name === name);
+    if (found?.id) return found.id;
+    throw new Error(`Yandex DNS: failed to create zone for ${apex}`);
+  }
+
+  // Brief settle time before adding records
+  await new Promise((r) => setTimeout(r, 800));
+  return zoneId;
+}
+
+/** Upsert (add or replace) resource record sets in a DNS zone. */
+async function upsertDnsRecords(
+  zoneId: string,
+  records: Array<{ name: string; type: string; ttl: number; data: string[] }>
+): Promise<void> {
+  await dnsRequest(`/zones/${zoneId}:upsertRecordSets`, {
+    method: "POST",
+    body: JSON.stringify({ merges: records }),
+  });
 }
 
 async function ensureOriginGroup(bucket: string): Promise<string> {
@@ -275,8 +363,8 @@ async function findCdnResourceByCname(domain: string): Promise<any | null> {
 }
 
 /**
- * Removes the CDN resource (and its origin group) for a domain so a new domain
- * can be attached to the same bucket cleanly.
+ * Removes the CDN resource (and its origin group), SSL certificate, and
+ * Yandex Cloud DNS zone for a domain so a new domain can be attached cleanly.
  */
 export async function removeCustomDomain(domain: string): Promise<void> {
   const apex = domain.replace(/^www\./, "");
@@ -289,7 +377,7 @@ export async function removeCustomDomain(domain: string): Promise<void> {
       }
     }
   } catch (err) {
-    console.warn("[Yandex] removeCustomDomain non-fatal:", err);
+    console.warn("[Yandex] removeCustomDomain CDN non-fatal:", err);
   }
   try {
     const cert = await findCertificateByDomain(apex);
@@ -303,12 +391,26 @@ export async function removeCustomDomain(domain: string): Promise<void> {
   } catch (err) {
     console.warn("[Yandex] removeCustomDomain cert cleanup non-fatal:", err);
   }
+  // Also remove the auto-created DNS zone
+  try {
+    const zoneId = await findDnsZone(apex);
+    if (zoneId) {
+      await dnsRequest(`/zones/${zoneId}`, { method: "DELETE" });
+      console.log(`[Yandex DNS] Zone deleted for ${apex}`);
+    }
+  } catch (err) {
+    console.warn("[Yandex] removeCustomDomain DNS zone cleanup non-fatal:", err);
+  }
 }
 
 /**
  * Attach a custom domain to a project by creating (or reusing) a dedicated CDN
- * resource whose origin is the project's Object Storage bucket. Also kicks off a
- * free Let's Encrypt certificate via Certificate Manager (DNS challenge).
+ * resource whose origin is the project's Object Storage bucket.
+ *
+ * New flow: automatically creates a Yandex Cloud DNS public zone for the apex
+ * domain, adds an ANAME record pointing to the CDN provider CNAME, and adds the
+ * Let's Encrypt TXT challenge record — so the user only needs to change NS
+ * servers at their registrar to ns1/ns2.yandexcloud.net.
  */
 export async function addCustomDomain(
   yandexProjectId: string,
@@ -335,6 +437,9 @@ export async function addCustomDomain(
     if (!resource) throw new Error("Yandex CDN: не удалось создать ресурс для домена");
   }
 
+  const providerCname = resource.providerCname || resource.cname;
+
+  // Request the SSL certificate — get the TXT challenge value before we write the zone
   let txtRecord: { name: string; value: string } | undefined;
   try {
     txtRecord = await requestManagedCertificate(apex);
@@ -342,11 +447,33 @@ export async function addCustomDomain(
     console.warn("[Yandex] Certificate request failed (non-fatal, retry later):", err);
   }
 
+  // Auto-create DNS zone + write ANAME + TXT so the user only needs to change NS servers
+  try {
+    const zoneId = await ensureDnsZone(apex);
+    const records: Array<{ name: string; type: string; ttl: number; data: string[] }> = [
+      // ANAME on the root — Yandex DNS flattens this to an A record for clients
+      { name: `${apex}.`, type: "ANAME", ttl: 600, data: [`${providerCname}.`] },
+    ];
+    // www CNAME so www.domain also works
+    records.push({ name: `www.${apex}.`, type: "CNAME", ttl: 600, data: [`${apex}.`] });
+
+    if (txtRecord) {
+      const txtName = txtRecord.name.endsWith(".") ? txtRecord.name : `${txtRecord.name}.`;
+      records.push({ name: txtName, type: "TXT", ttl: 300, data: [txtRecord.value] });
+    }
+
+    await upsertDnsRecords(zoneId, records);
+    console.log(`[Yandex DNS] Zone + ANAME + TXT auto-configured for ${apex}`);
+  } catch (err) {
+    // Non-fatal: user can still use old manual CNAME approach
+    console.warn("[Yandex DNS] Auto-zone setup failed (non-fatal):", err);
+  }
+
   return {
     verified: false,
-    cname: resource.providerCname || resource.cname,
-    nameservers: [],
-    txtRecord,
+    cname: providerCname,
+    nameservers: YANDEX_NAMESERVERS,
+    // txtRecord intentionally omitted — added to DNS zone automatically above
   };
 }
 
@@ -442,21 +569,52 @@ export async function checkDomainStatus(
   if (!resource) return { verified: false, dnsReady: false, message: "Домен ещё не привязан" };
 
   const targetCname: string = resource.providerCname;
-  let cnameOk = false;
+
+  // Primary: check NS records → user changed nameservers to Yandex Cloud DNS
+  let nsOk = false;
   try {
-    const records = await dns.resolveCname(apex);
-    cnameOk = records.some((r) => r.toLowerCase() === (targetCname || "").toLowerCase());
+    const nsRecords = await dns.resolveNs(apex);
+    nsOk = nsRecords.some((ns) => ns.toLowerCase().includes("yandexcloud.net"));
   } catch {}
 
-  if (!cnameOk) {
+  // Fallback: check CNAME record (old manual approach still works)
+  let cnameOk = false;
+  if (!nsOk) {
     try {
-      const wwwRecords = await dns.resolveCname(`www.${apex}`);
-      cnameOk = wwwRecords.some((r) => r.toLowerCase() === (targetCname || "").toLowerCase());
+      const records = await dns.resolveCname(apex);
+      cnameOk = records.some((r) => r.toLowerCase() === (targetCname || "").toLowerCase());
     } catch {}
+    if (!cnameOk) {
+      try {
+        const wwwRecords = await dns.resolveCname(`www.${apex}`);
+        cnameOk = wwwRecords.some((r) => r.toLowerCase() === (targetCname || "").toLowerCase());
+      } catch {}
+    }
   }
 
-  if (!cnameOk) {
-    return { verified: false, dnsReady: false, message: "DNS ещё не обновился — попробуйте через 30-60 минут" };
+  if (!nsOk && !cnameOk) {
+    return { verified: false, dnsReady: false, message: "DNS ещё не обновился — подождите 30-60 минут" };
+  }
+
+  // If using the NS approach and cert challenge hasn't been written yet (e.g. zone was
+  // just created), try to refresh the TXT record in the zone now that NS has propagated.
+  if (nsOk) {
+    try {
+      const zoneId = await findDnsZone(apex);
+      if (zoneId) {
+        const cert = await findCertificateByDomain(apex);
+        if (cert?.id) {
+          const full = await getCertificateFull(cert.id);
+          const challenge = full?.challenges?.find((c: any) => c.dnsChallenge)?.dnsChallenge;
+          if (challenge?.name && challenge?.value && cert.status !== "ISSUED") {
+            const txtName = challenge.name.endsWith(".") ? challenge.name : `${challenge.name}.`;
+            await upsertDnsRecords(zoneId, [
+              { name: txtName, type: "TXT", ttl: 300, data: [challenge.value] },
+            ]).catch(() => {});
+          }
+        }
+      }
+    } catch { /* non-fatal */ }
   }
 
   // DNS is pointed correctly. Make sure the managed certificate is issued and

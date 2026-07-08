@@ -77,6 +77,27 @@ const SkeuoPanel = ({ children, className = "" }: { children: React.ReactNode; c
   </div>
 );
 
+const NS1 = "ns1.yandexcloud.net";
+const NS2 = "ns2.yandexcloud.net";
+
+function CopyRow({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = React.useState(false);
+  function copy() {
+    navigator.clipboard?.writeText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  }
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f1f5f9", borderRadius: 8, padding: "0.45rem 0.75rem", fontFamily: "monospace", fontSize: "0.8rem" }}>
+      <span style={{ color: "#1e40af", fontWeight: 600 }}>{label}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ color: "#374151" }}>{value}</span>
+        <button onClick={copy} style={{ background: "none", border: "none", cursor: "pointer", color: copied ? "#16a34a" : "#6b7280", fontSize: "0.7rem", padding: "2px 6px", borderRadius: 4 }} title="Скопировать">
+          {copied ? "✓" : "📋"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DnsInstructions({ customDomain, cname, txtRecord, domainChecking, domainVerified, domainDnsReady, domainStatusMessage, onCheck, testId }: {
   customDomain: string;
   cname: string;
@@ -89,69 +110,65 @@ function DnsInstructions({ customDomain, cname, txtRecord, domainChecking, domai
   testId?: string;
 }) {
   const apex = customDomain.replace(/^www\./, "");
+  const [showFallback, setShowFallback] = React.useState(false);
   const cnameTarget = cname || "craft-ai.yandex-cdn.net";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
-        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 8 }}>
-          Настройка DNS для{" "}
-          <a href={`https://${apex}`} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>{apex}</a>
+      <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 12, padding: "0.75rem 1rem" }}>
+        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#15803d", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+          <span>✅</span> DNS-зона настроена автоматически для{" "}
+          <a href={`https://${apex}`} target="_blank" rel="noreferrer" style={{ color: "#15803d", textDecoration: "underline" }}>{apex}</a>
         </div>
-        <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.9 }}>
-          <div><b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> (или панель вашего регистратора) → <b>Домены</b> → нажмите на <b>{apex}</b> — откроется страница «DNS-серверы и управление зоной»</div>
-          <div><b>2.</b> В блоке «<b>Ресурсные записи</b>» удалите (🗑) старую A-запись для <b>@</b> — она указывает на другой сервер и будет конфликтовать</div>
-          <div><b>3.</b> Нажмите «<b>Добавить запись</b>», выберите тип <b>CNAME</b> и заполните:</div>
-          <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem", display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span>Имя: <b>@</b>, Значение: {cnameTarget}</span>
-              <button
-                onClick={() => navigator.clipboard?.writeText(cnameTarget)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: "0.7rem", padding: "2px 6px" }}
-                title="Скопировать"
-              >📋</button>
-            </div>
-          </div>
-          <div style={{ color: "#9ca3af", fontSize: "0.72rem", marginBottom: 6 }}>
-            Если reg.ru не даёт сохранить CNAME для «@» (некоторые регистраторы это не разрешают) — удалите A-запись для <b>www</b> вместо «@», создайте CNAME с именем <b>www</b> и тем же значением, и используйте адрес www.{apex} как рабочий домен сайта.
-          </div>
-          {txtRecord && (
-            <>
-              <div><b>4.</b> Ещё раз нажмите «Добавить запись», выберите тип <b>TXT</b> — это нужно для выпуска SSL-сертификата:</div>
-              <div style={{ background: "#f1f5f9", borderRadius: 8, padding: "0.5rem 0.75rem", margin: "6px 0", fontFamily: "monospace", fontSize: "0.76rem", display: "flex", flexDirection: "column", gap: 4 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ wordBreak: "break-all" }}>Имя: {txtRecord.name}</span>
-                  <button
-                    onClick={() => navigator.clipboard?.writeText(txtRecord.name)}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: "0.7rem", padding: "2px 6px" }}
-                    title="Скопировать"
-                  >📋</button>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ wordBreak: "break-all" }}>Значение: {txtRecord.value}</span>
-                  <button
-                    onClick={() => navigator.clipboard?.writeText(txtRecord.value)}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: "0.7rem", padding: "2px 6px" }}
-                    title="Скопировать"
-                  >📋</button>
-                </div>
-              </div>
-            </>
-          )}
-          <div style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: 4 }}>
-            После добавления записей DNS обновляется от 30 минут до нескольких часов, и Яндекс автоматически выдаст SSL-сертификат.
-          </div>
+        <div style={{ fontSize: "0.78rem", color: "#374151" }}>
+          ANAME, www CNAME и TXT-запись для SSL уже добавлены в Яндекс Cloud DNS — больше ничего настраивать не нужно.
         </div>
       </div>
+
+      <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 12, padding: "0.75rem 1rem" }}>
+        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1d4ed8", marginBottom: 10 }}>
+          Осталось одно действие — замените DNS-серверы у регистратора
+        </div>
+        <div style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.8 }}>
+          <div style={{ marginBottom: 8 }}>
+            <b>1.</b> Откройте <a href="https://www.reg.ru/user/domain-list" target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", textDecoration: "underline" }}>reg.ru</a> → <b>Домены</b> → нажмите на <b>{apex}</b> → раздел «<b>DNS-серверы</b>» → кнопка «<b>Изменить</b>»
+          </div>
+          <div style={{ marginBottom: 8 }}><b>2.</b> Удалите старые NS-серверы и введите два новых:</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "4px 0 10px" }}>
+            <CopyRow label="NS 1" value={NS1} />
+            <CopyRow label="NS 2" value={NS2} />
+          </div>
+          <div><b>3.</b> Сохраните. DNS обновится в течение 1–24 часов, после чего сайт откроется на <b>{apex}</b> без www.</div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: "0.72rem", color: "#9ca3af", textAlign: "center" }}>
+        <button onClick={() => setShowFallback(v => !v)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", textDecoration: "underline", fontSize: "0.72rem" }}>
+          {showFallback ? "Скрыть" : "Уже используете другой DNS-сервис? Показать ручную настройку CNAME"}
+        </button>
+      </div>
+
+      {showFallback && (
+        <div style={{ background: "#fafafa", border: "1px solid #e5e7eb", borderRadius: 10, padding: "0.75rem 1rem", fontSize: "0.78rem", color: "#374151" }}>
+          <div style={{ fontWeight: 700, marginBottom: 8, color: "#374151" }}>Ручная настройка (если не хотите менять NS)</div>
+          <div style={{ marginBottom: 6 }}>Добавьте CNAME-запись в вашем DNS-провайдере:</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f1f5f9", borderRadius: 8, padding: "0.45rem 0.75rem", fontFamily: "monospace", fontSize: "0.76rem", marginBottom: 6 }}>
+            <span>Имя: <b>www</b> → {cnameTarget}</span>
+            <button onClick={() => navigator.clipboard?.writeText(cnameTarget)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: "0.7rem" }}>📋</button>
+          </div>
+          <div style={{ color: "#9ca3af", fontSize: "0.72rem" }}>Домен откроется как www.{apex}. TXT-запись для SSL нужно добавить вручную — свяжитесь с поддержкой.</div>
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <Button size="sm" variant="outline" onClick={onCheck} disabled={domainChecking} style={{ borderRadius: 10, fontSize: "0.78rem" }} data-testid={testId}>
           {domainChecking ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
           Проверить DNS
         </Button>
         {domainChecking === false && domainVerified === false && !domainDnsReady && domainVerified !== null && (
-          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>DNS-запись ещё не обновилась — подождите 30-60 минут</span>
+          <span style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 500 }}>DNS ещё обновляется — подождите 1–24 часа</span>
         )}
         {domainChecking === false && domainVerified === false && domainDnsReady && (
-          <span style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: 500 }}>🔒 {domainStatusMessage || "DNS готов, SSL выдаётся (может занять до 30 минут)"}</span>
+          <span style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: 500 }}>🔒 {domainStatusMessage || "DNS готов, SSL выдаётся (до 30 минут)"}</span>
         )}
         {domainChecking === false && domainVerified === true && (
           <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 500 }}>✓ Домен полностью работает!</span>
