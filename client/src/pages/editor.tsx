@@ -81,7 +81,7 @@ const NS1 = "ns1.yandexcloud.net";
 const NS2 = "ns2.yandexcloud.net";
 
 function CopyRow({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = React.useState(false);
+  const [copied, setCopied] = useState(false);
   function copy() {
     navigator.clipboard?.writeText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
   }
@@ -110,7 +110,7 @@ function DnsInstructions({ customDomain, cname, txtRecord, domainChecking, domai
   testId?: string;
 }) {
   const apex = customDomain.replace(/^www\./, "");
-  const [showFallback, setShowFallback] = React.useState(false);
+  const [showFallback, setShowFallback] = useState(false);
   const cnameTarget = cname || "craft-ai.yandex-cdn.net";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
