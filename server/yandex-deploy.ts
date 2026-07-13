@@ -393,6 +393,22 @@ async function findCdnResourceByCname(domain: string): Promise<any | null> {
 }
 
 /**
+ * Purge the CDN edge cache for a custom domain (all paths). Called after every
+ * publish/unpublish so the 24h edge TTL never delays site updates. Non-fatal:
+ * if the domain has no CDN resource (default-URL publish) this is a no-op.
+ */
+export async function purgeCdnCache(domain: string): Promise<void> {
+  const apex = domain.replace(/^www\./, "");
+  const resource = await findCdnResourceByCname(apex);
+  if (!resource?.id) return;
+  await cdnRequest(`/cache/${resource.id}:purge`, {
+    method: "POST",
+    body: JSON.stringify({ resourceId: resource.id, paths: [] }),
+  });
+  console.log(`[Yandex CDN] Cache purged for ${apex}`);
+}
+
+/**
  * Removes the CDN resource (and its origin group), SSL certificate, and
  * Yandex Cloud DNS zone for a domain so a new domain can be attached cleanly.
  */
@@ -475,7 +491,9 @@ export async function addCustomDomain(
   //   rejects with 404 before our Express proxy ever sees the request
   // - customServerName: craft-ai.ru (TLS SNI for HTTPS connection to our server)
   // - staticRequestHeaders: X-Custom-Domain → domain (tells our proxy which bucket to serve)
-  // - edgeCacheSettings: cache responses for 1 hour
+  // - edgeCacheSettings: cache for 24h (cache is purged on every publish, so long TTL is safe)
+  // - stale: keep serving the cached copy if our origin is down/erroring — client sites
+  //   survive Craft AI server outages entirely on the CDN edge
   try {
     await cdnRequest(`/resources/${resource.id}`, {
       method: "PATCH",
@@ -484,7 +502,11 @@ export async function addCustomDomain(
           hostOptions: { host: { enabled: true, value: "craft-ai.ru" } },
           customServerName: { enabled: true, value: "craft-ai.ru" },
           staticRequestHeaders: { enabled: true, value: { "X-Custom-Domain": apex } },
-          edgeCacheSettings: { enabled: true, defaultValue: "3600" },
+          edgeCacheSettings: { enabled: true, defaultValue: "86400" },
+          stale: {
+            enabled: true,
+            value: ["error", "updating", "timeout", "invalid_header", "http_500", "http_502", "http_503", "http_504", "http_429"],
+          },
         },
       }),
     });

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
-import { deployToYandex, addCustomDomain, removeCustomDomain, checkDomainStatus, unpublishFromYandex } from "./yandex-deploy";
+import { deployToYandex, addCustomDomain, removeCustomDomain, checkDomainStatus, unpublishFromYandex, purgeCdnCache } from "./yandex-deploy";
 import { registerSeoRoutes } from "./seo-routes";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -2310,7 +2310,7 @@ export async function registerRoutes(
           const indexResp = await fetch(`https://storage.yandexcloud.net/${bucket}/index.html`);
           if (indexResp.ok) {
             res.setHeader("Content-Type", "text/html; charset=utf-8");
-            res.setHeader("Cache-Control", "public, max-age=3600");
+            res.setHeader("Cache-Control", "public, max-age=86400");
             res.send(Buffer.from(await indexResp.arrayBuffer()));
             return;
           }
@@ -4820,6 +4820,14 @@ ${designAnalysis}
         vercelProjectId: yandexProjectId,
       });
 
+      // Fresh content is live in the bucket — purge the CDN edge cache so the
+      // custom domain (24h TTL) shows the update immediately. Non-fatal.
+      if (project.customDomain) {
+        purgeCdnCache(project.customDomain).catch((e) =>
+          console.warn("[publish] CDN purge non-fatal:", e)
+        );
+      }
+
       res.json({ url });
     } catch (err: any) {
       await storage.updateProject(parseInt(req.params.id), { publishStatus: "error" });
@@ -5176,6 +5184,12 @@ ${fullHtml}`;
       if (project.publishStatus !== "published") return res.status(400).json({ message: "Проект не опубликован" });
 
       await unpublishFromYandex(projectId);
+      // Purge CDN so the "suspended" placeholder replaces the cached site immediately
+      if (project.customDomain) {
+        purgeCdnCache(project.customDomain).catch((e) =>
+          console.warn("[unpublish] CDN purge non-fatal:", e)
+        );
+      }
       // Voluntary unpublish frees the plan slot → "draft". "suspended" is reserved for
       // billing suspension (insufficient balance), which legitimately keeps holding a slot.
       await storage.updateProject(projectId, { publishStatus: "draft" });
@@ -5493,6 +5507,12 @@ ${fullHtml}`;
             console.log(`[Billing] User ${userId}: charged ${DAILY_PUBLISH_COST} tokens for project ${proj.id} (${proj.title}). Balance: ${result.newBalance}`);
           } else {
             await unpublishFromYandex(proj.id);
+            // Purge CDN so the "suspended" placeholder replaces the cached site immediately
+            if (proj.customDomain) {
+              await purgeCdnCache(proj.customDomain).catch((e) =>
+                console.warn("[Billing] CDN purge non-fatal:", e)
+              );
+            }
             await storage.updateProject(proj.id, { publishStatus: "suspended" });
             console.log(`[Billing] User ${userId}: suspended project ${proj.id} (${proj.title}) — insufficient balance (${result.newBalance} tokens)`);
           }

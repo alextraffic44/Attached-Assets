@@ -13,7 +13,8 @@ user domain → (DNS ANAME) → CDN edge (cname = user domain, serves the LE cer
 - `hostOptions: { host: { enabled: true, value: "craft-ai.ru" } }` — CRITICAL; default forwardHostHeader sends Host:<custom-domain> which Replit's edge 404s before Express sees it
 - `customServerName: "craft-ai.ru"` (TLS SNI to origin)
 - `staticRequestHeaders: { "X-Custom-Domain": <apex> }` (tells proxy which bucket)
-- `edgeCacheSettings: 3600`
+- `edgeCacheSettings: 86400` (24h — safe because every publish/unpublish purges the cache)
+- `stale: { enabled, value: ["error","updating","timeout","invalid_header","http_500","http_502","http_503","http_504","http_429"] }` — edge keeps serving cached copy when origin (the app server) is down; deliberately excludes 403/404 so real missing content doesn't serve stale forever. GET `/resources/{id}` returns ONLY non-default options — absence of `stale` in GET before setting it doesn't mean the field is unsupported.
 - `sslCertificate: { type: "CM", data: { cm: { id } } }` — attach via PATCH `/resources/{id}` WITHOUT `?updateMask` (updateMask query param → 404); PATCH without mask merges, doesn't wipe other options
 
 ## Cert issuance + AUTO-RENEWAL (the right way)
@@ -25,7 +26,8 @@ Write CNAME delegation `_acme-challenge.<apex>.` → `<certId>.cm.yandexcloud.ne
 ## Propagation behavior (don't panic-debug)
 - New/recreated CDN resource takes ~15-40 min to reach edge nodes; symptoms while propagating: nginx 404 (edge doesn't know the cname), wildcard `*.yccdn.cloud.yandex.net` cert, intermittent 000/SSL aborts.
 - Yandex GSLB DNS pulls un-updated edge IPs out of the A-record rotation itself — per-IP testing (`curl --resolve`) distinguishes propagation from real misconfig.
-- Cache purge: `POST /cdn/v1/cache/{resourceId}:purge` (does NOT fix propagation 404s).
+- Cache purge: `POST /cdn/v1/cache/{resourceId}:purge` body `{resourceId, paths: []}` = full purge (does NOT fix propagation 404s). MUST be called after every content-changing deploy for a custom-domain project — including secondary publish paths (SEO editor) — or the 24h TTL serves the old site; purge-after-upload order has no re-cache race.
+- Origin `Cache-Control` takes precedence over `edgeCacheSettings.defaultValue`, so the Express proxy must send `max-age=86400` on ALL success paths (incl. the 404→index.html SPA fallback) to actually get 24h edge caching.
 
 ## Proxy hardening (server/routes.ts custom-domain middleware)
 - Send `Vary: X-Custom-Domain` (same path serves different projects — cache poisoning otherwise).

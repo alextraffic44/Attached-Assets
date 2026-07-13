@@ -1,6 +1,6 @@
 import { type Express } from "express";
 import type { IStorage } from "./storage";
-import { deployToYandex } from "./yandex-deploy";
+import { deployToYandex, purgeCdnCache } from "./yandex-deploy";
 import type { SeoConfig, SeoCluster, SeoKeyword, SeoTheme } from "@shared/schema";
 import crypto from "crypto";
 
@@ -1373,6 +1373,14 @@ Respond with ONLY valid JSON, no explanation:
         vercelProjectId: yandexProjectId,
         seoConfig: updatedCfg,
       } as any);
+
+      // Fresh content is live in the bucket — purge the CDN edge cache so the
+      // custom domain (24h TTL) shows the update immediately. Non-fatal.
+      if ((proj as any).customDomain) {
+        purgeCdnCache((proj as any).customDomain).catch((e) =>
+          console.warn("[seo publish] CDN purge non-fatal:", e)
+        );
+      }
 
       res.json({ url: finalUrl });
     } catch (e: any) {
