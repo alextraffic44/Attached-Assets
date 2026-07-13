@@ -337,8 +337,13 @@ async function upsertDnsRecords(
   });
 }
 
-async function ensureOriginGroup(bucket: string): Promise<string> {
-  const name = `${bucket}-origin`;
+async function ensureOriginGroup(domain: string): Promise<string> {
+  // Route CDN through our Express app (craft-ai.ru) which proxies to the bucket.
+  // This is the only reliable way: Yandex CDN internally routes all *.yandexcloud.net
+  // origins through S3 API (which serves 403 for root "/"), bypassing the website endpoint.
+  // Our proxy middleware reads X-Custom-Domain to serve the right bucket via S3 API path.
+  const EXPRESS_ORIGIN = "craft-ai.ru";
+  const name = `${domain}-express-proxy`;
   const list = await cdnRequest(`/originGroups?folderId=${YC_FOLDER_ID}`);
   const existing = (list.originGroups || []).find((g: any) => g.name === name);
   if (existing) return existing.id;
@@ -349,7 +354,7 @@ async function ensureOriginGroup(bucket: string): Promise<string> {
       folderId: YC_FOLDER_ID,
       name,
       useNext: false,
-      origins: [{ source: `${bucket}.storage.yandexcloud.net`, enabled: true }],
+      origins: [{ source: EXPRESS_ORIGIN, enabled: true }],
     }),
   });
   const originGroupId = created?.response?.id;
@@ -419,7 +424,7 @@ export async function addCustomDomain(
   const bucket = yandexProjectId;
   const apex = domain.replace(/^www\./, "");
 
-  const originGroupId = await ensureOriginGroup(bucket);
+  const originGroupId = await ensureOriginGroup(apex);
 
   let resource = await findCdnResourceByCname(apex);
   if (!resource) {
@@ -429,12 +434,33 @@ export async function addCustomDomain(
         folderId: YC_FOLDER_ID,
         cname: apex,
         origin: { originGroupId },
+        // HTTPS: craft-ai.ru origin (our Express proxy) has a valid TLS cert
         originProtocol: "HTTPS",
         active: true,
       }),
     });
     resource = created?.response;
     if (!resource) throw new Error("Yandex CDN: не удалось создать ресурс для домена");
+
+    // Patch: 
+    // - customServerName: craft-ai.ru (TLS SNI + Host for HTTPS connection to our server)
+    // - staticRequestHeaders: X-Custom-Domain → domain (tells our proxy which bucket to serve)
+    // - edgeCacheSettings: cache responses for 1 hour
+    try {
+      await cdnRequest(`/resources/${resource.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          options: {
+            customServerName: { enabled: true, value: "craft-ai.ru" },
+            staticRequestHeaders: { enabled: true, value: { "X-Custom-Domain": apex } },
+            edgeCacheSettings: { enabled: true, defaultValue: "3600" },
+          },
+        }),
+      });
+      console.log(`[Yandex CDN] Express proxy configured for domain ${apex}`);
+    } catch (err) {
+      console.warn("[Yandex CDN] Failed to configure proxy options (non-fatal):", err);
+    }
   }
 
   const providerCname = resource.providerCname || resource.cname;

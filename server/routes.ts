@@ -2271,6 +2271,54 @@ export async function registerRoutes(
 
   registerObjectStorageRoutes(app);
 
+  // --- Custom Domain Proxy ---
+  // CDN edge nodes connect to craft-ai.ru with X-Custom-Domain: <custom-domain> header
+  // (staticRequestHeaders configured on CDN resource per custom domain)
+  // We proxy to the project's Yandex Object Storage bucket
+  const OWN_HOSTS = new Set(["craft-ai.ru", "www.craft-ai.ru", "localhost"]);
+  app.use(async (req, res, next) => {
+    // CDN sends X-Custom-Domain header; fallback to Host for direct/legacy requests
+    const xDomain = (req.headers["x-custom-domain"] || "").toString().toLowerCase().split(":")[0];
+    const rawHost = xDomain || (req.headers["host"] || "").split(":")[0].toLowerCase();
+    if (!rawHost || OWN_HOSTS.has(rawHost) || rawHost.includes("yandexcloud.net") || rawHost.startsWith("127.") || rawHost.startsWith("192.") || rawHost.startsWith("10.") || rawHost.includes("repl")) {
+      return next();
+    }
+    let project: any;
+    try {
+      project = await storage.getProjectByCustomDomain(rawHost);
+    } catch (e) {
+      return next();
+    }
+    if (!project?.vercelProjectId) return next();
+    const bucket = project.vercelProjectId as string;
+    let filePath = req.path;
+    if (filePath === "/" || filePath === "") filePath = "/index.html";
+    const s3Url = `https://storage.yandexcloud.net/${bucket}${filePath}`;
+    try {
+      const upstream = await fetch(s3Url);
+      if (!upstream.ok) {
+        if (upstream.status === 404) {
+          const indexResp = await fetch(`https://storage.yandexcloud.net/${bucket}/index.html`);
+          if (indexResp.ok) {
+            res.setHeader("Content-Type", "text/html; charset=utf-8");
+            res.setHeader("Cache-Control", "public, max-age=3600");
+            res.send(Buffer.from(await indexResp.arrayBuffer()));
+            return;
+          }
+        }
+        res.status(upstream.status).send("Not found");
+        return;
+      }
+      const contentType = upstream.headers.get("content-type") || "application/octet-stream";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("X-Proxy-Origin", bucket);
+      res.send(Buffer.from(await upstream.arrayBuffer()));
+    } catch (e) {
+      next(e);
+    }
+  });
+
   const ALLOWED_UPLOAD_MIMES: Record<string, string> = {
     "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/webp": "webp",
     "image/gif": "gif", "image/svg+xml": "svg",

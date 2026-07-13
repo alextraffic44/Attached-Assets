@@ -47,6 +47,7 @@ export interface IStorage {
   deleteLead(id: number): Promise<void>;
   getUnreadLeadCount(userId: number): Promise<number>;
 
+  getProjectByCustomDomain(domain: string): Promise<Project | undefined>;
   getPublishedProjectsCount(userId: number): Promise<number>;
   getAllPublishedProjects(): Promise<Project[]>;
   getAllUsersWithPublishedSites(): Promise<{ userId: number; publishedCount: number }[]>;
@@ -340,6 +341,11 @@ export class DatabaseStorage implements IStorage {
       count += projLeads.filter(l => l.isRead === 0).length;
     }
     return count;
+  }
+
+  async getProjectByCustomDomain(domain: string): Promise<Project | undefined> {
+    const result = await db.select().from(projects).where(eq(projects.customDomain, domain)).limit(1);
+    return result[0];
   }
 
   async getPublishedProjectsCount(userId: number): Promise<number> {

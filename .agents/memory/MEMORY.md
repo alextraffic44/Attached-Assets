@@ -25,3 +25,4 @@
 - [Object storage download route crash](object-storage-req-undefined.md) — `/objects/*` file-serving route can silently throw `ReferenceError: req is not defined` if a helper closes over an out-of-scope `req`; breaks ALL generated-site images/site rendering that depend on that route, not just one asset.
 - [Yandex CDN SSL cert attach](yandex-cdn-ssl-cert.md) — `sslCertificate: {type:"CM", data:{cm:{id}}}` is the real schema (not `cmData`/`cmId`/etc); DNS challenge only shows via `GET certificate?view=FULL`.
 - [Yandex CDN per-project buckets](yandex-cdn-per-project-buckets.md) — CDN origin groups reject `host/path` origins, so per-project isolation needs one dedicated bucket per project, not a shared bucket with prefixes.
+- [Yandex custom domain proxy](yandex-custom-domain-proxy.md) — CDN must use craft-ai.ru (Express) as origin + `X-Custom-Domain` header; bucket.website.yandexcloud.net via CDN always hits S3 API → 403 on root.
