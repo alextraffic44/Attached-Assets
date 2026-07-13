@@ -2293,6 +2293,15 @@ export async function registerRoutes(
     const bucket = project.vercelProjectId as string;
     let filePath = req.path;
     if (filePath === "/" || filePath === "") filePath = "/index.html";
+    // Guard against path traversal (e.g. /%2e%2e/other-bucket/...) — the WHATWG URL
+    // parser normalizes dot segments, which would allow cross-bucket reads.
+    if (/(^|[\\/])\.\.([\\/]|$)|%2e|%2f|%5c/i.test(filePath)) {
+      res.status(400).send("Bad request");
+      return;
+    }
+    // Responses vary by X-Custom-Domain (same URL path serves different projects) —
+    // without Vary a shared cache could serve one project's content for another.
+    res.setHeader("Vary", "X-Custom-Domain");
     const s3Url = `https://storage.yandexcloud.net/${bucket}${filePath}`;
     try {
       const upstream = await fetch(s3Url);

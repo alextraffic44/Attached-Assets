@@ -337,6 +337,31 @@ async function upsertDnsRecords(
   });
 }
 
+/**
+ * Write the ACME challenge CNAME delegation `_acme-challenge.<apex>` →
+ * `<certId>.cm.yandexcloud.net`. Certificate Manager then serves the TXT value
+ * itself, which makes BOTH initial issuance AND automatic ~90-day renewal work
+ * (a static TXT value goes stale on renewal and the cert would expire).
+ *
+ * Uses updateRecordSets with replacements so a stale static TXT at the same
+ * name (written by older code) is atomically removed — DNS forbids a CNAME
+ * coexisting with any other record type at the same name, so a plain upsert
+ * would be rejected.
+ */
+async function ensureAcmeDelegation(zoneId: string, apex: string, certId: string): Promise<void> {
+  const name = `_acme-challenge.${apex}.`;
+  await dnsRequest(`/zones/${zoneId}:updateRecordSets`, {
+    method: "POST",
+    body: JSON.stringify({
+      replacements: [
+        { name, type: "TXT", ttl: 300, data: [] },
+        { name, type: "CNAME", ttl: 300, data: [`${certId}.cm.yandexcloud.net.`] },
+      ],
+    }),
+  });
+  console.log(`[Yandex DNS] ACME delegation ensured for ${apex} → ${certId}.cm.yandexcloud.net`);
+}
+
 async function ensureOriginGroup(domain: string): Promise<string> {
   // Route CDN through our Express app (craft-ai.ru) which proxies to the bucket.
   // This is the only reliable way: Yandex CDN internally routes all *.yandexcloud.net
@@ -441,55 +466,64 @@ export async function addCustomDomain(
     });
     resource = created?.response;
     if (!resource) throw new Error("Yandex CDN: не удалось создать ресурс для домена");
+  }
 
-    // Patch: 
-    // - customServerName: craft-ai.ru (TLS SNI + Host for HTTPS connection to our server)
-    // - staticRequestHeaders: X-Custom-Domain → domain (tells our proxy which bucket to serve)
-    // - edgeCacheSettings: cache responses for 1 hour
-    try {
-      await cdnRequest(`/resources/${resource.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          options: {
-            customServerName: { enabled: true, value: "craft-ai.ru" },
-            staticRequestHeaders: { enabled: true, value: { "X-Custom-Domain": apex } },
-            edgeCacheSettings: { enabled: true, defaultValue: "3600" },
-          },
-        }),
-      });
-      console.log(`[Yandex CDN] Express proxy configured for domain ${apex}`);
-    } catch (err) {
-      console.warn("[Yandex CDN] Failed to configure proxy options (non-fatal):", err);
-    }
+  // Reconcile CDN options on EVERY call (not just creation) so legacy resources
+  // created before this fix, or resources touched manually, get repaired on re-add:
+  // - hostOptions.host: craft-ai.ru — CRITICAL: Replit routes by Host header; the CDN
+  //   default (forwardHostHeader) sends Host: <custom-domain> which Replit's edge
+  //   rejects with 404 before our Express proxy ever sees the request
+  // - customServerName: craft-ai.ru (TLS SNI for HTTPS connection to our server)
+  // - staticRequestHeaders: X-Custom-Domain → domain (tells our proxy which bucket to serve)
+  // - edgeCacheSettings: cache responses for 1 hour
+  try {
+    await cdnRequest(`/resources/${resource.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        options: {
+          hostOptions: { host: { enabled: true, value: "craft-ai.ru" } },
+          customServerName: { enabled: true, value: "craft-ai.ru" },
+          staticRequestHeaders: { enabled: true, value: { "X-Custom-Domain": apex } },
+          edgeCacheSettings: { enabled: true, defaultValue: "3600" },
+        },
+      }),
+    });
+    console.log(`[Yandex CDN] Express proxy configured for domain ${apex}`);
+  } catch (err) {
+    console.warn("[Yandex CDN] Failed to configure proxy options (non-fatal):", err);
   }
 
   const providerCname = resource.providerCname || resource.cname;
 
-  // Request the SSL certificate — get the TXT challenge value before we write the zone
-  let txtRecord: { name: string; value: string } | undefined;
+  // Request the SSL certificate — we need the cert id for the CNAME challenge delegation
+  let certInfo: { certId?: string; txt?: { name: string; value: string } } = {};
   try {
-    txtRecord = await requestManagedCertificate(apex);
+    certInfo = await requestManagedCertificate(apex);
   } catch (err) {
     console.warn("[Yandex] Certificate request failed (non-fatal, retry later):", err);
   }
 
-  // Auto-create DNS zone + write ANAME + TXT so the user only needs to change NS servers
+  // Auto-create DNS zone + write ANAME so the user only needs to change NS servers
   try {
     const zoneId = await ensureDnsZone(apex);
     const records: Array<{ name: string; type: string; ttl: number; data: string[] }> = [
       // ANAME on the root — Yandex DNS flattens this to an A record for clients
       { name: `${apex}.`, type: "ANAME", ttl: 600, data: [`${providerCname}.`] },
+      // www CNAME so www.domain also resolves to the CDN
+      { name: `www.${apex}.`, type: "CNAME", ttl: 600, data: [`${apex}.`] },
     ];
-    // www CNAME so www.domain also works
-    records.push({ name: `www.${apex}.`, type: "CNAME", ttl: 600, data: [`${apex}.`] });
-
-    if (txtRecord) {
-      const txtName = txtRecord.name.endsWith(".") ? txtRecord.name : `${txtRecord.name}.`;
-      records.push({ name: txtName, type: "TXT", ttl: 300, data: [txtRecord.value] });
-    }
-
     await upsertDnsRecords(zoneId, records);
-    console.log(`[Yandex DNS] Zone + ANAME + TXT auto-configured for ${apex}`);
+    console.log(`[Yandex DNS] Zone + ANAME auto-configured for ${apex}`);
+
+    // Cert challenge is written SEPARATELY so a failure here (e.g. stale TXT
+    // conflict) can never sink the ANAME/www records above.
+    if (certInfo.certId) {
+      await ensureAcmeDelegation(zoneId, apex, certInfo.certId);
+    } else if (certInfo.txt) {
+      // Fallback: static TXT (works for initial issuance only)
+      const txtName = certInfo.txt.name.endsWith(".") ? certInfo.txt.name : `${certInfo.txt.name}.`;
+      await upsertDnsRecords(zoneId, [{ name: txtName, type: "TXT", ttl: 300, data: [certInfo.txt.value] }]);
+    }
   } catch (err) {
     // Non-fatal: user can still use old manual CNAME approach
     console.warn("[Yandex DNS] Auto-zone setup failed (non-fatal):", err);
@@ -532,7 +566,9 @@ async function getCertificateFull(certId: string): Promise<any | null> {
  * existing one if already requested) and returns the DNS TXT challenge record
  * the user needs to add, if the certificate isn't already issued.
  */
-async function requestManagedCertificate(domain: string): Promise<{ name: string; value: string } | undefined> {
+async function requestManagedCertificate(
+  domain: string
+): Promise<{ certId?: string; txt?: { name: string; value: string } }> {
   const token = await getIamToken();
 
   let cert = await findCertificateByDomain(domain);
@@ -551,18 +587,22 @@ async function requestManagedCertificate(domain: string): Promise<{ name: string
     if (!res.ok) {
       throw new Error(`Certificate Manager error: ${res.status} ${JSON.stringify(data)}`);
     }
-    cert = data;
+    // requestNew returns an Operation — cert id lives in metadata/response
+    cert = (data as any)?.response || (data as any)?.metadata || data;
+    if (!cert?.id) {
+      cert = (await findCertificateByDomain(domain)) || cert;
+    }
   }
 
-  const certId = cert?.id;
-  if (!certId) return undefined;
+  const certId = cert?.id || cert?.certificateId;
+  if (!certId) return {};
 
   const full = await getCertificateFull(certId);
   const challenge = full?.challenges?.find((c: any) => c.dnsChallenge)?.dnsChallenge;
   if (challenge?.name && challenge?.value) {
-    return { name: challenge.name, value: `${challenge.value}` };
+    return { certId, txt: { name: challenge.name, value: `${challenge.value}` } };
   }
-  return undefined;
+  return { certId };
 }
 
 /**
@@ -571,7 +611,8 @@ async function requestManagedCertificate(domain: string): Promise<{ name: string
  * certificate attached.
  */
 async function attachCertificateToResource(resourceId: string, certId: string): Promise<void> {
-  await cdnRequest(`/resources/${resourceId}?updateMask=sslCertificate`, {
+  // NOTE: no ?updateMask query param — the CDN REST API returns 404 when it is present
+  await cdnRequest(`/resources/${resourceId}`, {
     method: "PATCH",
     body: JSON.stringify({
       sslCertificate: { type: "CM", data: { cm: { id: certId } } },
@@ -622,22 +663,18 @@ export async function checkDomainStatus(
     return { verified: false, dnsReady: false, message: "DNS ещё не обновился — подождите 30-60 минут" };
   }
 
-  // If using the NS approach and cert challenge hasn't been written yet (e.g. zone was
-  // just created), try to refresh the TXT record in the zone now that NS has propagated.
+  // If using the NS approach, make sure the ACME challenge delegation exists in the
+  // zone (CNAME → Certificate Manager). CM serves the TXT itself, so issuance AND
+  // auto-renewal keep working without us tracking challenge values.
   if (nsOk) {
     try {
       const zoneId = await findDnsZone(apex);
       if (zoneId) {
         const cert = await findCertificateByDomain(apex);
-        if (cert?.id) {
-          const full = await getCertificateFull(cert.id);
-          const challenge = full?.challenges?.find((c: any) => c.dnsChallenge)?.dnsChallenge;
-          if (challenge?.name && challenge?.value && cert.status !== "ISSUED") {
-            const txtName = challenge.name.endsWith(".") ? challenge.name : `${challenge.name}.`;
-            await upsertDnsRecords(zoneId, [
-              { name: txtName, type: "TXT", ttl: 300, data: [challenge.value] },
-            ]).catch(() => {});
-          }
+        if (cert?.id && cert.status !== "ISSUED") {
+          await ensureAcmeDelegation(zoneId, apex, cert.id).catch((e) =>
+            console.warn("[Yandex DNS] ACME delegation refresh failed (non-fatal):", e)
+          );
         }
       }
     } catch { /* non-fatal */ }
