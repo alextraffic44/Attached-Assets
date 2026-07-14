@@ -762,6 +762,7 @@ async function generateScrollFrames(
   referenceStillUrl?: string,
   layout: "parallax" | "split" | "action" = "parallax",
   onTaskCreated?: (taskId: string) => void,
+  existingTaskId?: string,
 ): Promise<string[]> {
   if (!KIE_API_KEY) { console.warn("[SCROLLANIM] missing KIE_API_KEY"); return []; }
 
@@ -819,6 +820,48 @@ async function generateScrollFrames(
   const deadline = Date.now() + 2400000; // 40 min cap (Kling can take up to 35 min)
   const MAX_VIDEO_ATTEMPTS = 4; // retry on API failure (e.g. upstream timeout)
   let mp4Url: string | null = null;
+
+  // If caller already has a completed/running task ID, skip video creation entirely
+  // and jump straight to polling that specific task (one attempt only).
+  if (existingTaskId) {
+    console.log(`[SCROLLANIM] resuming from existing task ID: ${existingTaskId}`);
+    if (onTaskCreated) { try { onTaskCreated(existingTaskId); } catch {} }
+    let taskFailed = false;
+    let pollCount = 0;
+    while (Date.now() < deadline) {
+      if (shouldStop()) return [];
+      await new Promise(r => setTimeout(r, 5000));
+      pollCount++;
+      try {
+        const body: any = await kieRequestJson(
+          `${NANO_BANANA_STATUS_URL}?taskId=${existingTaskId}`,
+          { headers: { "Authorization": `Bearer ${KIE_API_KEY}` } },
+          { label: "SCROLLANIM resume-poll", retries: 2, shouldStop: () => shouldStop() || Date.now() >= deadline },
+        );
+        if (!body || body.code !== 200 || !body.data) { console.log(`[SCROLLANIM] resume poll #${pollCount}: no data`); continue; }
+        const state = body.data.state;
+        if (pollCount <= 3 || pollCount % 10 === 0) console.log(`[SCROLLANIM] resume poll #${pollCount} state=${state}`);
+        if (state === "success") {
+          let result: any = {};
+          try { result = typeof body.data.resultJson === "string" ? JSON.parse(body.data.resultJson) : (body.data.resultJson || {}); } catch {}
+          mp4Url = (result.resultUrls || [])[0] || null;
+          console.log(`[SCROLLANIM] resume success, mp4Url=${mp4Url}`);
+          break;
+        }
+        if (state === "fail" || state === "failed" || state === "error") {
+          console.warn(`[SCROLLANIM] resumed task ${existingTaskId} reported failure:`, body.data.failMsg || body.data.failCode);
+          taskFailed = true; break;
+        }
+      } catch (e: any) {
+        console.warn("[SCROLLANIM] resume poll error:", e?.message);
+      }
+    }
+    if (!mp4Url) {
+      console.warn(`[SCROLLANIM] resume failed or timed out for task ${existingTaskId}`);
+      return [];
+    }
+    // Skip the frame-extraction block below by jumping past the for-loop via a synthetic mp4Url
+  } else {
 
   for (let videoAttempt = 0; videoAttempt < MAX_VIDEO_ATTEMPTS; videoAttempt++) {
     if (shouldStop() || Date.now() >= deadline) break;
@@ -893,6 +936,8 @@ async function generateScrollFrames(
     console.warn("[SCROLLANIM] video generation failed after all attempts or deadline exceeded");
     return [];
   }
+
+  } // end else (existingTaskId branch already set mp4Url or returned [])
 
   // Step 3 — download mp4 to a temp dir
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrollanim-"));
@@ -3810,6 +3855,9 @@ ${designAnalysis}
       if (!html.includes('data-scroll-anim-fallback="1"') && !html.includes('data-scroll-anim-pending="1"')) {
         return res.status(400).json({ message: "Анимация уже есть или сайт не интерактивный" });
       }
+      // Optional: caller supplies an already-completed video task ID so we skip video creation
+      const existingTaskId: string | undefined = typeof req.body?.taskId === "string" && req.body.taskId.trim()
+        ? req.body.taskId.trim() : undefined;
 
       // Extract embedded prompt + style from the fallback section data-attributes
       const tagMatch = html.match(/<section[^>]*data-scroll-anim-fallback="1"[^>]*>/);
@@ -3856,27 +3904,55 @@ ${designAnalysis}
       const noopRes = { write: () => {}, end: () => {} };
       const MAX_REGEN_ATTEMPTS = 2;
       const REGEN_RETRY_DELAY = 3 * 60 * 1000;
+      const layout: "parallax" | "split" | "action" = animStyle === "split" ? "split" : animStyle === "action" ? "action" : "parallax";
       (async () => {
         let succeeded = false;
-        for (let attempt = 0; attempt < MAX_REGEN_ATTEMPTS; attempt++) {
-          if (attempt > 0) {
-            console.log(`[REGEN ANIM] Waiting ${REGEN_RETRY_DELAY / 60000} min before retry for project ${projectId}...`);
-            await new Promise(r => setTimeout(r, REGEN_RETRY_DELAY));
-            bgMap.set("index.html", markerHtml); // reset for clean retry
-          }
+
+        // Fast path: if the caller supplied an existing completed video task ID, skip video
+        // creation and just resume from that task (download mp4 → slice frames → inject HTML).
+        if (existingTaskId) {
+          console.log(`[REGEN ANIM] resuming from existing task ${existingTaskId} for project ${projectId}`);
           try {
-            console.log(`[REGEN ANIM] Attempt ${attempt + 1}/${MAX_REGEN_ATTEMPTS} for project ${projectId}`);
-            const result = await resolveScrollAnimMarkers(bgMap, projectId, user.id, runKey, noopRes, () => false, undefined, animStyle);
-            let finalCode = bgMap.get("index.html") ?? pendingHtml;
-            finalCode = injectLoadingOverlay(finalCode);
-            await storage.updateProject(projectId, { generatedCode: finalCode });
-            console.log(`[REGEN ANIM] Done (attempt ${attempt + 1}) for project ${projectId} — frames: ${result.generated}`);
-            succeeded = true;
-            break;
-          } catch (err: any) {
-            console.error(`[REGEN ANIM] Error (attempt ${attempt + 1}) for project ${projectId}:`, err?.message || err);
+            const frames = await generateScrollFrames(
+              videoPrompt, () => false, undefined, layout, undefined, existingTaskId,
+            );
+            if (frames.length >= 8) {
+              const canvasHtml = buildScrollAnimHtml(frames, animTexts, layout);
+              let finalCode = safeReplaceScrollAnimPending(pendingHtml, canvasHtml);
+              finalCode = injectLoadingOverlay(finalCode);
+              await storage.updateProject(projectId, { generatedCode: finalCode });
+              console.log(`[REGEN ANIM] Resume done for project ${projectId} — ${frames.length} frames`);
+              succeeded = true;
+            } else {
+              console.warn(`[REGEN ANIM] Resume produced too few frames (${frames.length}) — falling through to full regen`);
+            }
+          } catch (resumeErr: any) {
+            console.warn(`[REGEN ANIM] Resume failed:`, resumeErr?.message);
           }
         }
+
+        if (!succeeded) {
+          for (let attempt = 0; attempt < MAX_REGEN_ATTEMPTS; attempt++) {
+            if (attempt > 0) {
+              console.log(`[REGEN ANIM] Waiting ${REGEN_RETRY_DELAY / 60000} min before retry for project ${projectId}...`);
+              await new Promise(r => setTimeout(r, REGEN_RETRY_DELAY));
+              bgMap.set("index.html", markerHtml); // reset for clean retry
+            }
+            try {
+              console.log(`[REGEN ANIM] Attempt ${attempt + 1}/${MAX_REGEN_ATTEMPTS} for project ${projectId}`);
+              const result = await resolveScrollAnimMarkers(bgMap, projectId, user.id, runKey, noopRes, () => false, undefined, animStyle);
+              let finalCode = bgMap.get("index.html") ?? pendingHtml;
+              finalCode = injectLoadingOverlay(finalCode);
+              await storage.updateProject(projectId, { generatedCode: finalCode });
+              console.log(`[REGEN ANIM] Done (attempt ${attempt + 1}) for project ${projectId} — frames: ${result.generated}`);
+              succeeded = true;
+              break;
+            } catch (err: any) {
+              console.error(`[REGEN ANIM] Error (attempt ${attempt + 1}) for project ${projectId}:`, err?.message || err);
+            }
+          }
+        }
+
         if (!succeeded) {
           try {
             const fallback = safeReplaceScrollAnimPending(
