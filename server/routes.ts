@@ -1157,17 +1157,20 @@ function scrollAnimFallbackHtml(
   texts: Array<{ title: string; sub: string }>,
   videoPrompt?: string,
   style?: string,
+  taskId?: string,
 ): string {
   const blocks = texts.map(t => `
       <div style="max-width:680px;margin:0 auto 3.5rem;">
         ${t.title ? `<h2 style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;letter-spacing:-0.03em;color:#0a0a0a;margin:0 0 .5em;line-height:1.1;">${csaEsc(t.title)}</h2>` : ""}
         ${t.sub ? `<p style="font-size:clamp(1rem,2vw,1.25rem);line-height:1.7;color:#444;margin:0;">${csaEsc(t.sub)}</p>` : ""}
       </div>`).join("");
-  // Embed the original video prompt + style so the retry endpoint can reconstruct the marker
+  // Embed the original video prompt + style + task ID so the retry endpoint can reconstruct
+  // the marker and — if the video already completed on KIE — skip re-generation entirely.
   const promptAttr = videoPrompt
     ? ` data-scroll-anim-prompt="${encodeURIComponent(videoPrompt)}" data-scroll-anim-style="${encodeURIComponent(style || "parallax")}"`
     : "";
-  return `<section data-scroll-anim-fallback="1"${promptAttr} style="background:#fff;padding:clamp(60px,12vw,160px) 6%;text-align:center;">${blocks}</section>`;
+  const taskAttr = taskId ? ` data-scroll-anim-task-id="${encodeURIComponent(taskId)}"` : "";
+  return `<section data-scroll-anim-fallback="1"${promptAttr}${taskAttr} style="background:#fff;padding:clamp(60px,12vw,160px) 6%;text-align:center;">${blocks}</section>`;
 }
 
 // Build a self-contained scroll-bound Canvas animation block (section + style + script).
@@ -3855,15 +3858,15 @@ ${designAnalysis}
       if (!html.includes('data-scroll-anim-fallback="1"') && !html.includes('data-scroll-anim-pending="1"')) {
         return res.status(400).json({ message: "Анимация уже есть или сайт не интерактивный" });
       }
-      // Optional: caller supplies an already-completed video task ID so we skip video creation
-      const existingTaskId: string | undefined = typeof req.body?.taskId === "string" && req.body.taskId.trim()
-        ? req.body.taskId.trim() : undefined;
-
-      // Extract embedded prompt + style from the fallback section data-attributes
+      // Extract embedded prompt + style + task ID from the fallback section data-attributes.
+      // The task ID is stored automatically when the fallback is written, so if the Kling video
+      // already completed the server can skip re-generation entirely (no user action needed).
       const tagMatch = html.match(/<section[^>]*data-scroll-anim-fallback="1"[^>]*>/);
       const tag = tagMatch ? tagMatch[0] : "";
       const promptRaw = tag.match(/data-scroll-anim-prompt="([^"]*)"/)?.[1] || "";
       const styleRaw = tag.match(/data-scroll-anim-style="([^"]*)"/)?.[1] || "";
+      const taskIdRaw = tag.match(/data-scroll-anim-task-id="([^"]*)"/)?.[1] || "";
+      const existingTaskId: string | undefined = taskIdRaw ? decodeURIComponent(taskIdRaw) : undefined;
       const videoPrompt = promptRaw
         ? decodeURIComponent(promptRaw)
         : "breathtaking cinematic forward flight into the scene, volumetric god rays and drifting atmospheric haze, epic film-still lighting, photorealistic";
@@ -5820,10 +5823,12 @@ ${fullHtml}`;
             : [{ title: "", sub: "" }];
 
           // Write the static fallback immediately (unblocks server startup, user sees something).
-          // If we have a task ID, the background resume below will overwrite it with the real animation.
+          // Preserve the Kling task ID inside the fallback so that (a) the background resume
+          // below can finish the animation without re-generating the video, and (b) if the
+          // resume also fails the "Создать видео" retry button can re-use the completed video.
           const fallback = safeReplaceScrollAnimPending(
             html,
-            scrollAnimFallbackHtml(savedTexts, savedPrompt, savedStyle)
+            scrollAnimFallbackHtml(savedTexts, savedPrompt, savedStyle, savedTaskId || undefined)
           );
           if (fallback !== html) {
             await storage.updateProject(proj.id, { generatedCode: fallback });

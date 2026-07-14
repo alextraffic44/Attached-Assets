@@ -271,7 +271,6 @@ export default function EditorPage() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showGenerations, setShowGenerations] = useState(false);
   const [isRegenAnim, setIsRegenAnim] = useState(false);
-  const [regenAnimTaskId, setRegenAnimTaskId] = useState("");
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<string | null>(null);
@@ -964,12 +963,8 @@ export default function EditorPage() {
     if (!project) return;
     setIsRegenAnim(true);
     try {
-      const body: Record<string, string> = {};
-      if (regenAnimTaskId.trim()) body.taskId = regenAnimTaskId.trim();
       const resp = await fetch(`/api/projects/${project.id}/regen-animation`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
         credentials: "include",
       });
       const data = await resp.json();
@@ -2336,31 +2331,20 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
         {/* Retry animation button — shown when fallback static section is present */}
         {hasAnimFallback && !isGenerating && (
-          <div className="shrink-0 flex items-center gap-1.5">
-            <input
-              type="text"
-              value={regenAnimTaskId}
-              onChange={e => setRegenAnimTaskId(e.target.value)}
-              placeholder="Task ID (опц.)"
-              disabled={isRegenAnim}
-              title="Если у вас есть готовый Task ID видео — вставьте его сюда, чтобы не тратить время на повторную генерацию"
-              className="h-10 w-36 px-3 rounded-full text-xs border border-violet-200 bg-white text-slate-600 placeholder:text-slate-400 focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-200 disabled:opacity-50"
-            />
-            <button
-              title="Видеоанимация не создана — нажмите, чтобы запустить снова"
-              data-testid="button-regen-anim"
-              onClick={handleRegenAnim}
-              disabled={isRegenAnim}
-              className="shrink-0 flex items-center gap-2 h-10 px-4 rounded-full text-sm font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md shadow-violet-200 hover:shadow-lg hover:shadow-violet-300 hover:from-violet-600 hover:to-purple-700 transition-all duration-200 disabled:opacity-60"
-            >
-              {isRegenAnim ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Video className="w-4 h-4" />
-              )}
-              <span className="hidden sm:inline">Создать видео</span>
-            </button>
-          </div>
+          <button
+            title="Видеоанимация не создана — нажмите, чтобы запустить снова"
+            data-testid="button-regen-anim"
+            onClick={handleRegenAnim}
+            disabled={isRegenAnim}
+            className="shrink-0 flex items-center gap-2 h-10 px-4 rounded-full text-sm font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md shadow-violet-200 hover:shadow-lg hover:shadow-violet-300 hover:from-violet-600 hover:to-purple-700 transition-all duration-200 disabled:opacity-60"
+          >
+            {isRegenAnim ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Video className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">Создать видео</span>
+          </button>
         )}
 
         {/* Publish button — always visible, outside scrollable toolbar */}
