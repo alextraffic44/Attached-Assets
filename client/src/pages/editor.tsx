@@ -2840,7 +2840,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             ) : currentCode || isGenerating ? (
               <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
-                 <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }}>
+                 <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { const iw = iframeRef.current?.contentWindow; if (!iw) return; e.preventDefault(); e.stopPropagation(); iw.scrollBy(e.deltaX, e.deltaY); }}>
                     <iframe key={selectorMode ? 'sel' : editMode ? 'edit' : 'view'} ref={iframeRef} srcDoc={isGenerating ? (getEditableCode(project?.generatedCode || "") || "") : getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
                  </div>
                  {isGenerating && (

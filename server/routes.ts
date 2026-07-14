@@ -1233,7 +1233,7 @@ ${layers}
 </section>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Manrope:wght@400;500;600&display=swap');
-  .${cid}-scroll{position:relative;height:${scrollVh}vh;margin:0;padding:0;background:#000;}
+  .${cid}-scroll{position:relative;height:${scrollVh}vh;margin:0;padding:0;}
   .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#000;}
   .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
   .${cid}-veil{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to top,rgba(0,0,0,0.62) 0%,rgba(0,0,0,0.18) 38%,rgba(0,0,0,0) 65%);}
@@ -1300,7 +1300,7 @@ ${layers}
 </section>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Manrope:wght@400;500;600&display=swap');
-  .${cid}-scroll{position:relative;height:${scrollVh}vh;margin:0;padding:0;background:#f8f7f4;}
+  .${cid}-scroll{position:relative;height:${scrollVh}vh;margin:0;padding:0;}
   .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#f8f7f4;}
   .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
   .${cid}-panel{position:absolute;top:0;left:0;width:52%;height:100%;pointer-events:none;display:flex;align-items:center;padding:0 clamp(32px,5.5vw,96px);background:linear-gradient(to right,rgba(248,247,244,0.9) 0%,rgba(248,247,244,0.74) 42%,rgba(248,247,244,0) 100%);}
@@ -5968,7 +5968,7 @@ ${fullHtml}`;
       }
       if (!seenTaskIds.size) continue;
 
-      for (const taskId of seenTaskIds) {
+      for (const taskId of Array.from(seenTaskIds)) {
         try {
           const body: any = await kieRequestJson(
             `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
