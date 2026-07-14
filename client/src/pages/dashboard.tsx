@@ -437,6 +437,18 @@ export default function DashboardPage() {
         }
         .db-magic-btn:hover { transform: scale(1.05); }
         .db-magic-btn:active { transform: scale(0.95); }
+        .db-enhance-btn {
+          border: 1.3px solid transparent;
+          background: linear-gradient(#fff, #fff) padding-box, var(--rainbow-grad) border-box;
+          background-size: 200% auto; animation: db-rainbow 3s linear infinite;
+          color: #1D1D1F !important;
+        }
+        .db-enhance-btn::before {
+          content: ''; position: absolute; bottom: -20%; left: 50%; z-index: -1;
+          height: 20%; width: 60%; transform: translateX(-50%);
+          background: var(--rainbow-grad); background-size: 200% auto;
+          animation: db-rainbow 3s linear infinite; filter: blur(10px);
+        }
       ` }} />
       {/* Ambient glows matching landing page */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80%] h-[60%] pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(66,165,255,0.07) 0%, transparent 70%)' }} />
@@ -1303,8 +1315,8 @@ export default function DashboardPage() {
                         } finally { setIsEnhancing(false); }
                       }}
                       disabled={isEnhancing || isResearching || !description.trim()}
-                      className="h-10 flex items-center justify-center gap-1.5 font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                      style={{ border: isEnhanced ? '1px solid rgba(52,199,89,0.4)' : '1.5px dashed rgba(0,0,0,0.12)', background: isEnhanced ? 'rgba(52,199,89,0.06)' : 'transparent', color: isEnhanced ? '#1D8348' : '#86868B', borderRadius: 12, cursor: 'pointer' }}
+                      className={`h-10 flex items-center justify-center gap-1.5 font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed${!isEnhanced && !isEnhancing && description.trim() ? ' db-enhance-btn' : ''}`}
+                      style={{ border: isEnhanced ? '1px solid rgba(52,199,89,0.4)' : (!description.trim() ? '1.5px dashed rgba(0,0,0,0.12)' : undefined), background: isEnhanced ? 'rgba(52,199,89,0.06)' : undefined, color: isEnhanced ? '#1D8348' : (description.trim() && !isEnhancing ? undefined : '#86868B'), borderRadius: 12, cursor: 'pointer' }}
                     >
                       {isEnhancing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isEnhanced ? <Sparkles className="w-3.5 h-3.5" /> : <Wand2 className="w-3.5 h-3.5" />}
                       {isEnhancing ? 'Улучшаем...' : isEnhanced ? 'Улучшено' : 'AI улучшение'}
