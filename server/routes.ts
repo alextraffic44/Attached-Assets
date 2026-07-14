@@ -1501,7 +1501,7 @@ async function resolveScrollAnimMarkers(
       clearInterval(keepAliveInterval);
     }
 
-    if (frames.length >= 5) {
+    if (frames.length >= 60) {
       replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts, layout));
       generated++;
       if (billed) creditsUsed += SCROLL_ANIM_COST;
@@ -3939,7 +3939,7 @@ ${designAnalysis}
             const frames = await generateScrollFrames(
               videoPrompt, () => false, undefined, layout, undefined, existingTaskId,
             );
-            if (frames.length >= 5) {
+            if (frames.length >= 60) {
               const canvasHtml = buildScrollAnimHtml(frames, animTexts, layout);
               let finalCode = safeReplaceScrollAnimPending(pendingHtml, canvasHtml);
               finalCode = injectLoadingOverlay(finalCode);
@@ -4023,7 +4023,7 @@ ${designAnalysis}
         console.error("Scroll frame generation error:", genErr?.message || genErr);
         return res.status(502).json({ message: "Не удалось сгенерировать анимацию. Токены возвращены." });
       }
-      if (frames.length < 5) {
+      if (frames.length < 60) {
         if (billed) { try { await storage.refundCredits(user.id, SCROLL_ANIM_COST); } catch {} }
         return res.status(502).json({ message: "Не удалось сгенерировать анимацию. Токены возвращены." });
       }
@@ -5911,7 +5911,7 @@ ${fullHtml}`;
                     const url = await uploadToObjectStorage(fs.readFileSync(path.join(framesDir, f)), "image/jpeg", "jpg");
                     frameUrls.push(url);
                   }
-                  if (frameUrls.length >= 5) {
+                  if (frameUrls.length >= 60) {
                     // Read current project code — only replace if it still has the fallback section
                     const cur = await storage.getProject(_projId);
                     if (!cur || !(cur.generatedCode || "").includes('data-scroll-anim-fallback="1"')) return;
@@ -6041,7 +6041,7 @@ ${fullHtml}`;
               }
               console.log(`[KLINGTASK] project ${proj.id}: ${frameUrls.length} frames uploaded`);
 
-              if (frameUrls.length >= 5) {
+              if (frameUrls.length >= 60) {
                 // Re-read project to avoid overwriting concurrent changes
                 const latest = await storage.getProject(proj.id);
                 if (!latest) continue;
