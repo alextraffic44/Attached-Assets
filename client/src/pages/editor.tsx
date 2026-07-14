@@ -3513,13 +3513,13 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       onClick={() => setVideoAnimReplaceExisting(true)}
                       className={`flex-1 py-2.5 px-3 transition-all ${videoAnimReplaceExisting ? "bg-rose-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-750"}`}
                     >
-                      Заменить текущую
+                      Заменить Hero
                     </button>
                     <button
                       onClick={() => setVideoAnimReplaceExisting(false)}
                       className={`flex-1 py-2.5 px-3 transition-all border-l border-slate-200 dark:border-slate-700 ${!videoAnimReplaceExisting ? "bg-rose-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-750"}`}
                     >
-                      Добавить новую
+                      Вставить после блока
                     </button>
                   </div>
                 )}
@@ -3547,7 +3547,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
                 {videoAnimHasExisting && videoAnimReplaceExisting && (
                   <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl px-4 py-3 text-xs text-amber-700 dark:text-amber-300">
-                    Текущая анимация будет заменена вашим видео. Предыдущая версия сохранится в истории.
+                    Hero-блок станет анимацией. Заголовок и подзаголовок из Hero сохранятся как текст поверх видео. Предыдущая версия — в истории.
                   </div>
                 )}
 

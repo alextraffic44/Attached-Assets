@@ -4308,23 +4308,88 @@ ${designAnalysis}
     const html = project.generatedCode || "";
     if (!html.trim()) return res.status(400).json({ message: "Сайт ещё не сгенерирован" });
 
-    const animHtml = buildScrollAnimHtml(frames, texts, "parallax");
+    // Helper: find the start/end of the Nth top-level <section> (handles nested sections)
+    function findTopLevelSection(src: string, targetIdx: number): { start: number; end: number } | null {
+      const tagRe = /(<section(?:\s[^>]*)?>|<\/section>)/gi;
+      let depth = 0, foundIdx = 0, secStart = -1;
+      let m: RegExpExecArray | null;
+      while ((m = tagRe.exec(src)) !== null) {
+        const isOpen = !m[0].startsWith("</");
+        if (isOpen) {
+          if (depth === 0) {
+            if (foundIdx === targetIdx) secStart = m.index;
+            depth = 1;
+          } else {
+            depth++;
+          }
+        } else {
+          depth--;
+          if (depth === 0) {
+            if (foundIdx === targetIdx && secStart >= 0) {
+              return { start: secStart, end: m.index + m[0].length };
+            }
+            foundIdx++;
+            secStart = -1;
+          }
+        }
+      }
+      return null;
+    }
+
+    // Helper: strip HTML tags to plain text
+    function stripTags(s: string): string {
+      return s.replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
+    }
+
+    // Helper: extract overlay texts from a hero section's HTML
+    function extractHeroTexts(sectionHtml: string): Array<{ title: string; sub: string }> {
+      const h1raw = (sectionHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1] || "";
+      const h2raw = (sectionHtml.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i) || [])[1] || "";
+      const pSubRaw = (sectionHtml.match(/<p[^>]*class="[^"]*(?:subtitle|sub|lead|desc)[^"]*"[^>]*>([\s\S]*?)<\/p>/i) || [])[1]
+                   || (sectionHtml.match(/<p[^>]*>([\s\S]*?)<\/p>/i) || [])[1] || "";
+      const title = stripTags(h1raw).slice(0, 90);
+      const sub = stripTags(h2raw || pSubRaw).slice(0, 140);
+      if (!title && !sub) return [];
+      return [{ title, sub }];
+    }
 
     let newHtml: string;
 
-    if (replaceExisting && html.includes('data-craft-scrollanim="1"')) {
-      // Replace ALL existing craft scroll-animation sections with the new one
-      // (regex: from <section ... data-craft-scrollanim ... > to the matching </section>)
-      newHtml = html.replace(/<section[^>]*data-craft-scrollanim="1"[\s\S]*?<\/section>/, animHtml);
-      // If somehow there are still extras, remove them
-      newHtml = newHtml.replace(/<section[^>]*data-craft-scrollanim="1"[\s\S]*?<\/section>/g, "");
+    if (replaceExisting) {
+      // "Replace existing" means: replace the Hero (first section) with the animation.
+      // Also remove any separate scroll-anim section that exists below.
+      let working = html;
+
+      // 1. Remove any existing data-craft-scrollanim section (separate from hero)
+      working = working.replace(/<section[^>]*data-craft-scrollanim="1"[\s\S]*?<\/section>/g, "");
+
+      // 2. Find the first section (Hero) in the updated HTML
+      const hero = findTopLevelSection(working, 0);
+      if (hero) {
+        const heroHtml = working.slice(hero.start, hero.end);
+        // Use passed texts if provided, otherwise auto-extract from Hero
+        const overlayTexts: Array<{ title: string; sub: string }> = (texts && texts.length > 0)
+          ? texts
+          : extractHeroTexts(heroHtml);
+        const animHtml = buildScrollAnimHtml(frames, overlayTexts.length ? overlayTexts : [{ title: "", sub: "" }], "parallax");
+        // Replace hero section with animation
+        newHtml = working.slice(0, hero.start) + animHtml + working.slice(hero.end);
+      } else {
+        // No sections at all — prepend animation before </body>
+        const animHtml = buildScrollAnimHtml(frames, texts.length ? texts : [], "parallax");
+        const bodyClose = working.lastIndexOf("</body>");
+        newHtml = bodyClose >= 0
+          ? working.slice(0, bodyClose) + "\n" + animHtml + "\n" + working.slice(bodyClose)
+          : working + "\n" + animHtml;
+      }
     } else {
-      // Find all </section> close-tag positions and insert after the chosen one
+      // Insert after the chosen section index
       const sectionEnds: number[] = [];
       const endRe = /<\/section>/gi;
       let em;
       while ((em = endRe.exec(html)) !== null) sectionEnds.push(em.index + em[0].length);
 
+      const animHtml = buildScrollAnimHtml(frames, texts, "parallax");
       let insertPos: number;
       if (sectionEnds.length === 0) {
         const bodyClose = html.lastIndexOf("</body>");
