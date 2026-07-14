@@ -4239,7 +4239,8 @@ ${designAnalysis}
       labels.push(`Секция ${labels.length + 1}${tag ? " " + tag : ""}`);
     }
     if (labels.length === 0) labels.push("Начало сайта");
-    return res.json({ sections: labels });
+    const hasExistingAnim = html.includes('data-craft-scrollanim="1"');
+    return res.json({ sections: labels, hasExistingAnim });
   });
 
   // Upload a video, extract ~90 frames with ffmpeg, store as WebP in Object Storage.
@@ -4301,7 +4302,7 @@ ${designAnalysis}
     const project = await storage.getProject(projectId);
     if (!project || project.userId !== req.user!.id) return res.status(403).json({ message: "Нет доступа" });
 
-    const { frames, insertAfterSection = 0, texts = [] } = req.body;
+    const { frames, insertAfterSection = 0, texts = [], replaceExisting = false } = req.body;
     if (!Array.isArray(frames) || frames.length === 0) return res.status(400).json({ message: "Нет кадров" });
 
     const html = project.generatedCode || "";
@@ -4309,23 +4310,32 @@ ${designAnalysis}
 
     const animHtml = buildScrollAnimHtml(frames, texts, "parallax");
 
-    // Find all </section> close-tag positions
-    const sectionEnds: number[] = [];
-    const endRe = /<\/section>/gi;
-    let em;
-    while ((em = endRe.exec(html)) !== null) sectionEnds.push(em.index + em[0].length);
+    let newHtml: string;
 
-    let insertPos: number;
-    if (sectionEnds.length === 0) {
-      // No sections — insert before </body> or at end
-      const bodyClose = html.lastIndexOf("</body>");
-      insertPos = bodyClose >= 0 ? bodyClose : html.length;
+    if (replaceExisting && html.includes('data-craft-scrollanim="1"')) {
+      // Replace ALL existing craft scroll-animation sections with the new one
+      // (regex: from <section ... data-craft-scrollanim ... > to the matching </section>)
+      newHtml = html.replace(/<section[^>]*data-craft-scrollanim="1"[\s\S]*?<\/section>/, animHtml);
+      // If somehow there are still extras, remove them
+      newHtml = newHtml.replace(/<section[^>]*data-craft-scrollanim="1"[\s\S]*?<\/section>/g, "");
     } else {
-      const idx = Math.max(0, Math.min(Number(insertAfterSection), sectionEnds.length - 1));
-      insertPos = sectionEnds[idx];
+      // Find all </section> close-tag positions and insert after the chosen one
+      const sectionEnds: number[] = [];
+      const endRe = /<\/section>/gi;
+      let em;
+      while ((em = endRe.exec(html)) !== null) sectionEnds.push(em.index + em[0].length);
+
+      let insertPos: number;
+      if (sectionEnds.length === 0) {
+        const bodyClose = html.lastIndexOf("</body>");
+        insertPos = bodyClose >= 0 ? bodyClose : html.length;
+      } else {
+        const idx = Math.max(0, Math.min(Number(insertAfterSection), sectionEnds.length - 1));
+        insertPos = sectionEnds[idx];
+      }
+      newHtml = html.slice(0, insertPos) + "\n" + animHtml + "\n" + html.slice(insertPos);
     }
 
-    let newHtml = html.slice(0, insertPos) + "\n" + animHtml + "\n" + html.slice(insertPos);
     // Wire up the reliable preloader-hide script so the loader can't get stuck.
     newHtml = injectLoadingOverlay(newHtml);
 

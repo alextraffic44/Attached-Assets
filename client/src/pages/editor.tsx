@@ -262,6 +262,8 @@ export default function EditorPage() {
   const [videoAnimFrames, setVideoAnimFrames] = useState<string[]>([]);
   const [videoAnimSections, setVideoAnimSections] = useState<string[]>([]);
   const [videoAnimSectionIdx, setVideoAnimSectionIdx] = useState(0);
+  const [videoAnimHasExisting, setVideoAnimHasExisting] = useState(false);
+  const [videoAnimReplaceExisting, setVideoAnimReplaceExisting] = useState(false);
   const [videoAnimProgress, setVideoAnimProgress] = useState("");
   const [videoAnimError, setVideoAnimError] = useState("");
   const [videoAnimInserting, setVideoAnimInserting] = useState(false);
@@ -3449,6 +3451,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       const secResp = await fetch(`/api/projects/${projectId}/sections`);
                       const secData = await secResp.json();
                       setVideoAnimSections(secData.sections || ["Секция 1"]);
+                      setVideoAnimHasExisting(!!secData.hasExistingAnim);
+                      setVideoAnimReplaceExisting(!!secData.hasExistingAnim);
                       setVideoAnimSectionIdx(0);
                       setVideoAnimStep("select");
                     } catch (err: any) {
@@ -3497,28 +3501,55 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                   <div>
                     <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Готово — {videoAnimFrames.length} кадров нарезано</p>
-                    <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Выберите, после какого блока вставить анимацию</p>
+                    <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
+                      {videoAnimHasExisting ? "Замените текущую анимацию или вставьте новую" : "Выберите, после какого блока вставить анимацию"}
+                    </p>
                   </div>
                 </div>
 
-                <div>
-                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Вставить после блока:</p>
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                    {videoAnimSections.map((label, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setVideoAnimSectionIdx(i)}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-all border ${
-                          videoAnimSectionIdx === i
-                            ? "bg-rose-50 dark:bg-rose-900/30 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300"
-                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                {videoAnimHasExisting && (
+                  <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden text-sm font-medium">
+                    <button
+                      onClick={() => setVideoAnimReplaceExisting(true)}
+                      className={`flex-1 py-2.5 px-3 transition-all ${videoAnimReplaceExisting ? "bg-rose-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-750"}`}
+                    >
+                      Заменить текущую
+                    </button>
+                    <button
+                      onClick={() => setVideoAnimReplaceExisting(false)}
+                      className={`flex-1 py-2.5 px-3 transition-all border-l border-slate-200 dark:border-slate-700 ${!videoAnimReplaceExisting ? "bg-rose-500 text-white" : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-750"}`}
+                    >
+                      Добавить новую
+                    </button>
                   </div>
-                </div>
+                )}
+
+                {(!videoAnimHasExisting || !videoAnimReplaceExisting) && (
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Вставить после блока:</p>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {videoAnimSections.map((label, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setVideoAnimSectionIdx(i)}
+                          className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-all border ${
+                            videoAnimSectionIdx === i
+                              ? "bg-rose-50 dark:bg-rose-900/30 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300"
+                              : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {videoAnimHasExisting && videoAnimReplaceExisting && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl px-4 py-3 text-xs text-amber-700 dark:text-amber-300">
+                    Текущая анимация будет заменена вашим видео. Предыдущая версия сохранится в истории.
+                  </div>
+                )}
 
                 <Button
                   className="w-full h-11 bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 text-white font-bold rounded-xl shadow-lg shadow-rose-500/25"
@@ -3526,10 +3557,16 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   onClick={async () => {
                     setVideoAnimInserting(true);
                     try {
+                      const body: Record<string, any> = { frames: videoAnimFrames, texts: [] };
+                      if (videoAnimReplaceExisting && videoAnimHasExisting) {
+                        body.replaceExisting = true;
+                      } else {
+                        body.insertAfterSection = videoAnimSectionIdx;
+                      }
                       const resp = await fetch(`/api/projects/${projectId}/inject-scroll-anim`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ frames: videoAnimFrames, insertAfterSection: videoAnimSectionIdx, texts: [] }),
+                        body: JSON.stringify(body),
                       });
                       const data = await resp.json();
                       if (!resp.ok) throw new Error(data.message || "Ошибка вставки");
@@ -3543,7 +3580,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                     }
                   }}
                 >
-                  {videoAnimInserting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Вставляю...</> : <><CheckCircle2 className="w-4 h-4 mr-2" />Вставить анимацию</>}
+                  {videoAnimInserting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Вставляю...</> : <><CheckCircle2 className="w-4 h-4 mr-2" />{videoAnimReplaceExisting && videoAnimHasExisting ? "Заменить анимацию" : "Вставить анимацию"}</>}
                 </Button>
                 {videoAnimError && <div className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-4 py-3">{videoAnimError}</div>}
               </div>
