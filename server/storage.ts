@@ -371,6 +371,14 @@ export class DatabaseStorage implements IStorage {
     return all.filter(p => (p.generatedCode || "").includes('data-scroll-anim-pending="1"'));
   }
 
+  // Returns all projects that have a Kling task ID stored — either in a pending
+  // spinner section or in a fallback section written after a server restart.
+  // Used by the periodic animation-resume job.
+  async getAllProjectsWithAnimTaskId(): Promise<Project[]> {
+    const all = await db.select().from(projects);
+    return all.filter(p => (p.generatedCode || "").includes('data-scroll-anim-task-id="'));
+  }
+
   async adminGetAllUsers(): Promise<User[]> {
     return db.select().from(users).orderBy(desc(users.createdAt));
   }

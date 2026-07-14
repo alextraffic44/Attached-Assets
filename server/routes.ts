@@ -939,20 +939,32 @@ async function generateScrollFrames(
 
   } // end else (existingTaskId branch already set mp4Url or returned [])
 
-  // Step 3 — download mp4 to a temp dir
+  // Step 3 — download mp4 to a temp dir (3 attempts with back-off)
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrollanim-"));
   const videoPath = path.join(tmpDir, "src.mp4");
   const framesDir = path.join(tmpDir, "frames");
-  try {
-    console.log(`[SCROLLANIM] downloading mp4: ${mp4Url}`);
-    const vresp = await fetch(mp4Url);
-    if (!vresp.ok) throw new Error(`download HTTP ${vresp.status}`);
-    const mp4Buf = Buffer.from(await vresp.arrayBuffer());
-    fs.writeFileSync(videoPath, mp4Buf);
-    fs.mkdirSync(framesDir, { recursive: true });
-    console.log(`[SCROLLANIM] mp4 downloaded: ${mp4Buf.length} bytes → ${videoPath}`);
-  } catch (e: any) {
-    console.warn("[SCROLLANIM] mp4 download failed:", e?.message);
+  let mp4Downloaded = false;
+  for (let dlAttempt = 0; dlAttempt < 3 && !mp4Downloaded; dlAttempt++) {
+    if (dlAttempt > 0) {
+      console.log(`[SCROLLANIM] mp4 download retry ${dlAttempt + 1}/3 in 10s…`);
+      await new Promise(r => setTimeout(r, 10000));
+    }
+    try {
+      console.log(`[SCROLLANIM] downloading mp4 (attempt ${dlAttempt + 1}): ${mp4Url}`);
+      const vresp = await fetch(mp4Url);
+      if (!vresp.ok) throw new Error(`HTTP ${vresp.status}`);
+      const mp4Buf = Buffer.from(await vresp.arrayBuffer());
+      if (mp4Buf.length < 10000) throw new Error(`file too small: ${mp4Buf.length} bytes`);
+      fs.writeFileSync(videoPath, mp4Buf);
+      fs.mkdirSync(framesDir, { recursive: true });
+      console.log(`[SCROLLANIM] mp4 downloaded: ${mp4Buf.length} bytes → ${videoPath}`);
+      mp4Downloaded = true;
+    } catch (e: any) {
+      console.warn(`[SCROLLANIM] mp4 download attempt ${dlAttempt + 1} failed:`, e?.message);
+    }
+  }
+  if (!mp4Downloaded) {
+    console.warn("[SCROLLANIM] all mp4 download attempts failed — giving up");
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
     return [];
   }
@@ -1489,7 +1501,7 @@ async function resolveScrollAnimMarkers(
       clearInterval(keepAliveInterval);
     }
 
-    if (frames.length >= 8) {
+    if (frames.length >= 5) {
       replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts, layout));
       generated++;
       if (billed) creditsUsed += SCROLL_ANIM_COST;
@@ -3803,14 +3815,22 @@ ${designAnalysis}
           }
           if (!animSucceeded) {
             // All attempts failed — replace pending with static fallback that embeds the
-            // prompt so the editor's "Создать видео" button can trigger a retry later.
+            // prompt AND the Kling task ID (if one was created) so the periodic scanner
+            // can pick up the video once it eventually finishes on KIE.
             try {
+              // Re-read current code to capture any task ID written by onTaskCreated callback
+              const curProj = await storage.getProject(project.id);
+              const curHtml = curProj?.generatedCode || immediateHtml;
+              const pendingTagM = curHtml.match(/<section[^>]*data-scroll-anim-pending="1"[^>]*>/);
+              const pendingTag  = pendingTagM ? pendingTagM[0] : "";
+              const savedTaskIdEnc = pendingTag.match(/data-scroll-anim-task-id="([^"]*)"/)?.[1] || "";
+              const savedTaskId    = savedTaskIdEnc ? decodeURIComponent(savedTaskIdEnc) : undefined;
               const fallbackCode = safeReplaceScrollAnimPending(
-                immediateHtml,
-                scrollAnimFallbackHtml(_animTexts, _animVideoPrompt, _animStyle),
+                curHtml,
+                scrollAnimFallbackHtml(_animTexts, _animVideoPrompt, _animStyle, savedTaskId),
               );
               await storage.updateProject(project.id, { generatedCode: fallbackCode });
-              console.warn(`[BG ANIM] All attempts failed for project ${project.id} — static fallback saved with prompt embedded`);
+              console.warn(`[BG ANIM] All attempts failed for project ${project.id} — fallback saved${savedTaskId ? ` (task ${savedTaskId.slice(0,12)}… preserved)` : ""}`);
             } catch {}
           }
         })();
@@ -3919,7 +3939,7 @@ ${designAnalysis}
             const frames = await generateScrollFrames(
               videoPrompt, () => false, undefined, layout, undefined, existingTaskId,
             );
-            if (frames.length >= 8) {
+            if (frames.length >= 5) {
               const canvasHtml = buildScrollAnimHtml(frames, animTexts, layout);
               let finalCode = safeReplaceScrollAnimPending(pendingHtml, canvasHtml);
               finalCode = injectLoadingOverlay(finalCode);
@@ -4003,7 +4023,7 @@ ${designAnalysis}
         console.error("Scroll frame generation error:", genErr?.message || genErr);
         return res.status(502).json({ message: "Не удалось сгенерировать анимацию. Токены возвращены." });
       }
-      if (frames.length < 8) {
+      if (frames.length < 5) {
         if (billed) { try { await storage.refundCredits(user.id, SCROLL_ANIM_COST); } catch {} }
         return res.status(502).json({ message: "Не удалось сгенерировать анимацию. Токены возвращены." });
       }
@@ -5891,7 +5911,7 @@ ${fullHtml}`;
                     const url = await uploadToObjectStorage(fs.readFileSync(path.join(framesDir, f)), "image/jpeg", "jpg");
                     frameUrls.push(url);
                   }
-                  if (frameUrls.length >= 8) {
+                  if (frameUrls.length >= 5) {
                     // Read current project code — only replace if it still has the fallback section
                     const cur = await storage.getProject(_projId);
                     if (!cur || !(cur.generatedCode || "").includes('data-scroll-anim-fallback="1"')) return;
@@ -5919,11 +5939,155 @@ ${fullHtml}`;
     }
   }
 
+  // ── Fast periodic scanner: poll ALL projects with a saved Kling task ID ─────
+  // Runs every 5 minutes. For each project whose HTML contains a data-scroll-anim-task-id
+  // (in either a pending spinner or a fallback section), we check the task status once.
+  // • success  → download mp4, slice frames, inject canvas animation into the project
+  // • fail     → strip the stale task ID from the HTML so the retry button can re-run fresh
+  // • pending  → leave everything unchanged; we'll check again in 5 minutes
+  // This guarantees that once a video completes on KIE it will be processed even if
+  // the original server connection was lost or the server was restarted mid-pipeline.
+  async function resumeCompletedKlingTasks() {
+    if (!KIE_API_KEY) return;
+    let projects: any[] = [];
+    try { projects = await storage.getAllProjectsWithAnimTaskId(); } catch { return; }
+    if (!projects.length) return;
+    console.log(`[KLINGTASK] Scanning ${projects.length} project(s) with saved task IDs…`);
+
+    for (const proj of projects) {
+      const html: string = proj.generatedCode || "";
+
+      // Collect every task ID in this project (pending + fallback can coexist on rare edge)
+      const taskIdRe = /data-scroll-anim-task-id="([^"]+)"/g;
+      let taskMatch: RegExpExecArray | null;
+      const seenTaskIds = new Set<string>();
+      while ((taskMatch = taskIdRe.exec(html)) !== null) {
+        const enc = taskMatch[1];
+        const tid = enc ? decodeURIComponent(enc) : "";
+        if (tid) seenTaskIds.add(tid);
+      }
+      if (!seenTaskIds.size) continue;
+
+      for (const taskId of seenTaskIds) {
+        try {
+          const body: any = await kieRequestJson(
+            `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
+            { headers: { Authorization: `Bearer ${KIE_API_KEY}` } },
+            { label: "KLINGTASK poll", retries: 2, shouldStop: () => false },
+          );
+          if (!body || body.code !== 200 || !body.data) continue;
+          const state: string = body.data.state;
+          console.log(`[KLINGTASK] project ${proj.id} task ${taskId.slice(0, 12)}… state=${state}`);
+
+          if (state === "success") {
+            // Video is ready — parse mp4 URL
+            let result: any = {};
+            try { result = typeof body.data.resultJson === "string" ? JSON.parse(body.data.resultJson) : (body.data.resultJson || {}); } catch {}
+            const mp4Url: string = (result.resultUrls || [])[0] || "";
+            if (!mp4Url) { console.warn(`[KLINGTASK] project ${proj.id}: no mp4 URL in resultJson`); continue; }
+
+            // Read current project HTML — may have changed since scan started
+            const cur = await storage.getProject(proj.id);
+            if (!cur) continue;
+            const curHtml: string = cur.generatedCode || "";
+
+            // Detect section type (pending vs fallback) and extract metadata
+            const isPending  = curHtml.includes('data-scroll-anim-pending="1"');
+            const isFallback = curHtml.includes('data-scroll-anim-fallback="1"');
+            if (!isPending && !isFallback) { console.log(`[KLINGTASK] project ${proj.id}: task ${taskId.slice(0,12)}… already resolved`); continue; }
+
+            const sectionTag = (curHtml.match(isPending
+              ? /<section[^>]*data-scroll-anim-pending="1"[^>]*>/
+              : /<section[^>]*data-scroll-anim-fallback="1"[^>]*>/) || [""])[0];
+            const styleEnc   = sectionTag.match(/data-scroll-anim-style="([^"]*)"/)?.[1] || "";
+            const textsEnc   = sectionTag.match(/data-scroll-anim-texts="([^"]*)"/)?.[1] || "";
+            const animStyle: string = styleEnc ? decodeURIComponent(styleEnc) : "parallax";
+            const layout: "parallax"|"split"|"action" = animStyle === "split" ? "split" : animStyle === "action" ? "action" : "parallax";
+            const vidDur  = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
+            const frCnt   = layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : SCROLL_FRAME_COUNT;
+            const texts: Array<{title:string;sub:string}> = textsEnc
+              ? decodeURIComponent(textsEnc).split("||").map(seg => { const [t,s] = seg.split("::"); return {title:(t||"").trim(),sub:(s||"").trim()}; })
+              : [{ title: "", sub: "" }];
+
+            console.log(`[KLINGTASK] project ${proj.id}: video ready — downloading mp4…`);
+            // Download mp4 (3 attempts)
+            let mp4Buf: Buffer | null = null;
+            for (let i = 0; i < 3 && !mp4Buf; i++) {
+              if (i > 0) await new Promise(r => setTimeout(r, 10000));
+              try {
+                const vr = await fetch(mp4Url);
+                if (!vr.ok) throw new Error(`HTTP ${vr.status}`);
+                const b = Buffer.from(await vr.arrayBuffer());
+                if (b.length >= 10000) mp4Buf = b;
+                else throw new Error(`too small: ${b.length}B`);
+              } catch (e: any) { console.warn(`[KLINGTASK] project ${proj.id} dl attempt ${i+1}:`, e?.message); }
+            }
+            if (!mp4Buf) { console.warn(`[KLINGTASK] project ${proj.id}: mp4 download failed — will retry next cycle`); continue; }
+
+            // Extract frames
+            const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "klt-"));
+            const videoPath = path.join(tmpDir, "src.mp4");
+            const framesDir = path.join(tmpDir, "frames");
+            try {
+              fs.writeFileSync(videoPath, mp4Buf);
+              fs.mkdirSync(framesDir, { recursive: true });
+              const fps = Math.max(8, Math.round(frCnt / vidDur));
+              await extractFramesWithFfmpeg(videoPath, framesDir, fps, () => false);
+              const frameFiles = fs.readdirSync(framesDir).filter(f => /\.jpg$/i.test(f)).sort();
+              const frameUrls: string[] = [];
+              for (const f of frameFiles) {
+                const url = await uploadToObjectStorage(fs.readFileSync(path.join(framesDir, f)), "image/jpeg", "jpg");
+                frameUrls.push(url);
+              }
+              console.log(`[KLINGTASK] project ${proj.id}: ${frameUrls.length} frames uploaded`);
+
+              if (frameUrls.length >= 5) {
+                // Re-read project to avoid overwriting concurrent changes
+                const latest = await storage.getProject(proj.id);
+                if (!latest) continue;
+                const latestHtml: string = latest.generatedCode || "";
+                const stillPending  = latestHtml.includes('data-scroll-anim-pending="1"');
+                const stillFallback = latestHtml.includes('data-scroll-anim-fallback="1"');
+                if (!stillPending && !stillFallback) { console.log(`[KLINGTASK] project ${proj.id}: resolved by another path while we were processing`); continue; }
+
+                const canvasHtml = buildScrollAnimHtml(frameUrls, texts, layout);
+                let finalCode = latestHtml;
+                if (stillPending)  finalCode = safeReplaceScrollAnimPending(finalCode, canvasHtml);
+                if (stillFallback) finalCode = finalCode.replace(/<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/, canvasHtml);
+                finalCode = injectLoadingOverlay(finalCode);
+                await storage.updateProject(proj.id, { generatedCode: finalCode });
+                console.log(`[KLINGTASK] project ${proj.id}: ✓ animation injected (${frameUrls.length} frames, layout=${layout})`);
+              } else {
+                console.warn(`[KLINGTASK] project ${proj.id}: too few frames (${frameUrls.length}) — will retry next cycle`);
+              }
+            } finally { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} }
+
+          } else if (state === "fail" || state === "failed" || state === "error") {
+            // Video failed on KIE — remove the stale task ID so the next retry creates a fresh one
+            console.warn(`[KLINGTASK] project ${proj.id}: task ${taskId.slice(0,12)}… FAILED — clearing task ID`);
+            try {
+              const cur2 = await storage.getProject(proj.id);
+              if (!cur2) continue;
+              const cleaned = (cur2.generatedCode || "").replace(/ data-scroll-anim-task-id="[^"]*"/g, "");
+              if (cleaned !== cur2.generatedCode) await storage.updateProject(proj.id, { generatedCode: cleaned });
+            } catch {}
+          }
+          // pending/processing states: leave unchanged, check again next cycle
+        } catch (e: any) {
+          console.warn(`[KLINGTASK] project ${proj.id} task ${taskId.slice(0,12)}…:`, e?.message);
+        }
+      }
+    }
+  }
+
   // Run once on startup (15s delay so DB connections stabilise)
   setTimeout(() => cleanupStuckPendingAnims("Startup"), 15000);
   // Patch old scroll-jacking JS to passive scroll (one-time migration, 20s delay)
   setTimeout(() => migrateScrollJackingToPassive(), 20000);
-  // Run every 30 minutes so stuck placeholders are cleaned even between restarts
+  // Fast task-ID scanner: runs every 5 min; guarantees video→animation pipeline completion
+  setTimeout(() => resumeCompletedKlingTasks(), 30000); // first run 30s after boot
+  setInterval(() => resumeCompletedKlingTasks(), 5 * 60 * 1000);
+  // Fallback: heavy stuck-placeholder cleanup still runs every 30 min (handles edge cases)
   setInterval(() => cleanupStuckPendingAnims("Periodic"), 30 * 60 * 1000);
 
   registerSeoRoutes(app, storage);
