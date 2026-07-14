@@ -1655,7 +1655,10 @@ async function resolveGenImgMarkers(
     for (const [filename, code] of Array.from(filesMap.entries())) {
       const newCode = code.replace(/\{\{GENIMG:([^}]+)\}\}/g, (_full, inner) => {
         const key = inner.trim();
-        return urlMap.get(key) ?? gradientPlaceholderDataUri(key);
+        const url = urlMap.get(key);
+        if (url && !url.startsWith("data:")) return url; // real image
+        // Encode the original key so autoFillMissingImages can later retry with the right prompt
+        return `IMGPENDING:${Buffer.from(key).toString("base64")}`;
       });
       filesMap.set(filename, newCode);
     }
@@ -1745,6 +1748,100 @@ async function resolveGenImgMarkers(
 
   finalize();
   return { generated, creditsUsed };
+}
+
+// ── Post-generation image review ──────────────────────────────────────────────
+// Called only on the FIRST generation of a site. After resolveGenImgMarkers
+// runs its two passes, any images that still failed are left as
+// IMGPENDING:base64key markers (key = original "prompt|ratio").
+// This function does one final targeted attempt with a fresh idempotency key,
+// then converts remaining IMGPENDING: to gradient placeholders as a safety net.
+async function autoFillMissingImages(
+  filesMap: Map<string, string>,
+  projectId: number,
+  userId: number | undefined,
+  runKey: string,
+  res: any,
+  isAborted: () => boolean = () => false,
+): Promise<{ filled: number; creditsUsed: number }> {
+  const PENDING_RE = /IMGPENDING:([A-Za-z0-9+/=]+)/g;
+  const pendingSet = new Map<string, { prompt: string; ratio: string }>();
+  for (const code of Array.from(filesMap.values())) {
+    let m: RegExpExecArray | null;
+    PENDING_RE.lastIndex = 0;
+    while ((m = PENDING_RE.exec(code)) !== null) {
+      const b64key = m[1];
+      if (pendingSet.has(b64key)) continue;
+      const key = Buffer.from(b64key, "base64").toString("utf8");
+      const parts = key.split("|");
+      const prompt = parts[0].trim();
+      let ratio = (parts[1] || "").trim();
+      if (!/^\d+:\d+$/.test(ratio)) ratio = "16:9";
+      pendingSet.set(b64key, { prompt, ratio });
+    }
+  }
+  if (pendingSet.size === 0) return { filled: 0, creditsUsed: 0 };
+
+  const total = pendingSet.size;
+  try { res.write(`data: ${JSON.stringify({ status: `Проверяю сайт, добавляю ${total} фото...` })}\n\n`); } catch {}
+
+  const urlMap = new Map<string, string>(); // b64key → resolved URL
+  let filled = 0;
+  let creditsUsed = 0;
+  const deadline = Date.now() + 300_000; // 5 min budget
+
+  for (const [b64key, { prompt, ratio }] of Array.from(pendingSet)) {
+    if (isAborted() || Date.now() > deadline) break;
+    let billed = false;
+    if (userId) {
+      const ikey = `fill-${projectId}-${runKey}-${crypto.createHash("md5").update(b64key).digest("hex").slice(0, 8)}`;
+      const ded = await storage.deductCredits(userId, AUTO_IMAGE_COST, "image", ikey);
+      if (!ded.success) break; // out of credits
+      if (!ded.alreadyProcessed) billed = true;
+    }
+    const resolvedUrl = await generateGptImage(
+      withImageQualityBooster(prompt),
+      ratio,
+      () => isAborted() || Date.now() > deadline,
+    );
+    if (resolvedUrl) {
+      let savedUrl = resolvedUrl;
+      try {
+        const imgResp = await fetch(resolvedUrl);
+        if (imgResp.ok) {
+          const buf = Buffer.from(await imgResp.arrayBuffer());
+          const localUrl = await uploadToObjectStorage(buf, "image/jpeg", "jpg");
+          if (localUrl) savedUrl = localUrl;
+        }
+      } catch { /* best-effort object storage */ }
+      try {
+        const proj = await storage.getProject(projectId);
+        const name = (prompt.trim().split(/\s+/).slice(0, 3).join("_").replace(/[^a-zA-Z0-9_а-яА-Я-]/g, "") || "review_img").slice(0, 40);
+        await storage.createProjectImage({ projectId, userId: proj?.userId, name, url: savedUrl, prompt: prompt.substring(0, 200) });
+      } catch { /* best-effort library save */ }
+      urlMap.set(b64key, savedUrl);
+      filled++;
+      creditsUsed += AUTO_IMAGE_COST;
+      try { res.write(`data: ${JSON.stringify({ status: `Добавляю фото (${filled}/${total})...` })}\n\n`); } catch {}
+    } else if (billed && userId) {
+      try { await storage.refundCredits(userId, AUTO_IMAGE_COST); } catch {}
+    }
+  }
+
+  // Replace IMGPENDING: markers — real URL if generated, gradient fallback otherwise
+  for (const [filename, code] of Array.from(filesMap.entries())) {
+    const newCode = code.replace(/IMGPENDING:([A-Za-z0-9+/=]+)/g, (_full, b64key) => {
+      const url = urlMap.get(b64key);
+      if (url) return url;
+      const key = Buffer.from(b64key, "base64").toString("utf8");
+      return gradientPlaceholderDataUri(key);
+    });
+    filesMap.set(filename, newCode);
+  }
+
+  if (filled > 0) console.log(`[IMG-REVIEW] Filled ${filled}/${total} missing image(s) for project ${projectId}`);
+  else console.log(`[IMG-REVIEW] ${total} image(s) still unavailable after review pass for project ${projectId}`);
+  return { filled, creditsUsed };
 }
 
 type KieContentItem =
@@ -3481,6 +3578,30 @@ ${designAnalysis}
       const genImgResult = await resolveGenImgMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => clientGone, referenceImageUrlsForGen);
       mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
 
+      // ── Image review pass (first generation only) ─────────────────────────
+      // Any GENIMG markers that survived both passes in resolveGenImgMarkers are
+      // still encoded as IMGPENDING:base64key in the HTML. Try one final targeted
+      // generation for each, then convert any survivors to gradient placeholders.
+      let reviewCreditsUsed = 0;
+      if (isNewSite && !clientGone) {
+        const reviewResult = await autoFillMissingImages(
+          genFilesMap, project.id, user?.id,
+          `rv-${genRunKey}`, res, () => clientGone,
+        );
+        reviewCreditsUsed = reviewResult.creditsUsed;
+        if (reviewResult.filled > 0) mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
+      } else {
+        // Not a new site — just convert any lingering IMGPENDING: to gradients
+        for (const [filename, code] of Array.from(genFilesMap.entries())) {
+          if (!code.includes("IMGPENDING:")) continue;
+          genFilesMap.set(filename, code.replace(/IMGPENDING:([A-Za-z0-9+/=]+)/g, (_full, b64key) => {
+            const key = Buffer.from(b64key, "base64").toString("utf8");
+            return gradientPlaceholderDataUri(key);
+          }));
+        }
+        mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
+      }
+
       // ── Normalize malformed SCROLLANIM markers before any detection ──
       // The model sometimes deviates from the exact `{{SCROLLANIM:...}}` syntax —
       // adds spaces ({{ SCROLLANIM :), changes case ({{scrollanim:), or wraps the
@@ -3579,8 +3700,8 @@ ${designAnalysis}
       const allFiles = await storage.getProjectFiles(project.id);
       const editedFileCode = editingFile !== "index.html" ? allFiles.find(f => f.filename === editingFile)?.code : immediateHtml;
       const freshUser = user?.id ? await storage.getUser(user.id) : null;
-      const immediateCreditsUsed = GENERATION_COST + genImgResult.creditsUsed;
-      const immediateBalance = freshUser?.credits ?? (genDeduction.newBalance - genImgResult.creditsUsed);
+      const immediateCreditsUsed = GENERATION_COST + genImgResult.creditsUsed + reviewCreditsUsed;
+      const immediateBalance = freshUser?.credits ?? (genDeduction.newBalance - genImgResult.creditsUsed - reviewCreditsUsed);
       res.write(`data: ${JSON.stringify({ done: true, code: immediateHtml, editedFile: editingFile, editedCode: editedFileCode || immediateHtml, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })), imagesGenerated: genImgResult.generated, creditsUsed: immediateCreditsUsed, newBalance: immediateBalance, animPending: hasScrollMarkers })}\n\n`);
       res.end();
 
