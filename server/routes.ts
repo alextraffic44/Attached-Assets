@@ -4343,7 +4343,7 @@ ${designAnalysis}
     await storage.createProjectVersion({ projectId, code: html, label: "До: Вставка видео-анимации" });
     await storage.updateProject(projectId, { generatedCode: newHtml });
 
-    return res.json({ code: newHtml, sections: sectionEnds.length });
+    return res.json({ code: newHtml });
   });
 
   // WaveSpeed 3D model generation
