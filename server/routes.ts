@@ -786,7 +786,7 @@ async function generateScrollFrames(
     .replace(/\s{2,}/g, " ")
     .replace(/^[\s.,;:]+|[\s.,;:]+$/g, "")
     .trim();
-  const safeVideoPrompt = cleanVideoPrompt.length > 15
+  let safeVideoPrompt = cleanVideoPrompt.length > 15
     ? cleanVideoPrompt
     : "breathtaking cinematic scene with atmospheric depth, volumetric lighting, photorealistic";
   if (cleanVideoPrompt !== videoPrompt.trim()) {
@@ -806,7 +806,7 @@ async function generateScrollFrames(
   const styleLead = layout === "action"
     ? `Render as an epic Hollywood blockbuster action sequence in dramatic slow motion (bullet-time): powerful, clearly visible motion that builds across the whole clip, IMAX-grade cinematic spectacle`
     : `Render as a high-end Hollywood-grade cinematic shot: smooth, graceful but clearly visible motion (the scene must noticeably evolve and feel alive from start to finish)`;
-  const animPrompt =
+  let animPrompt =
     `${safeVideoPrompt}. ${styleLead}, ${cameraGuidance}, premium dramatic lighting ` +
     `and rich filmic color grading. Do not warp, melt or distort the main subject or any architecture, ` +
     `no text, no captions, no watermark, no camera shake, no flicker, no jump cuts.`;
@@ -820,6 +820,27 @@ async function generateScrollFrames(
   const deadline = Date.now() + 2400000; // 40 min cap (Kling can take up to 35 min)
   const MAX_VIDEO_ATTEMPTS = 4; // retry on API failure (e.g. upstream timeout)
   let mp4Url: string | null = null;
+
+  // Detects Kling content-moderation failures (error 400 "community guidelines")
+  function isModerationError(failMsg?: string, failCode?: string | number): boolean {
+    const s = `${failMsg || ""} ${failCode || ""}`.toLowerCase();
+    return s.includes("community") || s.includes("guideline") || s.includes("violat") ||
+           s.includes("moderat") || s.includes("inappropriate") || s.includes("content policy") ||
+           s.includes("400");
+  }
+
+  // Returns a safe commercial-grade rewrite of the prompt for moderation retries
+  function sanitizeVideoPrompt(p: string): string {
+    // Strip any potentially problematic words and rephrase as generic commercial scene
+    const stripped = p
+      .replace(/\b(blood|gore|violence|weapon|gun|knife|nude|naked|sexy|erotic|adult|death|kill|war|combat|fight|crash|explosion|fire|smoke|burn|destroy|brutal|brutal|horror|terror|fear)\b/gi, "")
+      .replace(/\s{2,}/g, " ").trim();
+    const base = stripped.length > 20 ? stripped : "modern professional product brand lifestyle";
+    return `${base}, clean professional commercial advertising photography, safe for work, bright modern studio environment, brand lifestyle scene`;
+  }
+
+  // Mutable working still URL — may be replaced on moderation retry
+  let currentStillUrl = stillUrl;
 
   // If caller already has a completed/running task ID, skip video creation entirely
   // and jump straight to polling that specific task (one attempt only).
@@ -879,7 +900,7 @@ async function generateScrollFrames(
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
         body: JSON.stringify({
           model: KLING_IMG2VID_MODEL,
-          input: { prompt: animPrompt.slice(0, 2500), image_urls: [stillUrl], duration: String(videoDuration), resolution: "1080p" },
+          input: { prompt: animPrompt.slice(0, 2500), image_urls: [currentStillUrl], duration: String(videoDuration), resolution: "1080p" },
         }),
       },
       { label: "SCROLLANIM video-create", retries: 4, shouldStop: () => shouldStop() || Date.now() >= deadline },
@@ -893,6 +914,7 @@ async function generateScrollFrames(
 
     // Step 2 — poll for completion (Kling video can take up to 35 min in queue)
     let taskFailed = false;
+    let moderationFailed = false;
     let pollCount = 0;
     while (Date.now() < deadline) {
       if (shouldStop()) return [];
@@ -919,8 +941,14 @@ async function generateScrollFrames(
           break;
         }
         if (state === "fail" || state === "failed" || state === "error") {
-          console.warn(`[SCROLLANIM] video task failed (attempt ${videoAttempt + 1}):`, body.data.failMsg || body.data.failCode);
+          const failMsg: string = body.data.failMsg || "";
+          const failCode: string = String(body.data.failCode || "");
+          console.warn(`[SCROLLANIM] video task failed (attempt ${videoAttempt + 1}): failMsg="${failMsg}" failCode="${failCode}"`);
           taskFailed = true;
+          if (isModerationError(failMsg, failCode)) {
+            moderationFailed = true;
+            console.warn("[SCROLLANIM] content moderation failure detected — will sanitize prompt and regenerate still for next attempt");
+          }
           break; // break poll loop → outer loop will retry
         }
       } catch (e: any) {
@@ -929,6 +957,26 @@ async function generateScrollFrames(
     }
     if (mp4Url) break;           // success — exit retry loop
     if (!taskFailed) break;      // timeout (deadline exceeded) — no point retrying
+
+    // On content moderation failure: sanitize the prompt and regenerate a new safe still
+    // so the next attempt doesn't hit the same moderation block
+    if (moderationFailed && videoAttempt + 1 < MAX_VIDEO_ATTEMPTS) {
+      console.log("[SCROLLANIM] sanitizing prompt and regenerating still for moderation retry...");
+      safeVideoPrompt = sanitizeVideoPrompt(safeVideoPrompt);
+      animPrompt =
+        `${safeVideoPrompt}. ${styleLead}, ${cameraGuidance}, premium dramatic lighting ` +
+        `and rich filmic color grading. Do not warp, melt or distort the main subject or any architecture, ` +
+        `no text, no captions, no watermark, no camera shake, no flicker, no jump cuts.`;
+      console.log(`[SCROLLANIM] sanitized prompt: "${safeVideoPrompt.slice(0, 120)}"`);
+      // Regenerate the still image with the safer prompt (always use parallax/text-to-image, not the original ref)
+      const newStill = await generateStillForVideo(safeVideoPrompt, shouldStop, "parallax");
+      if (newStill) {
+        currentStillUrl = newStill;
+        console.log("[SCROLLANIM] regenerated still for moderation retry:", currentStillUrl);
+      } else {
+        console.warn("[SCROLLANIM] still regeneration failed, reusing previous still");
+      }
+    }
     // taskFailed === true → continue to next videoAttempt
   }
 
