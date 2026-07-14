@@ -335,7 +335,7 @@ async function generateStillForVideo(
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({ model: "nano-banana-2", input: { prompt: imagePrompt, aspect_ratio: "16:9", resolution: "1K" } }),
+        body: JSON.stringify({ model: "nano-banana-2", input: { prompt: imagePrompt, aspect_ratio: "16:9", resolution: "2K" } }),
       },
       { label: "SCROLLANIM still-create", retries: 4, shouldStop },
     );
@@ -703,7 +703,7 @@ async function generateProductStill(
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({ model: "gpt-image-2-image-to-image", input: { prompt, input_urls: [productImageUrl], aspect_ratio: "16:9", resolution: "1K" } }),
+        body: JSON.stringify({ model: "gpt-image-2-image-to-image", input: { prompt, input_urls: [productImageUrl], aspect_ratio: "16:9", resolution: "2K" } }),
       },
       { label: "SCROLLANIM product-create", retries: 4, shouldStop },
     );
