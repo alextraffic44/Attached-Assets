@@ -3648,17 +3648,22 @@ ${designAnalysis}
       }
     } catch (err: any) {
       console.error("Generation error:", err?.message || err);
-      const errMsg = (err?.message?.includes("503") || err?.message?.includes("UNAVAILABLE") || err?.message?.includes("high demand"))
+      const _em = err?.message || "";
+      const errMsg = (_em.includes("503") || _em.includes("UNAVAILABLE") || _em.includes("high demand"))
         ? "Сервер ИИ временно перегружен. Попробуйте через 30 секунд — мы уже сделали 3 попытки."
-        : (err?.message?.includes("RATE_LIMIT") || err?.message?.includes("429") || err?.message?.includes("RESOURCE_EXHAUSTED") || err?.message?.includes("quota"))
+        : (_em.toLowerCase().includes("overloaded") || _em.includes("529") || _em.includes("overloaded_error"))
+        ? "Серверы ИИ перегружены. Попробуйте снова через 5 минут."
+        : (_em.includes("RATE_LIMIT") || _em.includes("429") || _em.includes("RESOURCE_EXHAUSTED") || _em.includes("quota"))
         ? "Превышен лимит запросов к Gemini API. Подождите 1-2 минуты и попробуйте снова."
-        : err?.message?.includes("RECITATION") 
+        : _em.includes("RECITATION")
         ? "Ответ ИИ заблокирован из-за слишком похожего контента. Попробуйте переформулировать запрос."
-        : err?.message?.includes("SAFETY") 
+        : _em.includes("SAFETY")
         ? "Ответ ИИ заблокирован фильтром безопасности. Попробуйте другой запрос."
-        : err?.message?.includes("too long") || err?.message?.includes("token")
+        : (_em.includes("too long") || _em.includes("max_tokens"))
         ? "Ответ ИИ слишком длинный. Попробуйте более конкретный запрос для одной страницы."
-        : `Ошибка генерации: ${err?.message?.substring(0, 150) || "неизвестная ошибка"}`;
+        : _em.includes("KIE Claude stream error")
+        ? "Серверы ИИ временно недоступны. Попробуйте снова через несколько минут."
+        : `Ошибка генерации: ${_em.substring(0, 150) || "неизвестная ошибка"}`;
       if (res.headersSent) {
         res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
         res.end();
