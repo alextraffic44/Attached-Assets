@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
-import { deployToYandex, addCustomDomain, removeCustomDomain, checkDomainStatus, unpublishFromYandex, purgeCdnCache } from "./yandex-deploy";
+import { deployToYandex, addCustomDomain, removeCustomDomain, checkDomainStatus, unpublishFromYandex, purgeCdnCache, deleteProjectFromYandex } from "./yandex-deploy";
 import { registerSeoRoutes } from "./seo-routes";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -2654,8 +2654,17 @@ export async function registerRoutes(
       if (project.userId !== user.id) {
         return res.status(403).json({ message: "Доступ запрещён" });
       }
+      // Delete from DB first so the user sees it gone immediately
       await storage.deleteProject(project.id);
       res.json({ message: "Проект удалён" });
+      // Clean up Yandex Cloud resources in the background (non-blocking)
+      // — removes CDN resource + DNS zone + certificate (if custom domain was set)
+      // — empties and deletes the Object Storage bucket
+      if (project.publishStatus && project.publishStatus !== "draft") {
+        deleteProjectFromYandex(project.id, project.customDomain).catch((e) =>
+          console.warn(`[delete] Yandex cleanup non-fatal for project ${project.id}:`, e?.message)
+        );
+      }
     } catch (err) {
       res.status(500).json({ message: "Ошибка удаления проекта" });
     }

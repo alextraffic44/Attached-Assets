@@ -5,6 +5,7 @@ import {
   PutBucketWebsiteCommand,
   PutObjectCommand,
   DeleteObjectsCommand,
+  DeleteBucketCommand,
   ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 
@@ -446,6 +447,57 @@ export async function removeCustomDomain(domain: string): Promise<void> {
     }
   } catch (err) {
     console.warn("[Yandex] removeCustomDomain DNS zone cleanup non-fatal:", err);
+  }
+}
+
+/**
+ * Fully removes a project from Yandex Cloud:
+ * 1. Removes CDN resource + DNS zone + certificate if a custom domain was attached.
+ * 2. Empties and deletes the project's Object Storage bucket.
+ *
+ * Called when the user deletes a project from the dashboard.
+ * All errors are caught and logged so the project can still be removed from the DB.
+ */
+export async function deleteProjectFromYandex(projectId: number, customDomain?: string | null): Promise<void> {
+  // 1. Remove CDN + DNS + certificate if a custom domain exists
+  if (customDomain) {
+    try {
+      await removeCustomDomain(customDomain);
+      console.log(`[Yandex] Removed custom domain resources for ${customDomain}`);
+    } catch (err) {
+      console.warn("[Yandex] deleteProjectFromYandex: domain cleanup non-fatal:", err);
+    }
+  }
+
+  // 2. Empty and delete the S3 bucket
+  const bucket = bucketNameFor(projectId);
+  try {
+    const client = getS3Client();
+    // Empty the bucket first (required before deletion)
+    let continuationToken: string | undefined;
+    do {
+      const list: any = await client.send(new ListObjectsV2Command({
+        Bucket: bucket,
+        ContinuationToken: continuationToken,
+      }));
+      const objects = (list.Contents || []).map((o: any) => ({ Key: o.Key }));
+      if (objects.length > 0) {
+        await client.send(new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: objects, Quiet: true },
+        }));
+      }
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    // Delete the now-empty bucket
+    await client.send(new DeleteBucketCommand({ Bucket: bucket }));
+    console.log(`[Yandex] Bucket ${bucket} deleted`);
+  } catch (err: any) {
+    // NoSuchBucket is fine — bucket may never have been created for unpublished projects
+    if (err?.Code !== "NoSuchBucket" && err?.name !== "NoSuchBucket") {
+      console.warn(`[Yandex] deleteProjectFromYandex: bucket cleanup non-fatal for ${bucket}:`, err?.message || err);
+    }
   }
 }
 
