@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
-import { deployToYandex, addCustomDomain, removeCustomDomain, checkDomainStatus, unpublishFromYandex, purgeCdnCache, deleteProjectFromYandex } from "./yandex-deploy";
+import { deployToYandex, addCustomDomain, removeCustomDomain, checkDomainStatus, unpublishFromYandex, deleteProjectFromYandex, getDomainProxyIp } from "./yandex-deploy";
 import { registerSeoRoutes } from "./seo-routes";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -5169,21 +5169,15 @@ ${designAnalysis}
         }
       }
 
-      const { url, yandexProjectId } = await deployToYandex(projectId, files);
+      // Deploys to the project bucket AND (if a custom domain is attached)
+      // mirrors into the domain-named bucket served by the Caddy proxy.
+      const { url, yandexProjectId } = await deployToYandex(projectId, files, project.customDomain);
 
       await storage.updateProject(projectId, {
         publishStatus: "published",
         publishedUrl: url,
         vercelProjectId: yandexProjectId,
       });
-
-      // Fresh content is live in the bucket — purge the CDN edge cache so the
-      // custom domain (24h TTL) shows the update immediately. Non-fatal.
-      if (project.customDomain) {
-        purgeCdnCache(project.customDomain).catch((e) =>
-          console.warn("[publish] CDN purge non-fatal:", e)
-        );
-      }
 
       res.json({ url });
     } catch (err: any) {
@@ -5368,15 +5362,43 @@ ${fullHtml}`;
       }
       if (!project.vercelProjectId) return res.status(400).json({ message: "Сначала опубликуйте сайт" });
 
+      // A domain can belong to only one project — otherwise the Caddy "ask"
+      // endpoint and the domain bucket would be ambiguous.
+      const apexDomain = normalizedDomain.replace(/^www\./, "");
+      const existing = await storage.getProjectByCustomDomain(apexDomain);
+      if (existing && existing.id !== projectId) {
+        return res.status(409).json({ message: "Этот домен уже привязан к другому проекту" });
+      }
+
       const oldDomain = project.customDomain;
-      if (oldDomain && oldDomain.replace(/^www\./, "") !== normalizedDomain.replace(/^www\./, "")) {
+      if (oldDomain && oldDomain.replace(/^www\./, "") !== apexDomain) {
         removeCustomDomain(oldDomain).catch((e) => console.warn("[domain change] cleanup old domain non-fatal:", e));
       }
-      const result = await addCustomDomain(project.vercelProjectId, normalizedDomain);
-      await storage.updateProject(projectId, { customDomain: normalizedDomain });
+      const result = await addCustomDomain(project.vercelProjectId, apexDomain);
+      await storage.updateProject(projectId, { customDomain: apexDomain });
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Ошибка добавления домена" });
+    }
+  });
+
+  // Public "ask" endpoint for the Caddy proxy's on-demand TLS: Caddy calls
+  // GET /api/domains/check?domain=<host> before issuing a certificate.
+  // 200 = issue/renew the cert, 404 = refuse. Must return 200 for both the
+  // apex and www forms, and ALSO for suspended sites (their certs still need
+  // renewal — the domain bucket serves the "suspended" placeholder).
+  app.get("/api/domains/check", async (req, res) => {
+    try {
+      const raw = ((req.query.domain as string) || "").toLowerCase().split(":")[0].trim();
+      if (!raw || raw.length > 253 || !/^[a-z0-9.-]+$/.test(raw)) return res.sendStatus(404);
+      const apex = raw.replace(/^www\./, "");
+      // Only apex and www.<apex> are supported — refuse deeper subdomains.
+      if (raw !== apex && raw !== `www.${apex}`) return res.sendStatus(404);
+      const project = await storage.getProjectByCustomDomain(apex);
+      if (!project) return res.sendStatus(404);
+      return res.sendStatus(200);
+    } catch {
+      return res.sendStatus(404);
     }
   });
 
@@ -5389,8 +5411,8 @@ ${fullHtml}`;
       if (!project.vercelProjectId) return res.json({ verified: false });
       const { domain } = req.query as { domain: string };
       if (!domain) return res.status(400).json({ message: "Домен обязателен" });
-      const result = await checkDomainStatus(project.vercelProjectId, domain as string);
-      res.json(result);
+      const result = await checkDomainStatus(domain as string);
+      res.json({ ...result, aRecordIp: getDomainProxyIp() });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5540,13 +5562,7 @@ ${fullHtml}`;
       if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
       if (project.publishStatus !== "published") return res.status(400).json({ message: "Проект не опубликован" });
 
-      await unpublishFromYandex(projectId);
-      // Purge CDN so the "suspended" placeholder replaces the cached site immediately
-      if (project.customDomain) {
-        purgeCdnCache(project.customDomain).catch((e) =>
-          console.warn("[unpublish] CDN purge non-fatal:", e)
-        );
-      }
+      await unpublishFromYandex(projectId, project.customDomain);
       // Voluntary unpublish frees the plan slot → "draft". "suspended" is reserved for
       // billing suspension (insufficient balance), which legitimately keeps holding a slot.
       await storage.updateProject(projectId, { publishStatus: "draft" });
@@ -5863,13 +5879,7 @@ ${fullHtml}`;
           if (result.success) {
             console.log(`[Billing] User ${userId}: charged ${DAILY_PUBLISH_COST} tokens for project ${proj.id} (${proj.title}). Balance: ${result.newBalance}`);
           } else {
-            await unpublishFromYandex(proj.id);
-            // Purge CDN so the "suspended" placeholder replaces the cached site immediately
-            if (proj.customDomain) {
-              await purgeCdnCache(proj.customDomain).catch((e) =>
-                console.warn("[Billing] CDN purge non-fatal:", e)
-              );
-            }
+            await unpublishFromYandex(proj.id, proj.customDomain);
             await storage.updateProject(proj.id, { publishStatus: "suspended" });
             console.log(`[Billing] User ${userId}: suspended project ${proj.id} (${proj.title}) — insufficient balance (${result.newBalance} tokens)`);
           }

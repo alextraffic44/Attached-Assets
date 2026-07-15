@@ -1,6 +1,6 @@
 import { type Express } from "express";
 import type { IStorage } from "./storage";
-import { deployToYandex, purgeCdnCache } from "./yandex-deploy";
+import { deployToYandex } from "./yandex-deploy";
 import type { SeoConfig, SeoCluster, SeoKeyword, SeoTheme } from "@shared/schema";
 import crypto from "crypto";
 
@@ -1363,7 +1363,9 @@ Respond with ONLY valid JSON, no explanation:
     const deployFiles = allFiles.map(f => ({ filename: f.filename, content: f.code }));
 
     try {
-      const { url, yandexProjectId } = await deployToYandex(proj.id, deployFiles);
+      // Deploys to the project bucket AND mirrors into the domain-named
+      // bucket when a custom domain is attached (served by the Caddy proxy).
+      const { url, yandexProjectId } = await deployToYandex(proj.id, deployFiles, (proj as any).customDomain);
       const finalUrl = url;
 
       const updatedCfg: SeoConfig = { ...cfg, publishUrl: finalUrl };
@@ -1373,14 +1375,6 @@ Respond with ONLY valid JSON, no explanation:
         vercelProjectId: yandexProjectId,
         seoConfig: updatedCfg,
       } as any);
-
-      // Fresh content is live in the bucket — purge the CDN edge cache so the
-      // custom domain (24h TTL) shows the update immediately. Non-fatal.
-      if ((proj as any).customDomain) {
-        purgeCdnCache((proj as any).customDomain).catch((e) =>
-          console.warn("[seo publish] CDN purge non-fatal:", e)
-        );
-      }
 
       res.json({ url: finalUrl });
     } catch (e: any) {

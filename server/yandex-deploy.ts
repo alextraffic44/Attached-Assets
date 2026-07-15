@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import {
   S3Client,
   CreateBucketCommand,
@@ -7,65 +6,18 @@ import {
   DeleteObjectsCommand,
   DeleteBucketCommand,
   ListObjectsV2Command,
+  CopyObjectCommand,
 } from "@aws-sdk/client-s3";
 
-const YC_FOLDER_ID = process.env.YC_FOLDER_ID;
 const YC_KEY_ID = process.env.YC_KEY_ID;
 const YC_SECRET = process.env.YC_SECRET;
 
-const IAM_URL = "https://iam.api.cloud.yandex.net/iam/v1/tokens";
-const CDN_API = "https://cdn.api.cloud.yandex.net/cdn/v1";
-const CM_API = "https://certificate-manager.api.cloud.yandex.net/certificate-manager/v1";
-const DNS_API = "https://dns.api.cloud.yandex.net/dns/v1";
-
-export const YANDEX_NAMESERVERS = ["ns1.yandexcloud.net", "ns2.yandexcloud.net"];
-
-// ═══ IAM token (cached, refreshed before the 12h expiry) ═══
-
-let serviceAccountKey: { id: string; service_account_id: string; private_key: string } | null = null;
-function getServiceAccountKey() {
-  if (serviceAccountKey) return serviceAccountKey;
-  const raw = process.env.YC_SERVICE_ACCOUNT_KEY;
-  if (!raw) throw new Error("YC_SERVICE_ACCOUNT_KEY не настроен");
-  serviceAccountKey = JSON.parse(raw);
-  return serviceAccountKey!;
-}
-
-function base64url(input: string | Buffer): string {
-  return Buffer.from(input).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-let cachedIamToken: { token: string; expiresAt: number } | null = null;
-
-async function getIamToken(): Promise<string> {
-  if (cachedIamToken && cachedIamToken.expiresAt > Date.now()) return cachedIamToken.token;
-
-  const key = getServiceAccountKey();
-  const now = Math.floor(Date.now() / 1000);
-  const header = { alg: "PS256", typ: "JWT", kid: key.id };
-  const payload = { iss: key.service_account_id, aud: IAM_URL, iat: now, exp: now + 3600 };
-  const unsigned = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
-  const signer = crypto.createSign("RSA-SHA256");
-  signer.update(unsigned);
-  signer.end();
-  const signature = signer.sign({
-    key: key.private_key,
-    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-    saltLength: 32,
-  });
-  const jwt = `${unsigned}.${base64url(signature)}`;
-
-  const res = await fetch(IAM_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jwt }),
-  });
-  const data = (await res.json().catch(() => null)) as any;
-  if (!res.ok || !data?.iamToken) {
-    throw new Error(`Yandex IAM token exchange failed: ${res.status} ${JSON.stringify(data)}`);
-  }
-  cachedIamToken = { token: data.iamToken, expiresAt: Date.now() + 11 * 60 * 60 * 1000 };
-  return data.iamToken;
+// IP of our Caddy reverse-proxy VPS (Timeweb) that terminates TLS for client
+// custom domains via Let's Encrypt on-demand certificates. The client points
+// an A record at this IP; Caddy proxies to the domain-named Object Storage
+// bucket ({domain}.website.yandexcloud.net).
+export function getDomainProxyIp(): string {
+  return process.env.DOMAIN_PROXY_IP || "";
 }
 
 // ═══ Object Storage (S3-compatible) ═══
@@ -114,15 +66,22 @@ function contentTypeFor(filename: string): string {
   return map[ext] || "application/octet-stream";
 }
 
-// Each project gets its own dedicated bucket. This keeps Object Storage → CDN origin
-// wiring simple (one bucket root = one site) and avoids needing origin-path rewriting,
-// which the Yandex CDN origin-group API does not support.
+// Each project gets its own dedicated bucket. This keeps Object Storage wiring
+// simple: one bucket root = one site.
 export function bucketNameFor(projectId: number): string {
   return `craft-ai-p${projectId}`;
 }
 
 export function siteUrlFor(projectId: number): string {
   return `https://${bucketNameFor(projectId)}.website.yandexcloud.net/`;
+}
+
+// Custom domains get a SECOND bucket named exactly after the apex domain
+// (e.g. "moysite.ru"). The Yandex Object Storage website endpoint routes by
+// Host ({bucket}.website.yandexcloud.net), which lets a single generic Caddy
+// config proxy ANY client domain without per-domain configuration.
+export function domainBucketFor(domain: string): string {
+  return domain.replace(/^www\./, "").toLowerCase();
 }
 
 async function ensureBucketReady(bucket: string): Promise<void> {
@@ -145,42 +104,45 @@ async function ensureBucketReady(bucket: string): Promise<void> {
   );
 }
 
-/**
- * Deploy files to the project's dedicated bucket. Existing objects are cleared first
- * so stale assets from a previous version never linger (mirrors Netlify's
- * "replace the whole deploy" semantics).
- */
-export async function deployToYandex(
-  projectId: number,
-  files: DeployFile[]
-): Promise<{ url: string; deploymentId: string; yandexProjectId: string }> {
+async function listAllKeys(bucket: string): Promise<string[]> {
   const client = getS3Client();
-  const bucket = bucketNameFor(projectId);
-
-  await ensureBucketReady(bucket);
-
-  try {
-    let continuationToken: string | undefined;
-    const keysToDelete: { Key: string }[] = [];
-    do {
-      const list = await client.send(
-        new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: continuationToken })
-      );
-      for (const obj of list.Contents || []) {
-        if (obj.Key) keysToDelete.push({ Key: obj.Key });
-      }
-      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
-    } while (continuationToken);
-
-    for (let i = 0; i < keysToDelete.length; i += 1000) {
-      const batch = keysToDelete.slice(i, i + 1000);
-      if (batch.length === 0) continue;
-      await client.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: batch } }));
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const list = await client.send(
+      new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: continuationToken })
+    );
+    for (const obj of list.Contents || []) {
+      if (obj.Key) keys.push(obj.Key);
     }
-  } catch (err) {
-    console.warn(`[Yandex] Failed to clear old objects for project ${projectId} (non-fatal):`, err);
-  }
+    continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+  } while (continuationToken);
+  return keys;
+}
 
+async function clearBucket(bucket: string): Promise<void> {
+  const client = getS3Client();
+  const keys = await listAllKeys(bucket);
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000).map((Key) => ({ Key }));
+    if (batch.length === 0) continue;
+    await client.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: batch, Quiet: true } }));
+  }
+}
+
+/**
+ * Deploy files into a specific bucket. Existing objects are cleared first so
+ * stale assets from a previous version never linger ("replace the whole
+ * deploy" semantics).
+ */
+export async function deployFilesToBucket(bucket: string, files: DeployFile[]): Promise<void> {
+  const client = getS3Client();
+  await ensureBucketReady(bucket);
+  try {
+    await clearBucket(bucket);
+  } catch (err) {
+    console.warn(`[Yandex] Failed to clear old objects in ${bucket} (non-fatal):`, err);
+  }
   for (const f of files) {
     const buf = f.contentBuffer ?? Buffer.from(f.content ?? "", "utf8");
     const key = f.filename.replace(/^\/+/, "");
@@ -194,11 +156,34 @@ export async function deployToYandex(
       })
     );
   }
+}
+
+/**
+ * Deploy files to the project's dedicated bucket, and — when a custom domain
+ * is attached — mirror the same files into the domain-named bucket so the
+ * Caddy proxy serves the fresh version immediately (no CDN cache to purge).
+ */
+export async function deployToYandex(
+  projectId: number,
+  files: DeployFile[],
+  customDomain?: string | null
+): Promise<{ url: string; deploymentId: string; yandexProjectId: string }> {
+  const bucket = bucketNameFor(projectId);
+  await deployFilesToBucket(bucket, files);
+
+  if (customDomain) {
+    const domainBucket = domainBucketFor(customDomain);
+    try {
+      await deployFilesToBucket(domainBucket, files);
+    } catch (err) {
+      console.warn(`[Yandex] Mirror deploy to domain bucket ${domainBucket} failed (non-fatal):`, err);
+    }
+  }
 
   return { url: siteUrlFor(projectId), deploymentId: `${bucket}-${Date.now()}`, yandexProjectId: bucket };
 }
 
-export async function unpublishFromYandex(projectId: number): Promise<void> {
+export async function unpublishFromYandex(projectId: number, customDomain?: string | null): Promise<void> {
   const suspendedPage = `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -225,570 +210,151 @@ a{color:#3b82f6;text-decoration:none}
 </html>`;
 
   try {
-    await deployToYandex(projectId, [{ filename: "index.html", content: suspendedPage }]);
+    await deployToYandex(projectId, [{ filename: "index.html", content: suspendedPage }], customDomain);
   } catch (err) {
     console.error(`[Yandex] Failed to unpublish project ${projectId}:`, err);
   }
 }
 
-// ═══ Custom domains (CDN + Certificate Manager + Cloud DNS) ═══
-
-async function cdnRequest(path: string, init: RequestInit = {}): Promise<any> {
-  const token = await getIamToken();
-  const res = await fetch(`${CDN_API}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...(init.headers || {}),
-    },
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new Error(`Yandex CDN API error (${res.status}): ${JSON.stringify(data)}`);
+/**
+ * Server-side copy of every object from one bucket to another (used when a
+ * custom domain is attached to an already-published site — no regeneration).
+ */
+async function copyBucketContents(srcBucket: string, destBucket: string): Promise<void> {
+  const client = getS3Client();
+  const keys = await listAllKeys(srcBucket);
+  for (const key of keys) {
+    await client.send(
+      new CopyObjectCommand({
+        Bucket: destBucket,
+        Key: key,
+        CopySource: `/${srcBucket}/${encodeURIComponent(key).replace(/%2F/g, "/")}`,
+        ACL: "public-read",
+      })
+    );
   }
-  if (data?.error) {
-    throw new Error(`Yandex CDN error: ${data.error.message || JSON.stringify(data.error)}`);
-  }
-  return data;
 }
 
-async function dnsRequest(path: string, init: RequestInit = {}): Promise<any> {
-  const token = await getIamToken();
-  const res = await fetch(`${DNS_API}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...(init.headers || {}),
-    },
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new Error(`Yandex DNS API error (${res.status}): ${JSON.stringify(data)}`);
-  }
-  return data;
-}
-
-function dnsZoneNameFor(domain: string): string {
-  return `craft-ai-${domain.replace(/[^a-z0-9]/gi, "-")}`.slice(0, 60).toLowerCase();
-}
-
-/** Find an existing Yandex Cloud DNS zone for the domain, returns zone id or null. */
-async function findDnsZone(domain: string): Promise<string | null> {
+/** Empties and deletes a bucket. NoSuchBucket is silently ignored. */
+async function deleteBucketFully(bucket: string): Promise<void> {
+  const client = getS3Client();
   try {
-    const apex = domain.replace(/^www\./, "");
-    const name = dnsZoneNameFor(apex);
-    const list = await dnsRequest(`/zones?folderId=${YC_FOLDER_ID}&pageSize=1000`);
-    const found = (list.dnsZones || []).find((z: any) => z.name === name);
-    return found?.id || null;
-  } catch {
-    return null;
+    await clearBucket(bucket);
+    await client.send(new DeleteBucketCommand({ Bucket: bucket }));
+    console.log(`[Yandex] Bucket ${bucket} deleted`);
+  } catch (err: any) {
+    if (err?.Code !== "NoSuchBucket" && err?.name !== "NoSuchBucket") {
+      console.warn(`[Yandex] Bucket cleanup non-fatal for ${bucket}:`, err?.message || err);
+    }
   }
 }
 
-/** Create (or reuse) a public DNS zone in Yandex Cloud DNS for the domain, returns zone id. */
-async function ensureDnsZone(domain: string): Promise<string> {
-  const apex = domain.replace(/^www\./, "");
-  const name = dnsZoneNameFor(apex);
-
-  // Reuse if already exists
-  const existing = await findDnsZone(apex);
-  if (existing) return existing;
-
-  // Create new public zone
-  const op = await dnsRequest(`/zones`, {
-    method: "POST",
-    body: JSON.stringify({
-      folderId: YC_FOLDER_ID,
-      name,
-      zone: `${apex}.`,   // trailing dot required by DNS standard
-      publicVisibility: {},
-    }),
-  });
-
-  // The API returns an Operation; zone id is in metadata or response
-  const zoneId: string | undefined =
-    op?.metadata?.dnsZoneId ||
-    op?.response?.id ||
-    op?.id;
-
-  if (!zoneId) {
-    // Wait briefly and re-list as last resort
-    await new Promise((r) => setTimeout(r, 1500));
-    const list = await dnsRequest(`/zones?folderId=${YC_FOLDER_ID}&pageSize=1000`);
-    const found = (list.dnsZones || []).find((z: any) => z.name === name);
-    if (found?.id) return found.id;
-    throw new Error(`Yandex DNS: failed to create zone for ${apex}`);
+/**
+ * Attach a custom domain: creates a bucket named exactly after the apex domain
+ * and mirrors the project's published files into it. TLS + traffic are handled
+ * by our Caddy proxy VPS — the user only needs to point an A record at it.
+ */
+export async function addCustomDomain(
+  projectBucket: string,
+  domain: string
+): Promise<{ verified: boolean; aRecordIp: string }> {
+  const apex = domainBucketFor(domain);
+  if (apex.length > 63) {
+    throw new Error("Домен слишком длинный (максимум 63 символа)");
+  }
+  const proxyIp = getDomainProxyIp();
+  if (!proxyIp) {
+    throw new Error("Прокси-сервер доменов не настроен — обратитесь в поддержку");
   }
 
-  // Brief settle time before adding records
-  await new Promise((r) => setTimeout(r, 800));
-  return zoneId;
+  const client = getS3Client();
+  try {
+    await client.send(new CreateBucketCommand({ Bucket: apex }));
+  } catch (err: any) {
+    if (err?.name === "BucketAlreadyOwnedByYou") {
+      // fine — re-attaching the same domain
+    } else if (err?.name === "BucketAlreadyExists") {
+      throw new Error("Это доменное имя уже занято в облачном хранилище — обратитесь в поддержку");
+    } else {
+      throw err;
+    }
+  }
+  await client.send(
+    new PutBucketWebsiteCommand({
+      Bucket: apex,
+      WebsiteConfiguration: {
+        IndexDocument: { Suffix: "index.html" },
+        ErrorDocument: { Key: "index.html" },
+      },
+    })
+  );
+
+  try {
+    await copyBucketContents(projectBucket, apex);
+  } catch (err) {
+    console.warn(`[Yandex] Copy ${projectBucket} → ${apex} failed (non-fatal, next publish will fill it):`, err);
+  }
+
+  return { verified: false, aRecordIp: proxyIp };
 }
 
-/** Upsert (add or replace) resource record sets in a DNS zone. */
-async function upsertDnsRecords(
-  zoneId: string,
-  records: Array<{ name: string; type: string; ttl: number; data: string[] }>
-): Promise<void> {
-  await dnsRequest(`/zones/${zoneId}:upsertRecordSets`, {
-    method: "POST",
-    body: JSON.stringify({ merges: records }),
-  });
-}
-
-/**
- * Write the ACME challenge CNAME delegation `_acme-challenge.<apex>` →
- * `<certId>.cm.yandexcloud.net`. Certificate Manager then serves the TXT value
- * itself, which makes BOTH initial issuance AND automatic ~90-day renewal work
- * (a static TXT value goes stale on renewal and the cert would expire).
- *
- * Uses updateRecordSets with replacements so a stale static TXT at the same
- * name (written by older code) is atomically removed — DNS forbids a CNAME
- * coexisting with any other record type at the same name, so a plain upsert
- * would be rejected.
- */
-async function ensureAcmeDelegation(zoneId: string, apex: string, certId: string): Promise<void> {
-  const name = `_acme-challenge.${apex}.`;
-  await dnsRequest(`/zones/${zoneId}:updateRecordSets`, {
-    method: "POST",
-    body: JSON.stringify({
-      replacements: [
-        { name, type: "TXT", ttl: 300, data: [] },
-        { name, type: "CNAME", ttl: 300, data: [`${certId}.cm.yandexcloud.net.`] },
-      ],
-    }),
-  });
-  console.log(`[Yandex DNS] ACME delegation ensured for ${apex} → ${certId}.cm.yandexcloud.net`);
-}
-
-async function ensureOriginGroup(domain: string): Promise<string> {
-  // Route CDN through our Express app (craft-ai.ru) which proxies to the bucket.
-  // This is the only reliable way: Yandex CDN internally routes all *.yandexcloud.net
-  // origins through S3 API (which serves 403 for root "/"), bypassing the website endpoint.
-  // Our proxy middleware reads X-Custom-Domain to serve the right bucket via S3 API path.
-  const EXPRESS_ORIGIN = "craft-ai.ru";
-  const name = `${domain}-express-proxy`;
-  const list = await cdnRequest(`/originGroups?folderId=${YC_FOLDER_ID}`);
-  const existing = (list.originGroups || []).find((g: any) => g.name === name);
-  if (existing) return existing.id;
-
-  const created = await cdnRequest(`/originGroups`, {
-    method: "POST",
-    body: JSON.stringify({
-      folderId: YC_FOLDER_ID,
-      name,
-      useNext: false,
-      origins: [{ source: EXPRESS_ORIGIN, enabled: true }],
-    }),
-  });
-  const originGroupId = created?.response?.id;
-  if (!originGroupId) throw new Error("Yandex CDN: не удалось создать origin group");
-  return originGroupId;
-}
-
-async function findCdnResourceByCname(domain: string): Promise<any | null> {
-  const list = await cdnRequest(`/resources?folderId=${YC_FOLDER_ID}`);
-  return (list.resources || []).find((r: any) => r.cname === domain) || null;
-}
-
-/**
- * Purge the CDN edge cache for a custom domain (all paths). Called after every
- * publish/unpublish so the 24h edge TTL never delays site updates. Non-fatal:
- * if the domain has no CDN resource (default-URL publish) this is a no-op.
- */
-export async function purgeCdnCache(domain: string): Promise<void> {
-  const apex = domain.replace(/^www\./, "");
-  const resource = await findCdnResourceByCname(apex);
-  if (!resource?.id) return;
-  await cdnRequest(`/cache/${resource.id}:purge`, {
-    method: "POST",
-    body: JSON.stringify({ resourceId: resource.id, paths: [] }),
-  });
-  console.log(`[Yandex CDN] Cache purged for ${apex}`);
-}
-
-/**
- * Removes the CDN resource (and its origin group), SSL certificate, and
- * Yandex Cloud DNS zone for a domain so a new domain can be attached cleanly.
- */
+/** Detach a custom domain: deletes the domain-named bucket. */
 export async function removeCustomDomain(domain: string): Promise<void> {
-  const apex = domain.replace(/^www\./, "");
-  try {
-    const resource = await findCdnResourceByCname(apex);
-    if (resource?.id) {
-      await cdnRequest(`/resources/${resource.id}`, { method: "DELETE" });
-      if (resource.originGroupId) {
-        await cdnRequest(`/originGroups/${resource.originGroupId}?folderId=${YC_FOLDER_ID}`, { method: "DELETE" }).catch(() => {});
-      }
-    }
-  } catch (err) {
-    console.warn("[Yandex] removeCustomDomain CDN non-fatal:", err);
+  await deleteBucketFully(domainBucketFor(domain));
+}
+
+/**
+ * Checks whether the client's DNS A record points at our Caddy proxy and
+ * whether HTTPS already works (the first HTTPS request triggers on-demand
+ * certificate issuance, which can take ~5-15 seconds).
+ */
+export async function checkDomainStatus(
+  domain: string
+): Promise<{ verified: boolean; dnsReady: boolean; message?: string }> {
+  const { promises: dns } = await import("dns");
+  const apex = domainBucketFor(domain);
+  const proxyIp = getDomainProxyIp();
+  if (!proxyIp) {
+    return { verified: false, dnsReady: false, message: "Прокси-сервер доменов не настроен" };
   }
+
+  let ips: string[] = [];
   try {
-    const cert = await findCertificateByDomain(apex);
-    if (cert?.id) {
-      const token = await getIamToken();
-      await fetch(`${CM_API}/certificates/${cert.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {});
-    }
-  } catch (err) {
-    console.warn("[Yandex] removeCustomDomain cert cleanup non-fatal:", err);
+    ips = await dns.resolve4(apex);
+  } catch {}
+  const dnsReady = ips.includes(proxyIp);
+  if (!dnsReady) {
+    return {
+      verified: false,
+      dnsReady: false,
+      message: `A-запись ещё не обновилась — домен должен указывать на ${proxyIp} (обычно до 30 минут)`,
+    };
   }
-  // Also remove the auto-created DNS zone
+
+  // The first HTTPS request makes Caddy mint the certificate — allow up to 25s.
   try {
-    const zoneId = await findDnsZone(apex);
-    if (zoneId) {
-      await dnsRequest(`/zones/${zoneId}`, { method: "DELETE" });
-      console.log(`[Yandex DNS] Zone deleted for ${apex}`);
-    }
-  } catch (err) {
-    console.warn("[Yandex] removeCustomDomain DNS zone cleanup non-fatal:", err);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    const httpsRes = await fetch(`https://${apex}`, { method: "HEAD", signal: controller.signal, redirect: "follow" });
+    clearTimeout(timeout);
+    if (httpsRes.status < 500) return { verified: true, dnsReady: true };
+    return { verified: false, dnsReady: true, message: "DNS готов, SSL-сертификат выпускается — проверьте через минуту" };
+  } catch {
+    return { verified: false, dnsReady: true, message: "DNS готов, SSL-сертификат выпускается — проверьте через минуту" };
   }
 }
 
 /**
  * Fully removes a project from Yandex Cloud:
- * 1. Removes CDN resource + DNS zone + certificate if a custom domain was attached.
- * 2. Empties and deletes the project's Object Storage bucket.
+ * 1. Deletes the domain-named bucket if a custom domain was attached.
+ * 2. Empties and deletes the project's dedicated bucket.
  *
  * Called when the user deletes a project from the dashboard.
  * All errors are caught and logged so the project can still be removed from the DB.
  */
 export async function deleteProjectFromYandex(projectId: number, customDomain?: string | null): Promise<void> {
-  // 1. Remove CDN + DNS + certificate if a custom domain exists
   if (customDomain) {
-    try {
-      await removeCustomDomain(customDomain);
-      console.log(`[Yandex] Removed custom domain resources for ${customDomain}`);
-    } catch (err) {
-      console.warn("[Yandex] deleteProjectFromYandex: domain cleanup non-fatal:", err);
-    }
+    await deleteBucketFully(domainBucketFor(customDomain));
   }
-
-  // 2. Empty and delete the S3 bucket
-  const bucket = bucketNameFor(projectId);
-  try {
-    const client = getS3Client();
-    // Empty the bucket first (required before deletion)
-    let continuationToken: string | undefined;
-    do {
-      const list: any = await client.send(new ListObjectsV2Command({
-        Bucket: bucket,
-        ContinuationToken: continuationToken,
-      }));
-      const objects = (list.Contents || []).map((o: any) => ({ Key: o.Key }));
-      if (objects.length > 0) {
-        await client.send(new DeleteObjectsCommand({
-          Bucket: bucket,
-          Delete: { Objects: objects, Quiet: true },
-        }));
-      }
-      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
-    } while (continuationToken);
-
-    // Delete the now-empty bucket
-    await client.send(new DeleteBucketCommand({ Bucket: bucket }));
-    console.log(`[Yandex] Bucket ${bucket} deleted`);
-  } catch (err: any) {
-    // NoSuchBucket is fine — bucket may never have been created for unpublished projects
-    if (err?.Code !== "NoSuchBucket" && err?.name !== "NoSuchBucket") {
-      console.warn(`[Yandex] deleteProjectFromYandex: bucket cleanup non-fatal for ${bucket}:`, err?.message || err);
-    }
-  }
-}
-
-/**
- * Attach a custom domain to a project by creating (or reusing) a dedicated CDN
- * resource whose origin is the project's Object Storage bucket.
- *
- * New flow: automatically creates a Yandex Cloud DNS public zone for the apex
- * domain, adds an ANAME record pointing to the CDN provider CNAME, and adds the
- * Let's Encrypt TXT challenge record — so the user only needs to change NS
- * servers at their registrar to ns1/ns2.yandexcloud.net.
- */
-export async function addCustomDomain(
-  yandexProjectId: string,
-  domain: string
-): Promise<{ verified: boolean; cname: string; nameservers: string[]; txtRecord?: { name: string; value: string } }> {
-  const bucket = yandexProjectId;
-  const apex = domain.replace(/^www\./, "");
-
-  const originGroupId = await ensureOriginGroup(apex);
-
-  let resource = await findCdnResourceByCname(apex);
-  if (!resource) {
-    const created = await cdnRequest(`/resources`, {
-      method: "POST",
-      body: JSON.stringify({
-        folderId: YC_FOLDER_ID,
-        cname: apex,
-        origin: { originGroupId },
-        // HTTPS: craft-ai.ru origin (our Express proxy) has a valid TLS cert
-        originProtocol: "HTTPS",
-        active: true,
-      }),
-    });
-    resource = created?.response;
-    if (!resource) throw new Error("Yandex CDN: не удалось создать ресурс для домена");
-  }
-
-  // Reconcile CDN options on EVERY call (not just creation) so legacy resources
-  // created before this fix, or resources touched manually, get repaired on re-add:
-  // - hostOptions.host: craft-ai.ru — CRITICAL: Replit routes by Host header; the CDN
-  //   default (forwardHostHeader) sends Host: <custom-domain> which Replit's edge
-  //   rejects with 404 before our Express proxy ever sees the request
-  // - customServerName: craft-ai.ru (TLS SNI for HTTPS connection to our server)
-  // - staticRequestHeaders: X-Custom-Domain → domain (tells our proxy which bucket to serve)
-  // - edgeCacheSettings: cache for 24h (cache is purged on every publish, so long TTL is safe)
-  // - stale: keep serving the cached copy if our origin is down/erroring — client sites
-  //   survive Craft AI server outages entirely on the CDN edge
-  try {
-    await cdnRequest(`/resources/${resource.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        options: {
-          hostOptions: { host: { enabled: true, value: "craft-ai.ru" } },
-          customServerName: { enabled: true, value: "craft-ai.ru" },
-          staticRequestHeaders: { enabled: true, value: { "X-Custom-Domain": apex } },
-          edgeCacheSettings: { enabled: true, defaultValue: "86400" },
-          stale: {
-            enabled: true,
-            value: ["error", "updating", "timeout", "invalid_header", "http_500", "http_502", "http_503", "http_504", "http_429"],
-          },
-        },
-      }),
-    });
-    console.log(`[Yandex CDN] Express proxy configured for domain ${apex}`);
-  } catch (err) {
-    console.warn("[Yandex CDN] Failed to configure proxy options (non-fatal):", err);
-  }
-
-  const providerCname = resource.providerCname || resource.cname;
-
-  // Request the SSL certificate — we need the cert id for the CNAME challenge delegation
-  let certInfo: { certId?: string; txt?: { name: string; value: string } } = {};
-  try {
-    certInfo = await requestManagedCertificate(apex);
-  } catch (err) {
-    console.warn("[Yandex] Certificate request failed (non-fatal, retry later):", err);
-  }
-
-  // Auto-create DNS zone + write ANAME so the user only needs to change NS servers
-  try {
-    const zoneId = await ensureDnsZone(apex);
-    const records: Array<{ name: string; type: string; ttl: number; data: string[] }> = [
-      // ANAME on the root — Yandex DNS flattens this to an A record for clients
-      { name: `${apex}.`, type: "ANAME", ttl: 600, data: [`${providerCname}.`] },
-      // www CNAME so www.domain also resolves to the CDN
-      { name: `www.${apex}.`, type: "CNAME", ttl: 600, data: [`${apex}.`] },
-    ];
-    await upsertDnsRecords(zoneId, records);
-    console.log(`[Yandex DNS] Zone + ANAME auto-configured for ${apex}`);
-
-    // Cert challenge is written SEPARATELY so a failure here (e.g. stale TXT
-    // conflict) can never sink the ANAME/www records above.
-    if (certInfo.certId) {
-      await ensureAcmeDelegation(zoneId, apex, certInfo.certId);
-    } else if (certInfo.txt) {
-      // Fallback: static TXT (works for initial issuance only)
-      const txtName = certInfo.txt.name.endsWith(".") ? certInfo.txt.name : `${certInfo.txt.name}.`;
-      await upsertDnsRecords(zoneId, [{ name: txtName, type: "TXT", ttl: 300, data: [certInfo.txt.value] }]);
-    }
-  } catch (err) {
-    // Non-fatal: user can still use old manual CNAME approach
-    console.warn("[Yandex DNS] Auto-zone setup failed (non-fatal):", err);
-  }
-
-  return {
-    verified: false,
-    cname: providerCname,
-    nameservers: YANDEX_NAMESERVERS,
-    // txtRecord intentionally omitted — added to DNS zone automatically above
-  };
-}
-
-function certNameFor(domain: string): string {
-  return `craft-ai-${domain.replace(/[^a-zA-Z0-9]/g, "-")}`.slice(0, 50);
-}
-
-async function findCertificateByDomain(domain: string): Promise<any | null> {
-  const token = await getIamToken();
-  const res = await fetch(`${CM_API}/certificates?folderId=${YC_FOLDER_ID}&pageSize=1000`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) return null;
-  return (data?.certificates || []).find((c: any) => c.name === certNameFor(domain)) || null;
-}
-
-async function getCertificateFull(certId: string): Promise<any | null> {
-  const token = await getIamToken();
-  const res = await fetch(`${CM_API}/certificates/${certId}?view=FULL`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) return null;
-  return data;
-}
-
-/**
- * Ensures a managed Let's Encrypt certificate exists for the domain (reuses an
- * existing one if already requested) and returns the DNS TXT challenge record
- * the user needs to add, if the certificate isn't already issued.
- */
-async function requestManagedCertificate(
-  domain: string
-): Promise<{ certId?: string; txt?: { name: string; value: string } }> {
-  const token = await getIamToken();
-
-  let cert = await findCertificateByDomain(domain);
-  if (!cert) {
-    const res = await fetch(`${CM_API}/certificates/requestNew`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        folderId: YC_FOLDER_ID,
-        name: certNameFor(domain),
-        domains: [domain],
-        challengeType: "DNS",
-      }),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      throw new Error(`Certificate Manager error: ${res.status} ${JSON.stringify(data)}`);
-    }
-    // requestNew returns an Operation — cert id lives in metadata/response
-    cert = (data as any)?.response || (data as any)?.metadata || data;
-    if (!cert?.id) {
-      cert = (await findCertificateByDomain(domain)) || cert;
-    }
-  }
-
-  const certId = cert?.id || cert?.certificateId;
-  if (!certId) return {};
-
-  const full = await getCertificateFull(certId);
-  const challenge = full?.challenges?.find((c: any) => c.dnsChallenge)?.dnsChallenge;
-  if (challenge?.name && challenge?.value) {
-    return { certId, txt: { name: challenge.name, value: `${challenge.value}` } };
-  }
-  return { certId };
-}
-
-/**
- * Attaches an issued Certificate Manager certificate to a CDN resource so
- * HTTPS works for the custom domain. No-op if the resource already has this
- * certificate attached.
- */
-async function attachCertificateToResource(resourceId: string, certId: string): Promise<void> {
-  // NOTE: no ?updateMask query param — the CDN REST API returns 404 when it is present
-  await cdnRequest(`/resources/${resourceId}`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      sslCertificate: { type: "CM", data: { cm: { id: certId } } },
-    }),
-  });
-}
-
-export async function checkDomainStatus(
-  yandexProjectId: string,
-  domain: string
-): Promise<{ verified: boolean; dnsReady: boolean; message?: string }> {
-  const { promises: dns } = await import("dns");
-  const apex = domain.replace(/^www\./, "");
-
-  let resource: any = null;
-  try {
-    resource = await findCdnResourceByCname(apex);
-  } catch (err) {
-    console.warn("[Yandex] Failed to look up CDN resource for domain status:", err);
-  }
-  if (!resource) return { verified: false, dnsReady: false, message: "Домен ещё не привязан" };
-
-  const targetCname: string = resource.providerCname;
-
-  // Primary: check NS records → user changed nameservers to Yandex Cloud DNS
-  let nsOk = false;
-  try {
-    const nsRecords = await dns.resolveNs(apex);
-    nsOk = nsRecords.some((ns) => ns.toLowerCase().includes("yandexcloud.net"));
-  } catch {}
-
-  // Fallback: check CNAME record (old manual approach still works)
-  let cnameOk = false;
-  if (!nsOk) {
-    try {
-      const records = await dns.resolveCname(apex);
-      cnameOk = records.some((r) => r.toLowerCase() === (targetCname || "").toLowerCase());
-    } catch {}
-    if (!cnameOk) {
-      try {
-        const wwwRecords = await dns.resolveCname(`www.${apex}`);
-        cnameOk = wwwRecords.some((r) => r.toLowerCase() === (targetCname || "").toLowerCase());
-      } catch {}
-    }
-  }
-
-  if (!nsOk && !cnameOk) {
-    return { verified: false, dnsReady: false, message: "DNS ещё не обновился — подождите 30-60 минут" };
-  }
-
-  // If using the NS approach, make sure the ACME challenge delegation exists in the
-  // zone (CNAME → Certificate Manager). CM serves the TXT itself, so issuance AND
-  // auto-renewal keep working without us tracking challenge values.
-  if (nsOk) {
-    try {
-      const zoneId = await findDnsZone(apex);
-      if (zoneId) {
-        const cert = await findCertificateByDomain(apex);
-        if (cert?.id && cert.status !== "ISSUED") {
-          await ensureAcmeDelegation(zoneId, apex, cert.id).catch((e) =>
-            console.warn("[Yandex DNS] ACME delegation refresh failed (non-fatal):", e)
-          );
-        }
-      }
-    } catch { /* non-fatal */ }
-  }
-
-  // DNS is pointed correctly. Make sure the managed certificate is issued and
-  // attached to the CDN resource before declaring the domain fully verified.
-  try {
-    const cert = await findCertificateByDomain(apex);
-    if (cert?.id) {
-      const currentType = resource?.sslCertificate?.type;
-      const currentCertId = resource?.sslCertificate?.data?.cm?.id;
-      if (cert.status === "ISSUED" && !(currentType === "CM" && currentCertId === cert.id)) {
-        await attachCertificateToResource(resource.id, cert.id);
-      } else if (cert.status === "INVALID" || cert.status === "RENEWAL_FAILED") {
-        return {
-          verified: false,
-          dnsReady: true,
-          message: "Не удалось выпустить SSL-сертификат — проверьте TXT-запись и попробуйте снова",
-        };
-      } else if (cert.status !== "ISSUED") {
-        return {
-          verified: false,
-          dnsReady: true,
-          message: "DNS обновлён, SSL-сертификат выдаётся (может занять до 30 минут)",
-        };
-      }
-    }
-  } catch (err) {
-    console.warn("[Yandex] Certificate status check failed (non-fatal):", err);
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
-    const httpsRes = await fetch(`https://${apex}`, { method: "HEAD", signal: controller.signal, redirect: "follow" });
-    clearTimeout(timeout);
-    if (httpsRes.status < 500) return { verified: true, dnsReady: true };
-    return { verified: false, dnsReady: true, message: "DNS обновлён, SSL-сертификат выдаётся (может занять до 30 минут)" };
-  } catch {
-    return { verified: false, dnsReady: true, message: "DNS обновлён, SSL-сертификат выдаётся (может занять до 30 минут)" };
-  }
+  await deleteBucketFully(bucketNameFor(projectId));
 }
