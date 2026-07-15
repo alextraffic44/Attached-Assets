@@ -26,3 +26,4 @@
 - [Yandex CDN SSL cert attach](yandex-cdn-ssl-cert.md) — `sslCertificate: {type:"CM", data:{cm:{id}}}` is the real schema (not `cmData`/`cmId`/etc); DNS challenge only shows via `GET certificate?view=FULL`.
 - [Yandex custom-domain proxy](yandex-custom-domain-proxy.md) — CDN→craft-ai.ru origin needs hostOptions Host:craft-ai.ru (Replit routes by Host); ACME via CNAME delegation to CM or renewal dies; edge propagation 15-40 min.
 - [Yandex CDN per-project buckets](yandex-cdn-per-project-buckets.md) — CDN origin groups reject `host/path` origins, so per-project isolation needs one dedicated bucket per project, not a shared bucket with prefixes.
+- [Yandex CDN economics](yandex-cdn-economics.md) — decision: 1 custom domain = 1 CDN resource (150 ₽/mo, quota 20/cloud, 1 cert per resource); default publishes stay CDN-free; owner rejected shared-cert & VPS options.
