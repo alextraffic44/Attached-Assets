@@ -2330,6 +2330,9 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                     const res = await fetch(`/api/projects/${project.id}/domain/status?domain=${encodeURIComponent(project.customDomain!)}`, { credentials: "include" });
                     const data = await res.json();
                     setDomainVerified(data.verified || false);
+                    setDomainDnsReady(data.dnsReady || false);
+                    setDomainStatusMessage(data.message || "");
+                    if (data.aRecordIp) setDomainIp(data.aRecordIp);
                   } catch { setDomainVerified(false); }
                 }, 100);
               } else {

@@ -105,20 +105,24 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `window.__PROJECT_ID__` is injected into iframe via `injectProjectId()` in editor
 - Dashboard shows unread lead count badge, `/leads` page shows full lead management
 
-## Publishing (Yandex Cloud)
+## Publishing (Yandex Object Storage + Timeweb Caddy proxy for custom domains)
 - Button "Опубликовать" in editor header → publish modal
-- `POST /api/projects/:id/publish` — deploys to a dedicated Yandex Object Storage bucket (`craft-ai-p{projectId}`) with static website hosting enabled, uploads all pages + images
-- `POST /api/projects/:id/unpublish` — suspends site (overwrites bucket with "suspended" placeholder page)
-- `POST /api/projects/:id/domain` — attaches a custom domain: creates a per-project CDN origin group + CDN resource pointed at the bucket, and requests a free Certificate Manager (Let's Encrypt) certificate via DNS challenge
-- `GET /api/projects/:id/domain/status` — checks CNAME DNS propagation, then certificate issuance status; auto-attaches the certificate to the CDN resource once issued
-- Default publish URL (no custom domain): `https://craft-ai-p{projectId}.website.yandexcloud.net/` — served directly from Object Storage, no CDN needed
-- Custom domains: only these go through Yandex CDN (for the CNAME + SSL termination)
-- Env vars/secrets required: `YC_FOLDER_ID`, `YC_KEY_ID`, `YC_SECRET` (S3-compatible static keys for Object Storage), `YC_SERVICE_ACCOUNT_KEY` (JSON service account key used to mint IAM tokens for CDN/Certificate Manager API calls)
+- `POST /api/projects/:id/publish` — deploys to a dedicated Yandex Object Storage bucket (`craft-ai-p{projectId}`) with static website hosting enabled, uploads all pages + images; if the project has a custom domain, files are also mirrored into the domain-named bucket
+- `POST /api/projects/:id/unpublish` — suspends site (overwrites bucket(s) with "suspended" placeholder page)
+- Default publish URL (no custom domain): `https://craft-ai-p{projectId}.website.yandexcloud.net/` — served directly from Object Storage
+- **Custom domains (NO CDN, no Certificate Manager)**: bucket-per-domain + Caddy reverse proxy with on-demand TLS
+  - `POST /api/projects/:id/domain` — stores apex domain (www stripped, ≤63 chars, uniqueness across projects → 409), creates a Yandex bucket named exactly the apex domain (website hosting on), copies project files into it, returns `{ verified, aRecordIp }`
+  - User adds two DNS **A records**: `@` and `www` → `DOMAIN_PROXY_IP` (env var, currently 45.153.69.131)
+  - `GET /api/projects/:id/domain/status` — resolve4 == DOMAIN_PROXY_IP → `dnsReady`, then HEAD `https://{domain}` (25s) → `verified`; returns `aRecordIp`
+  - `GET /api/domains/check?domain=` — PUBLIC Caddy "ask" endpoint: 200 for apex+www of any known custom domain (incl. suspended), 404 otherwise; rejects deeper subdomains
+  - Timeweb VPS (ID 8611593, IP 45.153.69.131, Ubuntu 24.04, 1CPU/1GB, ~207₽/mo, ru-2) runs Caddy: on-demand TLS (Let's Encrypt per domain, issued on first request after ask-approval), www→apex 308 redirect, `reverse_proxy https://website.yandexcloud.net` with `header_up Host {host}.website.yandexcloud.net` (bucket name == apex domain). Config: `/etc/caddy/Caddyfile`; SSH key `craft-ai-agent` registered in Timeweb (key id 719979)
+  - IMPORTANT: cert issuance only works when production `craft-ai.ru` serves `/api/domains/check` — requires prod redeploy after this change
+- Env vars/secrets required: `YC_FOLDER_ID`, `YC_KEY_ID`, `YC_SECRET` (S3-compatible static keys for Object Storage), `DOMAIN_PROXY_IP` (Caddy VPS IP), `TIMEWEB_API_TOKEN` (VPS management). `YC_SERVICE_ACCOUNT_KEY` no longer used by publish code (CDN/CM removed)
 - Published URL stored in `projects.published_url`, status in `projects.publish_status`, bucket name stored in `projects.vercel_project_id` (column name kept from the earlier Vercel/Netlify integration, now holds the Yandex bucket name)
 - Publish statuses: `draft`, `publishing`, `published`, `suspended`, `error`
 - Dashboard cards show green "Live" badge when published, red "Приостановлен" when suspended
 - Editor button changes to "Опубликован" with green checkmark when published
-- Yandex helper: `server/yandex-deploy.ts` (`deployToYandex`, `unpublishFromYandex`, `addCustomDomain`, `checkDomainStatus`)
+- Yandex helper: `server/yandex-deploy.ts` (`deployFilesToBucket`, `deployToYandex(projectId, files, customDomain?)`, `unpublishFromYandex`, `addCustomDomain`, `removeCustomDomain`, `checkDomainStatus`, `deleteProjectFromYandex`)
 
 ## Publish Limits & Billing
 - Plan limits: bronze=1 site, silver=2, gold=3, platinum=5
