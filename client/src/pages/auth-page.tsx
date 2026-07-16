@@ -353,27 +353,86 @@ export default function AuthPage() {
               <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#1D1D1F", letterSpacing: "-0.01em" }}>Авторизация</span>
             </div>
 
-            {/* Telegram button area */}
+            {/* Hidden Telegram widget — iframe lives here, off-screen */}
+            <div
+              id="telegram-widget-container"
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                top: -9999,
+                left: -9999,
+                opacity: 0,
+                pointerEvents: "none",
+                overflow: "hidden",
+                width: 1,
+                height: 1,
+              }}
+            />
+
+            {/* Telegram button area — our custom UI */}
             {isTelegramLoading ? (
               <div style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem",
-                height: 52, borderRadius: 14, background: "#2AABEE", color: "#fff",
-                fontSize: "0.95rem", fontWeight: 600,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
+                height: 52, borderRadius: 14,
+                background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
+                color: "#fff", fontSize: "0.95rem", fontWeight: 600,
+                fontFamily: appleFont,
+                boxShadow: "0 4px 16px rgba(42,171,238,0.35)",
               }}>
                 <Loader2 size={18} className="animate-spin" />
                 Авторизация...
               </div>
             ) : botUsername ? (
-              <div id="telegram-widget-container" style={{
-                display: "flex", justifyContent: "center",
-                background: "#fff", borderRadius: 14, padding: "0.75rem",
-                border: "1px solid rgba(0,0,0,0.06)",
-              }} />
+              <button
+                data-testid="button-telegram-login"
+                onClick={() => {
+                  const iframe = document.querySelector<HTMLIFrameElement>("#telegram-widget-container iframe");
+                  if (iframe) {
+                    iframe.style.pointerEvents = "auto";
+                    iframe.contentWindow?.document.querySelector<HTMLElement>("button, a, [role=button]")?.click();
+                    iframe.style.pointerEvents = "none";
+                  } else {
+                    const btn = document.querySelector<HTMLElement>("#telegram-widget-container .tgme_widget_login_button, #telegram-widget-container a");
+                    if (btn) btn.click();
+                  }
+                }}
+                style={{
+                  width: "100%",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
+                  height: 52, borderRadius: 14, border: "none",
+                  background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
+                  color: "#fff", cursor: "pointer",
+                  fontSize: "0.95rem", fontWeight: 600,
+                  fontFamily: appleFont,
+                  boxShadow: "0 4px 16px rgba(42,171,238,0.3)",
+                  transition: "all 0.18s cubic-bezier(.4,0,.2,1)",
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLButtonElement;
+                  el.style.background = "linear-gradient(135deg, #3dbef7 0%, #2AABEE 100%)";
+                  el.style.boxShadow = "0 6px 22px rgba(42,171,238,0.45)";
+                  el.style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLButtonElement;
+                  el.style.background = "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)";
+                  el.style.boxShadow = "0 4px 16px rgba(42,171,238,0.3)";
+                  el.style.transform = "translateY(0)";
+                }}
+                onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0) scale(0.98)"; }}
+                onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px) scale(1)"; }}
+              >
+                {/* Telegram plane icon */}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z" fill="white"/>
+                </svg>
+                Войти через Telegram
+              </button>
             ) : (
               <div style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
                 height: 52, borderRadius: 14, background: "#e8e8ed",
-                fontSize: "0.85rem", color: "#86868B",
+                fontSize: "0.85rem", color: "#86868B", fontFamily: appleFont,
               }}>
                 Telegram-авторизация не настроена
               </div>
