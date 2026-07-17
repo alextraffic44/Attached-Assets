@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { useLocation, useParams } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { Project, ProjectMessage, ProjectImage, ProjectVersion, ProjectFile } from "@shared/schema";
 import JSZip from "jszip";
 import { UITemplatesModal } from "@/components/ui-templates";
@@ -55,6 +56,7 @@ import {
   CheckCircle,
   AlertTriangle,
   AlertCircle,
+  MessageSquare,
 } from "lucide-react";
 import {
   Dialog,
@@ -150,6 +152,7 @@ export default function EditorPage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -157,12 +160,17 @@ export default function EditorPage() {
   const [showCode, setShowCode] = useState(false);
   const [editableCode, setEditableCode] = useState("");
   const [codeSaving, setCodeSaving] = useState(false);
-  const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "mobile" : "desktop"
+  );
   const [attachedImages, setAttachedImages] = useState<Array<{id: string, base64: string, mimeType: string, preview: string | null, fileName: string, url?: string, uploading?: boolean}>>([]);
   const [attachedVideos, setAttachedVideos] = useState<Array<{id: string, url: string, fileName: string, uploading: boolean}>>([]);
   const [attachedModels, setAttachedModels] = useState<Array<{id: string, url: string, fileName: string, uploading: boolean}>>([]);
   const [attachedAudios, setAttachedAudios] = useState<Array<{id: string, url: string, fileName: string, uploading: boolean}>>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 768 : true
+  );
+  const [mobileView, setMobileView] = useState<"chat" | "preview">("preview");
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
   const [streamingReply, setStreamingReply] = useState("");
   const [editMode, setEditMode] = useState(false);
@@ -294,6 +302,19 @@ export default function EditorPage() {
     : (projectFiles.find(f => f.filename === activeFile)?.code || "");
 
   const currentCode = activeFileCode;
+
+  useEffect(() => {
+    if (!isMobile) return;
+    setPreviewDevice("mobile");
+    setSidebarOpen(mobileView === "chat");
+  }, [isMobile, mobileView]);
+
+  useEffect(() => {
+    if (isMobile && isGenerating) {
+      setMobileView("chat");
+      setSidebarOpen(true);
+    }
+  }, [isGenerating, isMobile]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -2044,7 +2065,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     return () => window.removeEventListener('message', handler);
   }, [projectId, activeFile, allFiles, isGenerating]);
 
-  const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
+  const deviceWidths = { desktop: "100%", tablet: "768px", mobile: isMobile ? "100%" : "375px" };
 
   const applyImageToIframe = useCallback((url: string) => {
     if (!pendingImageTarget.current) return;
@@ -2067,10 +2088,10 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     e.target.value = "";
   }, [applyImageToIframe]);
 
-  if (projectLoading) return <div className="h-screen flex items-center justify-center bg-[#F6F7FB] dark:bg-[#0F172A]"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
+  if (projectLoading) return <div className="h-[100dvh] flex items-center justify-center bg-[#F6F7FB] dark:bg-[#0F172A]"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
 
   if (projectError || (!project && !projectLoading)) return (
-    <div className="h-screen flex flex-col items-center justify-center gap-4 bg-[#F6F7FB] dark:bg-[#0F172A] text-center px-6">
+    <div className="h-[100dvh] flex flex-col items-center justify-center gap-4 bg-[#F6F7FB] dark:bg-[#0F172A] text-center px-6">
       <p className="text-slate-500 dark:text-slate-400 text-sm max-w-xs">Не удалось загрузить проект. Проверьте соединение и попробуйте ещё раз.</p>
       <button
         onClick={() => refetchProject()}
@@ -2083,14 +2104,14 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
   );
 
   return (
-    <div className="h-screen bg-[#F6F7FB] dark:bg-[#0F172A] flex flex-col p-3 gap-3 overflow-hidden">
-      <header className="h-16 flex items-center gap-2 sm:gap-3 bg-white dark:bg-slate-900 rounded-2xl px-3 sm:px-5 border border-slate-100 dark:border-slate-800 shadow-sm shrink-0">
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+    <div className="h-[100dvh] bg-[#F6F7FB] dark:bg-[#0F172A] flex flex-col p-1.5 sm:p-3 gap-1.5 sm:gap-3 overflow-hidden pb-[env(safe-area-inset-bottom)]">
+      <header className="h-14 sm:h-16 flex items-center gap-1.5 sm:gap-3 bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl px-2 sm:px-5 border border-slate-100 dark:border-slate-800 shadow-sm shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9 shrink-0 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => setLocation("/dashboard")} data-testid="button-back">
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setLocation("/")}>
-            <svg viewBox="0 0 32 32" stroke="currentColor" strokeWidth="2" fill="none" style={{ width: 32, height: 32 }}>
+          <div className="flex items-center gap-2 cursor-pointer min-w-0" onClick={() => setLocation("/")}>
+            <svg viewBox="0 0 32 32" stroke="currentColor" strokeWidth="2" fill="none" className="w-7 h-7 sm:w-8 sm:h-8 shrink-0">
               <defs>
                 <linearGradient id="db-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%"><animate attributeName="stop-color" values="#FF4242;#A5FF42;#42A5FF;#42E6FF;#B742FF;#FF4242" dur="5s" repeatCount="indefinite"/></stop>
@@ -2104,16 +2125,16 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               <line x1="15" y1="20" x2="17" y2="20" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
               <path d="M8 26 h16 M10 28 h12" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
             </svg>
-            <div className="hidden xl:flex flex-col">
+            <div className="hidden md:flex flex-col min-w-0">
               <span style={{ fontWeight: 700, fontSize: '1.1rem', letterSpacing: '-0.03em', color: '#1D1D1F', lineHeight: 1 }}>Craft AI</span>
-              <h1 className="text-xs font-bold tracking-tight text-slate-400 mt-0.5" data-testid="text-project-title">{project?.title}</h1>
+              <h1 className="text-xs font-bold tracking-tight text-slate-400 mt-0.5 truncate max-w-[160px]" data-testid="text-project-title">{project?.title}</h1>
             </div>
           </div>
         </div>
 
-        <div className="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
-          {/* Device switcher */}
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-full p-1 gap-0.5">
+        <div className="flex-1 min-w-0 flex items-center gap-1 sm:gap-2 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
+          {/* Device switcher — hide on very small screens where preview is already mobile */}
+          <div className={`flex items-center bg-slate-100 dark:bg-slate-800 rounded-full p-1 gap-0.5 ${isMobile ? "hidden" : ""}`}>
             {[
               { d: "desktop" as const, i: Monitor, tip: "Десктоп" },
               { d: "tablet" as const, i: Tablet, tip: "Планшет" },
@@ -2131,19 +2152,19 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             ))}
           </div>
 
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
+          <div className={`h-6 w-px bg-slate-200 dark:bg-slate-700 ${isMobile ? "hidden" : ""}`} />
 
           {/* Code toggle */}
           <button
             onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }}
             data-testid="button-toggle-code"
             title={showCode ? "Просмотр сайта" : "Код"}
-            className={`flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium transition-all duration-200 ${showCode
+            className={`flex items-center gap-2 h-9 sm:h-10 px-2.5 sm:px-4 rounded-full text-sm font-medium transition-all duration-200 ${showCode
               ? "bg-slate-800 text-white shadow-md"
               : "bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-slate-800"}`}
           >
             {showCode ? <Eye className="w-4 h-4" /> : <Code2 className="w-4 h-4" />}
-            <span className="hidden xl:inline">{showCode ? "Превью" : "Код"}</span>
+            <span className="hidden lg:inline">{showCode ? "Превью" : "Код"}</span>
           </button>
 
           {!showCode && currentCode && (
@@ -2152,41 +2173,41 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }}
                 data-testid="button-toggle-edit"
                 title="Визуальный редактор"
-                className={`flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium transition-all duration-200 ${editMode
+                className={`hidden sm:flex items-center gap-2 h-9 sm:h-10 px-2.5 sm:px-4 rounded-full text-sm font-medium transition-all duration-200 ${editMode
                   ? "bg-blue-500 text-white shadow-md shadow-blue-200"
                   : "bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-slate-800"}`}
               >
                 <MousePointer2 className="w-4 h-4" />
-                <span className="hidden xl:inline">Редактор</span>
+                <span className="hidden lg:inline">Редактор</span>
               </button>
               <button
                 onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }}
                 data-testid="button-toggle-selector"
                 title="Выбрать элемент"
-                className={`flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium transition-all duration-200 ${selectorMode
+                className={`hidden sm:flex items-center gap-2 h-9 sm:h-10 px-2.5 sm:px-4 rounded-full text-sm font-medium transition-all duration-200 ${selectorMode
                   ? "bg-orange-500 text-white shadow-md shadow-orange-200"
                   : "bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-slate-800"}`}
               >
                 <Crosshair className="w-4 h-4" />
-                <span className="hidden xl:inline">Выбрать</span>
+                <span className="hidden lg:inline">Выбрать</span>
               </button>
               <button
                 onClick={() => setShowTemplates(true)}
                 data-testid="button-templates"
                 title="Шаблоны"
-                className="flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-violet-600 transition-all duration-200"
+                className="hidden sm:flex items-center gap-2 h-9 sm:h-10 px-2.5 sm:px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-violet-600 transition-all duration-200"
               >
                 <Sparkles className="w-4 h-4" />
-                <span className="hidden xl:inline">Шаблоны</span>
+                <span className="hidden lg:inline">Шаблоны</span>
               </button>
               <button
                 onClick={() => setShowGenerations(true)}
                 data-testid="button-generations"
                 title="Генерации"
-                className="relative flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-cyan-600 transition-all duration-200"
+                className="relative flex items-center gap-2 h-9 sm:h-10 px-2.5 sm:px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-cyan-600 transition-all duration-200"
               >
                 <ImagePlus className="w-4 h-4" />
-                <span className="hidden xl:inline">Медиа</span>
+                <span className="hidden lg:inline">Медиа</span>
                 {projectImages.length > 0 && (
                   <span className="absolute -top-1.5 -right-1 bg-primary text-white text-[9px] font-bold px-1.5 min-w-[18px] h-[18px] rounded-full flex items-center justify-center">{projectImages.length}</span>
                 )}
@@ -2195,7 +2216,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 onClick={() => { setGen3dOpen(true); setGen3dStatus("idle"); setGen3dResultUrl(""); setGen3dError(""); setGen3dImagePreview(""); setGen3dImageUrl(""); }}
                 data-testid="button-3d-library"
                 title="Создать 3D модель"
-                className="flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-violet-600 transition-all duration-200"
+                className="hidden md:flex items-center gap-2 h-9 sm:h-10 px-2.5 sm:px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-violet-600 transition-all duration-200"
               >
                 <Box className="w-4 h-4" />
                 3D
@@ -2204,15 +2225,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 onClick={() => { setVideoAnimOpen(true); setVideoAnimStep("upload"); setVideoAnimFrames([]); setVideoAnimError(""); setVideoAnimProgress(""); }}
                 data-testid="button-video-anim"
                 title="Scroll-анимация из видео"
-                className="flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-rose-500 transition-all duration-200"
+                className="hidden md:flex items-center gap-2 h-9 sm:h-10 px-2.5 sm:px-4 rounded-full text-sm font-medium bg-white text-slate-600 border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 hover:text-rose-500 transition-all duration-200"
               >
                 <Video className="w-4 h-4" />
-                <span className="hidden xl:inline">Анимация</span>
+                <span className="hidden lg:inline">Анимация</span>
               </button>
             </>
           )}
 
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block" />
 
           <input ref={faviconInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/x-icon,image/webp" className="hidden" onChange={handleFaviconUpload} data-testid="input-favicon-upload" />
           <button
@@ -2220,7 +2241,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             disabled={faviconUploading || !currentCode}
             title="Фавикон"
             data-testid="button-favicon-upload"
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-slate-700 hover:border-slate-300 transition-all duration-200 disabled:opacity-40"
+            className="hidden sm:flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-slate-700 hover:border-slate-300 transition-all duration-200 disabled:opacity-40"
           >
             {faviconUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
               project?.generatedCode?.includes('rel="icon"') || project?.generatedCode?.includes("rel='icon'")
@@ -2230,7 +2251,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </button>
 
           {/* Agent V1/V2 toggle */}
-          <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 border border-slate-200 shadow-sm" title="Версия агента">
+          <div className="hidden sm:flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 border border-slate-200 shadow-sm" title="Версия агента">
             <button
               onClick={() => setAgentVersion("v1")}
               data-testid="button-agent-v1"
@@ -2251,7 +2272,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             disabled={!currentCode || auditRunning}
             title="Юридический аудит сайта"
             data-testid="button-legal-audit"
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-emerald-600 hover:border-emerald-200 transition-all duration-200 disabled:opacity-40"
+            className="hidden sm:flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-emerald-600 hover:border-emerald-200 transition-all duration-200 disabled:opacity-40"
           >
             {auditRunning
               ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -2267,7 +2288,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             disabled={!currentCode}
             title="Яндекс.Метрика и Вебмастер"
             data-testid="button-yandex-settings"
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-red-500 hover:border-red-200 transition-all duration-200 disabled:opacity-40"
+            className="hidden sm:flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-red-500 hover:border-red-200 transition-all duration-200 disabled:opacity-40"
           >
             {(currentCode?.includes("mc.yandex.ru/metrika") || currentCode?.includes('name="yandex-verification"'))
               ? <BarChart2 className="w-4 h-4 text-red-500" />
@@ -2279,7 +2300,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             disabled={!currentCode}
             data-testid="button-download-zip"
             title="Скачать ZIP"
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-slate-700 hover:border-slate-300 transition-all duration-200 disabled:opacity-40"
+            className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-slate-700 hover:border-slate-300 transition-all duration-200 disabled:opacity-40"
           >
             <Download className="w-4 h-4" />
           </button>
@@ -2288,7 +2309,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             onClick={() => setImgGenOpen(true)}
             data-testid="button-open-image-gen"
             title="AI Фото"
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-violet-600 hover:border-violet-200 transition-all duration-200"
+            className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white text-slate-500 border border-slate-200 shadow-sm hover:shadow-md hover:text-violet-600 hover:border-violet-200 transition-all duration-200"
           >
             <Camera className="w-4 h-4" />
           </button>
@@ -2343,7 +2364,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 setTimeout(() => handlePublish(), 50);
               }
             }}
-            className={`shrink-0 flex items-center gap-2 h-10 px-5 rounded-full text-sm font-semibold transition-all duration-200 ${
+            className={`shrink-0 flex items-center gap-1.5 sm:gap-2 h-9 sm:h-10 px-3 sm:px-5 rounded-full text-sm font-semibold transition-all duration-200 ${
               project?.publishStatus === "published"
                 ? "bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-md shadow-emerald-200 hover:shadow-lg hover:shadow-emerald-300"
                 : project?.publishStatus === "suspended"
@@ -2360,9 +2381,15 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </button>
       </header>
 
-      <div className="flex-1 flex gap-3 overflow-hidden relative">
-        <SkeuoPanel className={`transition-all duration-500 ease-in-out min-w-0 ${sidebarOpen ? 'w-full sm:w-[440px] sm:min-w-[440px]' : 'w-0 opacity-0 -translate-x-full'}`}>
-          <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3">
+      <div className="flex-1 flex gap-1.5 sm:gap-3 overflow-hidden relative min-h-0">
+        <SkeuoPanel className={`transition-all duration-300 ease-in-out min-w-0 ${
+          sidebarOpen
+            ? (isMobile
+              ? "absolute inset-0 z-20 w-full rounded-xl"
+              : "w-full sm:w-[440px] sm:min-w-[440px]")
+            : "w-0 opacity-0 -translate-x-full pointer-events-none absolute sm:relative"
+        }`}>
+          <div className="px-4 sm:px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                 <Sparkles className="w-3.5 h-3.5 text-primary" />
@@ -2373,7 +2400,17 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Craft Agent</span>
+              {isMobile && (
+                <button
+                  onClick={() => { setMobileView("preview"); setSidebarOpen(false); }}
+                  className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  data-testid="button-mobile-close-chat"
+                  title="К превью"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+              )}
+              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full hidden sm:inline">Craft Agent</span>
             </div>
           </div>
           {showVersions && versions.length > 0 && (
@@ -2547,7 +2584,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </ScrollArea>
 
 
-          <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             {selectedElement && (
               <div className="mb-3 flex items-center gap-2 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-xl px-3 py-2.5">
                 <Crosshair className="w-4 h-4 text-orange-500 shrink-0" />
@@ -2698,13 +2735,13 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
         <button 
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-12 bg-white dark:bg-slate-900 shadow-sm border border-slate-100 dark:border-slate-800 rounded-r-xl flex items-center justify-center hover:bg-slate-50 text-slate-400 hover:text-slate-700 transition-all duration-500 ${sidebarOpen ? 'translate-x-[440px]' : 'translate-x-0'}`}
+          className={`hidden sm:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-12 bg-white dark:bg-slate-900 shadow-sm border border-slate-100 dark:border-slate-800 rounded-r-xl items-center justify-center hover:bg-slate-50 text-slate-400 hover:text-slate-700 transition-all duration-500 ${sidebarOpen ? 'translate-x-[440px]' : 'translate-x-0'}`}
           data-testid="button-toggle-sidebar"
         >
           {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
 
-        <SkeuoPanel className="flex-1 relative bg-[#F6F7FB] dark:bg-slate-950 flex flex-col overflow-hidden">
+        <SkeuoPanel className={`flex-1 relative bg-[#F6F7FB] dark:bg-slate-950 flex flex-col overflow-hidden min-w-0 ${isMobile && mobileView === "chat" ? "invisible" : ""}`}>
             <div className="flex items-center gap-1 px-3 pt-3 pb-2 overflow-x-auto shrink-0 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
               {allFiles.map(f => (
                 <div key={f.filename} className={`flex items-center gap-0.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${activeFile === f.filename ? "bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200" : "text-slate-400 dark:text-slate-500 hover:text-slate-700 hover:bg-slate-50"}`}>
@@ -3048,6 +3085,41 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           </div>
         </SkeuoPanel>
       </div>
+
+      {isMobile && (
+        <nav
+          className="shrink-0 flex items-center bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden"
+          data-testid="mobile-editor-tabs"
+        >
+          <button
+            onClick={() => { setMobileView("chat"); setSidebarOpen(true); }}
+            className={`flex-1 flex items-center justify-center gap-2 h-12 text-sm font-semibold transition-colors ${
+              mobileView === "chat"
+                ? "bg-slate-800 text-white"
+                : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+            }`}
+            data-testid="button-mobile-tab-chat"
+          >
+            <MessageSquare className="w-4 h-4" />
+            Чат
+            {isGenerating && mobileView !== "chat" && (
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+            )}
+          </button>
+          <button
+            onClick={() => { setMobileView("preview"); setSidebarOpen(false); }}
+            className={`flex-1 flex items-center justify-center gap-2 h-12 text-sm font-semibold transition-colors ${
+              mobileView === "preview"
+                ? "bg-slate-800 text-white"
+                : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+            }`}
+            data-testid="button-mobile-tab-preview"
+          >
+            <Eye className="w-4 h-4" />
+            Превью
+          </button>
+        </nav>
+      )}
 
       <Dialog open={imgGenOpen} onOpenChange={setImgGenOpen}>
         <DialogContent className="sm:max-w-lg p-0 bg-white dark:bg-slate-900 border-0 shadow-[0_25px_60px_-12px_rgba(0,0,0,0.25)] rounded-3xl max-h-[85vh] overflow-hidden" aria-describedby="img-gen-description">
