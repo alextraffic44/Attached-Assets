@@ -167,32 +167,56 @@ export function setupAuth(app: Express) {
     })(req, res, next);
   });
 
+  async function loginWithTelegramData(
+    data: Record<string, any>,
+    req: any,
+    res: any,
+    next: any,
+    mode: "json" | "redirect",
+  ) {
+    if (!process.env.TELEGRAM_BOT_TOKEN) {
+      if (mode === "redirect") return res.redirect("/auth?error=telegram_not_configured");
+      return res.status(503).json({ message: "Telegram авторизация не настроена" });
+    }
+
+    if (!verifyTelegramHash(data)) {
+      if (mode === "redirect") return res.redirect("/auth?error=telegram_invalid");
+      return res.status(401).json({ message: "Неверная подпись Telegram" });
+    }
+
+    const telegramId = String(data.id);
+    const displayName = [data.first_name, data.last_name].filter(Boolean).join(" ") || data.username || "Пользователь";
+    const avatarUrl = data.photo_url || null;
+
+    let user = await storage.getUserByTelegramId(telegramId);
+    if (!user) {
+      user = await storage.createTelegramUser({ telegramId, displayName, avatarUrl });
+    }
+
+    req.login(user, (err: any) => {
+      if (err) return next(err);
+      if (mode === "redirect") return res.redirect("/dashboard");
+      const { password: _, ...safeUser } = user!;
+      return res.json(safeUser);
+    });
+  }
+
   app.post("/api/auth/telegram", async (req, res, next) => {
     try {
-      const data = req.body;
+      await loginWithTelegramData(req.body, req, res, next, "json");
+    } catch (err) {
+      next(err);
+    }
+  });
 
-      if (!process.env.TELEGRAM_BOT_TOKEN) {
-        return res.status(503).json({ message: "Telegram авторизация не настроена" });
+  // Redirect-based Telegram Login Widget callback (more reliable than postMessage/onauth).
+  app.get("/api/auth/telegram/callback", async (req, res, next) => {
+    try {
+      const data: Record<string, any> = {};
+      for (const [key, value] of Object.entries(req.query)) {
+        if (typeof value === "string") data[key] = value;
       }
-
-      if (!verifyTelegramHash(data)) {
-        return res.status(401).json({ message: "Неверная подпись Telegram" });
-      }
-
-      const telegramId = String(data.id);
-      const displayName = [data.first_name, data.last_name].filter(Boolean).join(" ") || data.username || "Пользователь";
-      const avatarUrl = data.photo_url || null;
-
-      let user = await storage.getUserByTelegramId(telegramId);
-      if (!user) {
-        user = await storage.createTelegramUser({ telegramId, displayName, avatarUrl });
-      }
-
-      req.login(user, (err) => {
-        if (err) return next(err);
-        const { password: _, ...safeUser } = user!;
-        return res.json(safeUser);
-      });
+      await loginWithTelegramData(data, req, res, next, "redirect");
     } catch (err) {
       next(err);
     }
