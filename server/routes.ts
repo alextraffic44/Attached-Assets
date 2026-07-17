@@ -15,6 +15,17 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import crypto from "crypto";
+import {
+  CRAFT_MD_FILENAME,
+  ensureCraftMd,
+  refreshCraftMdPages,
+  buildMultipageEditSystemPrompt,
+  runToolCallingAgent,
+  parseMultipageEditResponse,
+  applyDiffPatchesToCode,
+  isHtmlPage,
+  type SitePage,
+} from "./agent-runtime";
 
 // Rate limiters (in-memory, single-instance)
 const leadIntakeLimiter = rateLimit("lead-intake", { windowMs: 60_000, max: 20, message: "Слишком много заявок. Попробуйте позже." });
@@ -2155,7 +2166,7 @@ const PLAN_PUBLISH_LIMITS: Record<string, number> = {
   free: 0,
 };
 
-const DAILY_PUBLISH_COST = 20;
+const DAILY_PUBLISH_COST = 35;
 
 const SYSTEM_PROMPT = `Ты — креативный frontend-разработчик мирового уровня. Генерируй полные HTML-документы.
 
@@ -3014,33 +3025,40 @@ VIDEO_PROMPT (на английском) — ты КИНОРЕЖИССЁР го�
       };
 
       let base64Map = new Map<string, string>();
+      const sitePages: SitePage[] = [
+        { filename: "index.html", code: project.generatedCode || "" },
+        ...existingFiles
+          .filter((f) => f.filename !== "index.html" && isHtmlPage(f.filename))
+          .map((f) => ({ filename: f.filename, code: f.code || "" })),
+      ];
+      let craftMdForEdit = "";
+      let agentToolHandled = false;
+      let agentChangedFiles: Map<string, string> | null = null;
+      let agentSummary = "";
 
       if (isEditMode) {
         const editingFile = activeFile || "index.html";
-        const editingFileCodeRaw = editingFile === "index.html" 
-          ? project.generatedCode 
+        const editingFileCodeRaw = editingFile === "index.html"
+          ? project.generatedCode
           : existingFiles.find(f => f.filename === editingFile)?.code || project.generatedCode;
-
-        const { stripped: editingFileCode, map } = stripBase64(editingFileCodeRaw || "");
+        const { map } = stripBase64(editingFileCodeRaw || "");
         base64Map = map;
-        console.log(`Stripped ${map.size} base64 images from code. Original: ${(editingFileCodeRaw||"").length} chars, Stripped: ${editingFileCode.length} chars`);
+        console.log(`[AGENT] Multipage edit. Active: ${editingFile}, pages: ${sitePages.map(p => p.filename).join(", ")}`);
 
-        systemContent += `\n\n${"═".repeat(43)}\nРЕЖИМ РЕДАКТИРОВАНИЯ — АКТИВНЫЙ ФАЙЛ: ${editingFile}\n${"═".repeat(43)}\nПользователь РЕДАКТИРУЕТ файл "${editingFile}". Все изменения должны применяться К ЭТОМУ ФАЙЛУ.\n\n⚠️ КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА РЕДАКТИРОВАНИЯ:\n1. ОБЯЗАТЕЛЬНО сохрани <nav> (навбар) со ВСЕМИ ссылками навигации\n2. ОБЯЗАТЕЛЬНО сохрани <footer>\n3. Изменять ТОЛЬКО то, что явно просит пользователь\n4. НЕ удалять, НЕ упрощать существующий код\n5. Плейсхолдеры __B64_N__ — это изображения. НЕ трогай и НЕ меняй их.\n\n🔧 ФОРМАТ ОТВЕТА — ИСПОЛЬЗУЙ DIFF-ПАТЧИ (НЕ полный код!):\n- Сначала 1-3 предложения о внесённых изменениях\n- Затем используй блоки SEARCH/REPLACE для каждого изменения:\n\n\`\`\`diff\n<<<<<<< SEARCH\nточный фрагмент существующего кода который нужно найти\n=======\nновый код на замену\n>>>>>>> REPLACE\n\`\`\`\n\nПравила SEARCH/REPLACE:\n- SEARCH блок должен ТОЧНО совпадать с фрагментом существующего кода (включая пробелы и отступы)\n- Включай достаточно контекста (5-15 строк) чтобы фрагмент был уникальным\n- Используй несколько блоков SEARCH/REPLACE для нескольких изменений\n- Для УДАЛЕНИЯ блока — оставь REPLACE пустым\n- Для ДОБАВЛЕНИЯ нового кода — в SEARCH укажи соседний существующий блок, в REPLACE — его же + новый код\n\n⚠️ ИСКЛЮЧЕНИЕ — используй ПОЛНЫЙ HTML (блок \`\`\`html) ТОЛЬКО если:\n- Пользователь просит переделать/переписать ВЕСЬ дизайн\n- Изменения затрагивают >50% файла\n- Пользователь просит изменить ВСЕ страницы (тогда используй маркеры --- FILE: имя.html ---)\n\n`;
+        craftMdForEdit = await ensureCraftMd(project.id, {
+          title: project.title || "Сайт",
+          description: project.description,
+          userPrompt: prompt,
+          pages: sitePages,
+        });
 
-        systemContent += `ТЕКУЩИЙ КОД РЕДАКТИРУЕМОГО ФАЙЛА (${editingFile}):\n\`\`\`html\n${editingFileCode}\n\`\`\`\n`;
-
-        if (existingFiles.length > 0) {
-          const otherFiles = editingFile === "index.html" 
-            ? existingFiles 
-            : [{ filename: "index.html", code: project.generatedCode }, ...existingFiles.filter(f => f.filename !== editingFile)];
-          if (otherFiles.length > 0) {
-            systemContent += `\nДРУГИЕ ФАЙЛЫ ПРОЕКТА (для справки, НЕ редактируй их без запроса):\n`;
-            for (const f of otherFiles) {
-              const code = 'code' in f ? f.code : '';
-              systemContent += `- ${f.filename} (${(code || '').length} символов)\n`;
-            }
-          }
-        }
+        systemContent = buildMultipageEditSystemPrompt({
+          baseSystem: systemContent,
+          activeFile: editingFile,
+          craftMd: craftMdForEdit,
+          pages: sitePages,
+          useToolsHint: !useGemini,
+        });
       }
 
       const inputContent: any[] = [];
@@ -3331,35 +3349,87 @@ ${designAnalysis}
 
       console.log(`[KIE] Generate call. Agent: ${useGemini ? "v2/Gemini-Flash" : "v1/Claude-Sonnet-5"}, History: ${conversationHistory.length}, Edit: ${isEditMode}`);
 
-      const MAX_RETRIES = 3;
-      let lastError: any = null;
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      // ── Multipage tool-calling agent (Claude / KIE) ─────────────────────────
+      // Tries Anthropic-style function calling so the model can read/patch ANY page.
+      // If KIE rejects tools, we fall through to the streaming multipage text protocol.
+      if (isEditMode && !useGemini) {
         try {
-          const streamGen = useGemini
-            ? geminiGenerateStream(conversationHistory, systemContent)
-            : kieGenerateStream(conversationHistory, systemContent, "high");
-          for await (const chunk of streamGen) {
-            fullResponse += chunk;
-            res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+          res.write(`data: ${JSON.stringify({ status: "Агент изучает все страницы сайта…" })}\n\n`);
+          const hist = conversationHistory
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .slice(0, -1)
+            .map((m) => ({
+              role: m.role as "user" | "assistant",
+              text: m.content.map((c: any) => (c.type === "input_text" ? c.text : "")).join("\n").slice(0, 2000),
+            }))
+            .filter((h) => h.text.trim());
+
+          const toolResult = await runToolCallingAgent({
+            systemPrompt: systemContent,
+            userPrompt: prompt,
+            pages: sitePages,
+            craftMd: craftMdForEdit,
+            history: hist.slice(-8),
+            maxRounds: 8,
+            onStatus: (status) => {
+              try { res.write(`data: ${JSON.stringify({ status })}\n\n`); } catch {}
+            },
+            onContent: (chunk) => {
+              if (!chunk) return;
+              fullResponse += chunk;
+              try { res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`); } catch {}
+            },
+          });
+
+          if (toolResult.toolsSupported && toolResult.changedFiles.size > 0) {
+            agentToolHandled = true;
+            agentChangedFiles = toolResult.changedFiles;
+            agentSummary = toolResult.summary;
+            craftMdForEdit = toolResult.craftMd;
+            if (!fullResponse.trim()) fullResponse = toolResult.summary;
+            console.log(`[AGENT] Tool-calling success. Changed: ${[...toolResult.changedFiles.keys()].join(", ")}`);
+          } else if (toolResult.toolsSupported && toolResult.changedFiles.size === 0) {
+            console.log("[AGENT] Tools supported but no file changes — falling back to stream protocol");
+          } else {
+            console.log("[AGENT] Tools unsupported by KIE — using multipage stream protocol");
+            systemContent += `\n\n⚠️ Инструменты недоступны в этом запросе. Отвечай в MULTIPAGE DIFF формате с маркерами --- FILE: имя.html --- и блоками \`\`\`diff SEARCH/REPLACE.\n`;
           }
-          lastError = null;
-          break;
-        } catch (retryErr: any) {
-          lastError = retryErr;
-          const msg = String(retryErr?.message || "");
-          const status = retryErr?.status || retryErr?.code;
-          if ((status === 503 || status === 429 || msg.includes("429") || msg.includes("503")) && attempt < MAX_RETRIES - 1) {
-            const delay = (attempt + 1) * 3000;
-            console.log(`[KIE] ${status || "rate-limit"} error, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})...`);
-            res.write(`data: ${JSON.stringify({ content: `\n\n⏳ Сервер перегружен, повторяю запрос (${attempt + 2}/${MAX_RETRIES})...\n\n` })}\n\n`);
-            await new Promise(r => setTimeout(r, delay));
-            fullResponse = "";
-            continue;
-          }
-          throw retryErr;
+        } catch (agentErr: any) {
+          console.warn("[AGENT] Tool-calling failed, stream fallback:", agentErr?.message || agentErr);
         }
       }
-      if (lastError) throw lastError;
+
+      const MAX_RETRIES = 3;
+      let lastError: any = null;
+      if (!agentToolHandled) {
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+          try {
+            const streamGen = useGemini
+              ? geminiGenerateStream(conversationHistory, systemContent)
+              : kieGenerateStream(conversationHistory, systemContent, "high");
+            for await (const chunk of streamGen) {
+              fullResponse += chunk;
+              res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+            }
+            lastError = null;
+            break;
+          } catch (retryErr: any) {
+            lastError = retryErr;
+            const msg = String(retryErr?.message || "");
+            const status = retryErr?.status || retryErr?.code;
+            if ((status === 503 || status === 429 || msg.includes("429") || msg.includes("503")) && attempt < MAX_RETRIES - 1) {
+              const delay = (attempt + 1) * 3000;
+              console.log(`[KIE] ${status || "rate-limit"} error, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+              res.write(`data: ${JSON.stringify({ content: `\n\n⏳ Сервер перегружен, повторяю запрос (${attempt + 2}/${MAX_RETRIES})...\n\n` })}\n\n`);
+              await new Promise(r => setTimeout(r, delay));
+              fullResponse = "";
+              continue;
+            }
+            throw retryErr;
+          }
+        }
+        if (lastError) throw lastError;
+      }
 
       console.log("Total response length:", fullResponse.length);
       console.log("Response preview:", fullResponse.substring(0, 200));
@@ -3414,9 +3484,9 @@ ${designAnalysis}
         return result;
       };
 
-      // If single-page mode but model still emitted FILE markers, strip them
-      // so they don't leak into the HTML or trigger multi-file parsing.
-      if (!multiPagesData && fullResponse.includes("--- FILE:")) {
+      // New-site single-page mode: strip rogue FILE markers so they don't leak.
+      // Edit mode ALWAYS allows multipage --- FILE: --- markers.
+      if (!isEditMode && !multiPagesData && fullResponse.includes("--- FILE:")) {
         fullResponse = fullResponse.replace(/---\s*FILE:\s*[^\s\-]+\.html\s*---\s*\n?/gi, "");
         console.log("[PARSE] Stripped rogue FILE markers (single-page mode)");
       }
@@ -3425,69 +3495,10 @@ ${designAnalysis}
       const hasFileMarkers = fullResponse.includes("--- FILE:");
       const htmlBlockCount = (fullResponse.match(/```html/g) || []).length;
       const diffBlockCount = (fullResponse.match(/```diff/g) || []).length;
-      console.log("Full response length:", fullResponse.length, "Has FILE markers:", hasFileMarkers, "HTML blocks:", htmlBlockCount, "Diff blocks:", diffBlockCount, "Has SEARCH/REPLACE:", hasDiffBlocks);
+      console.log("Full response length:", fullResponse.length, "Has FILE markers:", hasFileMarkers, "HTML blocks:", htmlBlockCount, "Diff blocks:", diffBlockCount, "Has SEARCH/REPLACE:", hasDiffBlocks, "AgentTools:", agentToolHandled);
 
-      // Apply SEARCH/REPLACE diff blocks. Matching is tolerant of whitespace /
-      // indentation differences (the #1 reason a patch silently failed to match
-      // before), and all replacement is index/slice based so `$`, `$1`, `$&` etc.
-      // in the new code are inserted literally instead of being interpreted by
-      // String.replace. Returns how many patches actually applied so the caller
-      // can detect a total no-op instead of reporting a phantom success.
-      const applyDiffPatches = (originalCode: string, response: string): { code: string; applied: number; total: number } => {
-        const diffRegex = /```diff\s*\n([\s\S]*?)```/g;
-        let patchedCode = originalCode;
-        let applied = 0;
-        let total = 0;
-        let dm;
-        while ((dm = diffRegex.exec(response)) !== null) {
-          const diffContent = dm[1];
-          // Tolerate CRLF vs LF, trailing spaces after the markers, and small
-          // deviations in the number of </=/> characters the model emits — any of
-          // which previously made the pair fail to parse (total stayed 0) and the
-          // route reported a phantom success with unchanged code.
-          const searchReplaceRegex = /<{5,}[ \t]*SEARCH[ \t]*\r?\n([\s\S]*?)\r?\n={5,}[ \t]*\r?\n([\s\S]*?)\r?\n>{5,}[ \t]*REPLACE/g;
-          let sr;
-          while ((sr = searchReplaceRegex.exec(diffContent)) !== null) {
-            total++;
-            const searchBlock = sr[1];
-            const replaceBlock = sr[2];
-            if (!searchBlock.trim()) {
-              console.warn("Empty SEARCH block, skipping patch.");
-              continue;
-            }
-            // 1) Exact match (fast path) — slice-based so replacement is literal.
-            const exactIdx = patchedCode.indexOf(searchBlock);
-            if (exactIdx !== -1) {
-              patchedCode = patchedCode.slice(0, exactIdx) + replaceBlock + patchedCode.slice(exactIdx + searchBlock.length);
-              applied++;
-              continue;
-            }
-            // 2) Whitespace-tolerant match: build a regex where every run of
-            //    whitespace in the SEARCH block matches any whitespace run in the
-            //    code, and everything else matches literally. Handles reindented /
-            //    reformatted output from the model (CRLF vs LF, tabs vs spaces, etc.).
-            const pattern = searchBlock
-              .trim()
-              .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-              .replace(/\s+/g, "\\s+");
-            let matched = false;
-            try {
-              const re = new RegExp(pattern);
-              const m = re.exec(patchedCode);
-              if (m) {
-                patchedCode = patchedCode.slice(0, m.index) + replaceBlock + patchedCode.slice(m.index + m[0].length);
-                applied++;
-                matched = true;
-              }
-            } catch {}
-            if (!matched) {
-              console.warn("SEARCH block not found (exact+fuzzy), skipping patch. First 80 chars:", searchBlock.substring(0, 80));
-            }
-          }
-        }
-        console.log(`Applied ${applied}/${total} diff patches`);
-        return { code: patchedCode, applied, total };
-      };
+      const applyDiffPatches = (originalCode: string, response: string): { code: string; applied: number; total: number } =>
+        applyDiffPatchesToCode(originalCode, response);
 
       let aiTextReply = "";
       const firstHtmlIdx = fullResponse.indexOf("```html");
@@ -3503,24 +3514,35 @@ ${designAnalysis}
         aiTextReply = fullResponse.substring(0, firstFileMarkerIdx).trim();
       }
 
-      const editingFile = activeFile || "index.html";
+      let editingFile = activeFile || "index.html";
       let mainHtmlCode: string;
+      let editedFilesList: string[] = [];
 
-      if (hasDiffBlocks && diffBlockCount > 0) {
-        const editingFileCodeRaw = editingFile === "index.html"
-          ? project.generatedCode || ""
-          : existingFiles.find(f => f.filename === editingFile)?.code || project.generatedCode || "";
+      if (agentToolHandled && agentChangedFiles && agentChangedFiles.size > 0) {
+        aiTextReply = agentSummary || aiTextReply || "Сайт обновлён";
+        mainHtmlCode = project.generatedCode || "";
+        for (const [fn, code] of agentChangedFiles) {
+          const finalCode = replaceImgMarkers(code);
+          editedFilesList.push(fn);
+          if (fn === "index.html") mainHtmlCode = finalCode;
+          else await storage.upsertProjectFile({ projectId: project.id, filename: fn, code: finalCode });
+        }
+        if (!agentChangedFiles.has("index.html")) mainHtmlCode = project.generatedCode || "";
+        editingFile = editedFilesList.includes(activeFile || "")
+          ? (activeFile || "index.html")
+          : (editedFilesList[0] || editingFile);
+        await storage.upsertProjectFile({ projectId: project.id, filename: CRAFT_MD_FILENAME, code: craftMdForEdit });
+      } else if (isEditMode && (hasDiffBlocks || (hasFileMarkers && (diffBlockCount > 0 || htmlBlockCount > 0)))) {
+        // Multipage edit protocol: --- FILE: x.html --- + diff/html per file
+        const filesMap = new Map<string, string>();
+        filesMap.set("index.html", project.generatedCode || "");
+        for (const f of existingFiles) {
+          if (isHtmlPage(f.filename)) filesMap.set(f.filename, f.code || "");
+        }
+        const parsed = parseMultipageEditResponse(fullResponse, filesMap, editingFile);
+        aiTextReply = parsed.aiTextReply || aiTextReply;
 
-        const { stripped: editingFileCode } = stripBase64(editingFileCodeRaw);
-        const patchResult = applyDiffPatches(editingFileCode, fullResponse);
-
-        // Nothing applied — the AI returned diff blocks but not a single SEARCH block
-        // matched (or none parsed). Applying it would be a silent no-op: unchanged code
-        // saved, credits charged, and the model's "я изменил…" reply shown, so the user
-        // sees no change (the reported bug). Instead: refund (only if this request
-        // actually billed — an idempotent replay charged nothing), record the failure in
-        // chat history, and tell the user to retry.
-        if (patchResult.applied === 0) {
+        if (parsed.total > 0 && parsed.applied === 0) {
           const billed = genDeduction.success && !genDeduction.alreadyProcessed;
           if (billed && user?.id) { try { await storage.refundCredits(user.id, GENERATION_COST); } catch {} }
           const freshBal = user?.id ? (await storage.getUser(user.id))?.credits : undefined;
@@ -3528,27 +3550,88 @@ ${designAnalysis}
           try {
             await storage.createProjectMessage({ projectId: project.id, role: "model", content: failMsg });
           } catch {}
-          console.warn(`[EDIT] 0/${patchResult.total} diff patches applied for project ${project.id} — no-op, ${billed ? "credits refunded" : "no charge (replay)"}`);
+          console.warn(`[EDIT] 0/${parsed.total} multipage patches applied for project ${project.id}`);
           res.write(`data: ${JSON.stringify({ error: failMsg, newBalance: freshBal })}\n\n`);
           res.end();
           return;
         }
 
-        // Some (but not all) patches landed — tell the user so a partial edit doesn't
-        // read as a phantom success for the parts that didn't match.
-        if (patchResult.applied < patchResult.total) {
-          const note = `⚠️ Применено ${patchResult.applied} из ${patchResult.total} изменений — остальные не удалось точно сопоставить с кодом. Если чего-то не хватает, переформулируйте запрос.`;
+        if (parsed.applied > 0 && parsed.applied < parsed.total) {
+          const note = `⚠️ Применено ${parsed.applied} из ${parsed.total} изменений — остальные не удалось точно сопоставить с кодом. Если чего-то не хватает, переформулируйте запрос.`;
           aiTextReply = aiTextReply ? `${aiTextReply}\n\n${note}` : note;
         }
 
-        const patchedStripped = patchResult.code;
-        const patchedCode = replaceImgMarkers(restoreBase64(patchedStripped, base64Map));
+        mainHtmlCode = project.generatedCode || "";
+        if (parsed.changed.size === 0 && !hasDiffBlocks) {
+          // Fall through to full-HTML multipage parser below via empty changed —
+          // handled in the else branch by reusing legacy FILE+html logic.
+        }
 
-        if (editingFile !== "index.html") {
-          await storage.upsertProjectFile({ projectId: project.id, filename: editingFile, code: patchedCode });
-          mainHtmlCode = project.generatedCode || "";
+        if (parsed.changed.size > 0) {
+          for (const [fn, code] of parsed.changed) {
+            const finalCode = replaceImgMarkers(code);
+            editedFilesList.push(fn);
+            if (fn === "index.html") mainHtmlCode = finalCode;
+            else await storage.upsertProjectFile({ projectId: project.id, filename: fn, code: finalCode });
+          }
+          if (!parsed.changed.has("index.html")) mainHtmlCode = project.generatedCode || "";
+          editingFile = editedFilesList.includes(activeFile || "")
+            ? (activeFile || "index.html")
+            : (editedFilesList[0] || editingFile);
+        } else if (hasFileMarkers) {
+          // Full HTML per FILE marker (rewrite / new pages)
+          const fileMarkerRegex = /---\s*FILE:\s*([^\s\-]+\.html)\s*---\s*\n?\s*```html\s*\n?([\s\S]*?)```/gi;
+          const parsedFiles: { filename: string; code: string }[] = [];
+          let fm;
+          while ((fm = fileMarkerRegex.exec(fullResponse)) !== null) {
+            parsedFiles.push({ filename: fm[1].trim().toLowerCase(), code: replaceImgMarkers(fm[2].trim()) });
+          }
+          if (parsedFiles.length === 0) {
+            const rawMarkerRegex = /---\s*FILE:\s*([^\s\-]+\.html)\s*---\s*\n([\s\S]*?)(?=\s*---\s*FILE:|$)/gi;
+            let rm;
+            while ((rm = rawMarkerRegex.exec(fullResponse)) !== null) {
+              const rawCode = rm[2].trim();
+              if (rawCode.includes("<") && rawCode.length > 50) {
+                parsedFiles.push({ filename: rm[1].trim().toLowerCase(), code: replaceImgMarkers(rawCode) });
+              }
+            }
+          }
+          const indexFile = parsedFiles.find(f => f.filename === "index.html");
+          mainHtmlCode = indexFile?.code || project.generatedCode || parsedFiles[0]?.code || "";
+          for (const pf of parsedFiles) {
+            editedFilesList.push(pf.filename);
+            if (pf.filename !== "index.html") {
+              await storage.upsertProjectFile({ projectId: project.id, filename: pf.filename, code: pf.code });
+            }
+          }
+          editingFile = editedFilesList.includes(activeFile || "") ? (activeFile || "index.html") : (editedFilesList[0] || editingFile);
         } else {
-          mainHtmlCode = patchedCode;
+          // Single-file legacy diff without FILE markers → active file
+          const editingFileCodeRaw = editingFile === "index.html"
+            ? project.generatedCode || ""
+            : existingFiles.find(f => f.filename === editingFile)?.code || project.generatedCode || "";
+          const { stripped: editingFileCode } = stripBase64(editingFileCodeRaw);
+          const patchResult = applyDiffPatches(editingFileCode, fullResponse);
+          if (patchResult.total > 0 && patchResult.applied === 0) {
+            const billed = genDeduction.success && !genDeduction.alreadyProcessed;
+            if (billed && user?.id) { try { await storage.refundCredits(user.id, GENERATION_COST); } catch {} }
+            const freshBal = user?.id ? (await storage.getUser(user.id))?.credits : undefined;
+            const failMsg = "Не удалось применить изменения к коду — попробуйте переформулировать запрос или повторить. Токены за эту попытку возвращены.";
+            try {
+              await storage.createProjectMessage({ projectId: project.id, role: "model", content: failMsg });
+            } catch {}
+            res.write(`data: ${JSON.stringify({ error: failMsg, newBalance: freshBal })}\n\n`);
+            res.end();
+            return;
+          }
+          const patchedCode = replaceImgMarkers(restoreBase64(patchResult.code, base64Map));
+          editedFilesList = [editingFile];
+          if (editingFile !== "index.html") {
+            await storage.upsertProjectFile({ projectId: project.id, filename: editingFile, code: patchedCode });
+            mainHtmlCode = project.generatedCode || "";
+          } else {
+            mainHtmlCode = patchedCode;
+          }
         }
       } else {
         const fileMarkerRegex = /---\s*FILE:\s*([^\s\-]+\.html)\s*---\s*\n?\s*```html\s*\n?([\s\S]*?)```/gi;
@@ -3559,7 +3642,6 @@ ${designAnalysis}
         }
 
         if (parsedFiles.length === 0) {
-          // Fallback 2: bold/starred FILE markers with ```html blocks
           const altMarkerRegex = /\*{0,2}\s*FILE:\s*([^\s*]+\.html)\s*\*{0,2}\s*\n?\s*```html\s*\n?([\s\S]*?)```/gi;
           let altM;
           while ((altM = altMarkerRegex.exec(fullResponse)) !== null) {
@@ -3568,13 +3650,10 @@ ${designAnalysis}
         }
 
         if (parsedFiles.length === 0 && hasFileMarkers) {
-          // Fallback 3: raw HTML without ```html wrappers (Gemini Flash style)
-          // Splits on --- FILE: name.html --- and captures everything until the next marker or end
           const rawMarkerRegex = /---\s*FILE:\s*([^\s\-]+\.html)\s*---\s*\n([\s\S]*?)(?=\s*---\s*FILE:|$)/gi;
           let rm;
           while ((rm = rawMarkerRegex.exec(fullResponse)) !== null) {
             const rawCode = rm[2].trim();
-            // Only accept if it looks like HTML
             if (rawCode.includes("<") && rawCode.length > 50) {
               parsedFiles.push({ filename: rm[1].trim().toLowerCase(), code: replaceImgMarkers(rawCode) });
             }
@@ -3600,6 +3679,7 @@ ${designAnalysis}
           const footerMatch = indexCode.match(/<footer[\s\S]*?<\/footer>/i);
 
           for (const pf of parsedFiles) {
+            editedFilesList.push(pf.filename);
             if (pf.filename !== "index.html") {
               let code = pf.code;
               if (headerMatch) {
@@ -3616,21 +3696,18 @@ ${designAnalysis}
           const singleMatch = fullResponse.match(/```html\s*\n?([\s\S]*?)```/i);
           let parsedCode: string | null = null;
           if (singleMatch && singleMatch[1].includes("<")) {
-            // Closed ```html fence — use its content (still clean stray preamble/fences).
             parsedCode = replaceImgMarkers(cleanHtmlDoc(singleMatch[1]));
           } else if (/<!DOCTYPE\s+html|<html[\s>]/i.test(fullResponse)) {
-            // No closed fence (e.g. unclosed ```html or raw doc) — slice the real
-            // document out of the response, dropping conversational preamble and any
-            // dangling opening/closing fence. Prevents the leak where the model's
-            // "Вот готовый код файла index.html: ```html" prefix became the site.
             parsedCode = replaceImgMarkers(cleanHtmlDoc(fullResponse));
           }
 
           if (parsedCode && isEditMode && editingFile !== "index.html") {
             await storage.upsertProjectFile({ projectId: project.id, filename: editingFile, code: parsedCode });
             mainHtmlCode = project.generatedCode || "";
+            editedFilesList = [editingFile];
           } else if (parsedCode) {
             mainHtmlCode = parsedCode;
+            editedFilesList = ["index.html"];
           } else {
             mainHtmlCode = project.generatedCode || "";
           }
@@ -3686,7 +3763,8 @@ ${designAnalysis}
       genFilesMap.set("index.html", mainHtmlCode);
       const secondaryForGen = await storage.getProjectFiles(project.id);
       for (const f of secondaryForGen) {
-        if (f.filename !== "index.html") genFilesMap.set(f.filename, f.code);
+        if (f.filename === "index.html" || f.filename === CRAFT_MD_FILENAME || !isHtmlPage(f.filename)) continue;
+        genFilesMap.set(f.filename, f.code);
       }
       const genRunKey = idempotencyKey || `gen-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
       const referenceImageUrlsForGen = (mockupMode && savedImageUrls.length > 0)
@@ -3813,13 +3891,51 @@ ${designAnalysis}
         content: aiTextReply || "Сайт обновлён",
       });
 
+      // craft.md — Replit-style agent memory for this site
+      try {
+        const pagesNow: SitePage[] = [
+          { filename: "index.html", code: immediateHtml },
+          ...(await storage.getProjectFiles(project.id))
+            .filter((f) => f.filename !== "index.html" && isHtmlPage(f.filename))
+            .map((f) => ({ filename: f.filename, code: f.code || "" })),
+        ];
+        if (isNewSite) {
+          await ensureCraftMd(project.id, {
+            title: project.title || "Сайт",
+            description: project.description,
+            userPrompt: prompt,
+            pages: pagesNow,
+          });
+        } else if (isEditMode) {
+          await refreshCraftMdPages(project.id, pagesNow, {
+            userRequest: prompt,
+            summary: (aiTextReply || "правка").replace(/\s+/g, " ").trim().slice(0, 220),
+            changedFiles: editedFilesList.length ? editedFilesList : [editingFile],
+          });
+        }
+      } catch (craftErr: any) {
+        console.warn("[AGENT] craft.md update failed:", craftErr?.message || craftErr);
+      }
+
       // Deliver to client immediately (no waiting for video)
       const allFiles = await storage.getProjectFiles(project.id);
       const editedFileCode = editingFile !== "index.html" ? allFiles.find(f => f.filename === editingFile)?.code : immediateHtml;
       const freshUser = user?.id ? await storage.getUser(user.id) : null;
       const immediateCreditsUsed = GENERATION_COST + genImgResult.creditsUsed + reviewCreditsUsed;
       const immediateBalance = freshUser?.credits ?? (genDeduction.newBalance - genImgResult.creditsUsed - reviewCreditsUsed);
-      res.write(`data: ${JSON.stringify({ done: true, code: immediateHtml, editedFile: editingFile, editedCode: editedFileCode || immediateHtml, reply: aiTextReply, files: allFiles.map(f => ({ filename: f.filename, id: f.id })), imagesGenerated: genImgResult.generated, creditsUsed: immediateCreditsUsed, newBalance: immediateBalance, animPending: hasScrollMarkers })}\n\n`);
+      res.write(`data: ${JSON.stringify({
+        done: true,
+        code: immediateHtml,
+        editedFile: editingFile,
+        editedCode: editedFileCode || immediateHtml,
+        editedFiles: editedFilesList.length ? editedFilesList : [editingFile],
+        reply: aiTextReply,
+        files: allFiles.filter((f) => isHtmlPage(f.filename) || f.filename === "index.html").map(f => ({ filename: f.filename, id: f.id })),
+        imagesGenerated: genImgResult.generated,
+        creditsUsed: immediateCreditsUsed,
+        newBalance: immediateBalance,
+        animPending: hasScrollMarkers,
+      })}\n\n`);
       res.end();
 
       // ── Background: resolve animation markers, then update DB ─────────────
@@ -4769,7 +4885,7 @@ ${designAnalysis}
       const files = await storage.getProjectFiles(project.id);
       const allPages = [
         { filename: "index.html", code: project.generatedCode || "" },
-        ...files.filter(f => f.filename !== "index.html"),
+        ...files.filter(f => f.filename !== "index.html" && isHtmlPage(f.filename)),
       ];
 
       const indexCode = project.generatedCode || "";
@@ -4924,7 +5040,7 @@ ${designAnalysis}
 
 
       if (user.credits < DAILY_PUBLISH_COST) {
-        return res.status(403).json({ message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 20 токенов/сайт." });
+        return res.status(403).json({ message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 35 токенов/сайт в день." });
       }
 
       // Enforce per-plan published-site limit (only for a NEW publish, not re-publishing this project).
@@ -5009,6 +5125,8 @@ ${designAnalysis}
 
       for (const f of extraFiles) {
         if (f.filename === "index.html") continue;
+        // Agent memory / non-HTML project docs must not ship to the public bucket
+        if (f.filename === CRAFT_MD_FILENAME || !isHtmlPage(f.filename)) continue;
         let code = f.code;
         for (const img of projectImages) {
           code = code.replace(new RegExp(`\\{\\{IMG:${img.name}\\}\\}`, "g"), img.url);

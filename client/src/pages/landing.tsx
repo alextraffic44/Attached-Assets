@@ -249,10 +249,10 @@ export default function Landing() {
       const grid = document.createElement("div");
       grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.5rem;";
 
-      grid.appendChild(makeCard("1 000", "990 ₽", false, "", "1 сайт,<br>10 итераций по редактированию", "Старт"));
-      grid.appendChild(makeCard("1 900", "1 690 ₽", false, "0.1s", "2 сайта,<br>19 итераций по редактированию", "Базовый"));
-      grid.appendChild(makeCard("4 500", "3 990 ₽", false, "0.2s", "3 сайта,<br>45 итераций по редактированию, доступ к премиум шаблонам", "Профи"));
-      grid.appendChild(makeCard("10 000", "9 990 ₽", true, "0.3s", "5 сайтов,<br>100 итераций по редактированию, доступ к премиум шаблонам", "Ультра"));
+      grid.appendChild(makeCard("1 000", "990 ₽", false, "", "1 сайт,<br>хостинг 35 ток/день,<br>10 итераций по редактированию", "Старт"));
+      grid.appendChild(makeCard("1 900", "1 690 ₽", false, "0.1s", "2 сайта,<br>хостинг 35 ток/день за сайт,<br>19 итераций по редактированию", "Базовый"));
+      grid.appendChild(makeCard("4 500", "3 990 ₽", false, "0.2s", "3 сайта,<br>хостинг 35 ток/день за сайт,<br>45 итераций, премиум шаблоны", "Профи"));
+      grid.appendChild(makeCard("10 000", "9 990 ₽", true, "0.3s", "5 сайтов,<br>хостинг 35 ток/день за сайт,<br>100 итераций, премиум шаблоны", "Ультра"));
 
       pContainer.appendChild(pHeader);
       pContainer.appendChild(grid);

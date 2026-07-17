@@ -8,7 +8,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - **Backend**: Express.js with session-based authentication (Passport.js)
 - **Database**: PostgreSQL with Drizzle ORM
 - **AI Code (new site)**: Claude Sonnet 5 via KIE API (KIE_API_KEY env var, POST https://api.kie.ai/claude/v1/messages, Anthropic Messages API shape — `system` field + `messages` array, `max_tokens`, `thinkingFlag`, streaming SSE with `content_block_delta`/`text_delta` events, manual conversation history)
-- **AI Code (edit)**: Claude Sonnet 5 via KIE API for editing with SEARCH/REPLACE diff patches (falls back to full HTML if needed); base64 images stripped before sending to reduce context size
+- **AI Code (edit)**: Multipage site agent (Replit-style). Claude Sonnet 5 via KIE tries Anthropic function calling (`list_pages`, `read_page`, `apply_patch`, `write_page`, `read_craft_md`, `update_craft_md`, `finish`) so the model can see and patch ANY page, not only the editor's active tab. Gemini (v2 / interactive) and tool-API fallbacks use a multipage text protocol (`--- FILE: name.html ---` + SEARCH/REPLACE). Each project stores `craft.md` in `project_files` (agent memory: site brief, page map, change journal). Base64 images stripped before model context.
 - **"Профессионал" mode (formerly "По фото" / Mockup Mode)**: Dashboard start mode + in-editor toggle for attaching reference images. Supports MULTIPLE reference images (up to 5) — any mix of design-reference screenshots (competitor sites, mockups) and/or real product/brand/person photos. AI is given MAXIMUM CREATIVE FREEDOM (no pixel-perfect/exact-recreation rules) — treats references as inspiration only, and is free to improve layout, copy, and visual details.
 - **Two-Step Mockup Analysis**: Step 1 extracts a JSON design spec (colors, typography, layout, sections, effects) via a separate KIE sync call, plus a `reference_photos` array describing EACH attached image with its role (`design_reference` vs `product_photo`/`logo`/`person`/`brand_asset`); Step 2 uses that analysis as inspiration (not a strict blueprint) to generate the site
 - **Reference-aware image generation (REF markers)**: When the AI decides a generated site photo should feature the user's actual uploaded product/brand/person (not an invented stock photo), it emits `{{GENIMG:<prompt>|<ratio>|REF<n>}}` (or `REF<n>,<m>` for multiple refs) where `<n>` is the 1-based index of the reference image (matching upload/`reference_photos` order). `resolveGenImgMarkers` resolves `REF` indices against the reference image URLs passed in and calls `generateGptImage` with `refUrls`, which switches KIE model to `gpt-image-2-image-to-image` (`input_urls`) for true image-to-image generation — preserving the real product/brand/person while placing it in a new professional scene. Markers without `REF` use plain text-to-image as before. This mirrors the "Интерактивный" mode's `generateProductStill` pattern but generalized to any GENIMG marker.
@@ -41,7 +41,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - `project_messages` — id, projectId, role, content, createdAt
 - `project_images` — id, projectId, name, url, prompt, createdAt (named image library)
 - `project_versions` — id, projectId, code, label, createdAt (version history/rollback)
-- `project_files` — id, projectId, filename, code, createdAt (multi-page support: extra HTML files beyond index.html)
+- `project_files` — id, projectId, filename, code, createdAt (multi-page HTML + per-site `craft.md` agent memory; craft.md is never published to the public bucket)
 - `leads` — id, projectId, name, email, phone, message, source, isRead, createdAt (form submissions from generated sites)
 - `payment_orders` — id, userId, amount, tokens, status, orderId, paymentUrl, createdAt, paidAt
 - `session` — auto-managed by connect-pg-simple
@@ -127,7 +127,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 ## Publish Limits & Billing
 - Plan limits: bronze=1 site, silver=2, gold=3, platinum=5
 - Publish endpoint checks current published count vs plan limit before allowing new publish
-- Daily cost: 20 tokens per published site, charged at 03:00 via setInterval/setTimeout cron
+- Daily cost: 35 tokens per published site, charged at 03:00 via setInterval/setTimeout cron
 - If user has insufficient balance: sites are suspended (unpublished from Yandex Cloud with placeholder page)
 - Suspended sites can be re-published when user tops up balance
 - `PLAN_PUBLISH_LIMITS` and `DAILY_PUBLISH_COST` constants in server/routes.ts
@@ -146,6 +146,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - Integration: `server/replit_integrations/object_storage/`
 
 ## Important Files
+- `server/agent-runtime.ts` — Multipage edit agent (craft.md, Claude tools, DIFF parser)
 - `shared/schema.ts` — Database schema and types
 - `server/routes.ts` — API endpoints
 - `server/auth.ts` — Authentication setup
