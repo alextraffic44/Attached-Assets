@@ -450,6 +450,39 @@ export default function DashboardPage() {
           .db-mode-card h3 { margin-bottom: 2px !important; font-size: 0.95rem !important; }
           .db-mode-card p { font-size: 0.75rem !important; }
           .db-details-grid { grid-template-columns: 1fr !important; }
+          .db-hit-badge { top: -10px !important; right: 10px !important; left: auto !important; transform: none !important; font-size: 0.62rem !important; padding: 0.22rem 0.65rem !important; }
+        }
+        @keyframes db-hit-shimmer {
+          0% { background-position: 0% 50%; }
+          100% { background-position: 200% 50%; }
+        }
+        .db-hit-badge {
+          position: absolute;
+          top: -12px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 3;
+          font-size: 0.68rem;
+          font-weight: 800;
+          letter-spacing: 0.14em;
+          padding: 0.28rem 0.85rem;
+          border-radius: 999px;
+          color: #0b3a5c;
+          border: 1px solid rgba(255,255,255,0.65);
+          box-shadow: 0 4px 14px rgba(56, 189, 248, 0.35), inset 0 1px 0 rgba(255,255,255,0.7);
+          background: linear-gradient(
+            110deg,
+            #7dd3fc 0%,
+            #bae6fd 22%,
+            #e2e8f0 38%,
+            #38bdf8 55%,
+            #f8fafc 72%,
+            #7dd3fc 100%
+          );
+          background-size: 220% 100%;
+          animation: db-hit-shimmer 2.4s linear infinite;
+          white-space: nowrap;
+          pointer-events: none;
         }
         .db-magic-btn::before {
           content: ''; position: absolute; bottom: -20%; left: 50%; z-index: -1;
@@ -754,6 +787,7 @@ export default function DashboardPage() {
                       m: "prompt",
                       t: "По описанию",
                       d: "Просто напишите, что вам нужно",
+                      badge: null as string | null,
                       icon: (
                         <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
                           <g className="transition-transform duration-500 origin-center group-hover:scale-110">
@@ -769,6 +803,7 @@ export default function DashboardPage() {
                       m: "interactive",
                       t: "Интерактивный",
                       d: "Сайт с анимацией при скролле",
+                      badge: "HIT" as string | null,
                       icon: (
                         <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
                           <g className="transition-transform duration-500 origin-center group-hover:scale-110">
@@ -784,6 +819,7 @@ export default function DashboardPage() {
                       m: "photo",
                       t: "Профессионал",
                       d: "Референсы + ИИ-креатив",
+                      badge: null as string | null,
                       icon: (
                         <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
                           <defs><clipPath id="pm"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /></clipPath></defs>
@@ -804,11 +840,12 @@ export default function DashboardPage() {
                       data-testid={`button-create-${x.m}`}
                       data-tour={`mode-${x.m}`}
                       className="db-mode-card group flex flex-col items-center justify-center text-center transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none"
-                      style={{ padding: '2rem 1.5rem', borderRadius: 20, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', minHeight: 180 }}
+                      style={{ position: 'relative', padding: '2rem 1.5rem', borderRadius: 20, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', minHeight: 180 }}
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.12)'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.06)'; }}
                       onClick={() => { setSelectedMode(x.m as any); setCreateStep("details"); }}
                     >
+                      {x.badge && <span className="db-hit-badge" data-testid="badge-interactive-hit">{x.badge}</span>}
                       <div className="db-mode-icon flex items-center justify-center mb-4" style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         {x.icon}
                       </div>
