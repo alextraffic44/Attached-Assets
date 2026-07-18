@@ -76,7 +76,7 @@ function StyleTemplateCard({ tmpl, isCard, onClick }: { tmpl: UITemplate; isCard
           ref={iframeRef}
           srcDoc={previewHtml}
           style={isCard ? { width: '200%', height: '200%', border: 'none', pointerEvents: 'none', transform: 'scale(0.5)', transformOrigin: 'top left' } : { width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-same-origin"
           title={tmpl.name}
         />
       </div>
@@ -738,7 +738,7 @@ export default function DashboardPage() {
                   {project.generatedCode ? (
                     <div style={{ width: '100%', height: '100%', transform: 'scale(0.4)', transformOrigin: 'center', opacity: 0.7, transition: 'all 0.7s', filter: 'blur(1px)' }}
                       className="group-hover:opacity-100 group-hover:blur-none">
-                      <iframe srcDoc={project.generatedCode} sandbox="allow-same-origin" loading="lazy" className="border-none pointer-events-none" style={{ width: '250%', height: '250%' }} />
+                      <iframe srcDoc={project.generatedCode} sandbox="" loading="lazy" className="border-none pointer-events-none" style={{ width: '250%', height: '250%' }} />
                     </div>
                   ) : (
                     <div style={{ width: 64, height: 64, borderRadius: 20, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

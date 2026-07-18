@@ -4,7 +4,9 @@ description: Fixes from deep audit — iframe sandbox, idempotency, refunds, GEN
 ---
 
 ## Critical / High
-- Preview iframe: removed `allow-same-origin`; validate `postMessage` source; wheel via postMessage
+- Preview iframe (editor/SEO): removed `allow-same-origin`; validate `postMessage` source; wheel via postMessage
+- Project list thumbnails: empty `sandbox` (no scripts, opaque origin) — perf + XSS isolation
+- Trusted UI template cards keep `allow-same-origin` only (needed for hover via contentDocument; no scripts)
 - `deductCredits`: atomic claim-then-debit; reject key reuse across ops/users/amounts
 - Refunds on enhance/research/generate/image/3d failures
 - GENIMG secondary pages persisted after resolve

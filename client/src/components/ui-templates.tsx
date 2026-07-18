@@ -1105,7 +1105,7 @@ function TemplatePreviewCard({ t, onInsert, scaled }: { t: UITemplate; onInsert:
           ref={iframeRef}
           srcDoc={previewHtml}
           style={scaled ? { width: '200%', height: '200%', border: 'none', pointerEvents: 'none', transform: 'scale(0.5)', transformOrigin: 'top left' } : { width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-same-origin"
           title={t.name}
         />
       </div>

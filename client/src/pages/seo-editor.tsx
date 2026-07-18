@@ -663,7 +663,7 @@ export default function SeoEditorPage() {
               srcDoc={previewHtml}
               style={{ flex: 1, border: "none", background: "#fff" }}
               title="preview"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts allow-forms"
             />
           ) : isAnalyzing ? (
             <AnalyzingScreen elapsed={analyzeElapsed} keywordCount={keywordCount} />
