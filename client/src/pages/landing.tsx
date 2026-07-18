@@ -156,11 +156,19 @@ export default function Landing() {
           background-size:200% 200%;
           animation:m2-gradient-shift 5s ease-in-out infinite;
           display:flex;flex-direction:column;align-items:center;
+          justify-content:flex-start;
           padding:2.5rem 2rem;
           text-decoration:none;
           color:inherit;
           transition:transform .4s cubic-bezier(.2,.8,.2,1);
+          height:100%;
+          box-sizing:border-box;
         }
+        .m2card .m2desc{
+          flex:1 1 auto;display:flex;align-items:center;justify-content:center;
+          min-height:4.5rem;margin-bottom:1.5rem;width:100%;
+        }
+        .m2card .m2price{margin-top:auto;}
         .m2card:hover{transform:translateY(-6px) scale(1.02)}
         .m2card::before,.m2card::after{
           --size:5px;
@@ -215,10 +223,12 @@ export default function Landing() {
         divider.style.cssText = "width:100%;height:1px;background:rgba(255,255,255,.08);margin-bottom:1.5rem;";
 
         const descEl = document.createElement("div");
-        descEl.style.cssText = "font-size:.85rem;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:1.5rem;text-align:center;min-height:4.5rem;display:flex;align-items:center;justify-content:center;";
+        descEl.className = "m2desc";
+        descEl.style.cssText = "font-size:.85rem;color:rgba(255,255,255,.6);line-height:1.5;text-align:center;";
         descEl.innerHTML = description;
 
         const priceEl = document.createElement("div");
+        priceEl.className = "m2price";
         priceEl.style.cssText = "font-size:1.4rem;font-weight:600;letter-spacing:-.02em;background:linear-gradient(to right,hsl(27deg 93% 60%),#00a6ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;";
         priceEl.textContent = price;
 
@@ -247,12 +257,12 @@ export default function Landing() {
       `;
 
       const grid = document.createElement("div");
-      grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.5rem;";
+      grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.5rem;align-items:stretch;";
 
-      grid.appendChild(makeCard("1 000", "990 ₽", false, "", "1 сайт,<br>хостинг 35 ток/день,<br>10 итераций по редактированию", "Старт"));
-      grid.appendChild(makeCard("1 900", "1 690 ₽", false, "0.1s", "2 сайта,<br>хостинг 35 ток/день за сайт,<br>19 итераций по редактированию", "Базовый"));
-      grid.appendChild(makeCard("4 500", "3 990 ₽", false, "0.2s", "3 сайта,<br>хостинг 35 ток/день за сайт,<br>45 итераций, премиум шаблоны", "Профи"));
-      grid.appendChild(makeCard("10 000", "9 990 ₽", true, "0.3s", "5 сайтов,<br>хостинг 35 ток/день за сайт,<br>100 итераций, премиум шаблоны", "Ультра"));
+      grid.appendChild(makeCard("1 000", "990 ₽", false, "", "1 сайт,<br>10 итераций по редактированию", "Старт"));
+      grid.appendChild(makeCard("1 900", "1 690 ₽", false, "0.1s", "2 сайта,<br>19 итераций по редактированию", "Базовый"));
+      grid.appendChild(makeCard("4 500", "3 990 ₽", false, "0.2s", "3 сайта,<br>45 итераций, премиум шаблоны", "Профи"));
+      grid.appendChild(makeCard("10 000", "9 990 ₽", true, "0.3s", "5 сайтов,<br>100 итераций, премиум шаблоны", "Ультра"));
 
       pContainer.appendChild(pHeader);
       pContainer.appendChild(grid);

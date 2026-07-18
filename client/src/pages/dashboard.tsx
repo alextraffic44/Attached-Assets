@@ -1408,16 +1408,25 @@ export default function DashboardPage() {
           <style dangerouslySetInnerHTML={{ __html: `
             @keyframes m2-gradient-shift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
             @keyframes m2-blur{to{filter:blur(3vmin);transform:scale(1.05)}}
+            .db-topup-grid > * { min-height: 0; height: 100%; display: flex; }
             .topup-m2card{
               position:relative;border-radius:24px;
               background:linear-gradient(135deg,#1e1e24 10%,#050505 60%);
               background-size:200% 200%;
               animation:m2-gradient-shift 5s ease-in-out infinite;
               display:flex;flex-direction:column;align-items:center;
+              justify-content:flex-start;
               padding:2rem 1.25rem;cursor:pointer;color:inherit;
               transition:transform .4s cubic-bezier(.2,.8,.2,1);
-              border:none;text-align:center;width:100%;
+              border:none;text-align:center;width:100%;height:100%;
+              box-sizing:border-box;
             }
+            .topup-m2card .topup-desc{
+              flex:1 1 auto;display:flex;flex-direction:column;
+              justify-content:center;gap:0.3rem;width:100%;
+              min-height:3.6rem;margin-bottom:1rem;
+            }
+            .topup-m2card .topup-price{margin-top:auto;}
             .topup-m2card:hover{transform:translateY(-6px) scale(1.02)}
             .topup-m2card::before,.topup-m2card::after{
               --size:5px;content:"";position:absolute;
@@ -1442,12 +1451,12 @@ export default function DashboardPage() {
             <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)', marginTop: '0.4rem', marginBottom: isMobile ? '1.25rem' : '2rem' }}>Выберите подходящий тариф для пополнения токенов</p>
             <div className="db-topup-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
               {[
-                { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["1 сайт", "Хостинг 35 ток/день", "10 итераций редактирования"] },
-                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["2 сайта", "Хостинг 35 ток/день за сайт", "19 итераций редактирования"] },
-                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["3 сайта", "Хостинг 35 ток/день за сайт", "45 итераций редактирования", "Премиум шаблоны"] },
-                { price: 9990, tokens: 10000, label: "Ультра",  popular: true,  desc: ["5 сайтов", "Хостинг 35 ток/день за сайт", "100 итераций редактирования", "Премиум шаблоны"] },
+                { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["1 сайт", "10 итераций редактирования"] },
+                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["2 сайта", "19 итераций редактирования"] },
+                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["3 сайта", "45 итераций редактирования", "Премиум шаблоны"] },
+                { price: 9990, tokens: 10000, label: "Ультра",  popular: true,  desc: ["5 сайтов", "100 итераций редактирования", "Премиум шаблоны"] },
               ].map((plan) => (
-                <div key={plan.price} style={{ position: 'relative' }}>
+                <div key={plan.price} style={{ position: 'relative', height: '100%' }}>
                   {plan.popular && (
                     <span style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(90deg,hsl(27deg 93% 60%),#00a6ff,#6500ff)', color: '#fff', fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', padding: '0.28rem 0.9rem', borderRadius: 100, whiteSpace: 'nowrap', zIndex: 3 }}>
                       Популярный
@@ -1479,18 +1488,20 @@ export default function DashboardPage() {
                     <span style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: plan.popular ? '#00d2ff' : 'rgba(255,255,255,0.5)', marginBottom: '0.6rem' }}>{plan.label}</span>
                     <span style={{ fontSize: '2.2rem', fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1, color: '#fff' }}>{plan.tokens.toLocaleString("ru-RU")}</span>
                     <span style={{ fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginTop: '0.3rem', marginBottom: '1rem' }}>токенов</span>
-                    <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: '1rem' }} />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem', width: '100%', minHeight: '4.2rem', justifyContent: 'center' }}>
+                    <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: '1rem', flexShrink: 0 }} />
+                    <div className="topup-desc">
                       {plan.desc.map((line, i) => (
                         <span key={i} style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)', lineHeight: 1.4, textAlign: 'center' }}>{line}</span>
                       ))}
                     </div>
-                    <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: '1rem' }} />
-                    {paymentLoading === plan.price ? (
-                      <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#00d2ff' }}>Загрузка...</span>
-                    ) : (
-                      <span style={{ fontSize: '1.15rem', fontWeight: 600, letterSpacing: '-0.02em', color: plan.popular ? '#00d2ff' : '#fff' }}>{plan.price.toLocaleString("ru-RU")} ₽</span>
-                    )}
+                    <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: '1rem', flexShrink: 0 }} />
+                    <div className="topup-price">
+                      {paymentLoading === plan.price ? (
+                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#00d2ff' }}>Загрузка...</span>
+                      ) : (
+                        <span style={{ fontSize: '1.15rem', fontWeight: 600, letterSpacing: '-0.02em', color: plan.popular ? '#00d2ff' : '#fff' }}>{plan.price.toLocaleString("ru-RU")} ₽</span>
+                      )}
+                    </div>
                   </button>
                 </div>
               ))}
