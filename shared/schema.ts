@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, json } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, json, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -165,7 +165,9 @@ export const projectFiles = pgTable("project_files", {
   filename: text("filename").notNull(),
   code: text("code").notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (t) => ({
+  projectFilenameUniq: uniqueIndex("project_files_project_id_filename_uniq").on(t.projectId, t.filename),
+}));
 
 export const insertProjectFileSchema = createInsertSchema(projectFiles).omit({
   id: true,

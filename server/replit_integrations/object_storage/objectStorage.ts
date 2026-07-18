@@ -97,11 +97,19 @@ export class ObjectStorageService {
       const [metadata] = await file.getMetadata();
       const acl = await getObjectAclPolicy(file);
       const isPublic = acl?.visibility === "public";
-      res.set({
-        "Content-Type": metadata.contentType || "application/octet-stream",
+      const contentType = metadata.contentType || "application/octet-stream";
+      const headers: Record<string, string> = {
+        "Content-Type": contentType,
         "Content-Length": String(metadata.size || 0),
         "Cache-Control": `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`,
-      });
+        "X-Content-Type-Options": "nosniff",
+      };
+      // Existing SVG blobs must not execute as active content on the app origin
+      if (String(contentType).includes("svg")) {
+        headers["Content-Disposition"] = "attachment";
+        headers["Content-Security-Policy"] = "default-src 'none'; sandbox";
+      }
+      res.set(headers);
       const stream = file.createReadStream();
       stream.on("error", (err: any) => {
         if (err.code === "EPIPE" || err.code === "ECONNRESET") return;

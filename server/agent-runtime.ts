@@ -321,11 +321,15 @@ export const SITE_AGENT_TOOLS = [
   },
 ] as const;
 
-export function applySinglePatch(originalCode: string, searchBlock: string, replaceBlock: string): { code: string; ok: boolean } {
-  if (!searchBlock.trim()) return { code: originalCode, ok: false };
+export function applySinglePatch(originalCode: string, searchBlock: string, replaceBlock: string): { code: string; ok: boolean; error?: string } {
+  if (!searchBlock.trim()) return { code: originalCode, ok: false, error: "empty SEARCH" };
 
   const exactIdx = originalCode.indexOf(searchBlock);
   if (exactIdx !== -1) {
+    const second = originalCode.indexOf(searchBlock, exactIdx + searchBlock.length);
+    if (second !== -1) {
+      return { code: originalCode, ok: false, error: "SEARCH найден несколько раз — добавь больше контекста" };
+    }
     return {
       code: originalCode.slice(0, exactIdx) + replaceBlock + originalCode.slice(exactIdx + searchBlock.length),
       ok: true,
@@ -337,17 +341,21 @@ export function applySinglePatch(originalCode: string, searchBlock: string, repl
     .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     .replace(/\s+/g, "\\s+");
   try {
-    const re = new RegExp(pattern);
-    const m = re.exec(originalCode);
-    if (m) {
+    const re = new RegExp(pattern, "g");
+    const matches = [...originalCode.matchAll(re)];
+    if (matches.length === 1) {
+      const m = matches[0];
       return {
-        code: originalCode.slice(0, m.index) + replaceBlock + originalCode.slice(m.index + m[0].length),
+        code: originalCode.slice(0, m.index!) + replaceBlock + originalCode.slice(m.index! + m[0].length),
         ok: true,
       };
     }
+    if (matches.length > 1) {
+      return { code: originalCode, ok: false, error: "SEARCH (fuzzy) найден несколько раз — добавь больше контекста" };
+    }
   } catch { /* ignore */ }
 
-  return { code: originalCode, ok: false };
+  return { code: originalCode, ok: false, error: "SEARCH не найден" };
 }
 
 /** Apply all ```diff SEARCH/REPLACE blocks in a response fragment to one file. */
@@ -715,7 +723,7 @@ class SiteWorkspace {
         }
         const current = this.files.get(filename)!;
         const { code, ok } = applySinglePatch(current, search, replace);
-        if (!ok) return { result: { ok: false, error: "SEARCH не найден в файле. Перечитай read_page и уточни фрагмент." } };
+        if (!ok) return { result: { ok: false, error: "SEARCH не найден или неоднозначен. Перечитай read_page и уточни уникальный фрагмент." } };
         this.files.set(filename, code);
         this.changedFiles.add(filename);
         return { result: { ok: true, filename, newChars: code.length } };
@@ -723,7 +731,9 @@ class SiteWorkspace {
       case "write_page": {
         const filename = String(input.filename || "").trim().toLowerCase();
         let code = String(input.code ?? "");
-        if (!filename.endsWith(".html")) return { result: { ok: false, error: "Можно писать только .html" } };
+        if (!/^[a-z0-9][a-z0-9_-]*\.html$/.test(filename)) {
+          return { result: { ok: false, error: "Имя файла должно быть вида name.html (латиница, цифры, _ -)" } };
+        }
         if (!code.includes("<") || code.length < 50) return { result: { ok: false, error: "code слишком короткий или не HTML" } };
         // Preserve existing base64 map if rewriting known file
         if (!this.base64Maps.has(filename)) this.base64Maps.set(filename, new Map());

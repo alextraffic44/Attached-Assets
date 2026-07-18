@@ -322,17 +322,64 @@ export default function DashboardPage() {
     refetchInterval: 30000,
   });
 
+  const resetCreateState = () => {
+    setCreateStep("choose");
+    setTitle("");
+    setDescription("");
+    setIsEnhanced(false);
+    setResearchData("");
+    setMultiPageEnabled(false);
+    setPageNames(["О нас", "Услуги", "Контакты"]);
+    setSeoEnabled(false);
+    setSeoH1("");
+    setSeoH2s(["", ""]);
+    setPhotoImages([]);
+    setInteractiveProductImage(null);
+    setSelectedStyleTemplate(null);
+    setSelectedTemplate("");
+    setStyleCategory("buttons");
+    setSelectedMode("prompt");
+  };
+
   const createMutation = useMutation({
     mutationFn: async () => {
+      // Upload assets BEFORE creating/navigating so failures keep the modal usable
+      let mockupUrls: string[] = [];
+      if (selectedMode === "photo" && photoImages.length > 0) {
+        for (const img of photoImages) {
+          const uploadResp = await fetch("/api/upload-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ base64: img.base64, mimeType: img.mimeType, name: "mockup" }),
+            credentials: "include",
+          });
+          const uploadData = await uploadResp.json();
+          if (!uploadResp.ok) throw new Error(uploadData.message || "Не удалось загрузить изображения");
+          mockupUrls.push(uploadData.url);
+        }
+      }
+      let productUrl = "";
+      if (selectedMode === "interactive" && interactiveProductImage) {
+        const uploadResp = await fetch("/api/upload-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ base64: interactiveProductImage.base64, mimeType: interactiveProductImage.mimeType, name: "product-ref" }),
+          credentials: "include",
+        });
+        const uploadData = await uploadResp.json();
+        if (!uploadResp.ok) throw new Error(uploadData.message || "Не удалось загрузить фото продукта");
+        productUrl = uploadData.url;
+      }
+
       const res = await apiRequest("POST", "/api/projects", {
         title: title || "Новый проект",
         description: description || null,
       });
-      return res.json();
+      const project = await res.json();
+      return { project, mockupUrls, productUrl };
     },
-    onSuccess: async (project: Project) => {
+    onSuccess: async ({ project, mockupUrls, productUrl }: { project: Project; mockupUrls: string[]; productUrl: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      setShowCreateModal(false);
       const prompt = selectedMode === "photo"
         ? (description || (photoImages.length > 0 ? "Создай профессиональный сайт, вдохновляясь приложенными референсами" : "Создай стильный профессиональный сайт"))
         : description || title;
@@ -347,45 +394,20 @@ export default function DashboardPage() {
         : "";
       const leadFormParam = leadFormEnabled ? "" : "&leadform=0";
       const agentParam = agentVersion === "v2" ? "&agent=v2" : "";
-      let mockupParam = "";
-      if (selectedMode === "photo" && photoImages.length > 0) {
-        try {
-          const urls: string[] = [];
-          for (const img of photoImages) {
-            const uploadResp = await fetch("/api/upload-image", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ base64: img.base64, mimeType: img.mimeType, name: "mockup" }),
-              credentials: "include",
-            });
-            const uploadData = await uploadResp.json();
-            if (!uploadResp.ok) throw new Error(uploadData.message);
-            urls.push(uploadData.url);
-          }
-          mockupParam = `&mockup=1&mockupUrls=${encodeURIComponent(urls.join(","))}`;
-        } catch (e: any) {
-          console.error("Failed to upload mockup image(s):", e);
-          toast({ title: "Ошибка", description: "Не удалось загрузить изображения на сервер", variant: "destructive" });
-          return;
-        }
-      }
-      let iProductParam = "";
-      if (selectedMode === "interactive" && interactiveProductImage) {
-        try {
-          const uploadResp = await fetch("/api/upload-image", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ base64: interactiveProductImage.base64, mimeType: interactiveProductImage.mimeType, name: "product-ref" }),
-            credentials: "include",
-          });
-          const uploadData = await uploadResp.json();
-          if (!uploadResp.ok) throw new Error(uploadData.message);
-          iProductParam = `&iproductUrl=${encodeURIComponent(uploadData.url)}`;
-        } catch (e: any) {
-          console.error("Failed to upload product image:", e);
-        }
-      }
+      const mockupParam = mockupUrls.length > 0
+        ? `&mockup=1&mockupUrls=${encodeURIComponent(mockupUrls.join(","))}`
+        : "";
+      const iProductParam = productUrl ? `&iproductUrl=${encodeURIComponent(productUrl)}` : "";
+      setShowCreateModal(false);
+      resetCreateState();
       setLocation(`/editor/${project.id}?prompt=${encodeURIComponent(prompt)}${interactiveParam}${enhancedParam}${researchParam}${multiPageParam}${seoParam}${leadFormParam}${agentParam}${mockupParam}${iProductParam}`);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Не удалось создать сайт",
+        description: err?.message || "Попробуйте ещё раз",
+        variant: "destructive",
+      });
     },
   });
 
@@ -673,7 +695,7 @@ export default function DashboardPage() {
               {creatingSeo ? 'Создаём…' : 'SEO-машина'}
             </button>
             <button
-              onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImages([]); setSelectedStyleTemplate(null); setSelectedTemplate(""); setStyleCategory("buttons"); setShowCreateModal(true); }}
+              onClick={() => { resetCreateState(); setShowCreateModal(true); }}
               className="flex flex-1 sm:flex-none items-center justify-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
               style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: isMobile ? '0.75rem 1rem' : '0.85rem 1.6rem', fontSize: isMobile ? '0.8rem' : '0.9rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
             >
@@ -698,7 +720,7 @@ export default function DashboardPage() {
               <h2 style={{ fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.03em', color: '#1D1D1F' }}>Пока здесь пусто</h2>
               <p style={{ color: '#86868B', maxWidth: 360, margin: '0 auto', fontSize: '1rem', lineHeight: 1.6 }}>Создайте свой первый проект, используя возможности искусственного интеллекта.</p>
             </div>
-            <button onClick={() => setShowCreateModal(true)} className="transition-all hover:opacity-80" style={{ background: '#1D1D1F', color: '#fff', border: 'none', borderRadius: 14, padding: '0.85rem 2rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer' }}>
+            <button onClick={() => { resetCreateState(); setShowCreateModal(true); }} className="transition-all hover:opacity-80" style={{ background: '#1D1D1F', color: '#fff', border: 'none', borderRadius: 14, padding: '0.85rem 2rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer' }}>
               Создать первый сайт
             </button>
           </GlassCard>
@@ -1504,18 +1526,26 @@ export default function DashboardPage() {
                     data-testid={`button-plan-${plan.price}`}
                     disabled={paymentLoading !== null}
                     onClick={async () => {
+                      // Open blank tab synchronously to avoid popup blockers after await
+                      const payWin = window.open("about:blank", "_blank");
                       try {
                         setPaymentLoading(plan.price);
                         const res = await apiRequest("POST", "/api/payments/create", { price: plan.price });
                         const data = await res.json();
                         if (data.url) {
-                          window.open(data.url, "_blank");
+                          if (payWin && !payWin.closed) {
+                            payWin.location.href = data.url;
+                          } else {
+                            window.location.assign(data.url);
+                          }
                           setShowTopUpModal(false);
                           toast({ title: "Перенаправление на оплату", description: "Откроется страница оплаты через СБП" });
                         } else {
+                          if (payWin && !payWin.closed) payWin.close();
                           toast({ title: "Ошибка", description: data.message || "Не удалось создать платёж", variant: "destructive" });
                         }
                       } catch (err: any) {
+                        if (payWin && !payWin.closed) payWin.close();
                         toast({ title: "Ошибка", description: "Не удалось создать платёж", variant: "destructive" });
                       } finally {
                         setPaymentLoading(null);

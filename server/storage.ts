@@ -11,7 +11,7 @@ export interface IStorage {
   createTelegramUser(data: { telegramId: string; displayName: string; avatarUrl?: string }): Promise<User>;
   createYandexUser(data: { yandexId: string; displayName: string; email?: string; avatarUrl?: string }): Promise<User>;
   updateUserCredits(id: number, credits: number): Promise<User | undefined>;
-  deductCredits(userId: number, amount: number, operation: string, idempotencyKey: string): Promise<{ success: boolean; newBalance: number; alreadyProcessed?: boolean }>;
+  deductCredits(userId: number, amount: number, operation: string, idempotencyKey: string): Promise<{ success: boolean; newBalance: number; alreadyProcessed?: boolean; conflict?: boolean }>;
   refundCredits(userId: number, amount: number): Promise<number>;
   addCredits(userId: number, amount: number): Promise<number>;
   creditPayment(userId: number, amount: number, idempotencyKey: string, note: string): Promise<{ credited: boolean; newBalance: number }>;
@@ -116,30 +116,70 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async deductCredits(userId: number, amount: number, operation: string, idempotencyKey: string): Promise<{ success: boolean; newBalance: number; alreadyProcessed?: boolean }> {
-    const existing = await db.select().from(creditTransactions).where(eq(creditTransactions.idempotencyKey, idempotencyKey));
-    if (existing.length > 0) {
-      const user = await this.getUser(userId);
-      return { success: true, newBalance: user?.credits ?? 0, alreadyProcessed: true };
+  async deductCredits(userId: number, amount: number, operation: string, idempotencyKey: string): Promise<{ success: boolean; newBalance: number; alreadyProcessed?: boolean; conflict?: boolean }> {
+    // Atomic: claim idempotency key first, then debit. Concurrent same-key callers
+    // cannot both debit. Replays only succeed when user/operation/amount match.
+    try {
+      return await db.transaction(async (tx) => {
+        const existing = await tx.select().from(creditTransactions).where(eq(creditTransactions.idempotencyKey, idempotencyKey));
+        if (existing.length > 0) {
+          const row = existing[0];
+          const [user] = await tx.select().from(users).where(eq(users.id, userId));
+          if (
+            row.userId === userId
+            && row.operation === operation
+            && row.amount === amount
+            && (row.type || "debit") === "debit"
+          ) {
+            return { success: true, newBalance: user?.credits ?? 0, alreadyProcessed: true };
+          }
+          return { success: false, newBalance: user?.credits ?? 0, conflict: true };
+        }
+
+        const inserted = await tx.insert(creditTransactions).values({
+          userId,
+          amount,
+          operation,
+          idempotencyKey,
+          type: "debit",
+        }).returning();
+        if (!inserted.length) {
+          const [user] = await tx.select().from(users).where(eq(users.id, userId));
+          return { success: false, newBalance: user?.credits ?? 0 };
+        }
+
+        const result = await tx.execute(
+          sql`UPDATE users SET credits = credits - ${amount} WHERE id = ${userId} AND credits >= ${amount} RETURNING credits`
+        );
+        const rows = result.rows as Array<{ credits: number }>;
+        if (!rows || rows.length === 0) {
+          // Roll back the claimed key by aborting the transaction
+          throw new Error("INSUFFICIENT_CREDITS");
+        }
+        return { success: true, newBalance: rows[0].credits };
+      });
+    } catch (err: any) {
+      if (err?.message === "INSUFFICIENT_CREDITS") {
+        const user = await this.getUser(userId);
+        return { success: false, newBalance: user?.credits ?? 0 };
+      }
+      // Unique race: another txn inserted the same key — treat as replay if matching
+      const existing = await db.select().from(creditTransactions).where(eq(creditTransactions.idempotencyKey, idempotencyKey));
+      if (existing.length > 0) {
+        const row = existing[0];
+        const user = await this.getUser(userId);
+        if (
+          row.userId === userId
+          && row.operation === operation
+          && row.amount === amount
+          && (row.type || "debit") === "debit"
+        ) {
+          return { success: true, newBalance: user?.credits ?? 0, alreadyProcessed: true };
+        }
+        return { success: false, newBalance: user?.credits ?? 0, conflict: true };
+      }
+      throw err;
     }
-
-    const result = await db.execute(
-      sql`UPDATE users SET credits = credits - ${amount} WHERE id = ${userId} AND credits >= ${amount} RETURNING credits`
-    );
-    const rows = result.rows as Array<{ credits: number }>;
-    if (!rows || rows.length === 0) {
-      const user = await this.getUser(userId);
-      return { success: false, newBalance: user?.credits ?? 0 };
-    }
-
-    await db.insert(creditTransactions).values({
-      userId,
-      amount,
-      operation,
-      idempotencyKey,
-    });
-
-    return { success: true, newBalance: rows[0].credits };
   }
 
   async refundCredits(userId: number, amount: number): Promise<number> {
@@ -278,6 +318,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertProjectFile(file: InsertProjectFile): Promise<ProjectFile> {
+    // Prefer atomic upsert when unique (project_id, filename) exists.
+    try {
+      const result = await db.execute(sql`
+        INSERT INTO project_files (project_id, filename, code)
+        VALUES (${file.projectId}, ${file.filename}, ${file.code})
+        ON CONFLICT (project_id, filename)
+        DO UPDATE SET code = EXCLUDED.code
+        RETURNING id, project_id, filename, code, created_at
+      `);
+      const row = (result.rows as any[])?.[0];
+      if (row) {
+        return {
+          id: row.id,
+          projectId: row.project_id,
+          filename: row.filename,
+          code: row.code,
+          createdAt: row.created_at,
+        } as ProjectFile;
+      }
+    } catch (err: any) {
+      // Unique index may not exist yet in older DBs — fall back to select/update.
+      console.warn("[storage] upsert ON CONFLICT failed, fallback:", err?.message?.slice?.(0, 120));
+    }
     const existing = await this.getProjectFile(file.projectId, file.filename);
     if (existing) {
       const [updated] = await db.update(projectFiles).set({ code: file.code }).where(eq(projectFiles.id, existing.id)).returning();

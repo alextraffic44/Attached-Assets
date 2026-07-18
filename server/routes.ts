@@ -8,8 +8,9 @@ import { registerSeoRoutes } from "./seo-routes";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { db } from "./db";
+import { sql } from "drizzle-orm";
 import { rateLimit, userOrIpKey } from "./rate-limit";
-import { assertPublicHttpUrl } from "./url-guard";
+import { assertPublicHttpUrl, safeFetch } from "./url-guard";
 import { domainToASCII } from "node:url";
 import path from "path";
 import fs from "fs";
@@ -2480,6 +2481,20 @@ export async function registerRoutes(
 ): Promise<Server> {
   setupAuth(app);
 
+  try {
+    // Deduplicate any legacy rows before creating the unique index
+    await db.execute(sql`
+      DELETE FROM project_files a USING project_files b
+      WHERE a.id < b.id AND a.project_id = b.project_id AND a.filename = b.filename
+    `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS project_files_project_id_filename_uniq
+      ON project_files (project_id, filename)
+    `);
+  } catch (e: any) {
+    console.warn("[boot] project_files unique index:", e?.message?.slice?.(0, 200) || e);
+  }
+
   const uploadsDir = path.join(process.cwd(), "uploads");
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
   const express = (await import("express")).default;
@@ -2546,7 +2561,8 @@ export async function registerRoutes(
 
   const ALLOWED_UPLOAD_MIMES: Record<string, string> = {
     "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/webp": "webp",
-    "image/gif": "gif", "image/svg+xml": "svg",
+    "image/gif": "gif",
+    // SVG deliberately excluded — executable on same origin as Craft AI
     "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "video/ogg": "ogg",
     "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/wav": "wav", "audio/x-wav": "wav",
     "audio/ogg": "ogg", "audio/webm": "weba", "audio/aac": "aac", "audio/mp4": "m4a",
@@ -2558,12 +2574,16 @@ export async function registerRoutes(
   const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
   const MAX_AUDIO_SIZE = 30 * 1024 * 1024;
   const MAX_3D_SIZE = 50 * 1024 * 1024;
+  const uploadLimiter = rateLimit("upload", { windowMs: 60_000, max: 30, keyGenerator: userOrIpKey, message: "Слишком много загрузок. Подождите минуту." });
 
-  app.post("/api/upload-image", requireAuth, async (req, res) => {
+  app.post("/api/upload-image", requireAuth, uploadLimiter, async (req, res) => {
     try {
       const { base64, mimeType, name } = req.body;
       if (!base64) return res.status(400).json({ message: "Нет данных файла" });
       const mime = (mimeType || "image/png").toLowerCase();
+      if (mime.includes("svg")) {
+        return res.status(400).json({ message: "SVG-загрузки отключены из соображений безопасности" });
+      }
       const ext = ALLOWED_UPLOAD_MIMES[mime];
       if (!ext) return res.status(400).json({ message: "Неподдерживаемый формат файла" });
       const buffer = Buffer.from(base64, "base64");
@@ -2583,11 +2603,14 @@ export async function registerRoutes(
   const multer = (await import("multer")).default;
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Math.max(MAX_VIDEO_SIZE, MAX_3D_SIZE) } });
 
-  app.post("/api/upload-file", requireAuth, upload.single("file"), async (req, res) => {
+  app.post("/api/upload-file", requireAuth, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
       const file = req.file;
       if (!file) return res.status(400).json({ message: "Файл не прикреплён" });
-      let mime = file.mimetype.toLowerCase();
+      let mime = (file.mimetype || "").toLowerCase();
+      if (mime.includes("svg")) {
+        return res.status(400).json({ message: "SVG-загрузки отключены из соображений безопасности" });
+      }
       const originalName = (file.originalname || "").toLowerCase();
 
       // Detect 3D model by extension when browser sends application/octet-stream
@@ -2694,11 +2717,19 @@ export async function registerRoutes(
       if (!deduction.success) {
         return res.status(402).json({ message: `Недостаточно токенов. Нужно ${ENHANCE_COST}, у вас ${deduction.newBalance}.`, newBalance: deduction.newBalance });
       }
-      const result = await enhancePromptOnly(prompt);
-      if (result.success) {
-        res.json({ enhancedPrompt: result.enhancedPrompt, creditsUsed: ENHANCE_COST, newBalance: deduction.newBalance });
-      } else {
-        res.json({ enhancedPrompt: prompt, creditsUsed: 0, newBalance: deduction.newBalance, warning: "AI временно недоступен, использован оригинальный промпт" });
+      const billed = !deduction.alreadyProcessed;
+      try {
+        const result = await enhancePromptOnly(prompt);
+        if (result.success) {
+          res.json({ enhancedPrompt: result.enhancedPrompt, creditsUsed: ENHANCE_COST, newBalance: deduction.newBalance });
+        } else {
+          if (billed) { try { await storage.refundCredits(user.id, ENHANCE_COST); } catch {} }
+          const bal = (await storage.getUser(user.id))?.credits ?? deduction.newBalance;
+          res.json({ enhancedPrompt: prompt, creditsUsed: 0, newBalance: bal, warning: "AI временно недоступен, использован оригинальный промпт" });
+        }
+      } catch (inner: any) {
+        if (billed) { try { await storage.refundCredits(user.id, ENHANCE_COST); } catch {} }
+        throw inner;
       }
     } catch (err: any) {
       console.error("Enhance prompt error:", err.message);
@@ -2719,11 +2750,19 @@ export async function registerRoutes(
       if (!deduction.success) {
         return res.status(402).json({ message: `Недостаточно токенов. Нужно ${RESEARCH_COST}, у вас ${deduction.newBalance}.`, newBalance: deduction.newBalance });
       }
-      const result = await deepResearch(prompt);
-      if (result.success) {
-        res.json({ research: result.research, creditsUsed: RESEARCH_COST, newBalance: deduction.newBalance });
-      } else {
-        res.json({ research: "", creditsUsed: 0, newBalance: deduction.newBalance, warning: "Deep Research временно недоступен" });
+      const billed = !deduction.alreadyProcessed;
+      try {
+        const result = await deepResearch(prompt);
+        if (result.success) {
+          res.json({ research: result.research, creditsUsed: RESEARCH_COST, newBalance: deduction.newBalance });
+        } else {
+          if (billed) { try { await storage.refundCredits(user.id, RESEARCH_COST); } catch {} }
+          const bal = (await storage.getUser(user.id))?.credits ?? deduction.newBalance;
+          res.json({ research: "", creditsUsed: 0, newBalance: bal, warning: "Deep Research временно недоступен" });
+        }
+      } catch (inner: any) {
+        if (billed) { try { await storage.refundCredits(user.id, RESEARCH_COST); } catch {} }
+        throw inner;
       }
     } catch (err: any) {
       console.error("Deep research error:", err.message);
@@ -2749,12 +2788,16 @@ export async function registerRoutes(
   });
 
   app.post("/api/projects/:id/generate", requireAuth, aiLimiter, async (req, res) => {
+    let genBilled = false;
+    let generationCost = 0;
+    let billedUserId: number | undefined;
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
         return res.status(404).json({ message: "Проект не найден" });
       }
       const user = req.user as any;
+      billedUserId = user.id;
       if (project.userId !== user.id) {
         return res.status(403).json({ message: "Доступ запрещён" });
       }
@@ -2787,6 +2830,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Запрос обязателен" });
       }
 
+      // Capture history BEFORE saving the current prompt so we don't duplicate it
+      // in conversationHistory + the active user message.
+      const priorMessages = await storage.getProjectMessages(project.id);
+
       await storage.createProjectMessage({
         projectId: project.id,
         role: "user",
@@ -2801,6 +2848,9 @@ export async function registerRoutes(
       if (!genDeduction.success) {
         return res.status(402).json({ message: `Не хватает токенов. Нужно ${GENERATION_COST}, у вас ${genDeduction.newBalance}.`, newBalance: genDeduction.newBalance });
       }
+      const genBilledFlag = !genDeduction.alreadyProcessed;
+      genBilled = genBilledFlag;
+      generationCost = GENERATION_COST;
 
       const reqProto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
       const reqHost = req.get("host") || "";
@@ -3036,14 +3086,18 @@ VIDEO_PROMPT (на английском) — ты КИНОРЕЖИССЁР го�
       let agentChangedFiles: Map<string, string> | null = null;
       let agentSummary = "";
 
+      let editPromptBase = "";
       if (isEditMode) {
         const editingFile = activeFile || "index.html";
-        const editingFileCodeRaw = editingFile === "index.html"
+        // Validate active file exists; stale tabs fall back to index
+        const knownNames = new Set(sitePages.map((p) => p.filename));
+        const safeEditingFile = knownNames.has(editingFile) ? editingFile : "index.html";
+        const editingFileCodeRaw = safeEditingFile === "index.html"
           ? project.generatedCode
-          : existingFiles.find(f => f.filename === editingFile)?.code || project.generatedCode;
+          : existingFiles.find(f => f.filename === safeEditingFile)?.code || project.generatedCode;
         const { map } = stripBase64(editingFileCodeRaw || "");
         base64Map = map;
-        console.log(`[AGENT] Multipage edit. Active: ${editingFile}, pages: ${sitePages.map(p => p.filename).join(", ")}`);
+        console.log(`[AGENT] Multipage edit. Active: ${safeEditingFile}, pages: ${sitePages.map(p => p.filename).join(", ")}`);
 
         craftMdForEdit = await ensureCraftMd(project.id, {
           title: project.title || "Сайт",
@@ -3052,9 +3106,10 @@ VIDEO_PROMPT (на английском) — ты КИНОРЕЖИССЁР го�
           pages: sitePages,
         });
 
+        editPromptBase = systemContent;
         systemContent = buildMultipageEditSystemPrompt({
-          baseSystem: systemContent,
-          activeFile: editingFile,
+          baseSystem: editPromptBase,
+          activeFile: safeEditingFile,
           craftMd: craftMdForEdit,
           pages: sitePages,
           useToolsHint: true,
@@ -3297,10 +3352,9 @@ ${designAnalysis}
 
       let fullResponse = "";
 
-      const messages = await storage.getProjectMessages(project.id);
       const conversationHistory: KieMessage[] = [];
 
-      for (const msg of messages.slice(-10)) {
+      for (const msg of priorMessages.slice(-10)) {
         if (msg.role === "user") {
           conversationHistory.push({ role: "user", content: [{ type: "input_text", text: msg.content }] });
         } else if (msg.role === "assistant") {
@@ -3352,7 +3406,9 @@ ${designAnalysis}
       // ── Multipage tool-calling agent (Claude + Gemini / KIE) ────────────────
       // Tries function calling so the model can read/patch ANY page.
       // If KIE rejects tools, we fall through to the streaming multipage text protocol.
-      if (isEditMode) {
+      // Tool-calling path is text-tools only today — if the user attached images,
+      // skip tools and use the streaming path that already carries vision parts.
+      if (isEditMode && imageArray.length === 0) {
         try {
           res.write(`data: ${JSON.stringify({ status: useGemini ? "Gemini-агент изучает все страницы…" : "Агент изучает все страницы сайта…" })}\n\n`);
           const hist = conversationHistory
@@ -3393,7 +3449,13 @@ ${designAnalysis}
             console.log(`[AGENT] ${useGemini ? "Gemini" : "Claude"} tools supported but no file changes — falling back to stream protocol`);
           } else {
             console.log(`[AGENT] ${useGemini ? "Gemini" : "Claude"} tools unsupported by KIE — using multipage stream protocol`);
-            systemContent += `\n\n⚠️ Инструменты недоступны в этом запросе. Отвечай в MULTIPAGE DIFF формате с маркерами --- FILE: имя.html --- и блоками \`\`\`diff SEARCH/REPLACE.\n`;
+            systemContent = buildMultipageEditSystemPrompt({
+              baseSystem: editPromptBase || SYSTEM_PROMPT,
+              activeFile: activeFile || "index.html",
+              craftMd: craftMdForEdit,
+              pages: sitePages,
+              useToolsHint: false,
+            });
           }
         } catch (agentErr: any) {
           console.warn("[AGENT] Tool-calling failed, stream fallback:", agentErr?.message || agentErr);
@@ -3442,19 +3504,21 @@ ${designAnalysis}
         console.log("[PARSE] Detected Gemini shell-command JSON format — sanitizing");
         // 1) Try to extract HTML from heredoc patterns inside cmd values
         // Matches: cat > *.html <<'EOF'\n(content)\nEOF
-        const heredocRegex = /cat\s*>\s*[\w.-]+\.html\s*<<['"]?EOF['"]?\n([\s\S]*?)\nEOF/g;
-        const extractedFiles: string[] = [];
+        const heredocRegex = /cat\s*>\s*([\w./-]+\.html)\s*<<['"]?EOF['"]?\n([\s\S]*?)\nEOF/g;
+        const extractedFiles: { filename: string; code: string }[] = [];
         let hm;
         while ((hm = heredocRegex.exec(fullResponse)) !== null) {
-          const content = hm[1].trim();
-          if (content.includes("<") && content.length > 100) {
-            extractedFiles.push(content);
+          const filename = hm[1].trim().toLowerCase().split("/").pop() || hm[1].trim().toLowerCase();
+          const content = hm[2].trim();
+          if (content.includes("<") && content.length > 100 && /^[a-z0-9][a-z0-9_-]*\.html$/.test(filename)) {
+            extractedFiles.push({ filename, code: content });
           }
         }
         if (extractedFiles.length > 0) {
-          // Re-assemble as ```html blocks so the existing parser picks them up
-          fullResponse = extractedFiles.map(c => "```html\n" + c + "\n```").join("\n");
-          console.log("[PARSE] Extracted", extractedFiles.length, "file(s) from heredoc");
+          fullResponse = extractedFiles
+            .map((f) => `--- FILE: ${f.filename} ---\n\`\`\`html\n${f.code}\n\`\`\``)
+            .join("\n");
+          console.log("[PARSE] Extracted", extractedFiles.length, "file(s) from heredoc:", extractedFiles.map(f => f.filename).join(", "));
         } else {
           // 2) Fallback: strip all JSON cmd/workdir/end lines, keep the rest
           fullResponse = fullResponse
@@ -3773,6 +3837,14 @@ ${designAnalysis}
         : [];
       const genImgResult = await resolveGenImgMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => clientGone, referenceImageUrlsForGen);
       mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
+      // Persist secondary pages that received GENIMG / IMGPENDING resolution
+      for (const [filename, code] of Array.from(genFilesMap.entries())) {
+        if (filename === "index.html" || filename === CRAFT_MD_FILENAME || !isHtmlPage(filename)) continue;
+        const prev = secondaryForGen.find((f) => f.filename === filename)?.code;
+        if (code !== prev) {
+          await storage.upsertProjectFile({ projectId: project.id, filename, code });
+        }
+      }
 
       // ── Image review pass (first generation only) ─────────────────────────
       // Any GENIMG markers that survived both passes in resolveGenImgMarkers are
@@ -3972,13 +4044,42 @@ ${designAnalysis}
               const scrollResult = await resolveScrollAnimMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl, _animStyle);
               let animatedCode = bgFilesMap.get("index.html") ?? immediateHtml;
               animatedCode = injectLoadingOverlay(animatedCode);
-              await storage.updateProject(project.id, { generatedCode: animatedCode });
-              for (const f of secondaryForGen) {
-                if (f.filename === "index.html") continue;
-                const upd = bgFilesMap.get(f.filename);
-                if (upd !== undefined && upd !== f.code) {
-                  await storage.upsertProjectFile({ projectId: project.id, filename: f.filename, code: upd });
+              // Extract only the finished animation section(s) and merge into the
+              // LATEST project HTML so concurrent user edits are not overwritten.
+              const curProj = await storage.getProject(project.id);
+              const curHtml = curProj?.generatedCode || immediateHtml;
+              let mergedHtml = curHtml;
+              if (curHtml.includes('data-scroll-anim-pending="1"')) {
+                // Pull finished section(s) from animatedCode (no pending markers)
+                const finishedSections: string[] = [];
+                const sectionRe = /<section\b[^>]*data-craft-scrollanim[^>]*>[\s\S]*?<\/section>/gi;
+                let sm: RegExpExecArray | null;
+                while ((sm = sectionRe.exec(animatedCode)) !== null) finishedSections.push(sm[0]);
+                if (finishedSections.length === 0) {
+                  // Fallback: take body chunk that replaced pending
+                  mergedHtml = safeReplaceScrollAnimPending(curHtml, animatedCode.includes('data-craft-scrollanim')
+                    ? (animatedCode.match(/<section\b[\s\S]*data-craft-scrollanim[\s\S]*?<\/section>/i)?.[0] || animatedCode)
+                    : animatedCode);
+                } else {
+                  let tmp = curHtml;
+                  for (const sec of finishedSections) {
+                    if (!tmp.includes('data-scroll-anim-pending="1"')) break;
+                    tmp = safeReplaceScrollAnimPending(tmp, sec);
+                  }
+                  mergedHtml = tmp;
                 }
+              } else if (!curHtml.includes('data-craft-scrollanim') && animatedCode.includes('data-craft-scrollanim')) {
+                // Pending was lost somehow — don't overwrite whole page; skip merge
+                console.warn(`[BG ANIM] No pending marker in current HTML for project ${project.id} — skipping overwrite to preserve edits`);
+                mergedHtml = curHtml;
+              } else {
+                // Already has animation or no pending — keep current
+                mergedHtml = curHtml;
+              }
+              await storage.updateProject(project.id, { generatedCode: mergedHtml });
+              for (const [filename, code] of Array.from(bgFilesMap.entries())) {
+                if (filename === "index.html" || !isHtmlPage(filename)) continue;
+                await storage.upsertProjectFile({ projectId: project.id, filename, code });
               }
               console.log(`[BG ANIM] Done (attempt ${animAttempt + 1}) for project ${project.id} — frames: ${scrollResult.generated}, credits: ${scrollResult.creditsUsed}`);
               animSucceeded = true;
@@ -4011,6 +4112,11 @@ ${designAnalysis}
       }
     } catch (err: any) {
       console.error("Generation error:", err?.message || err);
+      try {
+        if (genBilled && billedUserId && generationCost > 0) {
+          await storage.refundCredits(billedUserId, generationCost);
+        }
+      } catch {}
       const _em = err?.message || "";
       const errMsg = (_em.includes("503") || _em.includes("UNAVAILABLE") || _em.includes("high demand"))
         ? "Сервер ИИ временно перегружен. Попробуйте через 30 секунд — мы уже сделали 3 попытки."
@@ -4027,11 +4133,12 @@ ${designAnalysis}
         : _em.includes("KIE Claude stream error")
         ? "Серверы ИИ временно недоступны. Попробуйте снова через несколько минут."
         : `Ошибка генерации: ${_em.substring(0, 150) || "неизвестная ошибка"}`;
+      const freshBal = billedUserId ? (await storage.getUser(billedUserId))?.credits : undefined;
       if (res.headersSent) {
-        res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: errMsg, newBalance: freshBal })}\n\n`);
         res.end();
       } else {
-        res.status(500).json({ message: errMsg });
+        res.status(500).json({ message: errMsg, newBalance: freshBal });
       }
     }
   });
@@ -4211,9 +4318,14 @@ ${designAnalysis}
   });
 
   app.post("/api/images/generate", requireAuth, aiLimiter, async (req, res) => {
+    let billed = false;
+    let imageCost = 15;
+    let userId: number | undefined;
     try {
       const IMAGE_COST = 15;
+      imageCost = IMAGE_COST;
       const user = req.user as any;
+      userId = user.id;
 
       const { prompt, aspectRatio = "16:9", outputFormat = "jpg", idempotencyKey, referenceImageUrls } = req.body;
       if (!prompt) {
@@ -4225,6 +4337,7 @@ ${designAnalysis}
       if (!deduction.success) {
         return res.status(402).json({ message: `Недостаточно токенов. Нужно ${IMAGE_COST}, у вас ${deduction.newBalance}`, newBalance: deduction.newBalance });
       }
+      billed = !deduction.alreadyProcessed;
 
       const hasRefImages = referenceImageUrls && Array.isArray(referenceImageUrls) && referenceImageUrls.length > 0;
       const refUrlsFull = hasRefImages
@@ -4296,13 +4409,16 @@ ${designAnalysis}
       }
 
       if (createBody.code !== 200 || !createBody.data?.taskId) {
-        return res.status(500).json({ message: createBody.msg || "Ошибка создания задачи" });
+        if (billed) { try { await storage.refundCredits(user.id, IMAGE_COST); } catch {} }
+        const bal = (await storage.getUser(user.id))?.credits ?? deduction.newBalance;
+        return res.status(500).json({ message: createBody.msg || "Ошибка создания задачи", newBalance: bal });
       }
 
       console.log(`[Image] Task created with ${usedModel}, taskId=${createBody.data.taskId}`);
       res.json({ taskId: createBody.data.taskId, model: usedModel, newBalance: deduction.newBalance });
     } catch (err: any) {
       console.error("Image generation error:", err);
+      if (billed && userId) { try { await storage.refundCredits(userId, imageCost); } catch {} }
       res.status(500).json({ message: "Ошибка генерации изображения" });
     }
   });
@@ -4374,7 +4490,7 @@ ${designAnalysis}
       let mimeType = "image/jpeg";
       let buffer: Buffer;
       try {
-        const r = await fetch(url, { redirect: "error", signal: controller.signal });
+        const r = await safeFetch(url, { redirect: "error", signal: controller.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         mimeType = r.headers.get("content-type") || "image/jpeg";
         if (!mimeType.startsWith("image/")) {
@@ -4587,8 +4703,11 @@ ${designAnalysis}
 
   // WaveSpeed 3D model generation
   app.post("/api/3d/generate", requireAuth, aiLimiter, async (req, res) => {
+    let billed = false;
+    let userId: number | undefined;
     try {
       const user = req.user as any;
+      userId = user.id;
       const { imageUrl, enablePbr = false, generateType = "Normal", faceCount = 500000, idempotencyKey } = req.body;
       if (!imageUrl) {
         return res.status(400).json({ message: "URL изображения обязателен" });
@@ -4602,6 +4721,7 @@ ${designAnalysis}
       if (!deduction.success) {
         return res.status(402).json({ message: `Недостаточно токенов. Нужно ${MODEL_3D_COST}, у вас ${deduction.newBalance}`, newBalance: deduction.newBalance });
       }
+      billed = !deduction.alreadyProcessed;
 
       let fullImageUrl = imageUrl;
       if (imageUrl.startsWith("/")) {
@@ -4630,7 +4750,7 @@ ${designAnalysis}
       const taskData = createBody.data || createBody;
       const taskId = taskData.id;
       if (!createResp.ok || !taskId) {
-        await storage.refundCredits(user.id, MODEL_3D_COST);
+        if (billed) { try { await storage.refundCredits(user.id, MODEL_3D_COST); } catch {} }
         return res.status(500).json({ message: createBody?.error?.message || createBody?.detail || createBody?.message || "Ошибка создания 3D задачи" });
       }
 
@@ -4641,6 +4761,7 @@ ${designAnalysis}
       });
     } catch (err: any) {
       console.error("[WaveSpeed 3D] generate error:", err);
+      if (billed && userId) { try { await storage.refundCredits(userId, MODEL_3D_COST); } catch {} }
       res.status(500).json({ message: "Ошибка генерации 3D модели" });
     }
   });
@@ -5044,6 +5165,9 @@ ${designAnalysis}
         return res.status(403).json({ message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 35 токенов/сайт в день." });
       }
 
+      // Serialize publish-limit checks per user to prevent concurrent over-limit publishes
+      await db.execute(sql`SELECT pg_advisory_lock(${1000000 + user.id})`);
+      try {
       // Enforce per-plan published-site limit (only for a NEW publish, not re-publishing this project).
       const alreadyLive = project.publishStatus === "published" || project.publishStatus === "publishing" || project.publishStatus === "suspended";
       if (!alreadyLive) {
@@ -5061,7 +5185,27 @@ ${designAnalysis}
         }
       }
 
+      // Charge first hosting day on new publish (daily cron continues afterwards)
+      if (!alreadyLive) {
+        const today = new Date().toISOString().slice(0, 10);
+        const publishCharge = await storage.deductCredits(
+          user.id,
+          DAILY_PUBLISH_COST,
+          "daily_publish",
+          `publish-start-${projectId}-${today}`,
+        );
+        if (!publishCharge.success) {
+          return res.status(403).json({
+            message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 35 токенов/сайт в день.",
+            newBalance: publishCharge.newBalance,
+          });
+        }
+      }
+
       await storage.updateProject(projectId, { publishStatus: "publishing" });
+      } finally {
+        try { await db.execute(sql`SELECT pg_advisory_unlock(${1000000 + user.id})`); } catch {}
+      }
 
       const extraFiles = await storage.getProjectFiles(projectId);
       const projectImages = await storage.getProjectImages(projectId);
@@ -5651,7 +5795,7 @@ ${fullHtml}`;
       let contentType = "application/octet-stream";
       let buffer: Buffer;
       try {
-        const response = await fetch(imageUrl, { redirect: "error", signal: controller.signal });
+        const response = await safeFetch(imageUrl, { redirect: "error", signal: controller.signal });
         if (!response.ok) throw new Error("Не удалось загрузить изображение");
         contentType = response.headers.get("content-type") || "application/octet-stream";
         if (!contentType.startsWith("image/")) {
@@ -5774,7 +5918,13 @@ ${fullHtml}`;
   app.post("/api/payments/webhook", async (req, res) => {
     try {
       const { order_id, status, user_data, merchant_price, test } = req.body;
-      console.log("[Payment Webhook]", JSON.stringify(req.body));
+      console.log("[Payment Webhook]", JSON.stringify({ order_id, status, merchant_price, test, has_user_data: !!user_data }));
+
+      // Reject provider test/sandbox webhooks in production
+      if (test === true || test === 1 || test === "1" || test === "true") {
+        console.warn("[Payment] Rejected test webhook");
+        return res.json({ status: "ok" });
+      }
 
       let parsed: { orderId: number; userId: number; v?: string };
       try {
@@ -5790,10 +5940,29 @@ ${fullHtml}`;
         return res.json({ status: "ok" });
       }
 
+      if (parsed.userId !== order.userId) {
+        console.error("Payment webhook userId mismatch for order:", parsed.orderId);
+        return res.json({ status: "ok" });
+      }
+
       const apiKey = process.env.ONEPAYMENT_API_KEY || "";
       const expectedHash = crypto.createHash("md5").update(`${parsed.orderId}:${parsed.userId}:${apiKey}`).digest("hex");
       if (parsed.v !== expectedHash) {
         console.error("Payment webhook signature mismatch for order:", parsed.orderId);
+        return res.json({ status: "ok" });
+      }
+
+      // Amount must match (rubles). Accept number or string from provider.
+      if (merchant_price !== undefined && merchant_price !== null && String(merchant_price).trim() !== "") {
+        const paid = Math.round(Number(merchant_price));
+        if (!Number.isFinite(paid) || paid !== order.amount) {
+          console.error(`Payment amount mismatch order ${order.id}: expected ${order.amount}, got ${merchant_price}`);
+          return res.json({ status: "ok" });
+        }
+      }
+
+      if (order_id && order.orderId && String(order_id) !== String(order.orderId)) {
+        console.error(`Payment order_id mismatch for ${order.id}: stored ${order.orderId}, got ${order_id}`);
         return res.json({ status: "ok" });
       }
 
@@ -5806,9 +5975,6 @@ ${fullHtml}`;
 
         const user = await storage.getUser(order.userId);
         if (user) {
-          // Exactly-once, atomic: insert the idempotency row + credit in ONE transaction.
-          // If the check-status path (or a duplicate webhook) already credited this order,
-          // the unique idempotencyKey no-ops the insert and no credit is applied.
           await storage.creditPayment(
             order.userId,
             order.tokens,
@@ -5903,10 +6069,18 @@ ${fullHtml}`;
     }
   });
 
-  const ADMIN_TELEGRAM_ID = "661325490";
+  const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || "661325490";
   const adminOnly = (req: any, res: any, next: any) => {
     if (!req.user) return res.status(403).json({ message: "Forbidden" });
-    const isAdmin = req.user.id === 1 || req.user.telegramId === ADMIN_TELEGRAM_ID;
+    const adminIds = (process.env.ADMIN_USER_IDS || "")
+      .split(",")
+      .map((s: string) => parseInt(s.trim(), 10))
+      .filter((n: number) => Number.isFinite(n) && n > 0);
+    const isAdmin =
+      adminIds.includes(req.user.id)
+      || (ADMIN_TELEGRAM_ID && req.user.telegramId === ADMIN_TELEGRAM_ID)
+      // Legacy: only if ADMIN_USER_IDS unset — prefer setting ADMIN_USER_IDS in prod
+      || (adminIds.length === 0 && req.user.id === 1);
     if (!isAdmin) return res.status(403).json({ message: "Forbidden" });
     next();
   };

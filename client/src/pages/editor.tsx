@@ -157,6 +157,9 @@ export default function EditorPage() {
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamedCode, setStreamedCode] = useState("");
+  const [streamedFile, setStreamedFile] = useState("index.html");
+  const [optimisticFiles, setOptimisticFiles] = useState<Record<string, string>>({});
+  const saveSeqRef = useRef(0);
   const [showCode, setShowCode] = useState(false);
   const [editableCode, setEditableCode] = useState("");
   const [codeSaving, setCodeSaving] = useState(false);
@@ -292,14 +295,26 @@ export default function EditorPage() {
 
   const [activeFile, setActiveFile] = useState("index.html");
 
-  const allFiles = [
-    { filename: "index.html", code: project?.generatedCode || "" },
-    ...projectFiles.filter(f => f.filename !== "index.html" && f.filename.toLowerCase().endsWith(".html")),
-  ];
+  const allFiles = (() => {
+    const fromServer = [
+      { filename: "index.html", code: optimisticFiles["index.html"] || streamedCode || project?.generatedCode || "" },
+      ...projectFiles
+        .filter(f => f.filename !== "index.html" && f.filename.toLowerCase().endsWith(".html"))
+        .map(f => ({ filename: f.filename, code: optimisticFiles[f.filename] || f.code })),
+    ];
+    const known = new Set(fromServer.map(f => f.filename));
+    for (const [fn, code] of Object.entries(optimisticFiles)) {
+      if (!known.has(fn) && fn.toLowerCase().endsWith(".html")) fromServer.push({ filename: fn, code });
+    }
+    return fromServer;
+  })();
 
-  const activeFileCode = activeFile === "index.html"
-    ? (streamedCode || project?.generatedCode || "")
-    : (projectFiles.find(f => f.filename === activeFile)?.code || "");
+  const activeFileCode = (() => {
+    if (optimisticFiles[activeFile]) return optimisticFiles[activeFile];
+    if (streamedFile === activeFile && streamedCode) return streamedCode;
+    if (activeFile === "index.html") return streamedCode || project?.generatedCode || "";
+    return projectFiles.find(f => f.filename === activeFile)?.code || "";
+  })();
 
   const currentCode = activeFileCode;
 
@@ -645,7 +660,22 @@ export default function EditorPage() {
             const editedList: string[] = Array.isArray(data.editedFiles) ? data.editedFiles : [];
             const targetFile = data.editedFile || (editedList.includes(activeFile) ? activeFile : editedList[0]) || activeFile || "index.html";
             const targetCode = targetFile === "index.html" ? data.code : (data.editedCode || data.code);
-            if (targetCode) { setStreamedCode(targetCode); gotFinalCode = true; }
+            if (targetCode) {
+              setStreamedCode(targetCode);
+              setStreamedFile(targetFile);
+              gotFinalCode = true;
+            }
+            setOptimisticFiles(prev => {
+              const next = { ...prev };
+              if (data.code) next["index.html"] = data.code;
+              if (targetFile !== "index.html" && targetCode) next[targetFile] = targetCode;
+              if (Array.isArray(data.files)) {
+                for (const f of data.files) {
+                  if (f?.filename && typeof f.code === "string") next[f.filename] = f.code;
+                }
+              }
+              return next;
+            });
             setActiveFile(targetFile);
             queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
             queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
@@ -1700,6 +1730,13 @@ export default function EditorPage() {
 window.__PROJECT_ID__=${projectId};
 (function(){
   var API=(window.location.origin==='null'?window.parent.location.origin:window.location.origin)+'/api/leads/${projectId}';
+  window.addEventListener('message',function(ev){
+    if(!ev.data||typeof ev.data!=='object')return;
+    if(ev.data.type==='nz-wheel'){try{window.scrollBy(ev.data.dx||0,ev.data.dy||0);}catch(e){}}
+    if(ev.data.type==='nz-scroll-anchor'&&ev.data.anchor){
+      try{var el=document.querySelector(ev.data.anchor);if(el)el.scrollIntoView({behavior:'smooth'});}catch(e){}
+    }
+  });
   document.addEventListener('click',function(e){
     var a=e.target.closest('a');
     if(!a) return;
@@ -1993,34 +2030,64 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (!e.data || typeof e.data !== 'object') return;
+      if (iframeRef.current && e.source && e.source !== iframeRef.current.contentWindow) return;
       if (e.data.type === 'nz-text-edit') {
         const finalHtml = e.data.html;
+        const seq = ++saveSeqRef.current;
+        setOptimisticFiles(prev => ({ ...prev, [activeFile]: finalHtml }));
         if (activeFile === "index.html") {
           setStreamedCode(finalHtml);
+          setStreamedFile("index.html");
           fetch(`/api/projects/${projectId}/code`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ generatedCode: finalHtml }),
             credentials: "include",
-          }).then(() => {
+          }).then(async (resp) => {
+            if (seq !== saveSeqRef.current) return;
+            if (!resp.ok) throw new Error("save failed");
             queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+          }).catch(() => {
+            if (seq === saveSeqRef.current) toast({ title: "Не удалось сохранить", variant: "destructive" });
           });
         } else {
-          fetch(`/api/projects/${projectId}/files/${activeFile}`, {
+          setStreamedCode(finalHtml);
+          setStreamedFile(activeFile);
+          fetch(`/api/projects/${projectId}/files/${encodeURIComponent(activeFile)}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code: finalHtml }),
             credentials: "include",
-          }).then(() => {
+          }).then(async (resp) => {
+            if (seq !== saveSeqRef.current) return;
+            if (!resp.ok) throw new Error("save failed");
             queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+          }).catch(() => {
+            if (seq === saveSeqRef.current) toast({ title: "Не удалось сохранить", variant: "destructive" });
           });
         }
       }
       if (e.data.type === 'nz-navigate-file') {
         if (isGenerating) return;
-        const filename = e.data.filename;
+        const filename = String(e.data.filename || "");
+        const anchor = String(e.data.anchor || "");
+        const known = new Set([
+          "index.html",
+          ...projectFiles.filter(f => f.filename.toLowerCase().endsWith(".html")).map(f => f.filename),
+          ...Object.keys(optimisticFiles),
+        ]);
+        if (!known.has(filename)) {
+          toast({ title: "Страница не найдена", description: filename, variant: "destructive" });
+          return;
+        }
         setActiveFile(filename);
         setStreamedCode("");
+        setStreamedFile(filename);
+        if (anchor) {
+          setTimeout(() => {
+            iframeRef.current?.contentWindow?.postMessage({ type: "nz-scroll-anchor", anchor }, "*");
+          }, 120);
+        }
       }
       if (e.data.type === 'nz-img-click' || e.data.type === 'nz-placeholder-click') {
         pendingImageTarget.current = e.data.path;
@@ -2039,32 +2106,42 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       if (e.data.type === 'nz-element-deleted') {
         const finalHtml = e.data.html;
         setSelectedElement(null);
+        const seq = ++saveSeqRef.current;
+        setOptimisticFiles(prev => ({ ...prev, [activeFile]: finalHtml }));
+        const savePromise = activeFile === "index.html"
+          ? fetch(`/api/projects/${projectId}/code`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ generatedCode: finalHtml }),
+              credentials: "include",
+            })
+          : fetch(`/api/projects/${projectId}/files/${encodeURIComponent(activeFile)}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ code: finalHtml }),
+              credentials: "include",
+            });
         if (activeFile === "index.html") {
           setStreamedCode(finalHtml);
-          fetch(`/api/projects/${projectId}/code`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ generatedCode: finalHtml }),
-            credentials: "include",
-          }).then(() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
-          });
+          setStreamedFile("index.html");
         } else {
-          fetch(`/api/projects/${projectId}/files/${activeFile}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: finalHtml }),
-            credentials: "include",
-          }).then(() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
-          });
+          setStreamedCode(finalHtml);
+          setStreamedFile(activeFile);
         }
-        toast({ title: "Элемент удалён", description: "Изменения сохранены" });
+        savePromise.then(async (resp) => {
+          if (seq !== saveSeqRef.current) return;
+          if (!resp.ok) throw new Error("save failed");
+          queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+          queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+          toast({ title: "Элемент удалён", description: "Изменения сохранены" });
+        }).catch(() => {
+          if (seq === saveSeqRef.current) toast({ title: "Не удалось сохранить удаление", variant: "destructive" });
+        });
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [projectId, activeFile, allFiles, isGenerating]);
+  }, [projectId, activeFile, allFiles, isGenerating, projectFiles, optimisticFiles, toast]);
 
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: isMobile ? "100%" : "375px" };
 
@@ -2794,21 +2871,26 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                       setCodeSaving(true);
                       try {
                         if (activeFile === "index.html") {
-                          await fetch(`/api/projects/${projectId}/code`, {
+                          const resp = await fetch(`/api/projects/${projectId}/code`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ generatedCode: editableCode }),
                             credentials: "include",
                           });
+                          if (!resp.ok) throw new Error("save failed");
                           setStreamedCode(editableCode);
+                          setStreamedFile("index.html");
+                          setOptimisticFiles(prev => ({ ...prev, "index.html": editableCode }));
                           queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
                         } else {
-                          await fetch(`/api/projects/${projectId}/files/${activeFile}`, {
+                          const resp = await fetch(`/api/projects/${projectId}/files/${encodeURIComponent(activeFile)}`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ code: editableCode }),
                             credentials: "include",
                           });
+                          if (!resp.ok) throw new Error("save failed");
+                          setOptimisticFiles(prev => ({ ...prev, [activeFile]: editableCode }));
                           queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
                         }
                         toast({ title: "Сохранено", description: "Изменения применены к сайту" });
@@ -2846,8 +2928,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             ) : currentCode || isGenerating ? (
               <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
-                 <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { const iw = iframeRef.current?.contentWindow; if (!iw) return; e.preventDefault(); e.stopPropagation(); iw.scrollBy(e.deltaX, e.deltaY); }}>
-                    <iframe key={selectorMode ? 'sel' : editMode ? 'edit' : 'view'} ref={iframeRef} srcDoc={isGenerating ? (getEditableCode(project?.generatedCode || "") || "") : getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
+                 <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { e.preventDefault(); e.stopPropagation(); iframeRef.current?.contentWindow?.postMessage({ type: 'nz-wheel', dx: e.deltaX, dy: e.deltaY }, '*'); }}>
+                    <iframe key={selectorMode ? 'sel' : editMode ? 'edit' : 'view'} ref={iframeRef} srcDoc={getEditableCode(isGenerating ? (streamedCode || currentCode || project?.generatedCode || "") : currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-forms" />
                  </div>
                  {isGenerating && (
                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style={{ background: 'rgba(11,15,25,0.92)', backdropFilter: 'blur(4px)' }}>

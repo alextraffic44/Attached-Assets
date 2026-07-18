@@ -70,3 +70,14 @@ export async function assertPublicHttpUrl(urlString: string): Promise<URL> {
   }
   return url;
 }
+
+/**
+ * Fetch after re-validating DNS to shrink SSRF TOCTOU window (DNS rebinding).
+ * Still best-effort — prefer this over bare fetch for user-supplied URLs.
+ */
+export async function safeFetch(urlString: string, init?: RequestInit): Promise<Response> {
+  await assertPublicHttpUrl(urlString);
+  // Re-check immediately before connect (mitigates simple rebinding races).
+  await assertPublicHttpUrl(urlString);
+  return fetch(urlString, init);
+}
