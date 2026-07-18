@@ -12,7 +12,8 @@ export interface IStorage {
   createYandexUser(data: { yandexId: string; displayName: string; email?: string; avatarUrl?: string }): Promise<User>;
   updateUserCredits(id: number, credits: number): Promise<User | undefined>;
   deductCredits(userId: number, amount: number, operation: string, idempotencyKey: string): Promise<{ success: boolean; newBalance: number; alreadyProcessed?: boolean; conflict?: boolean }>;
-  refundCredits(userId: number, amount: number): Promise<number>;
+  /** Refund credits and invalidate the debit idempotency key so the same key cannot free-replay. */
+  refundCredits(userId: number, amount: number, idempotencyKey?: string): Promise<number>;
   addCredits(userId: number, amount: number): Promise<number>;
   creditPayment(userId: number, amount: number, idempotencyKey: string, note: string): Promise<{ credited: boolean; newBalance: number }>;
 
@@ -182,7 +183,45 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async refundCredits(userId: number, amount: number): Promise<number> {
+  async refundCredits(userId: number, amount: number, idempotencyKey?: string): Promise<number> {
+    // When an idempotency key is provided: credit at most once per key, and rename the
+    // original debit row so a retry with the same key charges again (no free replay).
+    if (idempotencyKey) {
+      return await db.transaction(async (tx) => {
+        const refundKey = `refund:${idempotencyKey}`;
+        const inserted = await tx.insert(creditTransactions).values({
+          userId,
+          amount,
+          type: "credit",
+          operation: "refund",
+          note: `Refund for ${idempotencyKey}`,
+          idempotencyKey: refundKey,
+        }).onConflictDoNothing().returning();
+
+        if (inserted.length === 0) {
+          const [user] = await tx.select().from(users).where(eq(users.id, userId));
+          return user?.credits ?? 0;
+        }
+
+        // Free the original debit key for a future legitimate retry.
+        const freedKey = `${idempotencyKey}:refunded:${Date.now()}`;
+        await tx.execute(sql`
+          UPDATE credit_transactions
+          SET idempotency_key = ${freedKey},
+              note = COALESCE(note, '') || ' [refunded]'
+          WHERE idempotency_key = ${idempotencyKey}
+            AND user_id = ${userId}
+            AND (type = 'debit' OR type IS NULL)
+        `);
+
+        const result = await tx.execute(
+          sql`UPDATE users SET credits = credits + ${amount} WHERE id = ${userId} RETURNING credits`
+        );
+        const rows = result.rows as Array<{ credits: number }>;
+        return rows?.[0]?.credits ?? 0;
+      });
+    }
+
     const result = await db.execute(
       sql`UPDATE users SET credits = credits + ${amount} WHERE id = ${userId} RETURNING credits`
     );

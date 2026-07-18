@@ -1567,14 +1567,14 @@ async function resolveScrollAnimMarkers(
       if (billed) creditsUsed += SCROLL_ANIM_COST;
       try { res.write(`data: ${JSON.stringify({ status: `Анимация готова (${frames.length} кадров)` })}\n\n`); } catch {}
     } else if (billed && userId) {
-      try { await storage.refundCredits(userId, SCROLL_ANIM_COST); } catch {}
+      try { await storage.refundCredits(userId, SCROLL_ANIM_COST, ikey); } catch {}
     }
     } catch (blockErr: any) {
       // A helper (product still / creative concept / vision / frames) threw — never let
       // it abort the whole function (which would skip finalize() and strand the 2nd block).
       // Refund this block's credits and continue; finalize() degrades it to static fallback.
       console.warn(`[SCROLLANIM] block failed (project ${projectId}):`, blockErr?.message || blockErr);
-      if (billed && userId) { try { await storage.refundCredits(userId, SCROLL_ANIM_COST); } catch {} }
+      if (billed && userId) { try { await storage.refundCredits(userId, SCROLL_ANIM_COST, ikey); } catch {} }
     }
   }
 
@@ -1834,7 +1834,7 @@ async function resolveGenImgMarkers(
                 await storage.createProjectImage({ projectId, userId: proj?.userId, name, url, prompt: parsed.prompt.substring(0, 200) });
               } catch (e) { /* library save is best-effort */ }
             } else if (billed && userId) {
-              try { await storage.refundCredits(userId, AUTO_IMAGE_COST); } catch {}
+              try { await storage.refundCredits(userId, AUTO_IMAGE_COST, ikey); } catch {}
             }
           }
         }
@@ -1944,7 +1944,7 @@ async function autoFillMissingImages(
       creditsUsed += AUTO_IMAGE_COST;
       try { res.write(`data: ${JSON.stringify({ status: `Добавляю фото (${filled}/${total})...` })}\n\n`); } catch {}
     } else if (billed && userId) {
-      try { await storage.refundCredits(userId, AUTO_IMAGE_COST); } catch {}
+      try { await storage.refundCredits(userId, AUTO_IMAGE_COST, ikey); } catch {}
     }
   }
 
@@ -2723,12 +2723,12 @@ export async function registerRoutes(
         if (result.success) {
           res.json({ enhancedPrompt: result.enhancedPrompt, creditsUsed: ENHANCE_COST, newBalance: deduction.newBalance });
         } else {
-          if (billed) { try { await storage.refundCredits(user.id, ENHANCE_COST); } catch {} }
+          if (billed) { try { await storage.refundCredits(user.id, ENHANCE_COST, ikey); } catch {} }
           const bal = (await storage.getUser(user.id))?.credits ?? deduction.newBalance;
           res.json({ enhancedPrompt: prompt, creditsUsed: 0, newBalance: bal, warning: "AI временно недоступен, использован оригинальный промпт" });
         }
       } catch (inner: any) {
-        if (billed) { try { await storage.refundCredits(user.id, ENHANCE_COST); } catch {} }
+        if (billed) { try { await storage.refundCredits(user.id, ENHANCE_COST, ikey); } catch {} }
         throw inner;
       }
     } catch (err: any) {
@@ -2756,12 +2756,12 @@ export async function registerRoutes(
         if (result.success) {
           res.json({ research: result.research, creditsUsed: RESEARCH_COST, newBalance: deduction.newBalance });
         } else {
-          if (billed) { try { await storage.refundCredits(user.id, RESEARCH_COST); } catch {} }
+          if (billed) { try { await storage.refundCredits(user.id, RESEARCH_COST, ikey); } catch {} }
           const bal = (await storage.getUser(user.id))?.credits ?? deduction.newBalance;
           res.json({ research: "", creditsUsed: 0, newBalance: bal, warning: "Deep Research временно недоступен" });
         }
       } catch (inner: any) {
-        if (billed) { try { await storage.refundCredits(user.id, RESEARCH_COST); } catch {} }
+        if (billed) { try { await storage.refundCredits(user.id, RESEARCH_COST, ikey); } catch {} }
         throw inner;
       }
     } catch (err: any) {
@@ -2791,6 +2791,7 @@ export async function registerRoutes(
     let genBilled = false;
     let generationCost = 0;
     let billedUserId: number | undefined;
+    let genIkeyForRefund = "";
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
@@ -2844,6 +2845,7 @@ export async function registerRoutes(
       const GENERATION_COST = isNewSite ? NEW_SITE_GENERATION_COST : EDIT_GENERATION_COST;
 
       const genIkey = idempotencyKey || `gen-${project.id}-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      genIkeyForRefund = genIkey;
       const genDeduction = await storage.deductCredits(user.id, GENERATION_COST, "generate", genIkey);
       if (!genDeduction.success) {
         return res.status(402).json({ message: `Не хватает токенов. Нужно ${GENERATION_COST}, у вас ${genDeduction.newBalance}.`, newBalance: genDeduction.newBalance });
@@ -3609,7 +3611,7 @@ ${designAnalysis}
 
         if (parsed.total > 0 && parsed.applied === 0) {
           const billed = genDeduction.success && !genDeduction.alreadyProcessed;
-          if (billed && user?.id) { try { await storage.refundCredits(user.id, GENERATION_COST); } catch {} }
+          if (billed && user?.id) { try { await storage.refundCredits(user.id, GENERATION_COST, genIkey); } catch {} }
           const freshBal = user?.id ? (await storage.getUser(user.id))?.credits : undefined;
           const failMsg = "Не удалось применить изменения к коду — попробуйте переформулировать запрос или повторить. Токены за эту попытку возвращены.";
           try {
@@ -3679,7 +3681,7 @@ ${designAnalysis}
           const patchResult = applyDiffPatches(editingFileCode, fullResponse);
           if (patchResult.total > 0 && patchResult.applied === 0) {
             const billed = genDeduction.success && !genDeduction.alreadyProcessed;
-            if (billed && user?.id) { try { await storage.refundCredits(user.id, GENERATION_COST); } catch {} }
+            if (billed && user?.id) { try { await storage.refundCredits(user.id, GENERATION_COST, genIkey); } catch {} }
             const freshBal = user?.id ? (await storage.getUser(user.id))?.credits : undefined;
             const failMsg = "Не удалось применить изменения к коду — попробуйте переформулировать запрос или повторить. Токены за эту попытку возвращены.";
             try {
@@ -4114,7 +4116,7 @@ ${designAnalysis}
       console.error("Generation error:", err?.message || err);
       try {
         if (genBilled && billedUserId && generationCost > 0) {
-          await storage.refundCredits(billedUserId, generationCost);
+          await storage.refundCredits(billedUserId, generationCost, genIkeyForRefund);
         }
       } catch {}
       const _em = err?.message || "";
@@ -4300,12 +4302,12 @@ ${designAnalysis}
       try {
         frames = await generateScrollFrames(prompt, () => clientGone);
       } catch (genErr: any) {
-        if (billed) { try { await storage.refundCredits(user.id, SCROLL_ANIM_COST); } catch {} }
+        if (billed) { try { await storage.refundCredits(user.id, SCROLL_ANIM_COST, saIkey); } catch {} }
         console.error("Scroll frame generation error:", genErr?.message || genErr);
         return res.status(502).json({ message: "Не удалось сгенерировать анимацию. Токены возвращены." });
       }
       if (frames.length < 60) {
-        if (billed) { try { await storage.refundCredits(user.id, SCROLL_ANIM_COST); } catch {} }
+        if (billed) { try { await storage.refundCredits(user.id, SCROLL_ANIM_COST, saIkey); } catch {} }
         return res.status(502).json({ message: "Не удалось сгенерировать анимацию. Токены возвращены." });
       }
 
@@ -4321,6 +4323,7 @@ ${designAnalysis}
     let billed = false;
     let imageCost = 15;
     let userId: number | undefined;
+    let imgIkey = "";
     try {
       const IMAGE_COST = 15;
       imageCost = IMAGE_COST;
@@ -4332,7 +4335,7 @@ ${designAnalysis}
         return res.status(400).json({ message: "Промпт обязателен" });
       }
 
-      const imgIkey = idempotencyKey || `img-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      imgIkey = idempotencyKey || `img-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
       const deduction = await storage.deductCredits(user.id, IMAGE_COST, "image", imgIkey);
       if (!deduction.success) {
         return res.status(402).json({ message: `Недостаточно токенов. Нужно ${IMAGE_COST}, у вас ${deduction.newBalance}`, newBalance: deduction.newBalance });
@@ -4409,7 +4412,7 @@ ${designAnalysis}
       }
 
       if (createBody.code !== 200 || !createBody.data?.taskId) {
-        if (billed) { try { await storage.refundCredits(user.id, IMAGE_COST); } catch {} }
+        if (billed) { try { await storage.refundCredits(user.id, IMAGE_COST, imgIkey); } catch {} }
         const bal = (await storage.getUser(user.id))?.credits ?? deduction.newBalance;
         return res.status(500).json({ message: createBody.msg || "Ошибка создания задачи", newBalance: bal });
       }
@@ -4418,7 +4421,7 @@ ${designAnalysis}
       res.json({ taskId: createBody.data.taskId, model: usedModel, newBalance: deduction.newBalance });
     } catch (err: any) {
       console.error("Image generation error:", err);
-      if (billed && userId) { try { await storage.refundCredits(userId, imageCost); } catch {} }
+      if (billed && userId) { try { await storage.refundCredits(userId, imageCost, imgIkey); } catch {} }
       res.status(500).json({ message: "Ошибка генерации изображения" });
     }
   });
@@ -4493,9 +4496,11 @@ ${designAnalysis}
         const r = await safeFetch(url, { redirect: "error", signal: controller.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         mimeType = r.headers.get("content-type") || "image/jpeg";
-        if (!mimeType.startsWith("image/")) {
-          return res.status(400).json({ message: "URL не является изображением" });
+        const mime = mimeType.split(";")[0].trim().toLowerCase();
+        if (!["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"].includes(mime)) {
+          return res.status(400).json({ message: "Разрешены только PNG/JPEG/WebP/GIF" });
         }
+        mimeType = mime === "image/jpg" ? "image/jpeg" : mime;
         buffer = Buffer.from(await r.arrayBuffer());
       } finally {
         clearTimeout(timeout);
@@ -4705,6 +4710,7 @@ ${designAnalysis}
   app.post("/api/3d/generate", requireAuth, aiLimiter, async (req, res) => {
     let billed = false;
     let userId: number | undefined;
+    let ikey = "";
     try {
       const user = req.user as any;
       userId = user.id;
@@ -4716,7 +4722,7 @@ ${designAnalysis}
         return res.status(500).json({ message: "WAVESPEED_API_KEY не настроен" });
       }
 
-      const ikey = idempotencyKey || `3d-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      ikey = idempotencyKey || `3d-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
       const deduction = await storage.deductCredits(user.id, MODEL_3D_COST, "3d", ikey);
       if (!deduction.success) {
         return res.status(402).json({ message: `Недостаточно токенов. Нужно ${MODEL_3D_COST}, у вас ${deduction.newBalance}`, newBalance: deduction.newBalance });
@@ -4750,7 +4756,7 @@ ${designAnalysis}
       const taskData = createBody.data || createBody;
       const taskId = taskData.id;
       if (!createResp.ok || !taskId) {
-        if (billed) { try { await storage.refundCredits(user.id, MODEL_3D_COST); } catch {} }
+        if (billed) { try { await storage.refundCredits(user.id, MODEL_3D_COST, ikey); } catch {} }
         return res.status(500).json({ message: createBody?.error?.message || createBody?.detail || createBody?.message || "Ошибка создания 3D задачи" });
       }
 
@@ -4761,7 +4767,7 @@ ${designAnalysis}
       });
     } catch (err: any) {
       console.error("[WaveSpeed 3D] generate error:", err);
-      if (billed && userId) { try { await storage.refundCredits(userId, MODEL_3D_COST); } catch {} }
+      if (billed && userId) { try { await storage.refundCredits(userId, MODEL_3D_COST, ikey); } catch {} }
       res.status(500).json({ message: "Ошибка генерации 3D модели" });
     }
   });
@@ -5798,10 +5804,12 @@ ${fullHtml}`;
         const response = await safeFetch(imageUrl, { redirect: "error", signal: controller.signal });
         if (!response.ok) throw new Error("Не удалось загрузить изображение");
         contentType = response.headers.get("content-type") || "application/octet-stream";
-        if (!contentType.startsWith("image/")) {
-          return res.status(400).json({ message: "URL не является изображением" });
+        const mime = contentType.split(";")[0].trim().toLowerCase();
+        if (!["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"].includes(mime)) {
+          return res.status(400).json({ message: "Разрешены только PNG/JPEG/WebP/GIF" });
         }
         buffer = Buffer.from(await response.arrayBuffer());
+        contentType = mime === "image/jpg" ? "image/jpeg" : mime;
       } finally {
         clearTimeout(timeout);
       }
@@ -5809,6 +5817,8 @@ ${fullHtml}`;
         return res.status(413).json({ message: "Изображение слишком большое" });
       }
       res.setHeader("Content-Type", contentType);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Disposition", "inline");
       res.setHeader("Cache-Control", "public, max-age=3600");
       res.send(buffer);
     } catch (err) {
@@ -5952,15 +5962,6 @@ ${fullHtml}`;
         return res.json({ status: "ok" });
       }
 
-      // Amount must match (rubles). Accept number or string from provider.
-      if (merchant_price !== undefined && merchant_price !== null && String(merchant_price).trim() !== "") {
-        const paid = Math.round(Number(merchant_price));
-        if (!Number.isFinite(paid) || paid !== order.amount) {
-          console.error(`Payment amount mismatch order ${order.id}: expected ${order.amount}, got ${merchant_price}`);
-          return res.json({ status: "ok" });
-        }
-      }
-
       if (order_id && order.orderId && String(order_id) !== String(order.orderId)) {
         console.error(`Payment order_id mismatch for ${order.id}: stored ${order.orderId}, got ${order_id}`);
         return res.json({ status: "ok" });
@@ -5971,6 +5972,17 @@ ${fullHtml}`;
       }
 
       if (Number(status) === 3) {
+        // Paid webhooks must include merchant_price matching the stored order amount.
+        if (merchant_price === undefined || merchant_price === null || String(merchant_price).trim() === "") {
+          console.error(`Payment webhook missing merchant_price for order ${order.id}`);
+          return res.json({ status: "ok" });
+        }
+        const paid = Math.round(Number(merchant_price));
+        if (!Number.isFinite(paid) || paid !== order.amount) {
+          console.error(`Payment amount mismatch order ${order.id}: expected ${order.amount}, got ${merchant_price}`);
+          return res.json({ status: "ok" });
+        }
+
         await storage.updatePaymentOrderStatus(order.id, "paid", order_id, new Date());
 
         const user = await storage.getUser(order.userId);

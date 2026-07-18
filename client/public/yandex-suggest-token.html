@@ -8,13 +8,14 @@
 <script>
 "use strict";
 (function () {
-  var href = document.location.href;
   var hash = document.location.hash || "";
 
   function finishViaOpener() {
     try {
       if (window.opener && !window.opener.closed) {
-        window.opener.postMessage(href, "*");
+        // Same-origin only — never post the token URL to "*".
+        var target = window.location.origin;
+        window.opener.postMessage({ type: "yandex_oauth", hash: hash }, target);
         window.close();
         return true;
       }

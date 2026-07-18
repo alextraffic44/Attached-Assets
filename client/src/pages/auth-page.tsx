@@ -274,8 +274,12 @@ export default function AuthPage() {
     }
 
     const onMessage = (event: MessageEvent) => {
-      if (typeof event.data !== "string" || !event.data.includes("access_token")) return;
-      void finishYandex(new URL(event.data).hash);
+      // Only accept OAuth tokens from our own origin (yandex-suggest-token.html popup).
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || typeof data !== "object" || data.type !== "yandex_oauth") return;
+      if (typeof data.hash !== "string" || !data.hash.includes("access_token")) return;
+      void finishYandex(data.hash);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);

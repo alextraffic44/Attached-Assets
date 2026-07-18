@@ -1295,7 +1295,7 @@ Respond with ONLY valid JSON, no explanation:
 
         if (!html) {
           // Refund credits, write fallback placeholder so URL always exists
-          if (!ded.alreadyProcessed) { try { await storage.refundCredits(userId, SEO_ARTICLE_COST); } catch {} }
+          if (!ded.alreadyProcessed) { try { await storage.refundCredits(userId, SEO_ARTICLE_COST, ikey); } catch {} }
           const fallback = buildFallbackArticle(kw, cluster, { ...cfg, clusters: allClusters });
           await storage.upsertProjectFile({ projectId: proj.id, filename, code: fallback });
           kw.status = "done"; kw.filename = filename; // "done" so it's counted and site stays complete
