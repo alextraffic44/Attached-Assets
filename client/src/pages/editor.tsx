@@ -180,6 +180,8 @@ export default function EditorPage() {
   const [selectorMode, setSelectorMode] = useState(false);
   const [selectedElement, setSelectedElement] = useState<{tag: string, text: string, classes: string, path: string, outerSnippet: string} | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  /** Preserve preview scroll when remounting iframe (Редактор / Выбрать). */
+  const pendingScrollYRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingImageTarget = useRef<string | null>(null);
 
@@ -1733,6 +1735,23 @@ window.__PROJECT_ID__=${projectId};
   window.addEventListener('message',function(ev){
     if(!ev.data||typeof ev.data!=='object')return;
     if(ev.data.type==='nz-wheel'){try{window.scrollBy(ev.data.dx||0,ev.data.dy||0);}catch(e){}}
+    if(ev.data.type==='nz-get-scroll'){
+      try{
+        var y=window.scrollY||document.documentElement.scrollTop||document.body.scrollTop||0;
+        window.parent.postMessage({type:'nz-scroll-pos',y:y},'*');
+      }catch(e){try{window.parent.postMessage({type:'nz-scroll-pos',y:0},'*');}catch(_e){}}
+    }
+    if(ev.data.type==='nz-set-scroll'&&typeof ev.data.y==='number'){
+      try{
+        var ty=ev.data.y;
+        var go=function(){try{window.scrollTo(0,ty);}catch(e){}};
+        go();
+        if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);
+        window.addEventListener('load',go);
+        setTimeout(go,40);
+        setTimeout(go,160);
+      }catch(e){}
+    }
     if(ev.data.type==='nz-scroll-anchor'&&ev.data.anchor){
       try{var el=document.querySelector(ev.data.anchor);if(el)el.scrollIntoView({behavior:'smooth'});}catch(e){}
     }
@@ -1800,6 +1819,10 @@ window.__PROJECT_ID__=${projectId};
   else document.addEventListener('DOMContentLoaded',fixSticky);
 })();
 </script>`;
+    const restoreY = pendingScrollYRef.current;
+    const restoreScrollScript = (restoreY != null && restoreY > 0)
+      ? `<script data-nz-restore-scroll>(function(){var y=${Math.round(restoreY)};function go(){try{window.scrollTo(0,y);}catch(e){}}go();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);window.addEventListener('load',go);setTimeout(go,40);setTimeout(go,200);})();</script>`
+      : "";
     const preloaderKillScript = `<script data-nz-preloader-kill>
 (function(){
   var SELS=['#preloader','.preloader','#loader','.loader','#loading','.loading',
@@ -1835,7 +1858,7 @@ window.__PROJECT_ID__=${projectId};
   else go();
 })();
 <\/script>`;
-    return code.replace('</head>', leadScript + stickyFixScript + preloaderKillScript + '</head>');
+    return code.replace('</head>', leadScript + stickyFixScript + preloaderKillScript + restoreScrollScript + '</head>');
   }, [projectId]);
 
   const getEditableCode = useCallback((code: string) => {
@@ -2026,6 +2049,64 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 <\/script><!--NZ_EDITOR_END-->`;
     return injectProjectId(code.replace('</body>', editorScript + '</body>'));
   }, [editMode, selectorMode, injectProjectId]);
+
+  const requestIframeScrollY = useCallback((): Promise<number> => {
+    return new Promise((resolve) => {
+      const win = iframeRef.current?.contentWindow;
+      if (!win) {
+        resolve(0);
+        return;
+      }
+      let done = false;
+      const finish = (y: number) => {
+        if (done) return;
+        done = true;
+        window.removeEventListener("message", onMsg);
+        resolve(Number.isFinite(y) ? y : 0);
+      };
+      const onMsg = (e: MessageEvent) => {
+        if (e.source !== win) return;
+        if (e.data?.type === "nz-scroll-pos") finish(Number(e.data.y) || 0);
+      };
+      window.addEventListener("message", onMsg);
+      try {
+        win.postMessage({ type: "nz-get-scroll" }, "*");
+      } catch {
+        finish(0);
+        return;
+      }
+      setTimeout(() => finish(0), 180);
+    });
+  }, []);
+
+  const restoreIframeScroll = useCallback(() => {
+    const y = pendingScrollYRef.current;
+    if (y == null || y <= 0) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    try {
+      win.postMessage({ type: "nz-set-scroll", y }, "*");
+    } catch {}
+    // Keep Y briefly for remount races, then clear so later srcDoc updates don't jump back.
+    setTimeout(() => {
+      if (pendingScrollYRef.current === y) pendingScrollYRef.current = null;
+    }, 500);
+  }, []);
+
+  const togglePreviewMode = useCallback(async (mode: "edit" | "selector") => {
+    const y = await requestIframeScrollY();
+    pendingScrollYRef.current = y;
+    if (mode === "edit") {
+      const next = !editMode;
+      setEditMode(next);
+      if (next) setSelectorMode(false);
+    } else {
+      const next = !selectorMode;
+      setSelectorMode(next);
+      if (next) setEditMode(false);
+      setSelectedElement(null);
+    }
+  }, [requestIframeScrollY, editMode, selectorMode]);
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -2248,7 +2329,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           {!showCode && currentCode && (
             <>
               <button
-                onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }}
+                onClick={() => { void togglePreviewMode("edit"); }}
                 data-testid="button-toggle-edit"
                 title="Визуальный редактор"
                 className={`hidden sm:flex items-center gap-2 h-9 sm:h-10 px-2.5 sm:px-4 rounded-full text-sm font-medium transition-all duration-200 ${editMode
@@ -2259,7 +2340,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <span className="hidden lg:inline">Редактор</span>
               </button>
               <button
-                onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }}
+                onClick={() => { void togglePreviewMode("selector"); }}
                 data-testid="button-toggle-selector"
                 title="Выбрать элемент"
                 className={`hidden sm:flex items-center gap-2 h-9 sm:h-10 px-2.5 sm:px-4 rounded-full text-sm font-medium transition-all duration-200 ${selectorMode
@@ -2929,7 +3010,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             ) : currentCode || isGenerating ? (
               <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
                  <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { e.preventDefault(); e.stopPropagation(); iframeRef.current?.contentWindow?.postMessage({ type: 'nz-wheel', dx: e.deltaX, dy: e.deltaY }, '*'); }}>
-                    <iframe key={selectorMode ? 'sel' : editMode ? 'edit' : 'view'} ref={iframeRef} srcDoc={getEditableCode(isGenerating ? (streamedCode || currentCode || project?.generatedCode || "") : currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-forms" />
+                    <iframe key={selectorMode ? 'sel' : editMode ? 'edit' : 'view'} ref={iframeRef} srcDoc={getEditableCode(isGenerating ? (streamedCode || currentCode || project?.generatedCode || "") : currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-forms" onLoad={restoreIframeScroll} />
                  </div>
                  {isGenerating && (
                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style={{ background: 'rgba(11,15,25,0.92)', backdropFilter: 'blur(4px)' }}>
