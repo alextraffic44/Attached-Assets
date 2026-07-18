@@ -4,9 +4,10 @@ import { useAuth } from "@/lib/auth";
 import { Redirect } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Users, Coins, TrendingDown, TrendingUp, Search, ChevronRight, ArrowLeft, Plus, Minus, LayoutGrid, History, User as UserIcon, ExternalLink } from "lucide-react";
+import { Loader2, Users, Coins, TrendingDown, TrendingUp, Search, ChevronRight, ArrowLeft, Plus, Minus, LayoutGrid, History, User as UserIcon, ExternalLink, ChevronLeft } from "lucide-react";
 
 const appleFont = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif';
+const USERS_PER_PAGE = 20;
 
 const OPERATION_LABELS: Record<string, { label: string; color: string }> = {
   enhance: { label: "AI Улучшение", color: "#007AFF" },
@@ -74,23 +75,24 @@ function UserDetail({ userId, onBack }: { userId: number; onBack: () => void }) 
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: user, isLoading: userLoading } = useQuery<any>({
+  const { data: user, isLoading: userLoading, isError: userMissing } = useQuery<any>({
     queryKey: ["/api/admin/users", userId],
     queryFn: () => apiRequest("GET", `/api/admin/users/${userId}`).then(r => r.json()),
     refetchInterval: 5000,
+    retry: false,
   });
 
   const { data: transactions = [], isLoading: txLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/users", userId, "transactions"],
     queryFn: () => apiRequest("GET", `/api/admin/users/${userId}/transactions`).then(r => r.json()),
-    enabled: tab === "transactions",
+    enabled: tab === "transactions" && !!user,
     refetchInterval: 5000,
   });
 
   const { data: projects = [], isLoading: projLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/users", userId, "projects"],
     queryFn: () => apiRequest("GET", `/api/admin/users/${userId}/projects`).then(r => r.json()),
-    enabled: tab === "projects",
+    enabled: tab === "projects" && !!user,
   });
 
   const adjustMutation = useMutation({
@@ -115,6 +117,19 @@ function UserDetail({ userId, onBack }: { userId: number; onBack: () => void }) 
       <Loader2 className="animate-spin" size={28} style={{ color: "#007AFF" }} />
     </div>
   );
+
+  if (userMissing || !user) {
+    return (
+      <div>
+        <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "#007AFF", fontSize: "0.85rem", fontWeight: 600, marginBottom: 20, padding: 0 }}>
+          <ArrowLeft size={16} /> Назад к списку
+        </button>
+        <div style={{ padding: 48, textAlign: "center", color: "#86868B", background: "#fff", borderRadius: 16, border: "1px solid rgba(0,0,0,0.07)" }}>
+          Пользователь #{userId} не найден
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -316,10 +331,28 @@ function RecentTransactions({ userId }: { userId: number }) {
   );
 }
 
+function buildPageItems(current: number, total: number): Array<number | "…"> {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = new Set<number>([1, total, current, current - 1, current + 1]);
+  if (current <= 3) [2, 3, 4].forEach((p) => pages.add(p));
+  if (current >= total - 2) [total - 3, total - 2, total - 1].forEach((p) => pages.add(p));
+  const sorted = Array.from(pages).filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  const items: Array<number | "…"> = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) items.push("…");
+    items.push(sorted[i]);
+  }
+  return items;
+}
+
 export default function AdminPage() {
   const { user, isLoading } = useAuth();
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [findError, setFindError] = useState("");
+  const [finding, setFinding] = useState(false);
+  const { toast } = useToast();
 
   const { data: stats } = useQuery<any>({
     queryKey: ["/api/admin/stats"],
@@ -342,12 +375,58 @@ export default function AdminPage() {
   const isAdmin = user.id === 1 || user.telegramId === "661325490";
   if (!isAdmin) return <Redirect to="/dashboard" />;
 
-  const filtered = users.filter((u: any) =>
-    !search || u.displayName?.toLowerCase().includes(search.toLowerCase()) ||
-    u.email?.toLowerCase().includes(search.toLowerCase()) ||
-    String(u.id).includes(search) ||
-    (u.telegramId && u.telegramId.includes(search))
-  );
+  const q = search.trim();
+  const qLower = q.toLowerCase();
+  const numericId = /^\d+$/.test(q) ? Number(q) : null;
+
+  const filtered = users.filter((u: any) => {
+    if (!q) return true;
+    if (numericId !== null) return u.id === numericId || String(u.id).includes(q);
+    return (
+      u.displayName?.toLowerCase().includes(qLower) ||
+      u.email?.toLowerCase().includes(qLower) ||
+      String(u.id).includes(q) ||
+      (u.telegramId && u.telegramId.includes(q))
+    );
+  }).sort((a: any, b: any) => {
+    // Exact ID match first when searching by number
+    if (numericId !== null) {
+      if (a.id === numericId && b.id !== numericId) return -1;
+      if (b.id === numericId && a.id !== numericId) return 1;
+    }
+    return 0;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / USERS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * USERS_PER_PAGE;
+  const pageUsers = filtered.slice(pageStart, pageStart + USERS_PER_PAGE);
+  const pageItems = buildPageItems(currentPage, totalPages);
+
+  const openById = async () => {
+    setFindError("");
+    if (numericId === null || numericId <= 0) {
+      setFindError("Введите номер пользователя (ID)");
+      return;
+    }
+    const cached = users.find((u: any) => u.id === numericId);
+    if (cached) {
+      setSelectedUserId(numericId);
+      return;
+    }
+    setFinding(true);
+    try {
+      const resp = await apiRequest("GET", `/api/admin/users/${numericId}`);
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.message || "Пользователь не найден");
+      setSelectedUserId(data.id);
+    } catch (err: any) {
+      setFindError(err.message || "Пользователь не найден");
+      toast({ title: "Не найден", description: `Пользователь #${numericId} не найден`, variant: "destructive" });
+    } finally {
+      setFinding(false);
+    }
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "#F5F5F7", fontFamily: appleFont }}>
@@ -389,18 +468,50 @@ export default function AdminPage() {
             </div>
 
             <div style={{ background: "#fff", borderRadius: 18, border: "1px solid rgba(0,0,0,0.07)", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-              <div style={{ padding: "20px 24px", borderBottom: "1px solid #F2F2F7", display: "flex", alignItems: "center", gap: 12 }}>
-                <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: "#1D1D1F" }}>Пользователи</h2>
+              <div style={{ padding: "20px 24px", borderBottom: "1px solid #F2F2F7", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: "#1D1D1F" }}>Пользователи</h2>
+                  <div style={{ fontSize: "0.72rem", color: "#86868B", marginTop: 2 }}>
+                    {filtered.length} из {users.length}
+                    {filtered.length > 0 && <> · стр. {currentPage}/{totalPages}</>}
+                  </div>
+                </div>
                 <div style={{ flex: 1 }} />
-                <div style={{ position: "relative" }}>
-                  <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#86868B" }} />
-                  <input
-                    value={search} onChange={e => setSearch(e.target.value)}
-                    placeholder="Поиск по имени, email, ID..."
-                    style={{ paddingLeft: 34, paddingRight: 12, paddingTop: 8, paddingBottom: 8, borderRadius: 10, border: "1px solid #E0E0E5", fontSize: "0.83rem", outline: "none", width: 240 }}
-                  />
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ position: "relative" }}>
+                    <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#86868B" }} />
+                    <input
+                      value={search}
+                      onChange={e => { setSearch(e.target.value); setPage(1); setFindError(""); }}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          if (/^\d+$/.test(search.trim())) openById();
+                        }
+                      }}
+                      placeholder="ID пользователя, имя или email…"
+                      inputMode="search"
+                      style={{ paddingLeft: 34, paddingRight: 12, paddingTop: 8, paddingBottom: 8, borderRadius: 10, border: findError ? "1px solid #E74C3C" : "1px solid #E0E0E5", fontSize: "0.83rem", outline: "none", width: 220 }}
+                    />
+                  </div>
+                  <button
+                    onClick={openById}
+                    disabled={finding || !q}
+                    style={{
+                      padding: "8px 14px", borderRadius: 10, border: "none", cursor: finding || !q ? "default" : "pointer",
+                      background: "#007AFF", color: "#fff", fontWeight: 700, fontSize: "0.82rem",
+                      opacity: finding || !q ? 0.5 : 1, display: "flex", alignItems: "center", gap: 6,
+                    }}
+                  >
+                    {finding ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                    Найти
+                  </button>
                 </div>
               </div>
+              {findError && (
+                <div style={{ padding: "10px 24px", background: "#FFF5F5", color: "#C0392B", fontSize: "0.8rem", fontWeight: 600, borderBottom: "1px solid #FADBD8" }}>
+                  {findError}
+                </div>
+              )}
 
               {usersLoading ? (
                 <div style={{ padding: 60, textAlign: "center" }}>
@@ -409,41 +520,99 @@ export default function AdminPage() {
               ) : filtered.length === 0 ? (
                 <div style={{ padding: 60, textAlign: "center", color: "#86868B" }}>Пользователи не найдены</div>
               ) : (
-                <div>
-                  {filtered.map((u: any) => (
-                    <div
-                      key={u.id}
-                      onClick={() => setSelectedUserId(u.id)}
-                      style={{ display: "flex", alignItems: "center", padding: "14px 24px", borderBottom: "1px solid #F9F9F9", cursor: "pointer", gap: 14, transition: "background 0.15s" }}
-                      onMouseEnter={e => (e.currentTarget.style.background = "#F9F9F9")}
-                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                    >
-                      {u.avatarUrl ? (
-                        <img src={u.avatarUrl} style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      ) : (
-                        <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#007AFF,#5AC8FA)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <span style={{ color: "#fff", fontWeight: 700, fontSize: "0.88rem" }}>{u.displayName?.[0]?.toUpperCase()}</span>
+                <>
+                  <div>
+                    {pageUsers.map((u: any) => (
+                      <div
+                        key={u.id}
+                        onClick={() => setSelectedUserId(u.id)}
+                        style={{
+                          display: "flex", alignItems: "center", padding: "14px 24px", borderBottom: "1px solid #F9F9F9",
+                          cursor: "pointer", gap: 14, transition: "background 0.15s",
+                          background: numericId !== null && u.id === numericId ? "rgba(0,122,255,0.06)" : "transparent",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = numericId !== null && u.id === numericId ? "rgba(0,122,255,0.1)" : "#F9F9F9")}
+                        onMouseLeave={e => (e.currentTarget.style.background = numericId !== null && u.id === numericId ? "rgba(0,122,255,0.06)" : "transparent")}
+                      >
+                        {u.avatarUrl ? (
+                          <img src={u.avatarUrl} style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#007AFF,#5AC8FA)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <span style={{ color: "#fff", fontWeight: 700, fontSize: "0.88rem" }}>{u.displayName?.[0]?.toUpperCase()}</span>
+                          </div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "#1D1D1F" }}>{u.displayName}</div>
+                          <div style={{ fontSize: "0.75rem", color: "#86868B" }}>
+                            ID #{u.id}
+                            {u.email && <> · {u.email}</>}
+                            {u.telegramId && <> · TG: {u.telegramId}</>}
+                          </div>
                         </div>
-                      )}
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "#1D1D1F" }}>{u.displayName}</div>
-                        <div style={{ fontSize: "0.75rem", color: "#86868B" }}>
-                          ID #{u.id}
-                          {u.email && <> · {u.email}</>}
-                          {u.telegramId && <> · TG: {u.telegramId}</>}
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#1D1D1F" }}>{fmt(u.credits)} ток.</div>
+                            <div style={{ fontSize: "0.72rem", color: "#86868B" }}>{new Date(u.createdAt).toLocaleDateString("ru-RU")}</div>
+                          </div>
+                          <PlanBadge plan={u.plan} />
+                          <ChevronRight size={16} style={{ color: "#C0C0C5" }} />
                         </div>
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={{ textAlign: "right" }}>
-                          <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#1D1D1F" }}>{fmt(u.credits)} ток.</div>
-                          <div style={{ fontSize: "0.72rem", color: "#86868B" }}>{new Date(u.createdAt).toLocaleDateString("ru-RU")}</div>
-                        </div>
-                        <PlanBadge plan={u.plan} />
-                        <ChevronRight size={16} style={{ color: "#C0C0C5" }} />
+                    ))}
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div style={{ padding: "16px 24px", borderTop: "1px solid #F2F2F7", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ fontSize: "0.78rem", color: "#86868B" }}>
+                        {pageStart + 1}–{Math.min(pageStart + USERS_PER_PAGE, filtered.length)} из {filtered.length}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <button
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                          disabled={currentPage <= 1}
+                          style={{
+                            width: 34, height: 34, borderRadius: 8, border: "1px solid #E0E0E5", background: "#fff",
+                            cursor: currentPage <= 1 ? "default" : "pointer", opacity: currentPage <= 1 ? 0.4 : 1,
+                            display: "flex", alignItems: "center", justifyContent: "center", color: "#1D1D1F",
+                          }}
+                          aria-label="Предыдущая страница"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        {pageItems.map((item, idx) =>
+                          item === "…" ? (
+                            <span key={`e-${idx}`} style={{ width: 28, textAlign: "center", color: "#AEAEB2", fontSize: "0.85rem" }}>…</span>
+                          ) : (
+                            <button
+                              key={item}
+                              onClick={() => setPage(item)}
+                              style={{
+                                minWidth: 34, height: 34, padding: "0 8px", borderRadius: 8, border: "none", cursor: "pointer",
+                                background: item === currentPage ? "#007AFF" : "#F2F2F7",
+                                color: item === currentPage ? "#fff" : "#1D1D1F",
+                                fontWeight: item === currentPage ? 700 : 600, fontSize: "0.82rem",
+                              }}
+                            >
+                              {item}
+                            </button>
+                          )
+                        )}
+                        <button
+                          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={currentPage >= totalPages}
+                          style={{
+                            width: 34, height: 34, borderRadius: 8, border: "1px solid #E0E0E5", background: "#fff",
+                            cursor: currentPage >= totalPages ? "default" : "pointer", opacity: currentPage >= totalPages ? 0.4 : 1,
+                            display: "flex", alignItems: "center", justifyContent: "center", color: "#1D1D1F",
+                          }}
+                          aria-label="Следующая страница"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
           </>
