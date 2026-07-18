@@ -1728,10 +1728,11 @@ export default function EditorPage() {
 
   const injectProjectId = useCallback((code: string) => {
     if (!code) return code;
+    const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
     const leadScript = `<script data-nz-leads>
 window.__PROJECT_ID__=${projectId};
 (function(){
-  var API=(window.location.origin==='null'?window.parent.location.origin:window.location.origin)+'/api/leads/${projectId}';
+  var API='${appOrigin}/api/leads/${projectId}';
   window.addEventListener('message',function(ev){
     if(!ev.data||typeof ev.data!=='object')return;
     if(ev.data.type==='nz-wheel'){try{window.scrollBy(ev.data.dx||0,ev.data.dy||0);}catch(e){}}
@@ -1762,7 +1763,7 @@ window.__PROJECT_ID__=${projectId};
     var href=a.getAttribute('href');
     if(!href||href==='#'||href===''){e.preventDefault();return;}
     if(href.startsWith('#')){e.preventDefault();var el=document.querySelector(href);if(el)el.scrollIntoView({behavior:'smooth'});return;}
-    var pm=href.match(/^([a-zA-Z0-9_-]+\.html)(#[a-zA-Z0-9_-]+)?$/);
+    var pm=href.match(/^([a-zA-Z0-9_-]+\\.html)(#[a-zA-Z0-9_-]+)?$/);
     if(pm){
       e.preventDefault();
       window.parent.postMessage({type:'nz-navigate-file',filename:pm[1],anchor:pm[2]||''},'*');
