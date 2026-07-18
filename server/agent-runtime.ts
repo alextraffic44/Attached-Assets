@@ -3,7 +3,8 @@
  *
  * - Per-project craft.md — short agent memory (site brief + change log)
  * - Claude function calling via KIE Anthropic Messages API (tools)
- * - Multipage text protocol fallback (Gemini + when tools unavailable)
+ * - Gemini function calling via KIE `tools.functionDeclarations` (same page tools)
+ * - Multipage text protocol fallback when tools unavailable
  *
  * Agents can list/read/patch any page, not only the editor's active tab.
  */
@@ -16,6 +17,8 @@ const KIE_API_KEY = process.env.KIE_API_KEY;
 const KIE_LLM_URL = "https://api.kie.ai/claude/v1/messages";
 const KIE_LLM_MODEL = "claude-sonnet-5";
 const KIE_LLM_MAX_TOKENS = 64000;
+const KIE_GEMINI_MODEL = "gemini-3-5-flash";
+const KIE_GEMINI_GENERATE_URL = `https://api.kie.ai/gemini/v1/models/${KIE_GEMINI_MODEL}:generateContent`;
 
 export type SitePage = { filename: string; code: string };
 
@@ -518,6 +521,35 @@ type ClaudeContentBlock =
   | { type: "text"; text: string }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> };
 
+function toolStatusLabel(name: string, input: Record<string, unknown>): string {
+  return name === "read_page" ? `Читаю ${input.filename || "страницу"}…`
+    : name === "apply_patch" ? `Патчу ${input.filename || "файл"}…`
+    : name === "write_page" ? `Записываю ${input.filename || "файл"}…`
+    : name === "list_pages" ? "Смотрю все страницы…"
+    : name === "update_craft_md" ? "Обновляю craft.md…"
+    : name === "read_craft_md" ? "Читаю craft.md…"
+    : name === "finish" ? "Завершаю…"
+    : `Инструмент ${name}…`;
+}
+
+/** Anthropic tools → Gemini functionDeclarations (KIE Gemini shape). */
+function toGeminiFunctionDeclarations(tools: typeof SITE_AGENT_TOOLS) {
+  return tools.map((t) => {
+    const props = (t.input_schema as any).properties || {};
+    const required = (t.input_schema as any).required as string[] | undefined;
+    const parameters: any = {
+      type: "object",
+      properties: props,
+    };
+    if (required?.length) parameters.required = required;
+    return {
+      name: t.name,
+      description: t.description,
+      parameters,
+    };
+  });
+}
+
 async function kieClaudeToolsRound(
   messages: any[],
   systemPrompt: string,
@@ -544,7 +576,7 @@ async function kieClaudeToolsRound(
     const err = await resp.text();
     // Tools not supported / bad request → signal fallback
     if (resp.status === 400 || resp.status === 422 || /tool/i.test(err)) {
-      console.warn("[AGENT] Tools call rejected by KIE:", resp.status, err.slice(0, 300));
+      console.warn("[AGENT] Claude tools rejected by KIE:", resp.status, err.slice(0, 300));
       return { content: [], stop_reason: "tools_unsupported", toolsSupported: false };
     }
     throw new Error(`KIE API error ${resp.status}: ${err}`);
@@ -568,6 +600,65 @@ async function kieClaudeToolsRound(
     stop_reason: data.stop_reason || "end_turn",
     toolsSupported: true,
   };
+}
+
+type GeminiToolCall = { name: string; args: Record<string, unknown>; id?: string };
+
+async function kieGeminiToolsRound(
+  contents: any[],
+  systemPrompt: string,
+): Promise<{ text: string; functionCalls: GeminiToolCall[]; modelParts: any[]; toolsSupported: boolean }> {
+  if (!KIE_API_KEY) throw new Error("KIE_API_KEY missing");
+
+  const body: any = {
+    stream: false,
+    contents,
+    tools: [{ functionDeclarations: toGeminiFunctionDeclarations(SITE_AGENT_TOOLS) }],
+    toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+  };
+  if (systemPrompt) {
+    body.systemInstruction = { parts: [{ text: systemPrompt }] };
+  }
+
+  const resp = await fetch(KIE_GEMINI_GENERATE_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${KIE_API_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.text();
+    if (resp.status === 400 || resp.status === 422 || /tool|function/i.test(err)) {
+      console.warn("[AGENT] Gemini tools rejected by KIE:", resp.status, err.slice(0, 300));
+      return { text: "", functionCalls: [], modelParts: [], toolsSupported: false };
+    }
+    throw new Error(`Gemini KIE error ${resp.status}: ${err.slice(0, 400)}`);
+  }
+
+  const data = (await resp.json()) as any;
+  const parts: any[] = data?.candidates?.[0]?.content?.parts || [];
+  let text = "";
+  const functionCalls: GeminiToolCall[] = [];
+  for (const part of parts) {
+    if (part.text) text += part.text;
+    if (part.functionCall?.name) {
+      let args: Record<string, unknown> = {};
+      const raw = part.functionCall.args ?? part.functionCall.arguments;
+      if (raw && typeof raw === "object") args = raw as Record<string, unknown>;
+      else if (typeof raw === "string") {
+        try { args = JSON.parse(raw); } catch { args = {}; }
+      }
+      functionCalls.push({
+        name: part.functionCall.name,
+        args,
+        id: part.functionCall.id,
+      });
+    }
+  }
+  return { text, functionCalls, modelParts: parts, toolsSupported: true };
 }
 
 class SiteWorkspace {
@@ -690,10 +781,30 @@ export type ToolAgentResult = {
 };
 
 /**
- * Claude function-calling agent loop. Returns toolsSupported:false when KIE rejects tools
- * so the caller can fall back to streaming multipage text protocol.
+ * Function-calling agent loop (Claude or Gemini via KIE).
+ * Returns toolsSupported:false when KIE rejects tools so the caller can fall
+ * back to streaming multipage text protocol.
  */
 export async function runToolCallingAgent(opts: {
+  systemPrompt: string;
+  userPrompt: string;
+  pages: SitePage[];
+  craftMd: string;
+  history?: { role: "user" | "assistant"; text: string }[];
+  onStatus?: AgentStatusWriter;
+  onContent?: AgentContentWriter;
+  maxRounds?: number;
+  /** Default claude. Gemini uses KIE functionDeclarations. */
+  provider?: "claude" | "gemini";
+}): Promise<ToolAgentResult> {
+  const provider = opts.provider || "claude";
+  if (provider === "gemini") {
+    return runGeminiToolCallingAgent(opts);
+  }
+  return runClaudeToolCallingAgent(opts);
+}
+
+async function runClaudeToolCallingAgent(opts: {
   systemPrompt: string;
   userPrompt: string;
   pages: SitePage[];
@@ -750,29 +861,13 @@ export async function runToolCallingAgent(opts: {
     let finishedSummary: string | undefined;
 
     for (const tu of toolUses) {
-      const label =
-        tu.name === "read_page" ? `Читаю ${tu.input.filename || "страницу"}…`
-        : tu.name === "apply_patch" ? `Патчу ${tu.input.filename || "файл"}…`
-        : tu.name === "write_page" ? `Записываю ${tu.input.filename || "файл"}…`
-        : tu.name === "list_pages" ? "Смотрю все страницы…"
-        : tu.name === "update_craft_md" ? "Обновляю craft.md…"
-        : tu.name === "finish" ? "Завершаю…"
-        : `Инструмент ${tu.name}…`;
-      opts.onStatus?.(label);
-
+      opts.onStatus?.(toolStatusLabel(tu.name, tu.input || {}));
       const { result, finished } = workspace.execute(tu.name, tu.input || {});
       if (finished) finishedSummary = finished;
-
-      // Don't echo huge page bodies back into status — but tool_result needs full code for model
-      let resultPayload = result;
-      if (tu.name === "read_page" && result && typeof result === "object" && "code" in (result as any)) {
-        // keep full code in tool result for the model
-        resultPayload = result;
-      }
       toolResults.push({
         type: "tool_result",
         tool_use_id: tu.id,
-        content: JSON.stringify(resultPayload),
+        content: JSON.stringify(result),
       });
     }
 
@@ -786,6 +881,106 @@ export async function runToolCallingAgent(opts: {
     }
   }
 
+  return finalizeToolAgentResult(workspace, summary, streamedText);
+}
+
+async function runGeminiToolCallingAgent(opts: {
+  systemPrompt: string;
+  userPrompt: string;
+  pages: SitePage[];
+  craftMd: string;
+  history?: { role: "user" | "assistant"; text: string }[];
+  onStatus?: AgentStatusWriter;
+  onContent?: AgentContentWriter;
+  maxRounds?: number;
+}): Promise<ToolAgentResult> {
+  const workspace = new SiteWorkspace(opts.pages, opts.craftMd);
+  const contents: any[] = [];
+
+  for (const h of opts.history || []) {
+    contents.push({
+      role: h.role === "assistant" ? "model" : "user",
+      parts: [{ text: h.text }],
+    });
+  }
+  contents.push({ role: "user", parts: [{ text: opts.userPrompt }] });
+
+  let summary = "";
+  let streamedText = "";
+  const maxRounds = opts.maxRounds ?? 8;
+
+  for (let round = 0; round < maxRounds; round++) {
+    opts.onStatus?.(`Gemini-агент думает… (шаг ${round + 1}/${maxRounds})`);
+    const roundResult = await kieGeminiToolsRound(contents, opts.systemPrompt);
+
+    if (!roundResult.toolsSupported) {
+      return {
+        ok: false,
+        usedTools: false,
+        toolsSupported: false,
+        summary: "",
+        changedFiles: new Map(),
+        craftMd: workspace.craftMd,
+        streamedText: "",
+      };
+    }
+
+    if (roundResult.text) {
+      streamedText += roundResult.text;
+      opts.onContent?.(roundResult.text);
+    }
+
+    if (roundResult.functionCalls.length === 0) {
+      summary = streamedText.trim().slice(0, 500) || (workspace.changedFiles.size ? "Сайт обновлён" : "");
+      break;
+    }
+
+    // Append model turn (functionCall parts — required for Gemini multi-turn tools)
+    contents.push({
+      role: "model",
+      parts: roundResult.modelParts.length
+        ? roundResult.modelParts
+        : roundResult.functionCalls.map((fc) => ({ functionCall: { name: fc.name, args: fc.args } })),
+    });
+
+    const responseParts: any[] = [];
+    let finishedSummary: string | undefined;
+
+    for (const fc of roundResult.functionCalls) {
+      opts.onStatus?.(toolStatusLabel(fc.name, fc.args || {}));
+      const { result, finished } = workspace.execute(fc.name, fc.args || {});
+      if (finished) finishedSummary = finished;
+      // Gemini expects functionResponse.response to be a JSON object (not a string)
+      const responseObj =
+        result && typeof result === "object" && !Array.isArray(result)
+          ? (result as Record<string, unknown>)
+          : { result };
+      responseParts.push({
+        functionResponse: {
+          name: fc.name,
+          response: responseObj,
+        },
+      });
+    }
+
+    contents.push({ role: "user", parts: responseParts });
+
+    if (finishedSummary !== undefined) {
+      summary = finishedSummary;
+      opts.onContent?.(finishedSummary.startsWith(streamedText) ? "" : (streamedText ? `\n\n${finishedSummary}` : finishedSummary));
+      if (!streamedText.includes(finishedSummary)) streamedText = (streamedText ? streamedText + "\n\n" : "") + finishedSummary;
+      break;
+    }
+  }
+
+  return finalizeToolAgentResult(workspace, summary, streamedText);
+}
+
+function finalizeToolAgentResult(
+  workspace: SiteWorkspace,
+  summary: string,
+  streamedText: string,
+): ToolAgentResult {
   const restored = workspace.getRestoredFiles();
   const changed = new Map<string, string>();
   for (const fn of workspace.changedFiles) {
