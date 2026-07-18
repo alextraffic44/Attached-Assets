@@ -1,6 +1,7 @@
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
-import { ArrowLeft, Coins, Calendar, Hash, User, Shield, HeadphonesIcon, Gift, LogOut } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, Coins, Calendar, Hash, User, Shield, HeadphonesIcon, Gift, LogOut, History } from "lucide-react";
 
 const appleFont = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
 
@@ -12,9 +13,24 @@ const PLAN_LABELS: Record<string, string> = {
   platinum: "Ультра",
 };
 
+type CreditTxn = {
+  id: number;
+  amount: number;
+  type: string;
+  operation: string;
+  label: string;
+  note: string | null;
+  createdAt: string;
+};
+
 export default function ProfilePage() {
   const { user, logout } = useAuth();
   const [, setLocation] = useLocation();
+
+  const { data: history = [] } = useQuery<CreditTxn[]>({
+    queryKey: ["/api/credits/history"],
+    enabled: !!user,
+  });
 
   if (!user) return null;
 
@@ -88,6 +104,49 @@ export default function ProfilePage() {
           ))}
         </div>
 
+        {/* Transparent token spend history */}
+        <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", overflow: "hidden", marginBottom: "1.25rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.95rem 1.25rem", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(0,122,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <History size={16} color="#007AFF" />
+            </div>
+            <div>
+              <div style={{ fontSize: "0.92rem", fontWeight: 700, color: "#1D1D1F" }}>Расход токенов</div>
+              <div style={{ fontSize: "0.72rem", color: "#AEAEB2", marginTop: 2 }}>Прозрачная история списаний и возвратов</div>
+            </div>
+          </div>
+          {history.length === 0 ? (
+            <div style={{ padding: "1.25rem", fontSize: "0.85rem", color: "#AEAEB2" }}>Пока нет операций</div>
+          ) : (
+            history.slice(0, 40).map((t, i) => {
+              const isCredit = t.type === "credit";
+              const when = new Date(t.createdAt).toLocaleString("ru-RU", {
+                day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+              });
+              return (
+                <div
+                  key={t.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                    padding: "0.75rem 1.25rem",
+                    borderBottom: i < Math.min(history.length, 40) - 1 ? "1px solid rgba(0,0,0,0.04)" : "none",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "0.86rem", fontWeight: 600, color: "#1D1D1F" }}>{t.label}</div>
+                    <div style={{ fontSize: "0.7rem", color: "#AEAEB2", marginTop: 2 }}>{when}</div>
+                  </div>
+                  <div style={{ fontSize: "0.9rem", fontWeight: 700, color: isCredit ? "#34C759" : "#1D1D1F", fontVariantNumeric: "tabular-nums" }}>
+                    {isCredit ? "+" : "−"}{t.amount}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
         {/* Nav items */}
         <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", overflow: "hidden", marginBottom: "1.25rem" }}>
           {navItems.map((item, i) => (
@@ -115,13 +174,12 @@ export default function ProfilePage() {
             onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,59,48,0.04)")}
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
           >
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,59,48,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <LogOut size={16} color="#FF3B30" />
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,59,48,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#FF3B30" }}>
+              <LogOut size={15} />
             </div>
-            <span style={{ fontSize: "0.92rem", fontWeight: 600, color: "#FF3B30", fontFamily: appleFont }}>Выйти из аккаунта</span>
+            <span style={{ fontSize: "0.92rem", fontWeight: 600, color: "#FF3B30" }}>Выйти</span>
           </button>
         </div>
-
       </main>
     </div>
   );

@@ -503,7 +503,11 @@ export default function EditorPage() {
     setStreamingReply("");
     setStreamedCode("");
     setPrompt("");
-    queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 100) } : old);
+    queryClient.setQueryData(["/api/auth/user"], (old: any) => {
+      if (!old) return old;
+      const cost = project?.generatedCode ? 30 : 100;
+      return { ...old, credits: Math.max(0, old.credits - cost) };
+    });
 
     const images = effectiveImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
     const sentPreviews = effectiveImages.filter(img => img.preview).map(img => ({ preview: img.preview!, fileName: img.fileName }));
@@ -684,6 +688,18 @@ export default function EditorPage() {
             if (data.newBalance !== undefined) {
               queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
             }
+            if (data.creditBreakdown || data.creditsUsed) {
+              const b = data.creditBreakdown;
+              const parts: string[] = [];
+              if (b?.generate) parts.push(`генерация ${b.generate}`);
+              if (b?.images) parts.push(`изображения ${b.imagesCount || "?"}×15=${b.images}`);
+              if (b?.videoPending) parts.push(`видео −120 при успехе`);
+              const total = b?.total ?? data.creditsUsed;
+              toast({
+                title: `Списано ${total} ток.`,
+                description: parts.length ? parts.join(" · ") : undefined,
+              });
+            }
             // Animation is still rendering in the background — keep the loading
             // screen up (don't reveal the site yet) and poll until it's fully ready.
             if (data.animPending && (targetCode || "").includes('data-scroll-anim-pending="1"')) {
@@ -738,7 +754,11 @@ export default function EditorPage() {
             if (data.newBalance !== undefined) {
               queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: data.newBalance } : old);
             }
-            toast({ title: "Ошибка генерации", description: data.error, variant: "destructive" });
+            toast({
+              title: data.refunded ? "Ошибка · токены возвращены" : "Ошибка генерации",
+              description: data.error,
+              variant: "destructive",
+            });
           }
         }
       }
@@ -769,7 +789,7 @@ export default function EditorPage() {
         }
       }
     }
-  }, [prompt, projectId, attachedImages, attachedVideos, attachedModels, attachedAudios, mockupMode, activeFile, toast, selectedElement]);
+  }, [prompt, projectId, project?.generatedCode, attachedImages, attachedVideos, attachedModels, attachedAudios, mockupMode, activeFile, toast, selectedElement]);
 
   const handleDownloadZip = async () => {
     const indexCode = project?.generatedCode || currentCode;
@@ -1491,7 +1511,7 @@ export default function EditorPage() {
     setImgStatus("creating");
     setImgResultUrls([]);
     setImgError("");
-    queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 10) } : old);
+    queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: Math.max(0, old.credits - 15) } : old);
 
     try {
       const systemImgPrefix = "Макет для сайта, стильный и премиальный. ";
@@ -1530,6 +1550,14 @@ export default function EditorPage() {
             setImgError(statusData.error || "Ошибка генерации");
             setImgStatus("fail");
             setImgGenerating(false);
+            if (statusData.newBalance !== undefined) {
+              queryClient.setQueryData(["/api/auth/user"], (old: any) => old ? { ...old, credits: statusData.newBalance } : old);
+            } else {
+              queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+            }
+            if (statusData.refunded) {
+              toast({ title: "Токены возвращены", description: "Сбой KIE API при генерации изображения" });
+            }
           }
         } catch {
           clearInterval(pollInterval);
@@ -1544,8 +1572,9 @@ export default function EditorPage() {
       setImgError(err.message);
       setImgStatus("fail");
       setImgGenerating(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     }
-  }, [imgPrompt, imgSize, imgRefs]);
+  }, [imgPrompt, imgSize, imgRefs, projectId, toast]);
 
   const handleAddImageToChat = useCallback(async (url: string) => {
     try {

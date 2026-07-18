@@ -27,6 +27,51 @@ import {
   isHtmlPage,
   type SitePage,
 } from "./agent-runtime";
+import {
+  KieApiError,
+  isConfirmedKieApiFailure,
+  isConfirmedKieJobBodyFailure,
+  isKieModerationFailure,
+  isKieTaskInfraFailure,
+  kieHttpError,
+} from "./kie-errors";
+
+/** Refund only when billed AND we are 100% sure KIE API failed. */
+async function refundIfConfirmedKie(
+  billed: boolean,
+  userId: number | undefined | null,
+  amount: number,
+  ikey: string | undefined,
+  errOrFlag: unknown,
+  label: string,
+): Promise<boolean> {
+  if (!billed || !userId || amount <= 0) return false;
+  const ok =
+    errOrFlag === true ||
+    (typeof errOrFlag === "boolean" ? errOrFlag : isConfirmedKieApiFailure(errOrFlag));
+  if (!ok) {
+    console.log(`[REFUND-SKIP] ${label}: not a confirmed KIE failure — keeping charge`);
+    return false;
+  }
+  try {
+    await storage.refundCredits(userId, amount, ikey);
+    console.log(`[REFUND] ${label}: +${amount} tokens (confirmed KIE failure)`);
+    return true;
+  } catch (e: any) {
+    console.warn(`[REFUND] ${label} failed:`, e?.message || e);
+    return false;
+  }
+}
+
+/** Pending manual image charges keyed by KIE taskId — refunded only on confirmed infra fail. */
+type PendingImageCharge = { userId: number; amount: number; ikey: string; createdAt: number };
+const pendingImageCharges = new Map<string, PendingImageCharge>();
+setInterval(() => {
+  const cutoff = Date.now() - 45 * 60 * 1000;
+  for (const [k, v] of Array.from(pendingImageCharges.entries())) {
+    if (v.createdAt < cutoff) pendingImageCharges.delete(k);
+  }
+}, 5 * 60 * 1000).unref?.();
 
 // Rate limiters (in-memory, single-instance)
 const leadIntakeLimiter = rateLimit("lead-intake", { windowMs: 60_000, max: 20, message: "Слишком много заявок. Попробуйте позже." });
@@ -768,6 +813,7 @@ async function generateProductStill(
 // Create a 5s image-to-video on KIE Kling, poll until ready, slice into WebP frames,
 // upload each to object storage. Returns ordered "/objects/..." URLs (or [] on failure).
 // If referenceStillUrl is provided, it is used directly (skips nano-banana-2 still generation).
+// confirmedKieFailure is true ONLY when KIE API itself failed (not moderation / local ffmpeg).
 async function generateScrollFrames(
   videoPrompt: string,
   shouldStop: () => boolean = () => false,
@@ -775,8 +821,11 @@ async function generateScrollFrames(
   layout: "parallax" | "split" | "action" = "parallax",
   onTaskCreated?: (taskId: string) => void,
   existingTaskId?: string,
-): Promise<string[]> {
-  if (!KIE_API_KEY) { console.warn("[SCROLLANIM] missing KIE_API_KEY"); return []; }
+): Promise<{ frames: string[]; confirmedKieFailure: boolean }> {
+  if (!KIE_API_KEY) { console.warn("[SCROLLANIM] missing KIE_API_KEY"); return { frames: [], confirmedKieFailure: false }; }
+
+  let confirmedKieFailure = false;
+  const markKieFail = () => { confirmedKieFailure = true; };
 
   // Step 0 — get a cinematic still image to anchor the video
   let stillUrl: string | null = null;
@@ -786,8 +835,12 @@ async function generateScrollFrames(
   } else {
     stillUrl = await generateStillForVideo(videoPrompt, shouldStop, layout);
   }
-  if (!stillUrl) { console.warn("[SCROLLANIM] aborting: no still image"); return []; }
-  if (shouldStop()) { console.warn("[SCROLLANIM] aborted by shouldStop() after still image"); return []; }
+  if (!stillUrl) {
+    console.warn("[SCROLLANIM] aborting: no still image");
+    // Still generation talks to KIE image jobs — failure after retries is a KIE outage.
+    return { frames: [], confirmedKieFailure: true };
+  }
+  if (shouldStop()) { console.warn("[SCROLLANIM] aborted by shouldStop() after still image"); return { frames: [], confirmedKieFailure: false }; }
 
   // Strip Cyrillic text from videoPrompt — the AI sometimes copies the user's Russian
   // site description into the SCROLLANIM marker instead of writing an English cinematic prompt.
@@ -835,10 +888,7 @@ async function generateScrollFrames(
 
   // Detects Kling content-moderation failures (error 400 "community guidelines")
   function isModerationError(failMsg?: string, failCode?: string | number): boolean {
-    const s = `${failMsg || ""} ${failCode || ""}`.toLowerCase();
-    return s.includes("community") || s.includes("guideline") || s.includes("violat") ||
-           s.includes("moderat") || s.includes("inappropriate") || s.includes("content policy") ||
-           s.includes("400");
+    return isKieModerationFailure(failMsg, failCode);
   }
 
   // Returns a safe commercial-grade rewrite of the prompt for moderation retries
@@ -862,7 +912,7 @@ async function generateScrollFrames(
     let taskFailed = false;
     let pollCount = 0;
     while (Date.now() < deadline) {
-      if (shouldStop()) return [];
+      if (shouldStop()) return { frames: [], confirmedKieFailure: false };
       await new Promise(r => setTimeout(r, 5000));
       pollCount++;
       try {
@@ -883,7 +933,9 @@ async function generateScrollFrames(
         }
         if (state === "fail" || state === "failed" || state === "error") {
           console.warn(`[SCROLLANIM] resumed task ${existingTaskId} reported failure:`, body.data.failMsg || body.data.failCode);
-          taskFailed = true; break;
+          taskFailed = true;
+          if (isKieTaskInfraFailure(body.data.failMsg, body.data.failCode)) markKieFail();
+          break;
         }
       } catch (e: any) {
         console.warn("[SCROLLANIM] resume poll error:", e?.message);
@@ -891,7 +943,10 @@ async function generateScrollFrames(
     }
     if (!mp4Url) {
       console.warn(`[SCROLLANIM] resume failed or timed out for task ${existingTaskId}`);
-      return [];
+      // Timeout without explicit fail → KIE didn't deliver. Explicit fail already
+      // set confirmedKieFailure only for infra (not moderation).
+      if (!taskFailed) markKieFail();
+      return { frames: [], confirmedKieFailure };
     }
     // Skip the frame-extraction block below by jumping past the for-loop via a synthetic mp4Url
   } else {
@@ -918,7 +973,10 @@ async function generateScrollFrames(
       { label: "SCROLLANIM video-create", retries: 4, shouldStop: () => shouldStop() || Date.now() >= deadline },
     );
     if (createBody?.code === 200 && createBody?.data?.taskId) taskId = createBody.data.taskId;
-    else console.warn("[SCROLLANIM] create task failed:", createBody?.msg || createBody?.code);
+    else {
+      console.warn("[SCROLLANIM] create task failed:", createBody?.msg || createBody?.code);
+      if (isConfirmedKieJobBodyFailure(createBody)) markKieFail();
+    }
     if (!taskId) continue; // next video attempt
 
     console.log(`[SCROLLANIM] video task created (attempt ${videoAttempt + 1}): ${taskId}`);
@@ -929,7 +987,7 @@ async function generateScrollFrames(
     let moderationFailed = false;
     let pollCount = 0;
     while (Date.now() < deadline) {
-      if (shouldStop()) return [];
+      if (shouldStop()) return { frames: [], confirmedKieFailure: false };
       await new Promise(r => setTimeout(r, 5000));
       pollCount++;
       try {
@@ -960,6 +1018,11 @@ async function generateScrollFrames(
           if (isModerationError(failMsg, failCode)) {
             moderationFailed = true;
             console.warn("[SCROLLANIM] content moderation failure detected — will sanitize prompt and regenerate still for next attempt");
+          } else if (isKieTaskInfraFailure(failMsg, failCode)) {
+            markKieFail();
+          } else {
+            // Unknown fail reason — do NOT mark as confirmed KIE (not 100% sure)
+            console.warn("[SCROLLANIM] task fail with unclassified reason — no auto-refund flag");
           }
           break; // break poll loop → outer loop will retry
         }
@@ -968,7 +1031,11 @@ async function generateScrollFrames(
       }
     }
     if (mp4Url) break;           // success — exit retry loop
-    if (!taskFailed) break;      // timeout (deadline exceeded) — no point retrying
+    if (!taskFailed) {
+      // Deadline exceeded while waiting on KIE — confirmed infra/queue issue
+      markKieFail();
+      break;
+    }
 
     // On content moderation failure: sanitize the prompt and regenerate a new safe still
     // so the next attempt doesn't hit the same moderation block
@@ -994,7 +1061,9 @@ async function generateScrollFrames(
 
   if (!mp4Url) {
     console.warn("[SCROLLANIM] video generation failed after all attempts or deadline exceeded");
-    return [];
+    // If we never saw a confirmed infra fail but also never got video after create attempts,
+    // and create always failed with body 5xx — already marked. Pure moderation → leave false.
+    return { frames: [], confirmedKieFailure };
   }
 
   } // end else (existingTaskId branch already set mp4Url or returned [])
@@ -1011,7 +1080,7 @@ async function generateScrollFrames(
     }
     try {
       console.log(`[SCROLLANIM] downloading mp4 (attempt ${dlAttempt + 1}): ${mp4Url}`);
-      const vresp = await fetch(mp4Url);
+      const vresp = await fetch(mp4Url!);
       if (!vresp.ok) throw new Error(`HTTP ${vresp.status}`);
       const mp4Buf = Buffer.from(await vresp.arrayBuffer());
       if (mp4Buf.length < 10000) throw new Error(`file too small: ${mp4Buf.length} bytes`);
@@ -1026,7 +1095,8 @@ async function generateScrollFrames(
   if (!mp4Downloaded) {
     console.warn("[SCROLLANIM] all mp4 download attempts failed — giving up");
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-    return [];
+    // CDN download of KIE result URL failed — treat as KIE delivery failure
+    return { frames: [], confirmedKieFailure: true };
   }
 
   // Step 4 — extract frames with ffmpeg (direct spawn + retry; see extractFramesWithFfmpeg)
@@ -1037,7 +1107,8 @@ async function generateScrollFrames(
   } catch (e: any) {
     console.warn("[SCROLLANIM] ffmpeg extraction failed:", e?.message);
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-    return [];
+    // Local ffmpeg — NOT a KIE API failure
+    return { frames: [], confirmedKieFailure: false };
   }
 
   // Step 5 — upload raw JPEG frames to object storage (no compression)
@@ -1056,7 +1127,7 @@ async function generateScrollFrames(
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
   console.log(`[SCROLLANIM] produced ${urls.length} frames`);
-  return urls;
+  return { frames: urls, confirmedKieFailure: false };
 }
 
 // Ensure a video-anim site has a preloader (covers the page until the scroll
@@ -1481,9 +1552,10 @@ async function resolveScrollAnimMarkers(
     try { res.write(`data: ${JSON.stringify({ status: "Рендерю видео для анимации прокрутки (до 35 минут, зависит от очереди KIE)..." })}\n\n`); } catch {}
 
     let billed = false;
+    let ikey: string | undefined;
     try {
     if (userId) {
-      const ikey = `scroll-anim-${projectId}-${runKey}-${crypto.createHash("md5").update(raw).digest("hex").slice(0, 8)}`;
+      ikey = `scroll-anim-${projectId}-${runKey}-${crypto.createHash("md5").update(raw).digest("hex").slice(0, 8)}`;
       const ded = await storage.deductCredits(userId, SCROLL_ANIM_COST, "scroll-anim", ikey);
       if (!ded.success) break; // out of credits → leave for static fallback (finalize() still runs)
       billed = !ded.alreadyProcessed;
@@ -1535,8 +1607,9 @@ async function resolveScrollAnimMarkers(
       ? creativeConcept.motionPrompt
       : parsed.videoPrompt;
     let frames: string[] = [];
+    let scrollKieFailed = false;
     try {
-      frames = await generateScrollFrames(
+      const scrollOutcome = await generateScrollFrames(
         effectivePrompt,
         () => isAborted() || Date.now() >= phaseDeadline,
         referenceStill,
@@ -1557,6 +1630,8 @@ async function resolveScrollAnimMarkers(
           }).catch(() => {});
         } : undefined,
       );
+      frames = scrollOutcome.frames;
+      scrollKieFailed = scrollOutcome.confirmedKieFailure;
     } finally {
       clearInterval(keepAliveInterval);
     }
@@ -1566,15 +1641,15 @@ async function resolveScrollAnimMarkers(
       generated++;
       if (billed) creditsUsed += SCROLL_ANIM_COST;
       try { res.write(`data: ${JSON.stringify({ status: `Анимация готова (${frames.length} кадров)` })}\n\n`); } catch {}
-    } else if (billed && userId) {
-      try { await storage.refundCredits(userId, SCROLL_ANIM_COST, ikey); } catch {}
+    } else if (billed && userId && scrollKieFailed) {
+      await refundIfConfirmedKie(true, userId, SCROLL_ANIM_COST, ikey, true, "scroll-anim-empty-frames");
     }
     } catch (blockErr: any) {
       // A helper (product still / creative concept / vision / frames) threw — never let
       // it abort the whole function (which would skip finalize() and strand the 2nd block).
-      // Refund this block's credits and continue; finalize() degrades it to static fallback.
+      // Refund ONLY on confirmed KIE failure; continue so finalize() can degrade to fallback.
       console.warn(`[SCROLLANIM] block failed (project ${projectId}):`, blockErr?.message || blockErr);
-      if (billed && userId) { try { await storage.refundCredits(userId, SCROLL_ANIM_COST, ikey); } catch {} }
+      await refundIfConfirmedKie(billed, userId, SCROLL_ANIM_COST, ikey, blockErr, "scroll-anim-block");
     }
   }
 
@@ -1602,7 +1677,7 @@ async function generateGptImage(
   aspectRatio: string,
   shouldStop: () => boolean = () => false,
   refUrls?: string[],
-): Promise<string | null> {
+): Promise<{ url: string | null; confirmedKieFailure: boolean }> {
   const useRefs = !!(refUrls && refUrls.length > 0);
   // More attempts since explicit-fail retries are near-instant (2 s each)
   const MAX_ATTEMPTS = 7;
@@ -1612,9 +1687,10 @@ async function generateGptImage(
   const FAIL_RETRY_DELAY = 2000;
 
   let lastFailedExplicitly = false;
+  let sawConfirmedKieFailure = false;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    if (shouldStop()) return null;
+    if (shouldStop()) return { url: null, confirmedKieFailure: false };
     if (attempt > 0) {
       const delay = lastFailedExplicitly
         ? FAIL_RETRY_DELAY
@@ -1622,13 +1698,14 @@ async function generateGptImage(
       const reason = lastFailedExplicitly ? "explicit fail → fast retry" : "timeout → backoff";
       console.log(`[GENIMG] attempt ${attempt + 1}/${MAX_ATTEMPTS} (${reason}), waiting ${delay}ms...`);
       await new Promise((r) => setTimeout(r, delay));
-      if (shouldStop()) return null;
+      if (shouldStop()) return { url: null, confirmedKieFailure: false };
     }
     lastFailedExplicitly = false; // reset for this attempt
 
     try {
       // --- Step 1: create task (retry create up to 3x on 5xx/network err) ---
       let createBody: any = null;
+      let createHttpInfra = false;
       for (let cr = 0; cr < 3; cr++) {
         if (cr > 0) await new Promise((r) => setTimeout(r, 3000));
         try {
@@ -1642,20 +1719,26 @@ async function generateGptImage(
                 : { prompt, aspect_ratio: aspectRatio, resolution: "1K" },
             }),
           });
-          if (createResp.status >= 500 && cr < 2) {
-            console.warn(`[GENIMG] create HTTP ${createResp.status}, retrying create...`);
-            continue;
+          if (createResp.status === 429 || createResp.status >= 500) {
+            createHttpInfra = true;
+            sawConfirmedKieFailure = true;
+            if (cr < 2) {
+              console.warn(`[GENIMG] create HTTP ${createResp.status}, retrying create...`);
+              continue;
+            }
           }
-          createBody = await createResp.json();
+          createBody = await createResp.json().catch(() => null);
           break;
         } catch (netErr: any) {
           console.warn(`[GENIMG] create network error (cr=${cr}):`, netErr?.message);
+          sawConfirmedKieFailure = true;
           if (cr >= 2) break;
         }
       }
 
       if (!createBody || createBody.code !== 200 || !createBody.data?.taskId) {
         console.warn(`[GENIMG] create failed (attempt ${attempt + 1}):`, createBody?.msg);
+        if (isConfirmedKieJobBodyFailure(createBody) || createHttpInfra) sawConfirmedKieFailure = true;
         lastFailedExplicitly = true; // create rejected → fast retry
         continue;
       }
@@ -1665,51 +1748,67 @@ async function generateGptImage(
       const deadline = Date.now() + 180000;
       let taskFailed = false;
       while (Date.now() < deadline) {
-        if (shouldStop()) return null;
+        if (shouldStop()) return { url: null, confirmedKieFailure: false };
         await new Promise((r) => setTimeout(r, 3000));
         let statusBody: any = null;
         try {
           const statusResp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
             headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
           });
-          statusBody = await statusResp.json();
+          if (statusResp.status === 429 || statusResp.status >= 500) {
+            sawConfirmedKieFailure = true;
+            continue;
+          }
+          statusBody = await statusResp.json().catch(() => null);
         } catch (pollErr: any) {
           console.warn("[GENIMG] poll network error:", pollErr?.message);
+          sawConfirmedKieFailure = true;
           continue;
         }
-        if (!statusBody || statusBody.code !== 200) continue;
+        if (!statusBody || statusBody.code !== 200) {
+          if (isConfirmedKieJobBodyFailure(statusBody)) sawConfirmedKieFailure = true;
+          continue;
+        }
         const state = statusBody.data?.state;
         if (state === "success") {
           const result = JSON.parse(statusBody.data.resultJson);
           const urls = result.resultUrls || [];
-          if (!urls[0]) { taskFailed = true; lastFailedExplicitly = true; break; }
+          if (!urls[0]) { taskFailed = true; lastFailedExplicitly = true; sawConfirmedKieFailure = true; break; }
           const imgResp = await fetch(urls[0]);
-          if (!imgResp.ok) { taskFailed = true; lastFailedExplicitly = true; break; }
+          if (!imgResp.ok) { taskFailed = true; lastFailedExplicitly = true; sawConfirmedKieFailure = true; break; }
           const buf = Buffer.from(await imgResp.arrayBuffer());
-          return await uploadToObjectStorage(buf, "image/jpeg", "jpg");
+          return { url: await uploadToObjectStorage(buf, "image/jpeg", "jpg"), confirmedKieFailure: false };
         }
         if (state === "fail" || state === "failed" || state === "error") {
-          // KIE returned explicit error — recreate task quickly
-          console.warn(`[GENIMG] task failed (attempt ${attempt + 1}):`, statusBody.data?.failMsg);
+          const failMsg = statusBody.data?.failMsg;
+          const failCode = statusBody.data?.failCode;
+          console.warn(`[GENIMG] task failed (attempt ${attempt + 1}):`, failMsg);
           taskFailed = true;
           lastFailedExplicitly = true;
+          if (isKieModerationFailure(failMsg, failCode)) {
+            // Content policy — do not mark as KIE infra failure
+          } else if (isKieTaskInfraFailure(failMsg, failCode)) {
+            sawConfirmedKieFailure = true;
+          }
           break;
         }
       }
       if (!taskFailed) {
         // Deadline exceeded without a fail/success signal — API is slow, back off
         console.warn(`[GENIMG] task timed out (attempt ${attempt + 1})`);
+        sawConfirmedKieFailure = true;
         // lastFailedExplicitly stays false → TIMEOUT_RETRY_DELAYS applied next iteration
       }
       // fall through to next attempt
     } catch (e: any) {
       console.warn(`[GENIMG] error (attempt ${attempt + 1}):`, e?.message || e);
       lastFailedExplicitly = true; // unexpected exception → fast retry
+      if (isConfirmedKieApiFailure(e)) sawConfirmedKieFailure = true;
     }
   }
 
   console.warn("[GENIMG] all attempts exhausted, using gradient placeholder");
-  return null;
+  return { url: null, confirmedKieFailure: sawConfirmedKieFailure };
 }
 
 // Deterministic gradient SVG used as a graceful fallback when AI image
@@ -1807,8 +1906,9 @@ async function resolveGenImgMarkers(
         if (!outOfCredits && !isAborted() && Date.now() < phaseDeadline) {
           let billed = false;
           let proceed = true;
+          let ikey: string | undefined;
           if (userId) {
-            const ikey = `auto-img-${projectId}-${runKey}-${crypto.createHash("md5").update(raw).digest("hex").slice(0, 8)}`;
+            ikey = `auto-img-${projectId}-${runKey}-${crypto.createHash("md5").update(raw).digest("hex").slice(0, 8)}`;
             const ded = await storage.deductCredits(userId, AUTO_IMAGE_COST, "image", ikey);
             if (!ded.success) {
               outOfCredits = true;
@@ -1823,7 +1923,8 @@ async function resolveGenImgMarkers(
             const refUrls = parsed.refIndices.length > 0
               ? parsed.refIndices.map(i => referenceImageUrls[i - 1]).filter((u): u is string => !!u)
               : undefined;
-            const url = await generateGptImage(withImageQualityBooster(parsed.prompt), parsed.ratio, () => isAborted() || Date.now() >= phaseDeadline, refUrls);
+            const imgResult = await generateGptImage(withImageQualityBooster(parsed.prompt), parsed.ratio, () => isAborted() || Date.now() >= phaseDeadline, refUrls);
+            const url = imgResult.url;
             if (url) {
               resolvedUrl = url;
               generated++;
@@ -1833,8 +1934,8 @@ async function resolveGenImgMarkers(
                 const name = (parsed.prompt.trim().split(/\s+/).slice(0, 3).join("_").replace(/[^a-zA-Z0-9_а-яА-Я-]/g, "") || `img_${myIdx}`).slice(0, 40);
                 await storage.createProjectImage({ projectId, userId: proj?.userId, name, url, prompt: parsed.prompt.substring(0, 200) });
               } catch (e) { /* library save is best-effort */ }
-            } else if (billed && userId) {
-              try { await storage.refundCredits(userId, AUTO_IMAGE_COST, ikey); } catch {}
+            } else if (billed && userId && imgResult.confirmedKieFailure) {
+              await refundIfConfirmedKie(true, userId, AUTO_IMAGE_COST, ikey, true, "auto-img");
             }
           }
         }
@@ -1913,17 +2014,19 @@ async function autoFillMissingImages(
   for (const [b64key, { prompt, ratio }] of Array.from(pendingSet)) {
     if (isAborted() || Date.now() > deadline) break;
     let billed = false;
+    let ikey: string | undefined;
     if (userId) {
-      const ikey = `fill-${projectId}-${runKey}-${crypto.createHash("md5").update(b64key).digest("hex").slice(0, 8)}`;
+      ikey = `fill-${projectId}-${runKey}-${crypto.createHash("md5").update(b64key).digest("hex").slice(0, 8)}`;
       const ded = await storage.deductCredits(userId, AUTO_IMAGE_COST, "image", ikey);
       if (!ded.success) break; // out of credits
       if (!ded.alreadyProcessed) billed = true;
     }
-    const resolvedUrl = await generateGptImage(
+    const imgResult = await generateGptImage(
       withImageQualityBooster(prompt),
       ratio,
       () => isAborted() || Date.now() > deadline,
     );
+    const resolvedUrl = imgResult.url;
     if (resolvedUrl) {
       let savedUrl = resolvedUrl;
       try {
@@ -1943,8 +2046,8 @@ async function autoFillMissingImages(
       filled++;
       creditsUsed += AUTO_IMAGE_COST;
       try { res.write(`data: ${JSON.stringify({ status: `Добавляю фото (${filled}/${total})...` })}\n\n`); } catch {}
-    } else if (billed && userId) {
-      try { await storage.refundCredits(userId, AUTO_IMAGE_COST, ikey); } catch {}
+    } else if (billed && userId && imgResult.confirmedKieFailure) {
+      await refundIfConfirmedKie(true, userId, AUTO_IMAGE_COST, ikey, true, "fill-img");
     }
   }
 
@@ -2008,7 +2111,7 @@ async function kieGenerateSync(
   });
   if (!resp.ok) {
     const err = await resp.text();
-    throw new Error(`KIE API error ${resp.status}: ${err}`);
+    throw kieHttpError(resp.status, err, "KIE API");
   }
   const data = await resp.json() as any;
   let text = "";
@@ -2039,7 +2142,7 @@ async function* kieGenerateStream(
   });
   if (!resp.ok) {
     const errText = await resp.text();
-    throw new Error(`KIE API error ${resp.status}: ${errText}`);
+    throw kieHttpError(resp.status, errText, "KIE API");
   }
   const reader = (resp.body as any).getReader();
   const decoder = new TextDecoder();
@@ -2063,11 +2166,12 @@ async function* kieGenerateStream(
             yield parsed.delta.text as string;
           } else if (eventType === "error" || parsed?.type === "error") {
             const errMsg = parsed?.error?.message || raw;
-            throw new Error(`KIE Claude stream error: ${errMsg}`);
+            throw new KieApiError(`KIE Claude stream error: ${errMsg}`, { source: "stream" });
           } else if (eventType === "message_stop" || parsed?.type === "message_stop") {
             return;
           }
         } catch (parseErr: any) {
+          if (parseErr instanceof KieApiError) throw parseErr;
           if (parseErr instanceof Error && parseErr.message.startsWith("KIE Claude stream error")) throw parseErr;
           // ignore malformed/partial JSON chunks
         }
@@ -2116,7 +2220,7 @@ async function* geminiGenerateStream(
 
   if (!resp.ok) {
     const errText = await resp.text();
-    throw new Error(`Gemini KIE error ${resp.status}: ${errText.slice(0, 400)}`);
+    throw kieHttpError(resp.status, errText.slice(0, 400), "Gemini KIE");
   }
 
   const reader = (resp.body as any).getReader();
@@ -2394,7 +2498,7 @@ const RESEARCH_AND_ENHANCE_PROMPT = `Ты выполняешь ДВЕ задач
 
 Отвечай на русском языке.`;
 
-async function enhancePromptOnly(query: string): Promise<{ enhancedPrompt: string; success: boolean }> {
+async function enhancePromptOnly(query: string): Promise<{ enhancedPrompt: string; success: boolean; confirmedKieFailure?: boolean }> {
   try {
     console.log("Starting prompt enhancement for:", query);
 
@@ -2427,7 +2531,7 @@ async function enhancePromptOnly(query: string): Promise<{ enhancedPrompt: strin
     return { enhancedPrompt: enhancedPrompt.trim().length > 100 ? enhancedPrompt.trim() : query, success: true };
   } catch (err: any) {
     console.error("Enhancement error:", err.message);
-    return { enhancedPrompt: query, success: false };
+    return { enhancedPrompt: query, success: false, confirmedKieFailure: isConfirmedKieApiFailure(err) };
   }
 }
 
@@ -2704,6 +2808,39 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/credits/history", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const txns = await storage.adminGetUserTransactions(user.id);
+      const OP_LABELS: Record<string, string> = {
+        generate: "Генерация сайта",
+        image: "Изображение",
+        "scroll-anim": "Видеоанимация",
+        enhance: "Улучшение промпта",
+        "deep-research": "Deep Research",
+        "3d": "3D модель",
+        refund: "Возврат",
+        payment: "Пополнение",
+        daily_publish: "Хостинг (день)",
+        admin_add: "Начисление (админ)",
+        admin_deduct: "Списание (админ)",
+      };
+      res.json(
+        txns.slice(0, 100).map((t) => ({
+          id: t.id,
+          amount: t.amount,
+          type: t.type,
+          operation: t.operation,
+          label: OP_LABELS[t.operation] || t.operation,
+          note: t.note,
+          createdAt: t.createdAt,
+        })),
+      );
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Ошибка загрузки истории" });
+    }
+  });
+
   app.post("/api/enhance-prompt", requireAuth, aiLimiter, async (req, res) => {
     try {
       const { prompt, idempotencyKey } = req.body;
@@ -2723,12 +2860,12 @@ export async function registerRoutes(
         if (result.success) {
           res.json({ enhancedPrompt: result.enhancedPrompt, creditsUsed: ENHANCE_COST, newBalance: deduction.newBalance });
         } else {
-          if (billed) { try { await storage.refundCredits(user.id, ENHANCE_COST, ikey); } catch {} }
+          await refundIfConfirmedKie(billed, user.id, ENHANCE_COST, ikey, !!result.confirmedKieFailure, "enhance");
           const bal = (await storage.getUser(user.id))?.credits ?? deduction.newBalance;
           res.json({ enhancedPrompt: prompt, creditsUsed: 0, newBalance: bal, warning: "AI временно недоступен, использован оригинальный промпт" });
         }
       } catch (inner: any) {
-        if (billed) { try { await storage.refundCredits(user.id, ENHANCE_COST, ikey); } catch {} }
+        await refundIfConfirmedKie(billed, user.id, ENHANCE_COST, ikey, inner, "enhance-catch");
         throw inner;
       }
     } catch (err: any) {
@@ -3610,15 +3747,13 @@ ${designAnalysis}
         aiTextReply = parsed.aiTextReply || aiTextReply;
 
         if (parsed.total > 0 && parsed.applied === 0) {
-          const billed = genDeduction.success && !genDeduction.alreadyProcessed;
-          if (billed && user?.id) { try { await storage.refundCredits(user.id, GENERATION_COST, genIkey); } catch {} }
           const freshBal = user?.id ? (await storage.getUser(user.id))?.credits : undefined;
-          const failMsg = "Не удалось применить изменения к коду — попробуйте переформулировать запрос или повторить. Токены за эту попытку возвращены.";
+          const failMsg = "Не удалось применить изменения к коду — попробуйте переформулировать запрос или повторить.";
           try {
             await storage.createProjectMessage({ projectId: project.id, role: "model", content: failMsg });
           } catch {}
           console.warn(`[EDIT] 0/${parsed.total} multipage patches applied for project ${project.id}`);
-          res.write(`data: ${JSON.stringify({ error: failMsg, newBalance: freshBal })}\n\n`);
+          res.write(`data: ${JSON.stringify({ error: failMsg, newBalance: freshBal, refunded: false })}\n\n`);
           res.end();
           return;
         }
@@ -3680,14 +3815,12 @@ ${designAnalysis}
           const { stripped: editingFileCode } = stripBase64(editingFileCodeRaw);
           const patchResult = applyDiffPatches(editingFileCode, fullResponse);
           if (patchResult.total > 0 && patchResult.applied === 0) {
-            const billed = genDeduction.success && !genDeduction.alreadyProcessed;
-            if (billed && user?.id) { try { await storage.refundCredits(user.id, GENERATION_COST, genIkey); } catch {} }
             const freshBal = user?.id ? (await storage.getUser(user.id))?.credits : undefined;
-            const failMsg = "Не удалось применить изменения к коду — попробуйте переформулировать запрос или повторить. Токены за эту попытку возвращены.";
+            const failMsg = "Не удалось применить изменения к коду — попробуйте переформулировать запрос или повторить.";
             try {
               await storage.createProjectMessage({ projectId: project.id, role: "model", content: failMsg });
             } catch {}
-            res.write(`data: ${JSON.stringify({ error: failMsg, newBalance: freshBal })}\n\n`);
+            res.write(`data: ${JSON.stringify({ error: failMsg, newBalance: freshBal, refunded: false })}\n\n`);
             res.end();
             return;
           }
@@ -3853,12 +3986,14 @@ ${designAnalysis}
       // still encoded as IMGPENDING:base64key in the HTML. Try one final targeted
       // generation for each, then convert any survivors to gradient placeholders.
       let reviewCreditsUsed = 0;
+      let reviewFilled = 0;
       if (isNewSite && !clientGone) {
         const reviewResult = await autoFillMissingImages(
           genFilesMap, project.id, user?.id,
           `rv-${genRunKey}`, res, () => clientGone,
         );
         reviewCreditsUsed = reviewResult.creditsUsed;
+        reviewFilled = reviewResult.filled;
         if (reviewResult.filled > 0) mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
       } else {
         // Not a new site — just convert any lingering IMGPENDING: to gradients
@@ -3960,10 +4095,28 @@ ${designAnalysis}
       }
 
       await storage.updateProject(project.id, { generatedCode: immediateHtml });
+      const creditBreakdown = {
+        generate: GENERATION_COST,
+        images: genImgResult.creditsUsed + reviewCreditsUsed,
+        imagesCount: genImgResult.generated + reviewFilled,
+        videoPending: hasScrollMarkers,
+        videoCostIfCharged: hasScrollMarkers ? SCROLL_ANIM_COST : 0,
+        total: GENERATION_COST + genImgResult.creditsUsed + reviewCreditsUsed,
+      };
+      const spendNote =
+        `\n\n— Списано ${creditBreakdown.total} ток.` +
+        ` (генерация ${creditBreakdown.generate}` +
+        (creditBreakdown.images > 0
+          ? ` + изображения ${creditBreakdown.imagesCount}×${AUTO_IMAGE_COST}=${creditBreakdown.images}`
+          : "") +
+        ")" +
+        (hasScrollMarkers
+          ? `. Видеоанимация рендерится отдельно (−${SCROLL_ANIM_COST} ток. при успехе).`
+          : "");
       await storage.createProjectMessage({
         projectId: project.id,
         role: "model",
-        content: aiTextReply || "Сайт обновлён",
+        content: (aiTextReply || "Сайт обновлён") + spendNote,
       });
 
       // craft.md — Replit-style agent memory for this site
@@ -4006,8 +4159,9 @@ ${designAnalysis}
         editedFiles: editedFilesList.length ? editedFilesList : [editingFile],
         reply: aiTextReply,
         files: allFiles.filter((f) => isHtmlPage(f.filename) || f.filename === "index.html").map(f => ({ filename: f.filename, id: f.id })),
-        imagesGenerated: genImgResult.generated,
+        imagesGenerated: genImgResult.generated + reviewFilled,
         creditsUsed: immediateCreditsUsed,
+        creditBreakdown,
         newBalance: immediateBalance,
         animPending: hasScrollMarkers,
       })}\n\n`);
@@ -4114,9 +4268,14 @@ ${designAnalysis}
       }
     } catch (err: any) {
       console.error("Generation error:", err?.message || err);
+      let refunded = false;
       try {
-        if (genBilled && billedUserId && generationCost > 0) {
+        if (genBilled && billedUserId && generationCost > 0 && isConfirmedKieApiFailure(err)) {
           await storage.refundCredits(billedUserId, generationCost, genIkeyForRefund);
+          refunded = true;
+          console.log(`[REFUND] site-generate: +${generationCost} tokens (confirmed KIE failure)`);
+        } else if (genBilled) {
+          console.log(`[REFUND-SKIP] site-generate: not a confirmed KIE failure — keeping charge (${err?.message?.slice(0, 120)})`);
         }
       } catch {}
       const _em = err?.message || "";
@@ -4132,15 +4291,21 @@ ${designAnalysis}
         ? "Ответ ИИ заблокирован фильтром безопасности. Попробуйте другой запрос."
         : (_em.includes("too long") || _em.includes("max_tokens"))
         ? "Ответ ИИ слишком длинный. Попробуйте более конкретный запрос для одной страницы."
-        : _em.includes("KIE Claude stream error")
+        : (_em.includes("KIE Claude stream error") || err instanceof KieApiError)
         ? "Серверы ИИ временно недоступны. Попробуйте снова через несколько минут."
         : `Ошибка генерации: ${_em.substring(0, 150) || "неизвестная ошибка"}`;
       const freshBal = billedUserId ? (await storage.getUser(billedUserId))?.credits : undefined;
+      const errPayload = {
+        error: refunded ? `${errMsg} Токены возвращены (сбой KIE API).` : errMsg,
+        newBalance: freshBal,
+        refunded,
+        refundAmount: refunded ? generationCost : 0,
+      };
       if (res.headersSent) {
-        res.write(`data: ${JSON.stringify({ error: errMsg, newBalance: freshBal })}\n\n`);
+        res.write(`data: ${JSON.stringify(errPayload)}\n\n`);
         res.end();
       } else {
-        res.status(500).json({ message: errMsg, newBalance: freshBal });
+        res.status(500).json({ message: errPayload.error, newBalance: freshBal, refunded, refundAmount: errPayload.refundAmount });
       }
     }
   });
@@ -4219,9 +4384,10 @@ ${designAnalysis}
         if (existingTaskId) {
           console.log(`[REGEN ANIM] resuming from existing task ${existingTaskId} for project ${projectId}`);
           try {
-            const frames = await generateScrollFrames(
+            const scrollOutcome = await generateScrollFrames(
               videoPrompt, () => false, undefined, layout, undefined, existingTaskId,
             );
+            const frames = scrollOutcome.frames;
             if (frames.length >= 60) {
               const canvasHtml = buildScrollAnimHtml(frames, animTexts, layout);
               let finalCode = safeReplaceScrollAnimPending(pendingHtml, canvasHtml);
@@ -4299,20 +4465,43 @@ ${designAnalysis}
       req.on("close", () => { clientGone = true; });
 
       let frames: string[] = [];
+      let confirmedKieFailure = false;
       try {
-        frames = await generateScrollFrames(prompt, () => clientGone);
+        const outcome = await generateScrollFrames(prompt, () => clientGone);
+        frames = outcome.frames;
+        confirmedKieFailure = outcome.confirmedKieFailure;
       } catch (genErr: any) {
-        if (billed) { try { await storage.refundCredits(user.id, SCROLL_ANIM_COST, saIkey); } catch {} }
+        const refunded = await refundIfConfirmedKie(billed, user.id, SCROLL_ANIM_COST, saIkey, genErr, "scroll-assets");
         console.error("Scroll frame generation error:", genErr?.message || genErr);
-        return res.status(502).json({ message: "Не удалось сгенерировать анимацию. Токены возвращены." });
+        const bal = (await storage.getUser(user.id))?.credits;
+        return res.status(502).json({
+          message: refunded
+            ? "Не удалось сгенерировать анимацию. Токены возвращены (сбой KIE API)."
+            : "Не удалось сгенерировать анимацию.",
+          newBalance: bal,
+          refunded,
+        });
       }
       if (frames.length < 60) {
-        if (billed) { try { await storage.refundCredits(user.id, SCROLL_ANIM_COST, saIkey); } catch {} }
-        return res.status(502).json({ message: "Не удалось сгенерировать анимацию. Токены возвращены." });
+        const refunded = await refundIfConfirmedKie(billed, user.id, SCROLL_ANIM_COST, saIkey, confirmedKieFailure, "scroll-assets-short");
+        const bal = (await storage.getUser(user.id))?.credits;
+        return res.status(502).json({
+          message: refunded
+            ? "Не удалось сгенерировать анимацию. Токены возвращены (сбой KIE API)."
+            : "Не удалось сгенерировать анимацию.",
+          newBalance: bal,
+          refunded,
+        });
       }
 
       const freshUser = await storage.getUser(user.id);
-      res.json({ frames, count: frames.length, creditsUsed: billed ? SCROLL_ANIM_COST : 0, newBalance: freshUser?.credits ?? deduction.newBalance });
+      res.json({
+        frames,
+        count: frames.length,
+        creditsUsed: billed ? SCROLL_ANIM_COST : 0,
+        creditBreakdown: { video: billed ? SCROLL_ANIM_COST : 0, total: billed ? SCROLL_ANIM_COST : 0 },
+        newBalance: freshUser?.credits ?? deduction.newBalance,
+      });
     } catch (err: any) {
       console.error("Scroll assets error:", err?.message || err);
       res.status(500).json({ message: `Ошибка генерации анимации: ${err?.message?.substring(0, 150) || "неизвестная ошибка"}` });
@@ -4412,17 +4601,47 @@ ${designAnalysis}
       }
 
       if (createBody.code !== 200 || !createBody.data?.taskId) {
-        if (billed) { try { await storage.refundCredits(user.id, IMAGE_COST, imgIkey); } catch {} }
+        const kieFail = isConfirmedKieJobBodyFailure(createBody);
+        if (billed && kieFail) {
+          await refundIfConfirmedKie(true, user.id, IMAGE_COST, imgIkey, true, "image-create");
+        } else if (billed) {
+          console.log(`[REFUND-SKIP] image-create: body.code=${createBody?.code} — not confirmed KIE infra`);
+        }
         const bal = (await storage.getUser(user.id))?.credits ?? deduction.newBalance;
-        return res.status(500).json({ message: createBody.msg || "Ошибка создания задачи", newBalance: bal });
+        return res.status(500).json({
+          message: createBody.msg || "Ошибка создания задачи",
+          newBalance: bal,
+          refunded: !!(billed && kieFail),
+        });
       }
 
       console.log(`[Image] Task created with ${usedModel}, taskId=${createBody.data.taskId}`);
-      res.json({ taskId: createBody.data.taskId, model: usedModel, newBalance: deduction.newBalance });
+      if (billed && imgIkey) {
+        pendingImageCharges.set(String(createBody.data.taskId), {
+          userId: user.id,
+          amount: IMAGE_COST,
+          ikey: imgIkey,
+          createdAt: Date.now(),
+        });
+      }
+      res.json({
+        taskId: createBody.data.taskId,
+        model: usedModel,
+        newBalance: deduction.newBalance,
+        creditsUsed: billed ? IMAGE_COST : 0,
+        creditBreakdown: { image: billed ? IMAGE_COST : 0, total: billed ? IMAGE_COST : 0 },
+      });
     } catch (err: any) {
       console.error("Image generation error:", err);
-      if (billed && userId) { try { await storage.refundCredits(userId, imageCost, imgIkey); } catch {} }
-      res.status(500).json({ message: "Ошибка генерации изображения" });
+      const refunded = await refundIfConfirmedKie(billed, userId, imageCost, imgIkey, err, "image-generate");
+      const bal = userId ? (await storage.getUser(userId))?.credits : undefined;
+      res.status(500).json({
+        message: refunded
+          ? "Ошибка генерации изображения. Токены возвращены (сбой KIE API)."
+          : "Ошибка генерации изображения",
+        newBalance: bal,
+        refunded,
+      });
     }
   });
 
@@ -4441,6 +4660,7 @@ ${designAnalysis}
 
       const state = body.data?.state;
       if (state === "success") {
+        pendingImageCharges.delete(taskId);
         const result = JSON.parse(body.data.resultJson);
         const externalUrls = result.resultUrls || [];
         const localUrls: string[] = [];
@@ -4470,7 +4690,26 @@ ${designAnalysis}
         return res.json({ state: "success", urls: localUrls });
       }
       if (state === "fail") {
-        return res.json({ state: "fail", error: body.data.failMsg || "Ошибка генерации" });
+        const failMsg = body.data.failMsg || "Ошибка генерации";
+        const failCode = body.data.failCode;
+        const pending = pendingImageCharges.get(taskId);
+        let refunded = false;
+        let newBalance: number | undefined;
+        if (pending && pending.userId === (req.user as any).id) {
+          pendingImageCharges.delete(taskId);
+          if (isKieTaskInfraFailure(failMsg, failCode)) {
+            refunded = await refundIfConfirmedKie(true, pending.userId, pending.amount, pending.ikey, true, "image-status-fail");
+            newBalance = (await storage.getUser(pending.userId))?.credits;
+          } else {
+            console.log(`[REFUND-SKIP] image-status-fail: moderation/unknown — failMsg="${failMsg}" failCode="${failCode}"`);
+          }
+        }
+        return res.json({
+          state: "fail",
+          error: refunded ? `${failMsg}. Токены возвращены (сбой KIE API).` : failMsg,
+          refunded,
+          newBalance,
+        });
       }
       return res.json({ state: "waiting" });
     } catch (err: any) {
