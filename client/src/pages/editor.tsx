@@ -171,6 +171,12 @@ export default function EditorPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingImageTarget = useRef<string | null>(null);
+  // Latest HTML from in-iframe edits — persisted silently so srcDoc is not rewritten (avoids reload loop).
+  const latestEditHtmlRef = useRef<string | null>(null);
+  const editModeRef = useRef(false);
+  const selectorModeRef = useRef(false);
+  editModeRef.current = editMode;
+  selectorModeRef.current = selectorMode;
 
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [imagePickerTab, setImagePickerTab] = useState<"library" | "upload">("library");
@@ -1826,7 +1832,7 @@ document.addEventListener('DOMContentLoaded',function(){
   },true);
   function getCleanHtmlSel(){
     var clone=document.documentElement.cloneNode(true);
-    var sels=clone.querySelectorAll('[data-nz-selector],[data-nz-leads]');
+    var sels=clone.querySelectorAll('[data-nz-selector],[data-nz-leads],[data-nz-stickyfix],[data-nz-preloader-kill]');
     for(var i=0;i<sels.length;i++) sels[i].parentNode.removeChild(sels[i]);
     var cls=clone.querySelectorAll('.__nz-sel-hover,.__nz-sel-active,.__nz-sel-label');
     for(var i=0;i<cls.length;i++){cls[i].classList.remove('__nz-sel-hover','__nz-sel-active','__nz-sel-label')}
@@ -1861,7 +1867,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 (function(){
   function getCleanHtml(){
     var clone=document.documentElement.cloneNode(true);
-    var eds=clone.querySelectorAll('[data-nz-editor],[data-nz-leads]');
+    var eds=clone.querySelectorAll('[data-nz-editor],[data-nz-leads],[data-nz-stickyfix],[data-nz-preloader-kill],[data-nz-selector]');
     for(var i=0;i<eds.length;i++) eds[i].parentNode.removeChild(eds[i]);
     var tips=clone.querySelectorAll('.__nz-tooltip');
     for(var i=0;i<tips.length;i++) tips[i].parentNode.removeChild(tips[i]);
@@ -1969,36 +1975,48 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
   }, [editMode, selectorMode, injectProjectId]);
 
   useEffect(() => {
+    const persistHtml = (finalHtml: string, opts?: { invalidate?: boolean; updateState?: boolean }) => {
+      const invalidate = opts?.invalidate ?? true;
+      const updateState = opts?.updateState ?? true;
+      latestEditHtmlRef.current = finalHtml;
+      if (updateState) {
+        if (activeFile === "index.html") setStreamedCode(finalHtml);
+      }
+      if (activeFile === "index.html") {
+        fetch(`/api/projects/${projectId}/code`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ generatedCode: finalHtml }),
+          credentials: "include",
+        }).then(() => {
+          if (invalidate) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+        }).catch(() => {});
+      } else {
+        fetch(`/api/projects/${projectId}/files/${activeFile}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: finalHtml }),
+          credentials: "include",
+        }).then(() => {
+          if (invalidate) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+        }).catch(() => {});
+      }
+    };
+
     const handler = (e: MessageEvent) => {
       if (!e.data || typeof e.data !== 'object') return;
       if (e.data.type === 'nz-text-edit') {
         const finalHtml = e.data.html;
-        if (activeFile === "index.html") {
-          setStreamedCode(finalHtml);
-          fetch(`/api/projects/${projectId}/code`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ generatedCode: finalHtml }),
-            credentials: "include",
-          }).then(() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
-          });
-        } else {
-          fetch(`/api/projects/${projectId}/files/${activeFile}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: finalHtml }),
-            credentials: "include",
-          }).then(() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
-          });
-        }
+        // While visual editing: save quietly — never rewrite srcDoc (that remounts the iframe).
+        const liveEditing = editModeRef.current || selectorModeRef.current;
+        persistHtml(finalHtml, { invalidate: !liveEditing, updateState: !liveEditing });
       }
       if (e.data.type === 'nz-navigate-file') {
         if (isGenerating) return;
         const filename = e.data.filename;
         setActiveFile(filename);
         setStreamedCode("");
+        latestEditHtmlRef.current = null;
       }
       if (e.data.type === 'nz-img-click' || e.data.type === 'nz-placeholder-click') {
         pendingImageTarget.current = e.data.path;
@@ -2017,32 +2035,25 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       if (e.data.type === 'nz-element-deleted') {
         const finalHtml = e.data.html;
         setSelectedElement(null);
-        if (activeFile === "index.html") {
-          setStreamedCode(finalHtml);
-          fetch(`/api/projects/${projectId}/code`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ generatedCode: finalHtml }),
-            credentials: "include",
-          }).then(() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
-          });
-        } else {
-          fetch(`/api/projects/${projectId}/files/${activeFile}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: finalHtml }),
-            credentials: "include",
-          }).then(() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
-          });
-        }
+        const liveEditing = editModeRef.current || selectorModeRef.current;
+        persistHtml(finalHtml, { invalidate: !liveEditing, updateState: !liveEditing });
         toast({ title: "Элемент удалён", description: "Изменения сохранены" });
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [projectId, activeFile, allFiles, isGenerating]);
+  }, [projectId, activeFile, isGenerating, toast]);
+
+  const flushPendingEditHtml = useCallback(() => {
+    const html = latestEditHtmlRef.current;
+    if (!html) return;
+    if (activeFile === "index.html") {
+      setStreamedCode(html);
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+    }
+  }, [activeFile, projectId]);
 
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
 
@@ -2149,7 +2160,11 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           {!showCode && currentCode && (
             <>
               <button
-                onClick={() => { setEditMode(!editMode); if (!editMode) setSelectorMode(false); }}
+                onClick={() => {
+                  if (editMode) flushPendingEditHtml();
+                  setEditMode(!editMode);
+                  if (!editMode) setSelectorMode(false);
+                }}
                 data-testid="button-toggle-edit"
                 title="Визуальный редактор"
                 className={`flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium transition-all duration-200 ${editMode
@@ -2160,7 +2175,11 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <span className="hidden xl:inline">Редактор</span>
               </button>
               <button
-                onClick={() => { setSelectorMode(!selectorMode); if (!selectorMode) { setEditMode(false); setSelectedElement(null); } }}
+                onClick={() => {
+                  if (selectorMode) flushPendingEditHtml();
+                  setSelectorMode(!selectorMode);
+                  if (!selectorMode) { setEditMode(false); setSelectedElement(null); }
+                }}
                 data-testid="button-toggle-selector"
                 title="Выбрать элемент"
                 className={`flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium transition-all duration-200 ${selectorMode
@@ -2809,7 +2828,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             ) : currentCode || isGenerating ? (
               <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
                  <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { const iw = iframeRef.current?.contentWindow; if (!iw) return; e.preventDefault(); e.stopPropagation(); iw.scrollBy(e.deltaX, e.deltaY); }}>
-                    <iframe key={selectorMode ? 'sel' : editMode ? 'edit' : 'view'} ref={iframeRef} srcDoc={isGenerating ? (getEditableCode(project?.generatedCode || "") || "") : getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
+                    <iframe key={activeFile} ref={iframeRef} srcDoc={isGenerating ? (getEditableCode(project?.generatedCode || "") || "") : getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
                  </div>
                  {isGenerating && (
                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style={{ background: 'rgba(11,15,25,0.92)', backdropFilter: 'blur(4px)' }}>
