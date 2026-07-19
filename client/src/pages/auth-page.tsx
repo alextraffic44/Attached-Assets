@@ -229,13 +229,65 @@ export default function AuthPage() {
       const messages: Record<string, string> = {
         telegram_invalid: "Не удалось подтвердить вход через Telegram",
         telegram_not_configured: "Telegram авторизация не настроена на сервере",
+        telegram_expired: "Ссылка входа в Telegram устарела — попробуйте ещё раз",
+        telegram_timeout: "Время ожидания входа через Telegram истекло",
       };
       toast({ title: "Ошибка", description: messages[err] || "Ошибка авторизации", variant: "destructive" });
       window.history.replaceState({}, "", "/auth");
     }
   }, [toast]);
 
-  // After Telegram OAuth, user returns to /auth#tgAuthResult=<base64json>
+  // Yandex OAuth return (same-tab) + popup postMessage fallback
+  useEffect(() => {
+    const finishYandex = async (hash: string) => {
+      setIsYandexLoading(true);
+      try {
+        const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+        const token = params.get("access_token");
+        if (!token) throw new Error("Токен не получен");
+
+        const res = await fetch("/api/auth/yandex", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+          credentials: "include",
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.message || "Ошибка авторизации");
+        queryClient.setQueryData(["/api/auth/user"], result);
+        setLocation("/dashboard");
+      } catch (err: any) {
+        toast({ title: "Ошибка", description: err.message, variant: "destructive" });
+      } finally {
+        setIsYandexLoading(false);
+      }
+    };
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("yandex_callback") === "1") {
+      try {
+        const stored = sessionStorage.getItem("yandex_oauth_hash");
+        sessionStorage.removeItem("yandex_oauth_hash");
+        window.history.replaceState({}, "", "/auth");
+        if (stored) void finishYandex(stored);
+        else toast({ title: "Ошибка", description: "Не удалось получить токен Яндекса", variant: "destructive" });
+      } catch {
+        window.history.replaceState({}, "", "/auth");
+      }
+    }
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || typeof data !== "object" || data.type !== "yandex_oauth") return;
+      if (typeof data.hash !== "string" || !data.hash.includes("access_token")) return;
+      void finishYandex(data.hash);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [setLocation, toast]);
+
+  // After Telegram OAuth (legacy), user returns to /auth#tgAuthResult=<base64json>
   useEffect(() => {
     const finishTelegram = async (user: Record<string, any>) => {
       setIsTelegramLoading(true);
@@ -277,11 +329,55 @@ export default function AuthPage() {
     }
   }, [setLocation, toast]);
 
-  const handleTelegramAuth = () => {
+  const handleTelegramAuth = async () => {
     if (isTelegramLoading) return;
     setIsTelegramLoading(true);
-    // Full-page redirect — works without loading telegram-widget.js or clicking cross-origin iframes.
-    window.location.href = "/api/auth/telegram/start";
+    try {
+      const res = await fetch("/api/auth/telegram/bot/start", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Не удалось начать вход через Telegram");
+
+      const botUrl = data.url as string;
+      const nonce = data.nonce as string;
+
+      // Open Telegram app/web. Prefer new tab so this page can keep polling.
+      const opened = window.open(botUrl, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        // Popup blocked — navigate same tab; user can return after confirming in Telegram.
+        window.location.href = botUrl;
+        return;
+      }
+
+      toast({
+        title: "Подтвердите вход в Telegram",
+        description: "Нажмите Start у бота Craft AI — после этого страница войдёт автоматически.",
+      });
+
+      const started = Date.now();
+      const timeoutMs = 3 * 60 * 1000;
+      while (Date.now() - started < timeoutMs) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const st = await fetch(`/api/auth/telegram/bot/status?nonce=${encodeURIComponent(nonce)}`, {
+          credentials: "include",
+        });
+        const body = await st.json();
+        if (body.status === "ready" && body.user) {
+          queryClient.setQueryData(["/api/auth/user"], body.user);
+          setLocation("/dashboard");
+          return;
+        }
+        if (body.status === "expired" || body.status === "consumed" || body.status === "invalid") {
+          throw new Error("Ссылка входа устарела — нажмите кнопку ещё раз");
+        }
+      }
+      throw new Error("Время ожидания истекло. Откройте бота и нажмите Start, затем попробуйте снова.");
+    } catch (err: any) {
+      toast({ title: "Ошибка", description: err.message || "Ошибка авторизации Telegram", variant: "destructive" });
+      setIsTelegramLoading(false);
+    }
   };
 
   const handleYandexAuth = () => {
@@ -290,51 +386,8 @@ export default function AuthPage() {
 
     const redirectUri = window.location.origin + "/yandex-suggest-token.html";
     const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${yandexClientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
-    const popup = window.open(authUrl, "yandex_auth", "width=600,height=700,left=200,top=100");
-
-    const onMessage = async (event: MessageEvent) => {
-      if (typeof event.data !== "string" || !event.data.includes("access_token")) return;
-      window.removeEventListener("message", onMessage);
-      clearInterval(closedCheck);
-
-      try {
-        const hash = new URL(event.data).hash.slice(1);
-        const params = new URLSearchParams(hash);
-        const token = params.get("access_token");
-        if (!token) throw new Error("Токен не получен");
-
-        const res = await fetch("/api/auth/yandex", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-          credentials: "include",
-        });
-        const result = await res.json();
-        if (!res.ok) throw new Error(result.message || "Ошибка авторизации");
-        queryClient.setQueryData(["/api/auth/user"], result);
-        setLocation("/dashboard");
-      } catch (err: any) {
-        toast({ title: "Ошибка", description: err.message, variant: "destructive" });
-      } finally {
-        setIsYandexLoading(false);
-      }
-    };
-
-    window.addEventListener("message", onMessage);
-
-    if (!popup) {
-      window.removeEventListener("message", onMessage);
-      window.location.href = authUrl;
-      return;
-    }
-
-    const closedCheck = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(closedCheck);
-        window.removeEventListener("message", onMessage);
-        setIsYandexLoading(false);
-      }
-    }, 500);
+    // Same-tab OAuth — popups often show a blank page and never deliver the token.
+    window.location.href = authUrl;
   };
 
   return (
@@ -388,15 +441,21 @@ export default function AuthPage() {
             {/* Telegram — real button → server OAuth redirect (no cross-origin iframe click) */}
             {isTelegramLoading ? (
               <div style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
-                height: 52, borderRadius: 14,
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.35rem",
+                minHeight: 52, padding: "0.75rem 1rem", borderRadius: 14,
                 background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
-                color: "#fff", fontSize: "0.95rem", fontWeight: 600,
+                color: "#fff", fontSize: "0.9rem", fontWeight: 600,
                 fontFamily: appleFont,
                 boxShadow: "0 4px 16px rgba(42,171,238,0.35)",
+                textAlign: "center",
               }}>
-                <Loader2 size={18} className="animate-spin" />
-                Авторизация...
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.55rem" }}>
+                  <Loader2 size={18} className="animate-spin" />
+                  Ждём подтверждение в Telegram…
+                </span>
+                <span style={{ fontSize: "0.72rem", fontWeight: 500, opacity: 0.9 }}>
+                  Откройте бота и нажмите Start
+                </span>
               </div>
             ) : botUsername ? (
               <button

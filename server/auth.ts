@@ -10,6 +10,15 @@ import { rateLimit } from "./rate-limit";
 import { pool, db } from "./db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import {
+  buildTelegramBotDeepLink,
+  consumeTelegramBotAuth,
+  createTelegramBotAuthNonce,
+  ensureTelegramBotAuthIngress,
+  expectedTelegramWebhookSecret,
+  getTelegramBotAuthStatus,
+  handleTelegramUpdate,
+} from "./telegram-bot-auth";
 
 const scryptAsync = promisify(scrypt);
 
@@ -218,25 +227,8 @@ export function setupAuth(app: Express) {
     }
   });
 
-  // Full-page OAuth start — no dependency on telegram-widget.js / cross-origin iframe clicks.
-  app.get("/api/auth/telegram/start", (req, res) => {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    if (!token) return res.redirect("/auth?error=telegram_not_configured");
-    const botId = token.split(":")[0];
-    if (!botId || !/^\d+$/.test(botId)) {
-      return res.redirect("/auth?error=telegram_not_configured");
-    }
-    const origin = getPublicOrigin(req);
-    const returnTo = `${origin}/auth`;
-    const url = new URL("https://oauth.telegram.org/auth");
-    url.searchParams.set("bot_id", botId);
-    url.searchParams.set("origin", origin);
-    url.searchParams.set("request_access", "write");
-    url.searchParams.set("return_to", returnTo);
-    res.redirect(url.toString());
-  });
-
-  // Optional query-param callback (widget data-auth-url style) + hash handoff helper.
+  // Legacy Login Widget / oauth.telegram.org callback (kept for compatibility).
+  // Primary login path is bot deep-link below — oauth.telegram.org is often blocked in RF.
   app.get("/api/auth/telegram/callback", async (req, res, next) => {
     try {
       if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -246,7 +238,6 @@ export function setupAuth(app: Express) {
       for (const [key, value] of Object.entries(req.query)) {
         if (typeof value === "string") data[key] = value;
       }
-      // Some clients may pass the widget hash result as a query param.
       if (typeof req.query.tgAuthResult === "string" && !data.hash) {
         const decoded = decodeTgAuthResult(req.query.tgAuthResult);
         if (decoded) Object.assign(data, decoded);
@@ -268,6 +259,88 @@ export function setupAuth(app: Express) {
     } catch (err) {
       next(err);
     }
+  });
+
+  // Bot deep-link login — works when oauth.telegram.org is unreachable (common ISP blocks).
+  // Flow: create nonce → open t.me/Bot?start=auth_<nonce> → webhook/poll marks ready → client polls status.
+  app.post("/api/auth/telegram/bot/start", authLimiter, async (req, res, next) => {
+    try {
+      if (!process.env.TELEGRAM_BOT_TOKEN) {
+        return res.status(503).json({ message: "Telegram авторизация не настроена" });
+      }
+      const nonce = await createTelegramBotAuthNonce();
+      const url = buildTelegramBotDeepLink(nonce);
+      if (!url) {
+        return res.status(503).json({ message: "Telegram bot username не настроен" });
+      }
+      return res.json({ nonce, url });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.get("/api/auth/telegram/bot/status", async (req, res, next) => {
+    try {
+      const nonce = typeof req.query.nonce === "string" ? req.query.nonce : "";
+      if (!/^[a-f0-9]{16,64}$/i.test(nonce)) {
+        return res.status(400).json({ status: "invalid" });
+      }
+      const entry = await getTelegramBotAuthStatus(nonce);
+      if (!entry) return res.json({ status: "expired" });
+      if (entry.status === "pending") return res.json({ status: "pending" });
+      if (entry.status === "consumed") return res.json({ status: "consumed" });
+
+      const profile = await consumeTelegramBotAuth(nonce);
+      if (!profile) return res.json({ status: "expired" });
+
+      const telegramId = String(profile.id);
+      const displayName =
+        [profile.first_name, profile.last_name].filter(Boolean).join(" ") ||
+        profile.username ||
+        "Пользователь";
+      const avatarUrl = profile.photo_url || null;
+
+      let user = await storage.getUserByTelegramId(telegramId);
+      if (!user) {
+        user = await storage.createTelegramUser({ telegramId, displayName, avatarUrl });
+      }
+
+      req.login(user, (err) => {
+        if (err) return next(err);
+        const { password: _, ...safeUser } = user!;
+        return res.json({ status: "ready", user: safeUser });
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post("/api/auth/telegram/webhook", (req, res) => {
+    const secret = expectedTelegramWebhookSecret();
+    const header = String(req.headers["x-telegram-bot-api-secret-token"] || "");
+    if (!secret || header !== secret) {
+      return res.status(401).json({ ok: false });
+    }
+    handleTelegramUpdate(req.body);
+    return res.json({ ok: true });
+  });
+
+  // Optional legacy redirect to oauth.telegram.org (may time out in some networks).
+  app.get("/api/auth/telegram/start", (req, res) => {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) return res.redirect("/auth?error=telegram_not_configured");
+    const botId = token.split(":")[0];
+    if (!botId || !/^\d+$/.test(botId)) {
+      return res.redirect("/auth?error=telegram_not_configured");
+    }
+    const origin = getPublicOrigin(req);
+    const returnTo = `${origin}/auth`;
+    const url = new URL("https://oauth.telegram.org/auth");
+    url.searchParams.set("bot_id", botId);
+    url.searchParams.set("origin", origin);
+    url.searchParams.set("request_access", "write");
+    url.searchParams.set("return_to", returnTo);
+    res.redirect(url.toString());
   });
 
   app.post("/api/auth/yandex", async (req, res, next) => {
@@ -324,4 +397,6 @@ export function setupAuth(app: Express) {
     const { password: _, ...safeUser } = req.user as any;
     res.json(safeUser);
   });
+
+  void ensureTelegramBotAuthIngress();
 }

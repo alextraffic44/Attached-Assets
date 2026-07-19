@@ -1,18 +1,38 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Yandex OAuth</title>
+</head>
 <body>
 <script>
 "use strict";
-window.addEventListener("message", function(e) {
-  var opener = window.opener;
-  if (opener && opener.postMessage) {
-    opener.postMessage(e.data, e.origin);
-    window.close();
+(function () {
+  var hash = document.location.hash || "";
+
+  function finishViaOpener() {
+    try {
+      if (window.opener && !window.opener.closed) {
+        // Same-origin only — never post the token URL to "*".
+        var target = window.location.origin;
+        window.opener.postMessage({ type: "yandex_oauth", hash: hash }, target);
+        window.close();
+        return true;
+      }
+    } catch (e) {}
+    return false;
   }
-});
-try {
-  window.opener.postMessage(document.location.href, "*");
-} catch(e) {}
+
+  if (finishViaOpener()) return;
+
+  // Full-page / same-tab fallback when popup opener is unavailable.
+  try {
+    if (hash && hash.indexOf("access_token") !== -1) {
+      sessionStorage.setItem("yandex_oauth_hash", hash);
+    }
+  } catch (e) {}
+  window.location.replace("/auth?yandex_callback=1");
+})();
 </script>
 </body>
 </html>
