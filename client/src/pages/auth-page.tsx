@@ -23,6 +23,11 @@ const SVG_CSS = `
   }
   .auth-left { flex: 0 0 50% !important; }
   .auth-right { flex: 0 0 50% !important; }
+  #telegram-widget-container iframe {
+    border: 0 !important;
+    background: transparent !important;
+    color-scheme: normal;
+  }
   @media (max-width: 768px) {
     .auth-left { flex: 0 0 100% !important; min-height: 100vh; padding: 2rem 1.5rem !important; }
     .auth-right { display: none !important; }
@@ -333,11 +338,40 @@ export default function AuthPage() {
     script.setAttribute("data-request-access", "write");
     script.setAttribute("data-userpic", "false");
     script.setAttribute("data-lang", "ru");
-    // JS callback — official widget mode (no redirect).
     script.setAttribute("data-onauth", "onTelegramAuth(user)");
     container.appendChild(script);
 
+    // Scale official iframe to exactly cover the 52px full-width button (hides black letterbox bars).
+    const scaleOverlay = () => {
+      const iframe = container.querySelector("iframe");
+      if (!iframe) return;
+      const parent = container.parentElement;
+      if (!parent) return;
+      const pw = parent.clientWidth || 320;
+      const ph = parent.clientHeight || 52;
+      const iw = iframe.offsetWidth || 240;
+      const ih = iframe.offsetHeight || 40;
+      if (iw < 2 || ih < 2) return;
+      const scale = Math.max(pw / iw, ph / ih) * 1.08;
+      Object.assign(iframe.style, {
+        position: "absolute",
+        left: "50%",
+        top: "50%",
+        transform: `translate(-50%, -50%) scale(${scale})`,
+        transformOrigin: "center center",
+        opacity: "0.01",
+        pointerEvents: "auto",
+        border: "none",
+        background: "transparent",
+      });
+      iframe.addEventListener("pointerdown", () => setIsTelegramLoading(true), { once: true });
+    };
+    const timer = window.setInterval(scaleOverlay, 200);
+    const stopTimer = window.setTimeout(() => clearInterval(timer), 12000);
+
     return () => {
+      clearInterval(timer);
+      clearTimeout(stopTimer);
       document.getElementById("telegram-widget")?.remove();
       if (w.onTelegramAuth) delete w.onTelegramAuth;
     };
@@ -424,75 +458,12 @@ export default function AuthPage() {
               <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#1D1D1F", letterSpacing: "-0.01em" }}>Авторизация</span>
             </div>
 
-            {/* Official Telegram Login Widget */}
-            {botUsername ? (
-              <div
-                data-testid="button-telegram-login"
-                style={{
-                  position: "relative",
-                  width: "100%",
-                  minHeight: 48,
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <div
-                  id="telegram-widget-container"
-                  style={{
-                    width: "100%",
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    minHeight: 44,
-                    visibility: isTelegramLoading ? "hidden" : "visible",
-                  }}
-                />
-                {isTelegramLoading && (
-                  <div style={{
-                    position: "absolute",
-                    inset: 0,
-                    borderRadius: 14,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "0.65rem",
-                    background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
-                    color: "#fff",
-                    fontSize: "0.95rem",
-                    fontWeight: 600,
-                    fontFamily: appleFont,
-                    boxShadow: "0 4px 16px rgba(42,171,238,0.3)",
-                  }}>
-                    <Loader2 size={18} className="animate-spin" />
-                    Авторизация...
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                height: 52, borderRadius: 14, background: "#e8e8ed",
-                fontSize: "0.85rem", color: "#86868B", fontFamily: appleFont,
-              }}>
-                Telegram-авторизация не настроена
-              </div>
-            )}
-
-            {/* Divider */}
-            {yandexClientId && (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.9rem 0" }}>
-                <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
-                <span style={{ fontSize: "0.72rem", color: "#AEAEB2", fontWeight: 600, letterSpacing: "0.04em" }}>или</span>
-                <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
-              </div>
-            )}
-
-            {/* Yandex button */}
+            {/* Yandex first */}
             {yandexClientId && (
               <button
                 onClick={handleYandexAuth}
                 disabled={isYandexLoading}
+                data-testid="button-yandex-login"
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
                   gap: "0.6rem", height: 52, borderRadius: 14, border: "1px solid rgba(0,0,0,0.08)",
@@ -509,6 +480,82 @@ export default function AuthPage() {
                 {isYandexLoading ? <Loader2 size={18} className="animate-spin" /> : <YandexIcon />}
                 {isYandexLoading ? "Авторизация..." : "Войти через Яндекс"}
               </button>
+            )}
+
+            {/* Divider */}
+            {yandexClientId && botUsername && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.9rem 0" }}>
+                <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
+                <span style={{ fontSize: "0.72rem", color: "#AEAEB2", fontWeight: 600, letterSpacing: "0.04em" }}>или</span>
+                <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
+              </div>
+            )}
+
+            {/* Telegram — same size as Yandex; official widget as transparent overlay (no black bars) */}
+            {botUsername ? (
+              <div
+                data-testid="button-telegram-login"
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  height: 52,
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
+                  boxShadow: "0 4px 16px rgba(42,171,238,0.3)",
+                }}
+              >
+                <div style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.65rem",
+                  color: "#fff",
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  fontFamily: appleFont,
+                  pointerEvents: "none",
+                  userSelect: "none",
+                }}>
+                  {isTelegramLoading ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Авторизация...
+                    </>
+                  ) : (
+                    <>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+                        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z" fill="white"/>
+                      </svg>
+                      Войти через Telegram
+                    </>
+                  )}
+                </div>
+                <div
+                  id="telegram-widget-container"
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    zIndex: 2,
+                    overflow: "hidden",
+                    background: "transparent",
+                    // Keep hit-target alive while showing loading UI on the face button.
+                    opacity: isTelegramLoading ? 0 : 1,
+                    pointerEvents: isTelegramLoading ? "none" : "auto",
+                  }}
+                />
+              </div>
+            ) : (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                height: 52, borderRadius: 14, background: "#e8e8ed",
+                fontSize: "0.85rem", color: "#86868B", fontFamily: appleFont,
+              }}>
+                Telegram-авторизация не настроена
+              </div>
             )}
           </div>
 
