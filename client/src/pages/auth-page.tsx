@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -287,27 +287,64 @@ export default function AuthPage() {
     return () => window.removeEventListener("message", onMessage);
   }, [setLocation, toast]);
 
-  // After Telegram OAuth (legacy), user returns to /auth#tgAuthResult=<base64json>
+  const finishTelegramAuth = useCallback(async (user: Record<string, any>) => {
+    setIsTelegramLoading(true);
+    try {
+      const res = await fetch("/api/auth/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(user),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Ошибка авторизации");
+      queryClient.setQueryData(["/api/auth/user"], data);
+      setLocation("/dashboard");
+    } catch (err: any) {
+      toast({ title: "Ошибка", description: err.message, variant: "destructive" });
+      setIsTelegramLoading(false);
+    }
+  }, [setLocation, toast]);
+
+  const finishTelegramAuthRef = useRef(finishTelegramAuth);
+  finishTelegramAuthRef.current = finishTelegramAuth;
+
+  // Official Telegram Login Widget (https://core.telegram.org/widgets/login)
   useEffect(() => {
-    const finishTelegram = async (user: Record<string, any>) => {
-      setIsTelegramLoading(true);
-      try {
-        const res = await fetch("/api/auth/telegram", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(user),
-          credentials: "include",
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Ошибка авторизации");
-        queryClient.setQueryData(["/api/auth/user"], data);
-        setLocation("/dashboard");
-      } catch (err: any) {
-        toast({ title: "Ошибка", description: err.message, variant: "destructive" });
-        setIsTelegramLoading(false);
-      }
+    if (!botUsername) return;
+
+    const w = window as Window & { onTelegramAuth?: (user: Record<string, any>) => void };
+    w.onTelegramAuth = (user) => {
+      void finishTelegramAuthRef.current(user);
     };
 
+    const container = document.getElementById("telegram-widget-container");
+    if (!container) return;
+    container.innerHTML = "";
+    document.getElementById("telegram-widget")?.remove();
+
+    const script = document.createElement("script");
+    script.id = "telegram-widget";
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.async = true;
+    script.setAttribute("data-telegram-login", botUsername);
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-radius", "14");
+    script.setAttribute("data-request-access", "write");
+    script.setAttribute("data-userpic", "false");
+    script.setAttribute("data-lang", "ru");
+    // JS callback — official widget mode (no redirect).
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    container.appendChild(script);
+
+    return () => {
+      document.getElementById("telegram-widget")?.remove();
+      if (w.onTelegramAuth) delete w.onTelegramAuth;
+    };
+  }, [botUsername]);
+
+  // Fallback: some Telegram flows return /auth#tgAuthResult=<base64json>
+  useEffect(() => {
     const hash = window.location.hash || "";
     const match = hash.match(/[#&?]tgAuthResult=([A-Za-z0-9\-_=\.]+)/);
     if (!match) return;
@@ -319,7 +356,7 @@ export default function AuthPage() {
       const user = JSON.parse(atob(raw));
       window.history.replaceState({}, "", "/auth");
       if (user && typeof user === "object" && user.hash) {
-        void finishTelegram(user);
+        void finishTelegramAuthRef.current(user);
       } else {
         toast({ title: "Ошибка", description: "Не удалось получить данные Telegram", variant: "destructive" });
       }
@@ -327,58 +364,7 @@ export default function AuthPage() {
       window.history.replaceState({}, "", "/auth");
       toast({ title: "Ошибка", description: "Не удалось разобрать ответ Telegram", variant: "destructive" });
     }
-  }, [setLocation, toast]);
-
-  const handleTelegramAuth = async () => {
-    if (isTelegramLoading) return;
-    setIsTelegramLoading(true);
-    try {
-      const res = await fetch("/api/auth/telegram/bot/start", {
-        method: "POST",
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Не удалось начать вход через Telegram");
-
-      const botUrl = data.url as string;
-      const nonce = data.nonce as string;
-
-      // Open Telegram app/web. Prefer new tab so this page can keep polling.
-      const opened = window.open(botUrl, "_blank", "noopener,noreferrer");
-      if (!opened) {
-        // Popup blocked — navigate same tab; user can return after confirming in Telegram.
-        window.location.href = botUrl;
-        return;
-      }
-
-      toast({
-        title: "Подтвердите вход в Telegram",
-        description: "Нажмите Start у бота Craft AI — после этого страница войдёт автоматически.",
-      });
-
-      const started = Date.now();
-      const timeoutMs = 3 * 60 * 1000;
-      while (Date.now() - started < timeoutMs) {
-        await new Promise((r) => setTimeout(r, 1500));
-        const st = await fetch(`/api/auth/telegram/bot/status?nonce=${encodeURIComponent(nonce)}`, {
-          credentials: "include",
-        });
-        const body = await st.json();
-        if (body.status === "ready" && body.user) {
-          queryClient.setQueryData(["/api/auth/user"], body.user);
-          setLocation("/dashboard");
-          return;
-        }
-        if (body.status === "expired" || body.status === "consumed" || body.status === "invalid") {
-          throw new Error("Ссылка входа устарела — нажмите кнопку ещё раз");
-        }
-      }
-      throw new Error("Время ожидания истекло. Откройте бота и нажмите Start, затем попробуйте снова.");
-    } catch (err: any) {
-      toast({ title: "Ошибка", description: err.message || "Ошибка авторизации Telegram", variant: "destructive" });
-      setIsTelegramLoading(false);
-    }
-  };
+  }, [toast]);
 
   const handleYandexAuth = () => {
     if (!yandexClientId || isYandexLoading) return;
@@ -438,61 +424,51 @@ export default function AuthPage() {
               <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#1D1D1F", letterSpacing: "-0.01em" }}>Авторизация</span>
             </div>
 
-            {/* Telegram — real button → server OAuth redirect (no cross-origin iframe click) */}
-            {isTelegramLoading ? (
-              <div style={{
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.35rem",
-                minHeight: 52, padding: "0.75rem 1rem", borderRadius: 14,
-                background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
-                color: "#fff", fontSize: "0.9rem", fontWeight: 600,
-                fontFamily: appleFont,
-                boxShadow: "0 4px 16px rgba(42,171,238,0.35)",
-                textAlign: "center",
-              }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.55rem" }}>
-                  <Loader2 size={18} className="animate-spin" />
-                  Ждём подтверждение в Telegram…
-                </span>
-                <span style={{ fontSize: "0.72rem", fontWeight: 500, opacity: 0.9 }}>
-                  Откройте бота и нажмите Start
-                </span>
-              </div>
-            ) : botUsername ? (
-              <button
-                type="button"
+            {/* Official Telegram Login Widget */}
+            {botUsername ? (
+              <div
                 data-testid="button-telegram-login"
-                onClick={handleTelegramAuth}
                 style={{
+                  position: "relative",
                   width: "100%",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
-                  height: 52, borderRadius: 14, border: "none",
-                  background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
-                  color: "#fff", cursor: "pointer",
-                  fontSize: "0.95rem", fontWeight: 600,
-                  fontFamily: appleFont,
-                  boxShadow: "0 4px 16px rgba(42,171,238,0.3)",
-                  transition: "all 0.18s cubic-bezier(.4,0,.2,1)",
+                  minHeight: 48,
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
                 }}
-                onMouseEnter={e => {
-                  const el = e.currentTarget as HTMLButtonElement;
-                  el.style.background = "linear-gradient(135deg, #3dbef7 0%, #2AABEE 100%)";
-                  el.style.boxShadow = "0 6px 22px rgba(42,171,238,0.45)";
-                  el.style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={e => {
-                  const el = e.currentTarget as HTMLButtonElement;
-                  el.style.background = "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)";
-                  el.style.boxShadow = "0 4px 16px rgba(42,171,238,0.3)";
-                  el.style.transform = "translateY(0)";
-                }}
-                onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0) scale(0.98)"; }}
-                onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px) scale(1)"; }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z" fill="white"/>
-                </svg>
-                Войти через Telegram
-              </button>
+                <div
+                  id="telegram-widget-container"
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    minHeight: 44,
+                    visibility: isTelegramLoading ? "hidden" : "visible",
+                  }}
+                />
+                {isTelegramLoading && (
+                  <div style={{
+                    position: "absolute",
+                    inset: 0,
+                    borderRadius: 14,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.65rem",
+                    background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
+                    color: "#fff",
+                    fontSize: "0.95rem",
+                    fontWeight: 600,
+                    fontFamily: appleFont,
+                    boxShadow: "0 4px 16px rgba(42,171,238,0.3)",
+                  }}>
+                    <Loader2 size={18} className="animate-spin" />
+                    Авторизация...
+                  </div>
+                )}
+              </div>
             ) : (
               <div style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
