@@ -194,7 +194,6 @@ const AgentSVG = () => (
 
 declare global {
   interface Window {
-    onTelegramAuth?: (user: any) => void;
     YaAuthSuggest?: any;
   }
 }
@@ -224,8 +223,21 @@ export default function AuthPage() {
   }, []);
 
   useEffect(() => {
-    if (!botUsername) return;
-    window.onTelegramAuth = async (user: any) => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error");
+    if (err) {
+      const messages: Record<string, string> = {
+        telegram_invalid: "Не удалось подтвердить вход через Telegram",
+        telegram_not_configured: "Telegram авторизация не настроена на сервере",
+      };
+      toast({ title: "Ошибка", description: messages[err] || "Ошибка авторизации", variant: "destructive" });
+      window.history.replaceState({}, "", "/auth");
+    }
+  }, [toast]);
+
+  // After Telegram OAuth, user returns to /auth#tgAuthResult=<base64json>
+  useEffect(() => {
+    const finishTelegram = async (user: Record<string, any>) => {
       setIsTelegramLoading(true);
       try {
         const res = await fetch("/api/auth/telegram", {
@@ -240,23 +252,37 @@ export default function AuthPage() {
         setLocation("/dashboard");
       } catch (err: any) {
         toast({ title: "Ошибка", description: err.message, variant: "destructive" });
-      } finally {
         setIsTelegramLoading(false);
       }
     };
-    const existingScript = document.getElementById("telegram-widget");
-    if (existingScript) existingScript.remove();
-    const script = document.createElement("script");
-    script.id = "telegram-widget";
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.setAttribute("data-telegram-login", botUsername);
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-onauth", "onTelegramAuth(user)");
-    script.setAttribute("data-request-access", "write");
-    script.async = true;
-    document.getElementById("telegram-widget-container")?.appendChild(script);
-    return () => { document.getElementById("telegram-widget")?.remove(); delete window.onTelegramAuth; };
-  }, [botUsername, setLocation, toast]);
+
+    const hash = window.location.hash || "";
+    const match = hash.match(/[#&?]tgAuthResult=([A-Za-z0-9\-_=\.]+)/);
+    if (!match) return;
+
+    try {
+      let raw = match[1].replace(/-/g, "+").replace(/_/g, "/");
+      const pad = raw.length % 4;
+      if (pad > 1) raw += new Array(5 - pad).join("=");
+      const user = JSON.parse(atob(raw));
+      window.history.replaceState({}, "", "/auth");
+      if (user && typeof user === "object" && user.hash) {
+        void finishTelegram(user);
+      } else {
+        toast({ title: "Ошибка", description: "Не удалось получить данные Telegram", variant: "destructive" });
+      }
+    } catch {
+      window.history.replaceState({}, "", "/auth");
+      toast({ title: "Ошибка", description: "Не удалось разобрать ответ Telegram", variant: "destructive" });
+    }
+  }, [setLocation, toast]);
+
+  const handleTelegramAuth = () => {
+    if (isTelegramLoading) return;
+    setIsTelegramLoading(true);
+    // Full-page redirect — works without loading telegram-widget.js or clicking cross-origin iframes.
+    window.location.href = "/api/auth/telegram/start";
+  };
 
   const handleYandexAuth = () => {
     if (!yandexClientId || isYandexLoading) return;
@@ -296,8 +322,14 @@ export default function AuthPage() {
 
     window.addEventListener("message", onMessage);
 
+    if (!popup) {
+      window.removeEventListener("message", onMessage);
+      window.location.href = authUrl;
+      return;
+    }
+
     const closedCheck = setInterval(() => {
-      if (popup?.closed) {
+      if (popup.closed) {
         clearInterval(closedCheck);
         window.removeEventListener("message", onMessage);
         setIsYandexLoading(false);
@@ -353,23 +385,7 @@ export default function AuthPage() {
               <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#1D1D1F", letterSpacing: "-0.01em" }}>Авторизация</span>
             </div>
 
-            {/* Hidden Telegram widget — iframe lives here, off-screen */}
-            <div
-              id="telegram-widget-container"
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                top: -9999,
-                left: -9999,
-                opacity: 0,
-                pointerEvents: "none",
-                overflow: "hidden",
-                width: 1,
-                height: 1,
-              }}
-            />
-
-            {/* Telegram button area — our custom UI */}
+            {/* Telegram — real button → server OAuth redirect (no cross-origin iframe click) */}
             {isTelegramLoading ? (
               <div style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
@@ -384,18 +400,9 @@ export default function AuthPage() {
               </div>
             ) : botUsername ? (
               <button
+                type="button"
                 data-testid="button-telegram-login"
-                onClick={() => {
-                  const iframe = document.querySelector<HTMLIFrameElement>("#telegram-widget-container iframe");
-                  if (iframe) {
-                    iframe.style.pointerEvents = "auto";
-                    iframe.contentWindow?.document.querySelector<HTMLElement>("button, a, [role=button]")?.click();
-                    iframe.style.pointerEvents = "none";
-                  } else {
-                    const btn = document.querySelector<HTMLElement>("#telegram-widget-container .tgme_widget_login_button, #telegram-widget-container a");
-                    if (btn) btn.click();
-                  }
-                }}
+                onClick={handleTelegramAuth}
                 style={{
                   width: "100%",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
@@ -422,7 +429,6 @@ export default function AuthPage() {
                 onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0) scale(0.98)"; }}
                 onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px) scale(1)"; }}
               >
-                {/* Telegram plane icon */}
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
                   <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z" fill="white"/>
                 </svg>
