@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -1827,12 +1827,27 @@ window.__PROJECT_ID__=${projectId};
 
   const applyInPlacePreviewMode = useCallback((mode: "view" | "edit" | "selector") => {
     const iframe = iframeRef.current;
+    const win = iframe?.contentWindow;
     const doc = iframe?.contentDocument;
-    if (!doc?.body) return;
+    if (!doc?.body || !win) return;
+
+    // Hard-lock scroll so enabling tools never jumps to hero / top.
+    const y = win.scrollY || doc.documentElement.scrollTop || doc.body.scrollTop || 0;
+    const lockScroll = () => {
+      try { win.scrollTo(0, y); } catch {}
+    };
+    const prevBehavior = doc.documentElement.style.scrollBehavior;
+    doc.documentElement.style.scrollBehavior = "auto";
+    doc.documentElement.style.overflowAnchor = "none";
 
     clearInPlacePreviewTools(doc);
+    lockScroll();
 
-    if (mode === "view") return;
+    if (mode === "view") {
+      doc.documentElement.style.scrollBehavior = prevBehavior;
+      lockScroll();
+      return;
+    }
 
     if (mode === "edit") {
       const style = doc.createElement("style");
@@ -1846,6 +1861,9 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       const script = doc.createElement("script");
       script.setAttribute("data-nz-editor", "1");
       script.textContent = `(function(){
+  var lockedY=${Math.round(y)};
+  function keepScroll(){try{window.scrollTo(0,lockedY);}catch(e){}}
+  keepScroll();
   function getCleanHtml(){
     var clone=document.documentElement.cloneNode(true);
     var eds=clone.querySelectorAll('[data-nz-editor],[data-nz-leads],[data-nz-stickyfix],[data-nz-preloader-kill],[data-nz-selector]');
@@ -1879,6 +1897,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       el.addEventListener('mouseenter',function(){showTip(el,'Клик для редактирования')});
       el.addEventListener('mouseleave',hideTip);
       el.addEventListener('focus',function(){
+        keepScroll();
         var cs=window.getComputedStyle(el);
         if(cs.webkitBackgroundClip==='text'||cs.backgroundClip==='text'){
           savedBg=el.style.background||'';savedClip=el.style.webkitBackgroundClip||el.style.backgroundClip||'';savedFill=el.style.webkitTextFillColor||'';
@@ -1905,6 +1924,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     if(el.children.length>2)return;
     makeEditable(el);
   });
+  keepScroll();
   document.querySelectorAll('img').forEach(function(img){
     img.style.cursor='pointer';
     img.addEventListener('mouseenter',function(){showTip(img,'Клик для замены')});
@@ -1948,8 +1968,17 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       window.parent.postMessage({type:'nz-text-edit',html:getCleanHtml()},'*');
     }
   });
+  keepScroll();
+  requestAnimationFrame(keepScroll);
+  setTimeout(keepScroll,0);
+  setTimeout(keepScroll,50);
 })();`;
       doc.body.appendChild(script);
+      lockScroll();
+      requestAnimationFrame(lockScroll);
+      setTimeout(lockScroll, 0);
+      setTimeout(lockScroll, 50);
+      doc.documentElement.style.scrollBehavior = prevBehavior;
       return;
     }
 
@@ -1965,6 +1994,9 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     const script = doc.createElement("script");
     script.setAttribute("data-nz-selector", "1");
     script.textContent = `(function(){
+  var lockedY=${Math.round(y)};
+  function keepScroll(){try{window.scrollTo(0,lockedY);}catch(e){}}
+  keepScroll();
   var hovered=null,selected=null,label=null;
   var allLinks=document.querySelectorAll('a[href]');
   for(var i=0;i<allLinks.length;i++){allLinks[i].setAttribute('data-nz-href',allLinks[i].getAttribute('href'));allLinks[i].removeAttribute('href')}
@@ -2021,8 +2053,17 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       }
     }
   });
+  keepScroll();
+  requestAnimationFrame(keepScroll);
+  setTimeout(keepScroll,0);
+  setTimeout(keepScroll,50);
 })();`;
     doc.body.appendChild(script);
+    lockScroll();
+    requestAnimationFrame(lockScroll);
+    setTimeout(lockScroll, 0);
+    setTimeout(lockScroll, 50);
+    doc.documentElement.style.scrollBehavior = prevBehavior;
   }, [clearInPlacePreviewTools]);
 
   // Keep legacy name used by generation blob updates — view-only, no mode-dependent remount.
@@ -2113,23 +2154,19 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     if (mode === "edit") {
       if (editMode) flushPendingEditHtml();
       const next = !editMode;
-      setEditMode(next);
+      // Apply tools first (sync) so React re-render cannot remount before injection.
       if (next) setSelectorMode(false);
-      // Apply after React paints button state — no srcDoc change, scroll stays put.
-      requestAnimationFrame(() => {
-        applyInPlacePreviewMode(next ? "edit" : "view");
-      });
+      applyInPlacePreviewMode(next ? "edit" : "view");
+      setEditMode(next);
     } else {
       if (selectorMode) flushPendingEditHtml();
       const next = !selectorMode;
-      setSelectorMode(next);
       if (next) {
         setEditMode(false);
         setSelectedElement(null);
       }
-      requestAnimationFrame(() => {
-        applyInPlacePreviewMode(next ? "selector" : "view");
-      });
+      applyInPlacePreviewMode(next ? "selector" : "view");
+      setSelectorMode(next);
     }
   }, [editMode, selectorMode, flushPendingEditHtml, applyInPlacePreviewMode]);
 
@@ -2139,6 +2176,12 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     else if (selectorModeRef.current) applyInPlacePreviewMode("selector");
     else applyInPlacePreviewMode("view");
   }, [applyInPlacePreviewMode]);
+
+  // Freeze iframe HTML identity — never rebuild from edit/selector mode.
+  const previewSrcDoc = useMemo(() => {
+    if (isGenerating) return getPreviewCode(project?.generatedCode || "") || "";
+    return getPreviewCode(currentCode) || "";
+  }, [isGenerating, project?.generatedCode, currentCode, getPreviewCode]);
 
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
 
@@ -2912,7 +2955,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
             ) : currentCode || isGenerating ? (
               <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
                  <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { e.preventDefault(); e.stopPropagation(); iframeRef.current?.contentWindow?.postMessage({ type: 'nz-wheel', dx: e.deltaX, dy: e.deltaY }, '*'); }}>
-                    <iframe key={activeFile} ref={iframeRef} srcDoc={isGenerating ? (getPreviewCode(project?.generatedCode || "") || "") : getPreviewCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" onLoad={handlePreviewLoad} />
+                    <iframe key={activeFile} ref={iframeRef} srcDoc={previewSrcDoc} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" onLoad={handlePreviewLoad} />
                  </div>
                  {isGenerating && (
                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style={{ background: 'rgba(11,15,25,0.92)', backdropFilter: 'blur(4px)' }}>
