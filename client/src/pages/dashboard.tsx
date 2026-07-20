@@ -259,7 +259,7 @@ export default function DashboardPage() {
   const [seoEnabled, setSeoEnabled] = useState(false);
   const [creatingSeo, setCreatingSeo] = useState(false);
   const [leadFormEnabled, setLeadFormEnabled] = useState(true);
-  const [agentVersion, setAgentVersion] = useState<"v1" | "v2">("v1");
+  const [agentVersion, setAgentVersion] = useState<"v1" | "v2">("v2");
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImages, setPhotoImages] = useState<Array<{ base64: string; mimeType: string; preview: string }>>([]);
@@ -393,7 +393,7 @@ export default function DashboardPage() {
         ? `&seoh1=${encodeURIComponent(seoH1.trim())}&seoh2s=${encodeURIComponent(seoH2s.filter(h => h.trim()).join(","))}`
         : "";
       const leadFormParam = leadFormEnabled ? "" : "&leadform=0";
-      const agentParam = agentVersion === "v2" ? "&agent=v2" : "";
+      const agentParam = `&agent=${agentVersion}`;
       const mockupParam = mockupUrls.length > 0
         ? `&mockup=1&mockupUrls=${encodeURIComponent(mockupUrls.join(","))}`
         : "";

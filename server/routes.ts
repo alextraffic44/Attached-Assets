@@ -10,7 +10,12 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { rateLimit, userOrIpKey } from "./rate-limit";
+<<<<<<< HEAD
 import { assertPublicHttpUrl, safeFetch } from "./url-guard";
+=======
+import { assertPublicHttpUrl } from "./url-guard";
+import { isPublishableProjectFile } from "@shared/project-files";
+>>>>>>> origin/cursor/hide-craft-md-default-v2-1645
 import { domainToASCII } from "node:url";
 import path from "path";
 import fs from "fs";
@@ -5244,7 +5249,11 @@ ${designAnalysis}
       const files = await storage.getProjectFiles(project.id);
       const allPages = [
         { filename: "index.html", code: project.generatedCode || "" },
+<<<<<<< HEAD
         ...files.filter(f => f.filename !== "index.html" && isHtmlPage(f.filename)),
+=======
+        ...files.filter(f => isPublishableProjectFile(f.filename)),
+>>>>>>> origin/cursor/hide-craft-md-default-v2-1645
       ];
 
       const indexCode = project.generatedCode || "";
@@ -5252,7 +5261,7 @@ ${designAnalysis}
       if (!navMatch) return res.json({ success: true, message: "Nav not found" });
 
       const pageTitles: Record<string, string> = req.body?.pageTitles || {};
-      const subPages = files.filter(f => f.filename !== "index.html");
+      const subPages = files.filter(f => isPublishableProjectFile(f.filename));
 
       // ── Ghost cleanup: earlier buggy syncs added a raw <a href="index.html">Index</a>
       //    link (index treated as a "missing page"). Strip any such ghost from EVERY page.
@@ -5491,9 +5500,13 @@ ${designAnalysis}
       files.push({ filename: "index.html", content: mainHtml });
 
       for (const f of extraFiles) {
+<<<<<<< HEAD
         if (f.filename === "index.html") continue;
         // Agent memory / non-HTML project docs must not ship to the public bucket
         if (f.filename === CRAFT_MD_FILENAME || !isHtmlPage(f.filename)) continue;
+=======
+        if (!isPublishableProjectFile(f.filename)) continue;
+>>>>>>> origin/cursor/hide-craft-md-default-v2-1645
         let code = f.code;
         for (const img of projectImages) {
           code = code.replace(new RegExp(`\\{\\{IMG:${img.name}\\}\\}`, "g"), img.url);
