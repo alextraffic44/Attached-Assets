@@ -1720,25 +1720,41 @@ window.__PROJECT_ID__=${projectId};
   },true);
 })();
 </script>`;
+    // Preview-only: heal overflow:hidden→clip so position:sticky scroll-anims work.
+    // Also re-run after preloader kill — removeProperty('overflow') clears overflow-x/y
+    // longhands and used to re-break sticky, showing a tall empty black runway under the hero.
     const stickyFixScript = `<script data-nz-stickyfix>
 (function(){
+  function heal(el){
+    if(!el||el.nodeType!==1)return;
+    try{
+      var cs=getComputedStyle(el);
+      if(cs.overflowX==='hidden')el.style.setProperty('overflow-x','clip','important');
+      if(cs.overflowY==='hidden')el.style.setProperty('overflow-y','clip','important');
+    }catch(e){}
+  }
   function fixSticky(){
     var s=document.querySelectorAll('[data-craft-scrollanim]');
     if(!s.length)return;
     for(var i=0;i<s.length;i++){
       var el=s[i];
-      while(el&&el.nodeType===1&&el!==document.documentElement){
-        var cs=getComputedStyle(el);
-        if(cs.overflowX==='hidden')el.style.overflowX='clip';
-        if(cs.overflowY==='hidden')el.style.overflowY='clip';
+      while(el&&el.nodeType===1){
+        heal(el);
+        if(el===document.documentElement)break;
         el=el.parentElement;
       }
     }
-    var de=document.documentElement,b=document.body;
-    [de,b].forEach(function(n){if(!n)return;var c=getComputedStyle(n);if(c.overflowX==='hidden')n.style.overflowX='clip';if(c.overflowY==='hidden')n.style.overflowY='clip';});
+    heal(document.documentElement);
+    heal(document.body);
   }
-  if(document.readyState!=='loading')fixSticky();
-  else document.addEventListener('DOMContentLoaded',fixSticky);
+  window.__nzFixSticky=fixSticky;
+  function boot(){
+    fixSticky();
+    [0,50,200,600,1500,3200].forEach(function(ms){setTimeout(fixSticky,ms);});
+  }
+  if(document.readyState!=='loading')boot();
+  else document.addEventListener('DOMContentLoaded',boot);
+  window.addEventListener('load',fixSticky);
 })();
 </script>`;
     const preloaderKillScript = `<script data-nz-preloader-kill>
@@ -1750,6 +1766,21 @@ window.__PROJECT_ID__=${projectId};
     '#loadScreen','.load-screen','.loading-screen',
     '#loadingOverlay','.loadingOverlay','#pageLoader','.pageLoader',
     '[data-preloader]','[data-loader]','.preloading','.page-loading'];
+  function unlockOverflow(el){
+    if(!el||!el.style)return;
+    try{
+      var ox=(el.style.overflowX||'').toLowerCase();
+      var oy=(el.style.overflowY||'').toLowerCase();
+      var o=(el.style.overflow||'').toLowerCase();
+      // Keep sticky heal (clip). Only clear preloader scroll-locks (hidden).
+      if(ox==='clip'||oy==='clip'||o==='clip')return;
+      if(o==='hidden'||ox==='hidden'||oy==='hidden'){
+        el.style.removeProperty('overflow');
+        el.style.removeProperty('overflow-x');
+        el.style.removeProperty('overflow-y');
+      }
+    }catch(e){}
+  }
   function kill(){
     for(var i=0;i<SELS.length;i++){
       try{
@@ -1765,7 +1796,9 @@ window.__PROJECT_ID__=${projectId};
     }
     try{document.body.classList.remove('loading','preloading','is-loading','page-loading','js-loading');}catch(e){}
     try{document.documentElement.classList.remove('loading','preloading','is-loading','page-loading','js-loading');}catch(e){}
-    try{document.body.style.removeProperty('overflow');document.documentElement.style.removeProperty('overflow');}catch(e){}
+    unlockOverflow(document.body);
+    unlockOverflow(document.documentElement);
+    try{if(typeof window.__nzFixSticky==='function')window.__nzFixSticky();}catch(e){}
   }
   function go(){
     try{window.dispatchEvent(new Event('load'));}catch(e){}
@@ -1776,7 +1809,11 @@ window.__PROJECT_ID__=${projectId};
   else go();
 })();
 <\/script>`;
-    return code.replace('</head>', leadScript + stickyFixScript + preloaderKillScript + '</head>');
+    const previewInject = leadScript + stickyFixScript + preloaderKillScript;
+    if (/<\/head>/i.test(code)) return code.replace(/<\/head>/i, previewInject + '</head>');
+    if (/<\/body>/i.test(code)) return code.replace(/<\/body>/i, previewInject + '</body>');
+    if (/<\/html>/i.test(code)) return code.replace(/<\/html>/i, previewInject + '</html>');
+    return code + previewInject;
   }, [projectId]);
 
   const getEditableCode = useCallback((code: string) => {
