@@ -131,16 +131,18 @@ function TourTooltip({ steps, currentStep, onNext, onPrev, onClose }: {
       let top = 0;
       let left = 0;
       let arrowSide = "top";
+      const preferBottom = window.innerWidth < 640 && (step.position === "left" || step.position === "right");
+      const effectivePos = preferBottom ? "bottom" : step.position;
 
-      if (step.position === "bottom") {
+      if (effectivePos === "bottom") {
         top = rect.bottom + gap;
         left = rect.left + rect.width / 2 - tooltipW / 2;
         arrowSide = "top";
-      } else if (step.position === "top") {
+      } else if (effectivePos === "top") {
         top = rect.top - tooltipH - gap;
         left = rect.left + rect.width / 2 - tooltipW / 2;
         arrowSide = "bottom";
-      } else if (step.position === "left") {
+      } else if (effectivePos === "left") {
         top = rect.top + rect.height / 2 - tooltipH / 2;
         left = rect.left - tooltipW - gap;
         arrowSide = "right";
@@ -437,9 +439,25 @@ export default function DashboardPage() {
 
   const appleFont = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
   const isMobile = useIsMobile();
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isMobile || !showProfile) return;
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setShowProfile(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
+  }, [isMobile, showProfile]);
 
   return (
-    <div className="min-h-screen relative overflow-hidden" style={{ background: '#FBFBFD', fontFamily: appleFont, display: 'flex', flexDirection: 'column' }}>
+    <div className="min-h-screen relative overflow-x-hidden" style={{ background: '#FBFBFD', fontFamily: appleFont, display: 'flex', flexDirection: 'column' }}>
       <style dangerouslySetInnerHTML={{ __html: `
         :root { --rainbow-grad: linear-gradient(90deg, #FF4242, #A5FF42, #42A5FF, #42E6FF, #B742FF, #FF4242); }
         @keyframes db-rainbow { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
@@ -550,8 +568,7 @@ export default function DashboardPage() {
               <line x1="15" y1="20" x2="17" y2="20" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
               <path d="M8 26 h16 M10 28 h12" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
             </svg>
-            <span className="hidden sm:inline" style={{ fontWeight: 700, fontSize: '1.1rem', letterSpacing: '-0.03em', color: '#1D1D1F' }}>Craft AI</span>
-            <span className="sm:hidden" style={{ fontWeight: 700, fontSize: '0.95rem', letterSpacing: '-0.03em', color: '#1D1D1F' }}>Craft</span>
+            <span className="text-[0.95rem] sm:text-[1.1rem]" style={{ fontWeight: 700, letterSpacing: '-0.03em', color: '#1D1D1F' }}>Craft AI</span>
           </div>
 
           {/* Right controls */}
@@ -599,13 +616,17 @@ export default function DashboardPage() {
 
             {/* Profile avatar button */}
             <div
+              ref={profileMenuRef}
               style={{ position: 'relative' }}
-              onMouseEnter={() => setShowProfile(true)}
-              onMouseLeave={() => setShowProfile(false)}
+              onMouseEnter={!isMobile ? () => setShowProfile(true) : undefined}
+              onMouseLeave={!isMobile ? () => setShowProfile(false) : undefined}
             >
               <button
                 data-testid="button-profile"
-                onClick={() => setLocation('/profile')}
+                onClick={() => {
+                  if (isMobile) setShowProfile(v => !v);
+                  else setLocation('/profile');
+                }}
                 style={{ width: 36, height: 36, borderRadius: '50%', border: '2px solid rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', background: 'linear-gradient(135deg,hsl(27deg 93% 60%),#00a6ff)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}
               >
                 {user?.avatarUrl ? (
@@ -633,7 +654,7 @@ export default function DashboardPage() {
                     ].map((item, i) => (
                       <button
                         key={i}
-                        onClick={item.onClick}
+                        onClick={() => { setShowProfile(false); item.onClick(); }}
                         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.55rem 0.9rem', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 500, color: '#1D1D1F', textAlign: 'left', fontFamily: appleFont }}
                         onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.04)')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -644,7 +665,7 @@ export default function DashboardPage() {
                     ))}
                     <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', margin: '0.35rem 0' }} />
                     <button
-                      onClick={async () => { await logout(); setLocation("/auth"); }}
+                      onClick={async () => { setShowProfile(false); await logout(); setLocation("/auth"); }}
                       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.55rem 0.9rem', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 500, color: '#FF3B30', textAlign: 'left', fontFamily: appleFont }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,59,48,0.05)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -671,7 +692,7 @@ export default function DashboardPage() {
               Ваши проекты
             </h1>
           </div>
-          <div className="flex gap-2 sm:gap-2.5 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5 w-full sm:w-auto">
             <button
               disabled={creatingSeo}
               onClick={async () => {
@@ -687,7 +708,7 @@ export default function DashboardPage() {
                   setCreatingSeo(false);
                 }
               }}
-              className="flex flex-1 sm:flex-none items-center justify-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+              className="flex w-full sm:w-auto items-center justify-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
               style={{ background: 'linear-gradient(135deg,#1a1a3e,#312e81)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 16, padding: isMobile ? '0.75rem 1rem' : '0.85rem 1.4rem', fontSize: isMobile ? '0.8rem' : '0.88rem', fontWeight: 600, cursor: creatingSeo ? 'wait' : 'pointer', letterSpacing: '-0.01em', opacity: creatingSeo ? 0.7 : 1 }}
               title="Создать SEO-сайт из ключевых слов"
             >
@@ -712,12 +733,12 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : userProjects.length === 0 ? (
-          <GlassCard className="flex flex-col items-center justify-center py-32 text-center space-y-8">
-            <div className="w-24 h-24 rounded-[2rem] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>
-              <FolderOpen className="w-12 h-12" style={{ color: 'rgba(0,0,0,0.12)' }} />
+          <GlassCard className="flex flex-col items-center justify-center py-16 sm:py-32 text-center space-y-6 sm:space-y-8">
+            <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-[1.5rem] sm:rounded-[2rem] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>
+              <FolderOpen className="w-8 h-8 sm:w-12 sm:h-12" style={{ color: 'rgba(0,0,0,0.12)' }} />
             </div>
             <div className="space-y-3">
-              <h2 style={{ fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.03em', color: '#1D1D1F' }}>Пока здесь пусто</h2>
+              <h2 className="text-xl sm:text-[1.8rem]" style={{ fontWeight: 700, letterSpacing: '-0.03em', color: '#1D1D1F' }}>Пока здесь пусто</h2>
               <p style={{ color: '#86868B', maxWidth: 360, margin: '0 auto', fontSize: '1rem', lineHeight: 1.6 }}>Создайте свой первый проект, используя возможности искусственного интеллекта.</p>
             </div>
             <button onClick={() => { resetCreateState(); setShowCreateModal(true); }} className="transition-all hover:opacity-80" style={{ background: '#1D1D1F', color: '#fff', border: 'none', borderRadius: 14, padding: '0.85rem 2rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer' }}>
@@ -773,7 +794,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <button
-                      className="opacity-0 group-hover:opacity-100 transition-all duration-300"
+                      className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-300"
                       disabled={deleteMutation.isPending && deleteMutation.variables === project.id}
                       onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(project.id); }}
                       style={{ background: 'rgba(255,59,48,0.08)', border: 'none', borderRadius: 10, padding: '0.4rem', cursor: 'pointer', color: '#FF3B30', flexShrink: 0 }}
@@ -1204,7 +1225,7 @@ export default function DashboardPage() {
                                 </div>
                               </button>
                               <div className="rounded-xl p-2.5" data-tour="photo-ai-gen" style={{ background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.15)' }}>
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2">
                                   <input
                                     type="text"
                                     data-testid="input-mockup-prompt"
@@ -1267,7 +1288,7 @@ export default function DashboardPage() {
                                         setMockupGenerating(false);
                                       }
                                     }}
-                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
+                                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
                                     style={{ background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)', cursor: mockupGenerating ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}
                                   >
                                     {mockupGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
@@ -1286,12 +1307,12 @@ export default function DashboardPage() {
                         <button type="button" onClick={() => setAgentVersion("v1")}
                           className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all"
                           style={{ background: agentVersion === "v1" ? '#fff' : 'transparent', color: agentVersion === "v1" ? '#1d1d1f' : '#86868B', boxShadow: agentVersion === "v1" ? '0 1px 4px rgba(0,0,0,0.12)' : 'none', cursor: 'pointer' }}>
-                          V1 · Claude Sonnet 5
+                          {isMobile ? 'V1' : 'V1 · Claude Sonnet 5'}
                         </button>
                         <button type="button" onClick={() => setAgentVersion("v2")}
                           className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all"
                           style={{ background: agentVersion === "v2" ? 'linear-gradient(135deg,#4f46e5,#7c3aed)' : 'transparent', color: agentVersion === "v2" ? '#fff' : '#86868B', boxShadow: agentVersion === "v2" ? '0 1px 6px rgba(99,102,241,0.4)' : 'none', cursor: 'pointer' }}>
-                          ✦ V2 · Gemini Flash
+                          {isMobile ? '✦ V2' : '✦ V2 · Gemini Flash'}
                         </button>
                       </div>
 
