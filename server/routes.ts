@@ -2147,15 +2147,7 @@ const WAVESPEED_API_KEY = process.env.WAVESPEED_API_KEY;
 const WAVESPEED_3D_URL = "https://api.wavespeed.ai/api/v3/wavespeed-ai/hunyuan3d-v3/image-to-3d";
 const MODEL_3D_COST = 100;
 
-const PLAN_PUBLISH_LIMITS: Record<string, number> = {
-  bronze: 1,
-  silver: 2,
-  gold: 3,
-  platinum: 5,
-  free: 0,
-};
-
-const DAILY_PUBLISH_COST = 20;
+const DAILY_PUBLISH_COST = 35;
 
 const SYSTEM_PROMPT = `Ты — креативный frontend-разработчик мирового уровня. Генерируй полные HTML-документы.
 
@@ -4924,24 +4916,7 @@ ${designAnalysis}
 
 
       if (user.credits < DAILY_PUBLISH_COST) {
-        return res.status(403).json({ message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 20 токенов/сайт." });
-      }
-
-      // Enforce per-plan published-site limit (only for a NEW publish, not re-publishing this project).
-      const alreadyLive = project.publishStatus === "published" || project.publishStatus === "publishing" || project.publishStatus === "suspended";
-      if (!alreadyLive) {
-        const planLimit = PLAN_PUBLISH_LIMITS[user.plan] ?? PLAN_PUBLISH_LIMITS.bronze;
-        const userProjects = await storage.getProjectsByUser(user.id);
-        const liveCount = userProjects.filter(
-          (p) => p.id !== projectId && (p.publishStatus === "published" || p.publishStatus === "publishing" || p.publishStatus === "suspended"),
-        ).length;
-        if (liveCount >= planLimit) {
-          return res.status(403).json({
-            message: planLimit === 0
-              ? "На вашем тарифе публикация сайтов недоступна. Обновите тариф, чтобы опубликовать сайт."
-              : `Достигнут лимит опубликованных сайтов для вашего тарифа (${planLimit}). Снимите с публикации другой сайт или обновите тариф.`,
-          });
-        }
+        return res.status(403).json({ message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 35 токенов/сайт." });
       }
 
       await storage.updateProject(projectId, { publishStatus: "publishing" });
