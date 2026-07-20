@@ -13,7 +13,6 @@
   function finishViaOpener() {
     try {
       if (window.opener && !window.opener.closed) {
-        // Same-origin only — never post the token URL to "*".
         var target = window.location.origin;
         window.opener.postMessage({ type: "yandex_oauth", hash: hash }, target);
         window.close();
@@ -25,7 +24,6 @@
 
   if (finishViaOpener()) return;
 
-  // Full-page / same-tab fallback when popup opener is unavailable.
   try {
     if (hash && hash.indexOf("access_token") !== -1) {
       sessionStorage.setItem("yandex_oauth_hash", hash);
