@@ -73,6 +73,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/** Temporarily hidden in the toolbar — re-enable when Hunyuan3D generation ships. */
+const ENABLE_3D_GENERATION = false;
+
 const SkeuoPanel = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
   <div className={`bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm rounded-2xl overflow-hidden flex flex-col ${className}`}>
     {children}
@@ -2401,6 +2404,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                   <span className="absolute -top-1.5 -right-1 bg-primary text-white text-[9px] font-bold px-1.5 min-w-[18px] h-[18px] rounded-full flex items-center justify-center">{projectImages.length}</span>
                 )}
               </button>
+              {ENABLE_3D_GENERATION && (
               <button
                 onClick={() => { setGen3dOpen(true); setGen3dStatus("idle"); setGen3dResultUrl(""); setGen3dError(""); setGen3dImagePreview(""); setGen3dImageUrl(""); }}
                 data-testid="button-3d-library"
@@ -2410,6 +2414,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <Box className="w-4 h-4" />
                 3D
               </button>
+              )}
               <button
                 onClick={() => { setVideoAnimOpen(true); setVideoAnimStep("upload"); setVideoAnimFrames([]); setVideoAnimError(""); setVideoAnimProgress(""); }}
                 data-testid="button-video-anim"
