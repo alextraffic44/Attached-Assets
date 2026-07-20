@@ -513,8 +513,7 @@ export default function DashboardPage() {
               <line x1="15" y1="20" x2="17" y2="20" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
               <path d="M8 26 h16 M10 28 h12" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
             </svg>
-            <span className="hidden sm:inline" style={{ fontWeight: 700, fontSize: '1.1rem', letterSpacing: '-0.03em', color: '#1D1D1F' }}>Craft AI</span>
-            <span className="sm:hidden" style={{ fontWeight: 700, fontSize: '0.95rem', letterSpacing: '-0.03em', color: '#1D1D1F' }}>Craft</span>
+            <span className="text-[0.95rem] sm:text-[1.1rem]" style={{ fontWeight: 700, letterSpacing: '-0.03em', color: '#1D1D1F' }}>Craft AI</span>
           </div>
 
           {/* Right controls */}
