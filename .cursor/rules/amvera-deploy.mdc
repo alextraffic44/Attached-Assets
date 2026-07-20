@@ -1,0 +1,11 @@
+---
+description: Amvera production deploy must come from merged main only
+alwaysApply: true
+---
+
+# Amvera deploy policy
+
+- Never deploy Craft AI to Amvera from a feature branch that is not fully merged into `main`.
+- After a successful feature, **merge the PR into `main` first**, then run `python3 scripts/deploy-amvera.py` from `main`.
+- Prefer uploading only files changed by the merged commit range; when in doubt, deploy the full hot-file set from `main` via the script.
+- Do not leave production-only changes on Amvera that are absent from `main` — that is what caused prior “rollbacks”.
