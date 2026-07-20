@@ -125,12 +125,11 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 - Yandex helper: `server/yandex-deploy.ts` (`deployFilesToBucket`, `deployToYandex(projectId, files, customDomain?)`, `unpublishFromYandex`, `addCustomDomain`, `removeCustomDomain`, `checkDomainStatus`, `deleteProjectFromYandex`)
 
 ## Publish Limits & Billing
-- Plan limits: bronze=1 site, silver=2, gold=3, platinum=5
-- Publish endpoint checks current published count vs plan limit before allowing new publish
-- Daily cost: 20 tokens per published site, charged at 03:00 via setInterval/setTimeout cron
+- No per-plan limit on number of published sites (all tariffs can publish unlimited sites)
+- Daily cost: 35 tokens per published site, charged at 03:00 via setInterval/setTimeout cron
 - If user has insufficient balance: sites are suspended (unpublished from Yandex Cloud with placeholder page)
 - Suspended sites can be re-published when user tops up balance
-- `PLAN_PUBLISH_LIMITS` and `DAILY_PUBLISH_COST` constants in server/routes.ts
+- `DAILY_PUBLISH_COST` constant in server/routes.ts
 
 ## Tech Stack Details
 - Auth: express-session + passport-local + scrypt hashing

@@ -1404,10 +1404,10 @@ export default function DashboardPage() {
             <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)', marginTop: '0.4rem', marginBottom: '2rem' }}>Выберите подходящий тариф для пополнения токенов</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
               {[
-                { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["1 сайт", "10 итераций редактирования"] },
-                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["2 сайта", "19 итераций редактирования"] },
-                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["3 сайта", "45 итераций редактирования", "Премиум шаблоны"] },
-                { price: 9990, tokens: 10000, label: "Ультра",  popular: true,  desc: ["5 сайтов", "100 итераций редактирования", "Премиум шаблоны"] },
+                { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["Публикация без лимита", "10 итераций редактирования"] },
+                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["Публикация без лимита", "19 итераций редактирования"] },
+                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["Публикация без лимита", "45 итераций редактирования", "Премиум шаблоны"] },
+                { price: 9990, tokens: 10000, label: "Ультра",  popular: true,  desc: ["Публикация без лимита", "100 итераций редактирования", "Премиум шаблоны"] },
               ].map((plan) => (
                 <div key={plan.price} style={{ position: 'relative' }}>
                   {plan.popular && (
