@@ -23,9 +23,22 @@ const SVG_CSS = `
   }
   .auth-left { flex: 0 0 50% !important; }
   .auth-right { flex: 0 0 50% !important; }
-  #telegram-widget-container iframe {
+  /* Official Telegram widget — never scale/transform the iframe (breaks hit-testing). */
+  #telegram-login-widget {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 48px;
+  }
+  #telegram-login-widget iframe {
     border: 0 !important;
-    background: transparent !important;
+    margin: 0 auto !important;
+    max-width: 100% !important;
+    transform: none !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    position: static !important;
   }
   @media (max-width: 768px) {
     .auth-left { flex: 0 0 100% !important; min-height: 100vh; padding: 2rem 1.5rem !important; }
@@ -113,13 +126,41 @@ const YandexIcon = () => (
   </svg>
 );
 
+const WIDGET_SCRIPT_ID = "telegram-login-widget-script";
+
+function mountOfficialTelegramWidget(
+  container: HTMLElement,
+  botUsername: string,
+  onAuthCallbackName: string,
+): HTMLScriptElement {
+  container.innerHTML = "";
+  document.getElementById(WIDGET_SCRIPT_ID)?.remove();
+
+  const script = document.createElement("script");
+  script.id = WIDGET_SCRIPT_ID;
+  // Cache-bust after deploys so a stale telegram.org script cannot leave a dead iframe.
+  script.src = `https://telegram.org/js/telegram-widget.js?22&_=${Date.now()}`;
+  script.async = true;
+  script.setAttribute("data-telegram-login", botUsername);
+  script.setAttribute("data-size", "large");
+  script.setAttribute("data-radius", "14");
+  script.setAttribute("data-request-access", "write");
+  script.setAttribute("data-userpic", "false");
+  script.setAttribute("data-lang", "ru");
+  script.setAttribute("data-onauth", `${onAuthCallbackName}(user)`);
+  container.appendChild(script);
+  return script;
+}
+
 export default function AuthPage() {
   const [isTelegramLoading, setIsTelegramLoading] = useState(false);
   const [isYandexLoading, setIsYandexLoading] = useState(false);
   const [telegramWidgetReady, setTelegramWidgetReady] = useState(false);
   const [telegramWidgetFailed, setTelegramWidgetFailed] = useState(false);
+  const [widgetKey, setWidgetKey] = useState(0);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const widgetHostRef = useRef<HTMLDivElement | null>(null);
 
   const botUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME;
   const yandexClientId = import.meta.env.VITE_YANDEX_CLIENT_ID;
@@ -191,117 +232,63 @@ export default function AuthPage() {
     }
   }, [setLocation, toast]);
 
-  // Official Telegram Login Widget — real iframe overlay receives clicks (never fake-click cross-origin).
+  // Official Telegram Login Widget (visible iframe, no CSS scale / fake overlay).
   useEffect(() => {
     if (!botUsername) return;
+
+    const container = widgetHostRef.current;
+    if (!container) return;
 
     setTelegramWidgetReady(false);
     setTelegramWidgetFailed(false);
 
-    const w = window as Window & { onTelegramAuth?: (user: Record<string, any>) => void };
-    w.onTelegramAuth = (user) => {
+    const callbackName = "onTelegramAuthCraft";
+    const w = window as Window & { [key: string]: any };
+    w[callbackName] = (user: Record<string, any>) => {
       void finishTelegramAuthRef.current(user);
     };
 
-    const container = document.getElementById("telegram-widget-container");
-    if (!container) return;
-    container.innerHTML = "";
-    document.getElementById("telegram-widget")?.remove();
+    mountOfficialTelegramWidget(container, botUsername, callbackName);
 
-    const script = document.createElement("script");
-    script.id = "telegram-widget";
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.async = true;
-    script.setAttribute("data-telegram-login", botUsername);
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-radius", "14");
-    script.setAttribute("data-request-access", "write");
-    script.setAttribute("data-userpic", "false");
-    script.setAttribute("data-lang", "ru");
-    script.setAttribute("data-onauth", "onTelegramAuth(user)");
-    container.appendChild(script);
-
-    const scaleOverlay = () => {
+    const readyCheck = window.setInterval(() => {
       const iframe = container.querySelector("iframe");
-      if (!iframe) return false;
+      if (!iframe) return;
+      // iframe present = widget painted; do not restyle/transform it.
       setTelegramWidgetReady(true);
-      const parent = container.parentElement;
-      if (!parent) return true;
-      const pw = parent.clientWidth || 320;
-      const ph = parent.clientHeight || 52;
-      const iw = iframe.offsetWidth || 240;
-      const ih = iframe.offsetHeight || 40;
-      if (iw < 2 || ih < 2) return true;
-      const scale = Math.max(pw / iw, ph / ih) * 1.1;
-      Object.assign(iframe.style, {
-        position: "absolute",
-        left: "50%",
-        top: "50%",
-        transform: `translate(-50%, -50%) scale(${scale})`,
-        transformOrigin: "center center",
-        opacity: "0.02",
-        pointerEvents: "auto",
-        border: "none",
-        background: "transparent",
-        zIndex: "3",
-      });
-      return true;
-    };
+      clearInterval(readyCheck);
+    }, 150);
 
-    const timer = window.setInterval(() => {
-      if (scaleOverlay()) {
-        // keep scaling a bit for late layout
-      }
-    }, 200);
     const failTimer = window.setTimeout(() => {
       if (!container.querySelector("iframe")) {
         setTelegramWidgetFailed(true);
+        clearInterval(readyCheck);
       }
-    }, 6000);
-    const stopTimer = window.setTimeout(() => clearInterval(timer), 12000);
+    }, 8000);
 
     return () => {
-      clearInterval(timer);
+      clearInterval(readyCheck);
       clearTimeout(failTimer);
-      clearTimeout(stopTimer);
-      document.getElementById("telegram-widget")?.remove();
-      if (w.onTelegramAuth) delete w.onTelegramAuth;
+      document.getElementById(WIDGET_SCRIPT_ID)?.remove();
+      try {
+        delete w[callbackName];
+      } catch {
+        w[callbackName] = undefined;
+      }
     };
-  }, [botUsername]);
+  }, [botUsername, widgetKey]);
+
+  const reloadTelegramWidget = () => {
+    setTelegramWidgetFailed(false);
+    setTelegramWidgetReady(false);
+    setWidgetKey((k) => k + 1);
+  };
 
   const handleYandexAuth = () => {
     if (!yandexClientId || isYandexLoading) return;
     setIsYandexLoading(true);
     const redirectUri = window.location.origin + "/yandex-suggest-token.html";
     const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${yandexClientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
-    // Same-tab — more reliable than popup after deploys / blockers.
     window.location.href = authUrl;
-  };
-
-  const reloadTelegramWidget = () => {
-    setTelegramWidgetFailed(false);
-    setTelegramWidgetReady(false);
-    // Force remount by toggling a temporary key via location reload of script effect:
-    const container = document.getElementById("telegram-widget-container");
-    if (!container || !botUsername) return;
-    container.innerHTML = "";
-    document.getElementById("telegram-widget")?.remove();
-    const script = document.createElement("script");
-    script.id = "telegram-widget";
-    script.src = `https://telegram.org/js/telegram-widget.js?22&_=${Date.now()}`;
-    script.async = true;
-    script.setAttribute("data-telegram-login", botUsername);
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-radius", "14");
-    script.setAttribute("data-request-access", "write");
-    script.setAttribute("data-userpic", "false");
-    script.setAttribute("data-lang", "ru");
-    script.setAttribute("data-onauth", "onTelegramAuth(user)");
-    container.appendChild(script);
-    window.setTimeout(() => {
-      if (!container.querySelector("iframe")) setTelegramWidgetFailed(true);
-      else setTelegramWidgetReady(true);
-    }, 4000);
   };
 
   return (
@@ -346,7 +333,6 @@ export default function AuthPage() {
               <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#1D1D1F", letterSpacing: "-0.01em" }}>Авторизация</span>
             </div>
 
-            {/* Yandex first */}
             {yandexClientId && (
               <button
                 onClick={handleYandexAuth}
@@ -378,63 +364,71 @@ export default function AuthPage() {
               </div>
             )}
 
-            {/* Telegram: styled face + official widget iframe overlay (real clicks) */}
             {botUsername ? (
               <div
                 data-testid="button-telegram-login"
                 style={{
                   position: "relative",
                   width: "100%",
-                  height: 52,
+                  minHeight: 52,
                   borderRadius: 14,
-                  overflow: "hidden",
-                  background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
-                  boxShadow: "0 4px 16px rgba(42,171,238,0.3)",
-                }}
-              >
-                <div style={{
-                  width: "100%",
-                  height: "100%",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  gap: "0.65rem",
-                  color: "#fff",
-                  fontSize: "0.95rem",
-                  fontWeight: 600,
-                  fontFamily: appleFont,
-                  pointerEvents: "none",
-                  userSelect: "none",
-                }}>
-                  {isTelegramLoading ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" />
-                      Авторизация...
-                    </>
-                  ) : telegramWidgetFailed ? (
-                    "Виджет не загрузился"
-                  ) : (
-                    <>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-                        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z" fill="white"/>
-                      </svg>
-                      {telegramWidgetReady ? "Войти через Telegram" : "Загрузка Telegram…"}
-                    </>
-                  )}
-                </div>
+                  background: isTelegramLoading ? "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)" : "transparent",
+                }}
+              >
+                {isTelegramLoading && (
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
+                    height: 52, color: "#fff", fontSize: "0.95rem", fontWeight: 600, fontFamily: appleFont,
+                    width: "100%",
+                  }}>
+                    <Loader2 size={18} className="animate-spin" />
+                    Авторизация...
+                  </div>
+                )}
 
-                {/* Official widget iframe must sit ON TOP and receive the click */}
-                <div
-                  id="telegram-widget-container"
-                  aria-hidden="true"
-                  style={{
+                {!isTelegramLoading && telegramWidgetFailed && (
+                  <div style={{
+                    width: "100%", textAlign: "center", padding: "0.5rem 0",
+                    fontSize: "0.85rem", color: "#86868B", fontFamily: appleFont,
+                  }}>
+                    Виджет Telegram не загрузился
+                  </div>
+                )}
+
+                {!isTelegramLoading && !telegramWidgetFailed && !telegramWidgetReady && (
+                  <div style={{
                     position: "absolute",
                     inset: 0,
-                    zIndex: 2,
-                    overflow: "hidden",
-                    background: "transparent",
-                    opacity: isTelegramLoading || telegramWidgetFailed ? 0 : 1,
-                    pointerEvents: isTelegramLoading || telegramWidgetFailed ? "none" : "auto",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.5rem",
+                    color: "#86868B",
+                    fontSize: "0.85rem",
+                    fontFamily: appleFont,
+                    pointerEvents: "none",
+                    zIndex: 1,
+                  }}>
+                    <Loader2 size={16} className="animate-spin" />
+                    Загрузка Telegram…
+                  </div>
+                )}
+
+                {/* Official widget host — always laid out (never display:none / CSS scale). */}
+                <div
+                  id="telegram-login-widget"
+                  ref={widgetHostRef}
+                  aria-hidden={isTelegramLoading || telegramWidgetFailed || !telegramWidgetReady}
+                  style={{
+                    width: "100%",
+                    minHeight: 48,
+                    display: isTelegramLoading || telegramWidgetFailed ? "none" : "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    visibility: telegramWidgetReady ? "visible" : "hidden",
                   }}
                 />
               </div>
