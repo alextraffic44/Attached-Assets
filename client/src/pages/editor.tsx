@@ -171,6 +171,8 @@ export default function EditorPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingImageTarget = useRef<string | null>(null);
+  /** Preserve preview scroll when toggling Редактор / Выбрать (srcDoc reload). */
+  const pendingScrollYRef = useRef<number | null>(null);
   // Latest HTML from in-iframe edits — persisted silently so srcDoc is not rewritten (avoids reload loop).
   const latestEditHtmlRef = useRef<string | null>(null);
   const editModeRef = useRef(false);
@@ -1684,6 +1686,27 @@ export default function EditorPage() {
 window.__PROJECT_ID__=${projectId};
 (function(){
   var API=(window.location.origin==='null'?window.parent.location.origin:window.location.origin)+'/api/leads/${projectId}';
+  window.addEventListener('message',function(ev){
+    if(!ev.data||typeof ev.data!=='object')return;
+    if(ev.data.type==='nz-wheel'){try{window.scrollBy(ev.data.dx||0,ev.data.dy||0);}catch(e){}}
+    if(ev.data.type==='nz-get-scroll'){
+      try{
+        var y=window.scrollY||document.documentElement.scrollTop||document.body.scrollTop||0;
+        window.parent.postMessage({type:'nz-scroll-pos',y:y},'*');
+      }catch(e){try{window.parent.postMessage({type:'nz-scroll-pos',y:0},'*');}catch(_e){}}
+    }
+    if(ev.data.type==='nz-set-scroll'&&typeof ev.data.y==='number'){
+      try{
+        var ty=ev.data.y;
+        var go=function(){try{window.scrollTo(0,ty);}catch(e){}};
+        go();
+        if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);
+        window.addEventListener('load',go);
+        setTimeout(go,40);
+        setTimeout(go,160);
+      }catch(e){}
+    }
+  });
   document.addEventListener('click',function(e){
     var a=e.target.closest('a');
     if(!a) return;
@@ -1726,6 +1749,10 @@ window.__PROJECT_ID__=${projectId};
   },true);
 })();
 </script>`;
+    const restoreY = pendingScrollYRef.current;
+    const restoreScrollScript = (restoreY != null && restoreY > 0)
+      ? `<script data-nz-restore-scroll>(function(){var y=${Math.round(restoreY)};function go(){try{window.scrollTo(0,y);}catch(e){}}go();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);window.addEventListener('load',go);setTimeout(go,40);setTimeout(go,200);})();</script>`
+      : "";
     const stickyFixScript = `<script data-nz-stickyfix>
 (function(){
   function fixSticky(){
@@ -1782,7 +1809,7 @@ window.__PROJECT_ID__=${projectId};
   else go();
 })();
 <\/script>`;
-    return code.replace('</head>', leadScript + stickyFixScript + preloaderKillScript + '</head>');
+    return code.replace('</head>', leadScript + stickyFixScript + preloaderKillScript + restoreScrollScript + '</head>');
   }, [projectId]);
 
   const getEditableCode = useCallback((code: string) => {
@@ -1832,7 +1859,7 @@ document.addEventListener('DOMContentLoaded',function(){
   },true);
   function getCleanHtmlSel(){
     var clone=document.documentElement.cloneNode(true);
-    var sels=clone.querySelectorAll('[data-nz-selector],[data-nz-leads],[data-nz-stickyfix],[data-nz-preloader-kill]');
+    var sels=clone.querySelectorAll('[data-nz-selector],[data-nz-leads],[data-nz-stickyfix],[data-nz-preloader-kill],[data-nz-restore-scroll]');
     for(var i=0;i<sels.length;i++) sels[i].parentNode.removeChild(sels[i]);
     var cls=clone.querySelectorAll('.__nz-sel-hover,.__nz-sel-active,.__nz-sel-label');
     for(var i=0;i<cls.length;i++){cls[i].classList.remove('__nz-sel-hover','__nz-sel-active','__nz-sel-label')}
@@ -1867,7 +1894,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 (function(){
   function getCleanHtml(){
     var clone=document.documentElement.cloneNode(true);
-    var eds=clone.querySelectorAll('[data-nz-editor],[data-nz-leads],[data-nz-stickyfix],[data-nz-preloader-kill],[data-nz-selector]');
+    var eds=clone.querySelectorAll('[data-nz-editor],[data-nz-leads],[data-nz-stickyfix],[data-nz-preloader-kill],[data-nz-restore-scroll],[data-nz-selector]');
     for(var i=0;i<eds.length;i++) eds[i].parentNode.removeChild(eds[i]);
     var tips=clone.querySelectorAll('.__nz-tooltip');
     for(var i=0;i<tips.length;i++) tips[i].parentNode.removeChild(tips[i]);
@@ -2055,6 +2082,67 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     }
   }, [activeFile, projectId]);
 
+  const requestIframeScrollY = useCallback((): Promise<number> => {
+    return new Promise((resolve) => {
+      const win = iframeRef.current?.contentWindow;
+      if (!win) {
+        resolve(0);
+        return;
+      }
+      let done = false;
+      const finish = (y: number) => {
+        if (done) return;
+        done = true;
+        window.removeEventListener("message", onMsg);
+        resolve(Number.isFinite(y) ? y : 0);
+      };
+      const onMsg = (e: MessageEvent) => {
+        if (e.source !== win) return;
+        if (e.data?.type === "nz-scroll-pos") finish(Number(e.data.y) || 0);
+      };
+      window.addEventListener("message", onMsg);
+      try {
+        win.postMessage({ type: "nz-get-scroll" }, "*");
+      } catch {
+        finish(0);
+        return;
+      }
+      setTimeout(() => finish(0), 180);
+    });
+  }, []);
+
+  const restoreIframeScroll = useCallback(() => {
+    const y = pendingScrollYRef.current;
+    if (y == null || y <= 0) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    try {
+      win.postMessage({ type: "nz-set-scroll", y }, "*");
+    } catch {}
+    setTimeout(() => {
+      if (pendingScrollYRef.current === y) pendingScrollYRef.current = null;
+    }, 500);
+  }, []);
+
+  const togglePreviewMode = useCallback(async (mode: "edit" | "selector") => {
+    const y = await requestIframeScrollY();
+    pendingScrollYRef.current = y;
+    if (mode === "edit") {
+      if (editMode) flushPendingEditHtml();
+      const next = !editMode;
+      setEditMode(next);
+      if (next) setSelectorMode(false);
+    } else {
+      if (selectorMode) flushPendingEditHtml();
+      const next = !selectorMode;
+      setSelectorMode(next);
+      if (next) {
+        setEditMode(false);
+        setSelectedElement(null);
+      }
+    }
+  }, [requestIframeScrollY, editMode, selectorMode, flushPendingEditHtml]);
+
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "375px" };
 
   const applyImageToIframe = useCallback((url: string) => {
@@ -2160,11 +2248,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           {!showCode && currentCode && (
             <>
               <button
-                onClick={() => {
-                  if (editMode) flushPendingEditHtml();
-                  setEditMode(!editMode);
-                  if (!editMode) setSelectorMode(false);
-                }}
+                onClick={() => { void togglePreviewMode("edit"); }}
                 data-testid="button-toggle-edit"
                 title="Визуальный редактор"
                 className={`flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium transition-all duration-200 ${editMode
@@ -2175,11 +2259,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <span className="hidden xl:inline">Редактор</span>
               </button>
               <button
-                onClick={() => {
-                  if (selectorMode) flushPendingEditHtml();
-                  setSelectorMode(!selectorMode);
-                  if (!selectorMode) { setEditMode(false); setSelectedElement(null); }
-                }}
+                onClick={() => { void togglePreviewMode("selector"); }}
                 data-testid="button-toggle-selector"
                 title="Выбрать элемент"
                 className={`flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium transition-all duration-200 ${selectorMode
@@ -2827,8 +2907,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             ) : currentCode || isGenerating ? (
               <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
-                 <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { const iw = iframeRef.current?.contentWindow; if (!iw) return; e.preventDefault(); e.stopPropagation(); iw.scrollBy(e.deltaX, e.deltaY); }}>
-                    <iframe key={activeFile} ref={iframeRef} srcDoc={isGenerating ? (getEditableCode(project?.generatedCode || "") || "") : getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" />
+                 <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { e.preventDefault(); e.stopPropagation(); iframeRef.current?.contentWindow?.postMessage({ type: 'nz-wheel', dx: e.deltaX, dy: e.deltaY }, '*'); }}>
+                    <iframe key={activeFile} ref={iframeRef} srcDoc={isGenerating ? (getEditableCode(project?.generatedCode || "") || "") : getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" onLoad={restoreIframeScroll} />
                  </div>
                  {isGenerating && (
                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style={{ background: 'rgba(11,15,25,0.92)', backdropFilter: 'blur(4px)' }}>
