@@ -67,6 +67,8 @@ export interface IStorage {
   getPaymentOrdersByUser(userId: number): Promise<PaymentOrder[]>;
 }
 
+export const NEW_USER_CREDITS = 350;
+
 export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -84,7 +86,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const [user] = await db.insert(users).values({
+      ...insertUser,
+      credits: NEW_USER_CREDITS,
+    }).returning();
     return user;
   }
 
@@ -93,6 +98,7 @@ export class DatabaseStorage implements IStorage {
       displayName: data.displayName,
       telegramId: data.telegramId,
       avatarUrl: data.avatarUrl ?? null,
+      credits: NEW_USER_CREDITS,
     }).returning();
     return user;
   }
@@ -108,6 +114,7 @@ export class DatabaseStorage implements IStorage {
       yandexId: data.yandexId,
       email: data.email ?? null,
       avatarUrl: data.avatarUrl ?? null,
+      credits: NEW_USER_CREDITS,
     }).returning();
     return user;
   }

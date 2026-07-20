@@ -51,6 +51,26 @@ function verifyTelegramHash(data: Record<string, any>): boolean {
   return true;
 }
 
+function getPublicOrigin(req: any): string {
+  const xfProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const xfHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  const proto = xfProto || (req.secure ? "https" : "http");
+  const host = xfHost || req.headers.host || "localhost";
+  return `${proto}://${host}`;
+}
+
+function decodeTgAuthResult(raw: string): Record<string, any> | null {
+  try {
+    let data = raw.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = data.length % 4;
+    if (pad > 1) data += new Array(5 - pad).join("=");
+    const parsed = JSON.parse(Buffer.from(data, "base64").toString("utf8"));
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function setupAuth(app: Express) {
   const PgSessionStore = connectPg(session);
 
@@ -217,6 +237,58 @@ export function setupAuth(app: Express) {
         if (typeof value === "string") data[key] = value;
       }
       await loginWithTelegramData(data, req, res, next, "redirect");
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Full-page OAuth start — no dependency on telegram-widget.js / cross-origin iframe clicks.
+  app.get("/api/auth/telegram/start", (req, res) => {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) return res.redirect("/auth?error=telegram_not_configured");
+    const botId = token.split(":")[0];
+    if (!botId || !/^\d+$/.test(botId)) {
+      return res.redirect("/auth?error=telegram_not_configured");
+    }
+    const origin = getPublicOrigin(req);
+    const returnTo = `${origin}/auth`;
+    const url = new URL("https://oauth.telegram.org/auth");
+    url.searchParams.set("bot_id", botId);
+    url.searchParams.set("origin", origin);
+    url.searchParams.set("request_access", "write");
+    url.searchParams.set("return_to", returnTo);
+    res.redirect(url.toString());
+  });
+
+  // Optional query-param callback (widget data-auth-url style) + hash handoff helper.
+  app.get("/api/auth/telegram/callback", async (req, res, next) => {
+    try {
+      if (!process.env.TELEGRAM_BOT_TOKEN) {
+        return res.redirect("/auth?error=telegram_not_configured");
+      }
+      const data: Record<string, any> = {};
+      for (const [key, value] of Object.entries(req.query)) {
+        if (typeof value === "string") data[key] = value;
+      }
+      // Some clients may pass the widget hash result as a query param.
+      if (typeof req.query.tgAuthResult === "string" && !data.hash) {
+        const decoded = decodeTgAuthResult(req.query.tgAuthResult);
+        if (decoded) Object.assign(data, decoded);
+      }
+      if (!verifyTelegramHash(data)) {
+        return res.redirect("/auth?error=telegram_invalid");
+      }
+      const telegramId = String(data.id);
+      const displayName = [data.first_name, data.last_name].filter(Boolean).join(" ") || data.username || "Пользователь";
+      const avatarUrl = data.photo_url || null;
+      let user = await storage.getUserByTelegramId(telegramId);
+      if (!user) {
+        user = await storage.createTelegramUser({ telegramId, displayName, avatarUrl });
+      }
+      req.login(user, (err) => {
+        if (err) return next(err);
+        return res.redirect("/dashboard");
+      });
     } catch (err) {
       next(err);
     }
