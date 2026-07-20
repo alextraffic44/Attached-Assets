@@ -167,6 +167,7 @@ export default function EditorPage() {
   const [streamingReply, setStreamingReply] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [selectorMode, setSelectorMode] = useState(false);
+  const [previewModeSwitching, setPreviewModeSwitching] = useState(false);
   const [selectedElement, setSelectedElement] = useState<{tag: string, text: string, classes: string, path: string, outerSnippet: string} | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2113,18 +2114,26 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
   const restoreIframeScroll = useCallback(() => {
     const y = pendingScrollYRef.current;
-    if (y == null || y <= 0) return;
+    if (y == null || y <= 0) {
+      setTimeout(() => setPreviewModeSwitching(false), 60);
+      return;
+    }
     const win = iframeRef.current?.contentWindow;
-    if (!win) return;
+    if (!win) {
+      setTimeout(() => setPreviewModeSwitching(false), 60);
+      return;
+    }
     try {
       win.postMessage({ type: "nz-set-scroll", y }, "*");
     } catch {}
     setTimeout(() => {
       if (pendingScrollYRef.current === y) pendingScrollYRef.current = null;
-    }, 500);
+      setPreviewModeSwitching(false);
+    }, 220);
   }, []);
 
   const togglePreviewMode = useCallback(async (mode: "edit" | "selector") => {
+    setPreviewModeSwitching(true);
     const y = await requestIframeScrollY();
     pendingScrollYRef.current = y;
     if (mode === "edit") {
@@ -2907,8 +2916,18 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             ) : currentCode || isGenerating ? (
               <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
-                 <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { e.preventDefault(); e.stopPropagation(); iframeRef.current?.contentWindow?.postMessage({ type: 'nz-wheel', dx: e.deltaX, dy: e.deltaY }, '*'); }}>
+                 <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200 relative" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { e.preventDefault(); e.stopPropagation(); iframeRef.current?.contentWindow?.postMessage({ type: 'nz-wheel', dx: e.deltaX, dy: e.deltaY }, '*'); }}>
                     <iframe key={activeFile} ref={iframeRef} srcDoc={isGenerating ? (getEditableCode(project?.generatedCode || "") || "") : getEditableCode(currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" onLoad={restoreIframeScroll} />
+                    {previewModeSwitching && !isGenerating && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          background: "#fff",
+                          pointerEvents: "none",
+                        }}
+                      />
+                    )}
                  </div>
                  {isGenerating && (
                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style={{ background: 'rgba(11,15,25,0.92)', backdropFilter: 'blur(4px)' }}>
