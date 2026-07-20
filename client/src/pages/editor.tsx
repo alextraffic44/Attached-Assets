@@ -2273,21 +2273,6 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     }, 500);
   }, []);
 
-  const togglePreviewMode = useCallback(async (mode: "edit" | "selector") => {
-    const y = await requestIframeScrollY();
-    pendingScrollYRef.current = y;
-    if (mode === "edit") {
-      const next = !editMode;
-      setEditMode(next);
-      if (next) setSelectorMode(false);
-    } else {
-      const next = !selectorMode;
-      setSelectorMode(next);
-      if (next) setEditMode(false);
-      setSelectedElement(null);
-    }
-  }, [requestIframeScrollY, editMode, selectorMode]);
-
   useEffect(() => {
     const persistHtml = (finalHtml: string, opts?: { invalidate?: boolean; updateState?: boolean }) => {
       const invalidate = opts?.invalidate ?? true;

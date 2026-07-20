@@ -68,7 +68,7 @@ def require_main() -> None:
         print("WARN: could not fetch origin/main — continuing with local tip")
 
 
-def mcp_call(name: str, args: dict) -> dict:
+def mcp_call(name: str, args: dict, attempts: int = 5) -> dict:
     if not MCP.exists():
         die(f"Amvera MCP helper not found at {MCP}")
     if not os.environ.get("AMVERA_TOKEN"):
@@ -84,8 +84,20 @@ args = json.load(open({str(args_path)!r}))
 r = tool({name!r}, args)
 print(json.dumps(r, ensure_ascii=False))
 """
-    out = subprocess.check_output(["python3", "-c", script], text=True, timeout=600)
-    return json.loads(out)
+    last_err: Exception | None = None
+    for i in range(attempts):
+        try:
+            out = subprocess.check_output(
+                ["python3", "-c", script], text=True, timeout=600
+            )
+            return json.loads(out)
+        except Exception as e:  # noqa: BLE001 — network/timeouts from Amvera MCP
+            last_err = e
+            wait = 4 * (2**i)
+            print(f"  mcp_call {name} failed (try {i + 1}/{attempts}): {e}")
+            time.sleep(wait)
+    die(f"mcp_call {name} failed after {attempts} attempts: {last_err}")
+    raise RuntimeError("unreachable")
 
 
 def upload_file(rel: str) -> None:
@@ -94,9 +106,9 @@ def upload_file(rel: str) -> None:
         print(f"skip missing {rel}")
         return
     text = abs_path.read_text(encoding="utf-8")
-    path = str(Path(rel).parent).replace("\\", "/")
-    if path == ".":
-        path = ""
+    parent = Path(rel).parent
+    # Amvera rejects null/empty path — use "/" for repo root.
+    path = "/" if str(parent) in (".", "") else str(parent).replace("\\", "/")
     filename = Path(rel).name
     print(f"upload {rel} ({len(text)} chars)…")
     r = mcp_call(
