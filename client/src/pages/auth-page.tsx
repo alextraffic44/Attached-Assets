@@ -23,22 +23,33 @@ const SVG_CSS = `
   }
   .auth-left { flex: 0 0 50% !important; }
   .auth-right { flex: 0 0 50% !important; }
-  /* Official Telegram widget — never scale/transform the iframe (breaks hit-testing). */
+  /* Official Telegram widget — never scale/transform the iframe (breaks hit-testing).
+     Dark OS color-scheme paints black letterbox around the blue button inside the iframe;
+     force light canvas + match card bg so edges disappear. */
   #telegram-login-widget {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    min-height: 48px;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 auto;
+    min-height: 40px;
+    line-height: 0;
+    overflow: hidden;
+    border-radius: 20px;
+    background: #F5F5F7;
+    color-scheme: light;
   }
   #telegram-login-widget iframe {
     border: 0 !important;
-    margin: 0 auto !important;
+    margin: 0 !important;
     max-width: 100% !important;
     transform: none !important;
     opacity: 1 !important;
     pointer-events: auto !important;
     position: static !important;
+    background: #F5F5F7 !important;
+    color-scheme: light !important;
   }
   @media (max-width: 768px) {
     .auth-left { flex: 0 0 100% !important; min-height: 100vh; padding: 2rem 1.5rem !important; }
@@ -282,7 +293,19 @@ export default function AuthPage() {
     style.id = "auth-svg-styles";
     style.textContent = SVG_CSS;
     document.head.appendChild(style);
-    return () => { document.getElementById("auth-svg-styles")?.remove(); };
+    // Keep Telegram embed canvas light even if the OS is in dark mode.
+    const meta = document.createElement("meta");
+    meta.id = "auth-color-scheme";
+    meta.name = "color-scheme";
+    meta.content = "light";
+    document.head.appendChild(meta);
+    const prevScheme = document.documentElement.style.colorScheme;
+    document.documentElement.style.colorScheme = "light";
+    return () => {
+      document.getElementById("auth-svg-styles")?.remove();
+      document.getElementById("auth-color-scheme")?.remove();
+      document.documentElement.style.colorScheme = prevScheme;
+    };
   }, []);
 
   useEffect(() => {
@@ -343,7 +366,10 @@ export default function AuthPage() {
     const readyCheck = window.setInterval(() => {
       const iframe = container.querySelector("iframe");
       if (!iframe) return;
-      // iframe present = widget painted; do not restyle/transform it.
+      // Force light canvas so OS dark mode does not letterbox the button in black.
+      iframe.style.colorScheme = "light";
+      iframe.style.backgroundColor = "#F5F5F7";
+      iframe.style.border = "0";
       setTelegramWidgetReady(true);
       clearInterval(readyCheck);
     }, 150);
@@ -513,12 +539,19 @@ export default function AuthPage() {
                   ref={widgetHostRef}
                   aria-hidden={isTelegramLoading || telegramWidgetFailed || !telegramWidgetReady}
                   style={{
-                    width: "100%",
-                    minHeight: 48,
+                    width: "fit-content",
+                    maxWidth: "100%",
+                    minHeight: 40,
+                    margin: "0 auto",
                     display: isTelegramLoading || telegramWidgetFailed ? "none" : "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     visibility: telegramWidgetReady ? "visible" : "hidden",
+                    overflow: "hidden",
+                    borderRadius: 20,
+                    background: "#F5F5F7",
+                    colorScheme: "light",
+                    lineHeight: 0,
                   }}
                 />
               </div>
