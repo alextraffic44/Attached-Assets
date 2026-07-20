@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +23,10 @@ const SVG_CSS = `
   }
   .auth-left { flex: 0 0 50% !important; }
   .auth-right { flex: 0 0 50% !important; }
+  #telegram-widget-container iframe {
+    border: 0 !important;
+    background: transparent !important;
+  }
   @media (max-width: 768px) {
     .auth-left { flex: 0 0 100% !important; min-height: 100vh; padding: 2rem 1.5rem !important; }
     .auth-right { display: none !important; }
@@ -49,154 +53,57 @@ const SVG_CSS = `
   .mask-2 { animation: type2 10s infinite linear; }
   @keyframes type2 { 0%, 15% { width: 0; } 30%, 95% { width: 280px; } 96%, 100% { width: 0; } }
   .mask-3 { animation: type3 10s infinite linear; }
-  @keyframes type3 { 0%, 35% { width: 0; } 45%, 95% { width: 160px; } 96%, 100% { width: 0; } }
-  .mask-4 { animation: type4 10s infinite linear; }
-  @keyframes type4 { 0%, 50% { width: 0; } 60%, 95% { width: 220px; } 96%, 100% { width: 0; } }
-  .mask-5 { animation: type5 10s infinite linear; }
-  @keyframes type5 { 0%, 65% { width: 0; } 70%, 95% { width: 40px; } 96%, 100% { width: 0; } }
-  .mask-6 { animation: type6 10s infinite linear; }
-  @keyframes type6 { 0%, 75% { width: 0; } 85%, 95% { width: 250px; } 96%, 100% { width: 0; } }
-  .dot { animation: dotFade 1.5s infinite; }
-  .dot:nth-child(2) { animation-delay: 0.5s; }
-  .dot:nth-child(3) { animation-delay: 1s; }
-  @keyframes dotFade { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
-  .c1 { animation: cur1 10s infinite linear; }
-  @keyframes cur1 { 0% { transform: translate(300px, 206px); opacity: 1; } 10% { transform: translate(450px, 206px); opacity: 1; } 10.01%, 100% { opacity: 0; } }
-  .c2 { animation: cur2 10s infinite linear; }
-  @keyframes cur2 { 0%, 14.99% { opacity: 0; } 15% { transform: translate(300px, 241px); opacity: 1; } 30% { transform: translate(550px, 241px); opacity: 1; } 30.01%, 100% { opacity: 0; } }
-  .c3 { animation: cur3 10s infinite linear; }
-  @keyframes cur3 { 0%, 34.99% { opacity: 0; } 35% { transform: translate(300px, 276px); opacity: 1; } 45% { transform: translate(450px, 276px); opacity: 1; } 45.01%, 100% { opacity: 0; } }
-  .c4 { animation: cur4 10s infinite linear; }
-  @keyframes cur4 { 0%, 49.99% { opacity: 0; } 50% { transform: translate(300px, 311px); opacity: 1; } 60% { transform: translate(500px, 311px); opacity: 1; } 60.01%, 100% { opacity: 0; } }
-  .c5 { animation: cur5 10s infinite linear; }
-  @keyframes cur5 { 0%, 64.99% { opacity: 0; } 65% { transform: translate(300px, 346px); opacity: 1; } 70% { transform: translate(330px, 346px); opacity: 1; } 70.01%, 100% { opacity: 0; } }
-  .c6 { animation: cur6 10s infinite linear; }
-  @keyframes cur6 { 0%, 74.99% { opacity: 0; } 75% { transform: translate(300px, 381px); opacity: 1; } 85% { transform: translate(530px, 381px); opacity: 1; } 86%, 88%, 90%, 92%, 94% { opacity: 0; transform: translate(530px, 381px); } 87%, 89%, 91%, 93%, 95% { opacity: 1; transform: translate(530px, 381px); } 95.01%, 100% { opacity: 0; } }
+  @keyframes type3 { 0%, 35% { width: 0; } 50%, 95% { width: 160px; } 96%, 100% { width: 0; } }
+  .cursor { animation: blinkCursor 0.8s infinite; }
+  @keyframes blinkCursor { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 `;
 
-const AgentSVG = () => (
-  <svg viewBox="0 0 900 600" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <filter id="heavy-blur" x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="30" result="blur" />
-      </filter>
-      <filter id="glow-light" x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="4" result="blur" />
-        <feComposite in="SourceGraphic" in2="blur" operator="over" />
-      </filter>
-      <linearGradient id="metal-text" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stopColor="#626262" />
-        <stop offset="100%" stopColor="#ffffff" />
-      </linearGradient>
-      <pattern id="hex-grid" width="30" height="52" patternUnits="userSpaceOnUse" patternTransform="scale(0.5)">
-        <path d="M 15 0 L 30 13 L 30 39 L 15 52 L 0 39 L 0 13 Z" fill="none" stroke="#626262" strokeWidth="1" opacity="0.15"/>
-      </pattern>
-      <mask id="code-mask-1"><rect x="300" y="200" width="0" height="30" fill="white" className="mask-1" /></mask>
-      <mask id="code-mask-2"><rect x="300" y="235" width="0" height="30" fill="white" className="mask-2" /></mask>
-      <mask id="code-mask-3"><rect x="300" y="270" width="0" height="30" fill="white" className="mask-3" /></mask>
-      <mask id="code-mask-4"><rect x="300" y="305" width="0" height="30" fill="white" className="mask-4" /></mask>
-      <mask id="code-mask-5"><rect x="300" y="340" width="0" height="30" fill="white" className="mask-5" /></mask>
-      <mask id="code-mask-6"><rect x="300" y="375" width="0" height="30" fill="white" className="mask-6" /></mask>
-    </defs>
-    <rect width="900" height="600" fill="url(#hex-grid)" />
-    <g filter="url(#heavy-blur)" className="glow-pulse">
-      <circle cx="350" cy="200" r="110" fill="hsl(27deg 93% 60%)" opacity="0.6" />
-      <circle cx="680" cy="200" r="120" fill="#00a6ff" opacity="0.6" />
-      <circle cx="350" cy="400" r="100" fill="#ff0056" opacity="0.6" />
-      <circle cx="680" cy="400" r="130" fill="#6500ff" opacity="0.6" />
-    </g>
-    <g>
-      <rect x="260" y="140" width="520" height="320" rx="16" fill="#050505" stroke="#1e1e24" strokeWidth="2" opacity="0.9" />
-      <path d="M 260 156 A 16 16 0 0 1 276 140 L 764 140 A 16 16 0 0 1 780 156 L 780 170 L 260 170 Z" fill="#1e1e24" />
-      <circle cx="285" cy="155" r="6" fill="#ff0056" />
-      <circle cx="305" cy="155" r="6" fill="hsl(27deg 93% 60%)" />
-      <circle cx="325" cy="155" r="6" fill="#00a6ff" />
-      <text x="520" y="160" fill="url(#metal-text)" fontSize="14" fontFamily="monospace" fontWeight="bold" textAnchor="middle" letterSpacing="1">NEON_AGENT_MODULE.ts</text>
-      <line x1="260" y1="170" x2="780" y2="170" stroke="#1e1e24" strokeWidth="2" />
-      <g fontFamily="monospace" fontSize="14" fill="#626262" textAnchor="end">
-        <text x="285" y="220">1</text>
-        <text x="285" y="255">2</text>
-        <text x="285" y="290">3</text>
-        <text x="285" y="325">4</text>
-        <text x="285" y="360">5</text>
-        <text x="285" y="395">6</text>
+function AgentSVG() {
+  return (
+    <svg viewBox="0 0 800 450" style={{ width: "100%", height: "100%" }} xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="gradBg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#1e1e24" />
+          <stop offset="100%" stopColor="#050505" />
+        </linearGradient>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+          <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <clipPath id="clip1"><rect className="mask-1" x="380" y="155" height="24" width="200" /></clipPath>
+        <clipPath id="clip2"><rect className="mask-2" x="380" y="195" height="24" width="280" /></clipPath>
+        <clipPath id="clip3"><rect className="mask-3" x="380" y="235" height="24" width="160" /></clipPath>
+      </defs>
+      <rect width="800" height="450" fill="url(#gradBg)" />
+      <circle className="glow-pulse" cx="130" cy="220" r="120" fill="#ff0056" opacity="0.15" filter="url(#glow)" />
+      <circle className="glow-pulse" cx="130" cy="220" r="80" fill="#007AFF" opacity="0.1" filter="url(#glow)" style={{ animationDelay: "1.5s" }} />
+      <g className="robot-float">
+        <rect x="60" y="140" width="140" height="120" rx="28" fill="#1a1a20" stroke="#333" strokeWidth="2" />
+        <rect x="75" y="165" width="110" height="50" rx="12" fill="#0a0a0c" />
+        <g className="eye-blink">
+          <circle cx="105" cy="190" r="12" fill="#ff0056" filter="url(#glow)" />
+          <circle className="pupil" cx="105" cy="190" r="5" fill="#fff" />
+          <circle cx="155" cy="190" r="12" fill="#007AFF" filter="url(#glow)" />
+          <circle className="pupil" cx="155" cy="190" r="5" fill="#fff" />
+        </g>
+        <line x1="130" y1="140" x2="130" y2="110" stroke="#333" strokeWidth="3" />
+        <circle className="antenna-glow" cx="130" cy="105" r="8" />
+        <rect x="95" y="260" width="70" height="40" rx="10" fill="#1a1a20" stroke="#333" strokeWidth="2" />
+        <g className="hand-left"><rect x="30" y="200" width="30" height="14" rx="7" fill="#1a1a20" stroke="#333" strokeWidth="2" /></g>
+        <g className="hand-right"><rect x="200" y="200" width="30" height="14" rx="7" fill="#1a1a20" stroke="#333" strokeWidth="2" /></g>
       </g>
-      <line x1="292" y1="170" x2="292" y2="460" stroke="#1e1e24" strokeWidth="1" />
-    </g>
-    <g className="code-font code-group">
-      <g mask="url(#code-mask-1)">
-        <text x="300" y="220" fill="url(#metal-text)">// Initialize Agent Protocol</text>
+      <g className="code-group">
+        <rect x="340" y="100" width="400" height="250" rx="16" fill="#111116" stroke="#2a2a35" strokeWidth="1.5" />
+        <circle cx="365" cy="125" r="5" fill="#ff5f57" />
+        <circle cx="385" cy="125" r="5" fill="#febc2e" />
+        <circle cx="405" cy="125" r="5" fill="#28c840" />
+        <text className="code-font" x="380" y="175" fill="#6b7280" clipPath="url(#clip1)">{"// Initialize Agent Pro"}</text>
+        <text className="code-font" x="380" y="215" fill="#60a5fa" clipPath="url(#clip2)">{"const agent = new AIAgent();"}</text>
+        <text className="code-font" x="380" y="255" fill="#34d399" clipPath="url(#clip3)">{"agent.connect"}<tspan className="cursor" fill="#fff">|</tspan></text>
       </g>
-      <g mask="url(#code-mask-2)">
-        <text x="300" y="255">
-          <tspan fill="#8e44ff">const</tspan>{" "}<tspan fill="#00a6ff">agent</tspan>{" "}<tspan fill="#ffffff">=</tspan>{" "}<tspan fill="#8e44ff">new</tspan>{" "}<tspan fill="hsl(27deg 93% 60%)">AIAgent</tspan>{"();"}
-        </text>
-      </g>
-      <g mask="url(#code-mask-3)">
-        <text x="300" y="290">
-          <tspan fill="#00a6ff">agent</tspan>{"."}<tspan fill="#ff0056">connect</tspan>{"({"}
-        </text>
-      </g>
-      <g mask="url(#code-mask-4)">
-        <text x="300" y="325">
-          <tspan fill="#ffffff">{"  mode:"}</tspan>{" "}<tspan fill="hsl(27deg 93% 60%)">"autonomous"</tspan><tspan fill="#ffffff">,</tspan>
-        </text>
-      </g>
-      <g mask="url(#code-mask-5)">
-        <text x="300" y="360" fill="#ffffff">{"});"}</text>
-      </g>
-      <g mask="url(#code-mask-6)">
-        <text x="300" y="395">
-          <tspan fill="#8e44ff">await</tspan>{" "}<tspan fill="#00a6ff">agent</tspan>{"."}<tspan fill="#ff0056">deploy</tspan>{"();"}
-        </text>
-      </g>
-    </g>
-    <g className="code-group">
-      <rect className="cursor c1" width="10" height="18" fill="#fff" />
-      <rect className="cursor c2" width="10" height="18" fill="#fff" />
-      <rect className="cursor c3" width="10" height="18" fill="#fff" />
-      <rect className="cursor c4" width="10" height="18" fill="#fff" />
-      <rect className="cursor c5" width="10" height="18" fill="#fff" />
-      <rect className="cursor c6" width="10" height="18" fill="#fff" />
-    </g>
-    <g className="robot-float" style={{ transform: "translate(30px, 30px)" }}>
-      <line x1="130" y1="155" x2="130" y2="185" stroke="#626262" strokeWidth="2"/>
-      <circle cx="130" cy="148" r="7" className="antenna-glow"/>
-      <rect x="70" y="180" width="120" height="100" rx="25" fill="#1e1e24" stroke="#626262" strokeWidth="1.5"/>
-      <rect x="55" y="210" width="20" height="40" rx="5" fill="#050505" stroke="#1e1e24" strokeWidth="2"/>
-      <rect x="185" y="210" width="20" height="40" rx="5" fill="#050505" stroke="#1e1e24" strokeWidth="2"/>
-      <rect x="85" y="195" width="90" height="55" rx="12" fill="#050505" stroke="#1e1e24" strokeWidth="2"/>
-      <g className="eye-blink">
-        <circle cx="110" cy="225" r="8" fill="#00a6ff" filter="url(#glow-light)"/>
-        <circle cx="110" cy="225" r="3" fill="#ffffff" className="pupil" style={{ transformOrigin: "110px 225px" }}/>
-        <circle cx="150" cy="225" r="8" fill="#00a6ff" filter="url(#glow-light)"/>
-        <circle cx="150" cy="225" r="3" fill="#ffffff" className="pupil" style={{ transformOrigin: "150px 225px" }}/>
-      </g>
-      <rect x="115" y="280" width="30" height="15" fill="#1e1e24" />
-      <g className="hand-left">
-        <rect x="85" y="300" width="30" height="15" rx="7" fill="#ff0056" filter="url(#glow-light)"/>
-      </g>
-      <g className="hand-right">
-        <rect x="145" y="300" width="30" height="15" rx="7" fill="#00a6ff" filter="url(#glow-light)"/>
-      </g>
-    </g>
-    <text x="450" y="540" fontSize="20" fontWeight="bold" letterSpacing="2" textAnchor="middle">
-      <tspan fill="#ff0056" filter="url(#glow-light)">SYS_READY: </tspan>
-      <tspan fill="url(#metal-text)">Агент компилирует код</tspan>
-      <tspan className="dot" fill="url(#metal-text)">.</tspan>
-      <tspan className="dot" fill="url(#metal-text)">.</tspan>
-      <tspan className="dot" fill="url(#metal-text)">.</tspan>
-    </text>
-    <path d="M 170 530 L 160 530 L 160 545 L 170 545" fill="none" stroke="#626262" strokeWidth="2" />
-    <path d="M 730 530 L 740 530 L 740 545 L 730 545" fill="none" stroke="#626262" strokeWidth="2" />
-  </svg>
-);
-
-declare global {
-  interface Window {
-    onTelegramAuth?: (user: any) => void;
-    YaAuthSuggest?: any;
-  }
+      <text x="400" y="400" textAnchor="middle" fill="#ff0056" fontFamily="monospace" fontSize="13" letterSpacing="2">SYS_READY: Агент компилирует код ..</text>
+    </svg>
+  );
 }
 
 const YandexIcon = () => (
@@ -209,11 +116,35 @@ const YandexIcon = () => (
 export default function AuthPage() {
   const [isTelegramLoading, setIsTelegramLoading] = useState(false);
   const [isYandexLoading, setIsYandexLoading] = useState(false);
+  const [telegramWidgetReady, setTelegramWidgetReady] = useState(false);
+  const [telegramWidgetFailed, setTelegramWidgetFailed] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
   const botUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME;
   const yandexClientId = import.meta.env.VITE_YANDEX_CLIENT_ID;
+
+  const finishTelegramAuth = useCallback(async (user: Record<string, any>) => {
+    setIsTelegramLoading(true);
+    try {
+      const res = await fetch("/api/auth/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(user),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Ошибка авторизации");
+      queryClient.setQueryData(["/api/auth/user"], data);
+      setLocation("/dashboard");
+    } catch (err: any) {
+      toast({ title: "Ошибка", description: err.message, variant: "destructive" });
+      setIsTelegramLoading(false);
+    }
+  }, [setLocation, toast]);
+
+  const finishTelegramAuthRef = useRef(finishTelegramAuth);
+  finishTelegramAuthRef.current = finishTelegramAuth;
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -224,91 +155,157 @@ export default function AuthPage() {
   }, []);
 
   useEffect(() => {
-    if (!botUsername) return;
-    window.onTelegramAuth = async (user: any) => {
-      setIsTelegramLoading(true);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("yandex_callback") === "1") {
       try {
-        const res = await fetch("/api/auth/telegram", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(user),
-          credentials: "include",
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Ошибка авторизации");
-        queryClient.setQueryData(["/api/auth/user"], data);
-        setLocation("/dashboard");
-      } catch (err: any) {
-        toast({ title: "Ошибка", description: err.message, variant: "destructive" });
-      } finally {
-        setIsTelegramLoading(false);
+        const stored = sessionStorage.getItem("yandex_oauth_hash");
+        sessionStorage.removeItem("yandex_oauth_hash");
+        window.history.replaceState({}, "", "/auth");
+        if (stored) {
+          const hash = stored.startsWith("#") ? stored.slice(1) : stored;
+          const token = new URLSearchParams(hash).get("access_token");
+          if (token) {
+            setIsYandexLoading(true);
+            void (async () => {
+              try {
+                const res = await fetch("/api/auth/yandex", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ token }),
+                  credentials: "include",
+                });
+                const result = await res.json();
+                if (!res.ok) throw new Error(result.message || "Ошибка авторизации");
+                queryClient.setQueryData(["/api/auth/user"], result);
+                setLocation("/dashboard");
+              } catch (err: any) {
+                toast({ title: "Ошибка", description: err.message, variant: "destructive" });
+                setIsYandexLoading(false);
+              }
+            })();
+          }
+        }
+      } catch {
+        window.history.replaceState({}, "", "/auth");
       }
+    }
+  }, [setLocation, toast]);
+
+  // Official Telegram Login Widget — real iframe overlay receives clicks (never fake-click cross-origin).
+  useEffect(() => {
+    if (!botUsername) return;
+
+    setTelegramWidgetReady(false);
+    setTelegramWidgetFailed(false);
+
+    const w = window as Window & { onTelegramAuth?: (user: Record<string, any>) => void };
+    w.onTelegramAuth = (user) => {
+      void finishTelegramAuthRef.current(user);
     };
-    const existingScript = document.getElementById("telegram-widget");
-    if (existingScript) existingScript.remove();
+
+    const container = document.getElementById("telegram-widget-container");
+    if (!container) return;
+    container.innerHTML = "";
+    document.getElementById("telegram-widget")?.remove();
+
     const script = document.createElement("script");
     script.id = "telegram-widget";
     script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.async = true;
     script.setAttribute("data-telegram-login", botUsername);
     script.setAttribute("data-size", "large");
-    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    script.setAttribute("data-radius", "14");
     script.setAttribute("data-request-access", "write");
-    script.async = true;
-    document.getElementById("telegram-widget-container")?.appendChild(script);
-    return () => { document.getElementById("telegram-widget")?.remove(); delete window.onTelegramAuth; };
-  }, [botUsername, setLocation, toast]);
+    script.setAttribute("data-userpic", "false");
+    script.setAttribute("data-lang", "ru");
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    container.appendChild(script);
+
+    const scaleOverlay = () => {
+      const iframe = container.querySelector("iframe");
+      if (!iframe) return false;
+      setTelegramWidgetReady(true);
+      const parent = container.parentElement;
+      if (!parent) return true;
+      const pw = parent.clientWidth || 320;
+      const ph = parent.clientHeight || 52;
+      const iw = iframe.offsetWidth || 240;
+      const ih = iframe.offsetHeight || 40;
+      if (iw < 2 || ih < 2) return true;
+      const scale = Math.max(pw / iw, ph / ih) * 1.1;
+      Object.assign(iframe.style, {
+        position: "absolute",
+        left: "50%",
+        top: "50%",
+        transform: `translate(-50%, -50%) scale(${scale})`,
+        transformOrigin: "center center",
+        opacity: "0.02",
+        pointerEvents: "auto",
+        border: "none",
+        background: "transparent",
+        zIndex: "3",
+      });
+      return true;
+    };
+
+    const timer = window.setInterval(() => {
+      if (scaleOverlay()) {
+        // keep scaling a bit for late layout
+      }
+    }, 200);
+    const failTimer = window.setTimeout(() => {
+      if (!container.querySelector("iframe")) {
+        setTelegramWidgetFailed(true);
+      }
+    }, 6000);
+    const stopTimer = window.setTimeout(() => clearInterval(timer), 12000);
+
+    return () => {
+      clearInterval(timer);
+      clearTimeout(failTimer);
+      clearTimeout(stopTimer);
+      document.getElementById("telegram-widget")?.remove();
+      if (w.onTelegramAuth) delete w.onTelegramAuth;
+    };
+  }, [botUsername]);
 
   const handleYandexAuth = () => {
     if (!yandexClientId || isYandexLoading) return;
     setIsYandexLoading(true);
-
     const redirectUri = window.location.origin + "/yandex-suggest-token.html";
     const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${yandexClientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
-    const popup = window.open(authUrl, "yandex_auth", "width=600,height=700,left=200,top=100");
+    // Same-tab — more reliable than popup after deploys / blockers.
+    window.location.href = authUrl;
+  };
 
-    const onMessage = async (event: MessageEvent) => {
-      if (typeof event.data !== "string" || !event.data.includes("access_token")) return;
-      window.removeEventListener("message", onMessage);
-      clearInterval(closedCheck);
-
-      try {
-        const hash = new URL(event.data).hash.slice(1);
-        const params = new URLSearchParams(hash);
-        const token = params.get("access_token");
-        if (!token) throw new Error("Токен не получен");
-
-        const res = await fetch("/api/auth/yandex", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-          credentials: "include",
-        });
-        const result = await res.json();
-        if (!res.ok) throw new Error(result.message || "Ошибка авторизации");
-        queryClient.setQueryData(["/api/auth/user"], result);
-        setLocation("/dashboard");
-      } catch (err: any) {
-        toast({ title: "Ошибка", description: err.message, variant: "destructive" });
-      } finally {
-        setIsYandexLoading(false);
-      }
-    };
-
-    window.addEventListener("message", onMessage);
-
-    const closedCheck = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(closedCheck);
-        window.removeEventListener("message", onMessage);
-        setIsYandexLoading(false);
-      }
-    }, 500);
+  const reloadTelegramWidget = () => {
+    setTelegramWidgetFailed(false);
+    setTelegramWidgetReady(false);
+    // Force remount by toggling a temporary key via location reload of script effect:
+    const container = document.getElementById("telegram-widget-container");
+    if (!container || !botUsername) return;
+    container.innerHTML = "";
+    document.getElementById("telegram-widget")?.remove();
+    const script = document.createElement("script");
+    script.id = "telegram-widget";
+    script.src = `https://telegram.org/js/telegram-widget.js?22&_=${Date.now()}`;
+    script.async = true;
+    script.setAttribute("data-telegram-login", botUsername);
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-radius", "14");
+    script.setAttribute("data-request-access", "write");
+    script.setAttribute("data-userpic", "false");
+    script.setAttribute("data-lang", "ru");
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    container.appendChild(script);
+    window.setTimeout(() => {
+      if (!container.querySelector("iframe")) setTelegramWidgetFailed(true);
+      else setTelegramWidgetReady(true);
+    }, 4000);
   };
 
   return (
     <div style={{ fontFamily: appleFont, minHeight: "100vh", display: "flex", overflow: "hidden" }}>
-
-      {/* LEFT — Auth */}
       <div className="auth-left" style={{
         background: "#ffffff",
         display: "flex",
@@ -319,7 +316,6 @@ export default function AuthPage() {
         position: "relative",
         overflow: "hidden",
       }}>
-        {/* Subtle background blobs */}
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
           <div style={{ position: "absolute", top: "-5%", left: "-10%", width: "28rem", height: "28rem", borderRadius: "50%", background: "radial-gradient(circle, rgba(0,122,255,0.07) 0%, transparent 70%)", filter: "blur(40px)" }} />
           <div style={{ position: "absolute", bottom: "-5%", right: "-5%", width: "22rem", height: "22rem", borderRadius: "50%", background: "radial-gradient(circle, rgba(88,86,214,0.07) 0%, transparent 70%)", filter: "blur(40px)" }} />
@@ -331,7 +327,6 @@ export default function AuthPage() {
           transition={{ duration: 0.45 }}
           style={{ width: "100%", maxWidth: 400, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", zIndex: 1 }}
         >
-          {/* Heading */}
           <h1 className="craft-title" style={{ fontSize: "2.6rem", fontWeight: 800, letterSpacing: "-0.05em", margin: "0 0 0.4rem", textAlign: "center" }}>
             Craft AI
           </h1>
@@ -339,7 +334,6 @@ export default function AuthPage() {
             ИИ-конструктор сайтов нового поколения
           </p>
 
-          {/* Auth card */}
           <div style={{
             width: "100%",
             background: "#F5F5F7",
@@ -347,111 +341,17 @@ export default function AuthPage() {
             padding: "1.75rem",
             border: "1px solid rgba(0,0,0,0.06)",
           }}>
-            {/* Card header */}
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1.25rem" }}>
               <Sparkles size={16} style={{ color: "#007AFF" }} />
               <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#1D1D1F", letterSpacing: "-0.01em" }}>Авторизация</span>
             </div>
 
-            {/* Hidden Telegram widget — iframe lives here, off-screen */}
-            <div
-              id="telegram-widget-container"
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                top: -9999,
-                left: -9999,
-                opacity: 0,
-                pointerEvents: "none",
-                overflow: "hidden",
-                width: 1,
-                height: 1,
-              }}
-            />
-
-            {/* Telegram button area — our custom UI */}
-            {isTelegramLoading ? (
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
-                height: 52, borderRadius: 14,
-                background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
-                color: "#fff", fontSize: "0.95rem", fontWeight: 600,
-                fontFamily: appleFont,
-                boxShadow: "0 4px 16px rgba(42,171,238,0.35)",
-              }}>
-                <Loader2 size={18} className="animate-spin" />
-                Авторизация...
-              </div>
-            ) : botUsername ? (
-              <button
-                data-testid="button-telegram-login"
-                onClick={() => {
-                  const iframe = document.querySelector<HTMLIFrameElement>("#telegram-widget-container iframe");
-                  if (iframe) {
-                    iframe.style.pointerEvents = "auto";
-                    iframe.contentWindow?.document.querySelector<HTMLElement>("button, a, [role=button]")?.click();
-                    iframe.style.pointerEvents = "none";
-                  } else {
-                    const btn = document.querySelector<HTMLElement>("#telegram-widget-container .tgme_widget_login_button, #telegram-widget-container a");
-                    if (btn) btn.click();
-                  }
-                }}
-                style={{
-                  width: "100%",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: "0.65rem",
-                  height: 52, borderRadius: 14, border: "none",
-                  background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
-                  color: "#fff", cursor: "pointer",
-                  fontSize: "0.95rem", fontWeight: 600,
-                  fontFamily: appleFont,
-                  boxShadow: "0 4px 16px rgba(42,171,238,0.3)",
-                  transition: "all 0.18s cubic-bezier(.4,0,.2,1)",
-                }}
-                onMouseEnter={e => {
-                  const el = e.currentTarget as HTMLButtonElement;
-                  el.style.background = "linear-gradient(135deg, #3dbef7 0%, #2AABEE 100%)";
-                  el.style.boxShadow = "0 6px 22px rgba(42,171,238,0.45)";
-                  el.style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={e => {
-                  const el = e.currentTarget as HTMLButtonElement;
-                  el.style.background = "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)";
-                  el.style.boxShadow = "0 4px 16px rgba(42,171,238,0.3)";
-                  el.style.transform = "translateY(0)";
-                }}
-                onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0) scale(0.98)"; }}
-                onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px) scale(1)"; }}
-              >
-                {/* Telegram plane icon */}
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z" fill="white"/>
-                </svg>
-                Войти через Telegram
-              </button>
-            ) : (
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                height: 52, borderRadius: 14, background: "#e8e8ed",
-                fontSize: "0.85rem", color: "#86868B", fontFamily: appleFont,
-              }}>
-                Telegram-авторизация не настроена
-              </div>
-            )}
-
-            {/* Divider */}
-            {yandexClientId && (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.9rem 0" }}>
-                <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
-                <span style={{ fontSize: "0.72rem", color: "#AEAEB2", fontWeight: 600, letterSpacing: "0.04em" }}>или</span>
-                <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
-              </div>
-            )}
-
-            {/* Yandex button */}
+            {/* Yandex first */}
             {yandexClientId && (
               <button
                 onClick={handleYandexAuth}
                 disabled={isYandexLoading}
+                data-testid="button-yandex-login"
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
                   gap: "0.6rem", height: 52, borderRadius: 14, border: "1px solid rgba(0,0,0,0.08)",
@@ -469,9 +369,108 @@ export default function AuthPage() {
                 {isYandexLoading ? "Авторизация..." : "Войти через Яндекс"}
               </button>
             )}
+
+            {yandexClientId && botUsername && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.9rem 0" }}>
+                <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
+                <span style={{ fontSize: "0.72rem", color: "#AEAEB2", fontWeight: 600, letterSpacing: "0.04em" }}>или</span>
+                <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
+              </div>
+            )}
+
+            {/* Telegram: styled face + official widget iframe overlay (real clicks) */}
+            {botUsername ? (
+              <div
+                data-testid="button-telegram-login"
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  height: 52,
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  background: "linear-gradient(135deg, #2AABEE 0%, #229ED9 100%)",
+                  boxShadow: "0 4px 16px rgba(42,171,238,0.3)",
+                }}
+              >
+                <div style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.65rem",
+                  color: "#fff",
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  fontFamily: appleFont,
+                  pointerEvents: "none",
+                  userSelect: "none",
+                }}>
+                  {isTelegramLoading ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Авторизация...
+                    </>
+                  ) : telegramWidgetFailed ? (
+                    "Виджет не загрузился"
+                  ) : (
+                    <>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+                        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z" fill="white"/>
+                      </svg>
+                      {telegramWidgetReady ? "Войти через Telegram" : "Загрузка Telegram…"}
+                    </>
+                  )}
+                </div>
+
+                {/* Official widget iframe must sit ON TOP and receive the click */}
+                <div
+                  id="telegram-widget-container"
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    zIndex: 2,
+                    overflow: "hidden",
+                    background: "transparent",
+                    opacity: isTelegramLoading || telegramWidgetFailed ? 0 : 1,
+                    pointerEvents: isTelegramLoading || telegramWidgetFailed ? "none" : "auto",
+                  }}
+                />
+              </div>
+            ) : (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                height: 52, borderRadius: 14, background: "#e8e8ed",
+                fontSize: "0.85rem", color: "#86868B", fontFamily: appleFont,
+              }}>
+                Telegram-авторизация не настроена
+              </div>
+            )}
+
+            {telegramWidgetFailed && botUsername && (
+              <button
+                type="button"
+                onClick={reloadTelegramWidget}
+                style={{
+                  marginTop: "0.65rem",
+                  width: "100%",
+                  height: 40,
+                  borderRadius: 12,
+                  border: "1px solid rgba(0,0,0,0.08)",
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  color: "#007AFF",
+                  fontFamily: appleFont,
+                }}
+              >
+                Повторить загрузку Telegram
+              </button>
+            )}
           </div>
 
-          {/* Legal */}
           <p style={{ fontSize: "0.72rem", color: "#AEAEB2", marginTop: "1.5rem", textAlign: "center", lineHeight: 1.6, maxWidth: 320 }}>
             Создавая аккаунт, вы соглашаетесь с{" "}
             <a href="/oferta" style={{ color: "#007AFF", textDecoration: "none" }}>договором оферты</a>
@@ -479,7 +478,6 @@ export default function AuthPage() {
             <a href="/privacy" style={{ color: "#007AFF", textDecoration: "none" }}>политикой конфиденциальности</a>
           </p>
 
-          {/* Back */}
           <button
             onClick={() => setLocation("/")}
             style={{ marginTop: "1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.82rem", color: "#AEAEB2", fontFamily: appleFont }}
@@ -489,7 +487,6 @@ export default function AuthPage() {
         </motion.div>
       </div>
 
-      {/* RIGHT — SVG Animation */}
       <div className="auth-right" style={{
         background: "linear-gradient(135deg, #1e1e24 10%, #050505 60%)",
         display: "flex",
@@ -502,7 +499,6 @@ export default function AuthPage() {
           <AgentSVG />
         </div>
       </div>
-
     </div>
   );
 }
