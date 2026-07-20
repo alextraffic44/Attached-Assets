@@ -66,58 +66,148 @@ const SVG_CSS = `
   .mask-2 { animation: type2 10s infinite linear; }
   @keyframes type2 { 0%, 15% { width: 0; } 30%, 95% { width: 280px; } 96%, 100% { width: 0; } }
   .mask-3 { animation: type3 10s infinite linear; }
-  @keyframes type3 { 0%, 35% { width: 0; } 50%, 95% { width: 160px; } 96%, 100% { width: 0; } }
-  .cursor { animation: blinkCursor 0.8s infinite; }
-  @keyframes blinkCursor { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  @keyframes type3 { 0%, 35% { width: 0; } 45%, 95% { width: 160px; } 96%, 100% { width: 0; } }
+  .mask-4 { animation: type4 10s infinite linear; }
+  @keyframes type4 { 0%, 50% { width: 0; } 60%, 95% { width: 220px; } 96%, 100% { width: 0; } }
+  .mask-5 { animation: type5 10s infinite linear; }
+  @keyframes type5 { 0%, 65% { width: 0; } 70%, 95% { width: 40px; } 96%, 100% { width: 0; } }
+  .mask-6 { animation: type6 10s infinite linear; }
+  @keyframes type6 { 0%, 75% { width: 0; } 85%, 95% { width: 250px; } 96%, 100% { width: 0; } }
+  .dot { animation: dotFade 1.5s infinite; }
+  .dot:nth-child(2) { animation-delay: 0.5s; }
+  .dot:nth-child(3) { animation-delay: 1s; }
+  @keyframes dotFade { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+  .c1 { animation: cur1 10s infinite linear; }
+  @keyframes cur1 { 0% { transform: translate(300px, 206px); opacity: 1; } 10% { transform: translate(450px, 206px); opacity: 1; } 10.01%, 100% { opacity: 0; } }
+  .c2 { animation: cur2 10s infinite linear; }
+  @keyframes cur2 { 0%, 14.99% { opacity: 0; } 15% { transform: translate(300px, 241px); opacity: 1; } 30% { transform: translate(550px, 241px); opacity: 1; } 30.01%, 100% { opacity: 0; } }
+  .c3 { animation: cur3 10s infinite linear; }
+  @keyframes cur3 { 0%, 34.99% { opacity: 0; } 35% { transform: translate(300px, 276px); opacity: 1; } 45% { transform: translate(450px, 276px); opacity: 1; } 45.01%, 100% { opacity: 0; } }
+  .c4 { animation: cur4 10s infinite linear; }
+  @keyframes cur4 { 0%, 49.99% { opacity: 0; } 50% { transform: translate(300px, 311px); opacity: 1; } 60% { transform: translate(500px, 311px); opacity: 1; } 60.01%, 100% { opacity: 0; } }
+  .c5 { animation: cur5 10s infinite linear; }
+  @keyframes cur5 { 0%, 64.99% { opacity: 0; } 65% { transform: translate(300px, 346px); opacity: 1; } 70% { transform: translate(330px, 346px); opacity: 1; } 70.01%, 100% { opacity: 0; } }
+  .c6 { animation: cur6 10s infinite linear; }
+  @keyframes cur6 { 0%, 74.99% { opacity: 0; } 75% { transform: translate(300px, 381px); opacity: 1; } 85% { transform: translate(530px, 381px); opacity: 1; } 86%, 88%, 90%, 92%, 94% { opacity: 0; transform: translate(530px, 381px); } 87%, 89%, 91%, 93%, 95% { opacity: 1; transform: translate(530px, 381px); } 95.01%, 100% { opacity: 0; } }
 `;
 
-function AgentSVG() {
-  return (
-    <svg viewBox="0 0 800 450" style={{ width: "100%", height: "100%" }} xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="gradBg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#1e1e24" />
-          <stop offset="100%" stopColor="#050505" />
-        </linearGradient>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-          <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        <clipPath id="clip1"><rect className="mask-1" x="380" y="155" height="24" width="200" /></clipPath>
-        <clipPath id="clip2"><rect className="mask-2" x="380" y="195" height="24" width="280" /></clipPath>
-        <clipPath id="clip3"><rect className="mask-3" x="380" y="235" height="24" width="160" /></clipPath>
-      </defs>
-      <rect width="800" height="450" fill="url(#gradBg)" />
-      <circle className="glow-pulse" cx="130" cy="220" r="120" fill="#ff0056" opacity="0.15" filter="url(#glow)" />
-      <circle className="glow-pulse" cx="130" cy="220" r="80" fill="#007AFF" opacity="0.1" filter="url(#glow)" style={{ animationDelay: "1.5s" }} />
-      <g className="robot-float">
-        <rect x="60" y="140" width="140" height="120" rx="28" fill="#1a1a20" stroke="#333" strokeWidth="2" />
-        <rect x="75" y="165" width="110" height="50" rx="12" fill="#0a0a0c" />
-        <g className="eye-blink">
-          <circle cx="105" cy="190" r="12" fill="#ff0056" filter="url(#glow)" />
-          <circle className="pupil" cx="105" cy="190" r="5" fill="#fff" />
-          <circle cx="155" cy="190" r="12" fill="#007AFF" filter="url(#glow)" />
-          <circle className="pupil" cx="155" cy="190" r="5" fill="#fff" />
-        </g>
-        <line x1="130" y1="140" x2="130" y2="110" stroke="#333" strokeWidth="3" />
-        <circle className="antenna-glow" cx="130" cy="105" r="8" />
-        <rect x="95" y="260" width="70" height="40" rx="10" fill="#1a1a20" stroke="#333" strokeWidth="2" />
-        <g className="hand-left"><rect x="30" y="200" width="30" height="14" rx="7" fill="#1a1a20" stroke="#333" strokeWidth="2" /></g>
-        <g className="hand-right"><rect x="200" y="200" width="30" height="14" rx="7" fill="#1a1a20" stroke="#333" strokeWidth="2" /></g>
+const AgentSVG = () => (
+  <svg viewBox="0 0 900 600" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="heavy-blur" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="30" result="blur" />
+      </filter>
+      <filter id="glow-light" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="4" result="blur" />
+        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+      </filter>
+      <linearGradient id="metal-text" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stopColor="#626262" />
+        <stop offset="100%" stopColor="#ffffff" />
+      </linearGradient>
+      <pattern id="hex-grid" width="30" height="52" patternUnits="userSpaceOnUse" patternTransform="scale(0.5)">
+        <path d="M 15 0 L 30 13 L 30 39 L 15 52 L 0 39 L 0 13 Z" fill="none" stroke="#626262" strokeWidth="1" opacity="0.15"/>
+      </pattern>
+      <mask id="code-mask-1"><rect x="300" y="200" width="0" height="30" fill="white" className="mask-1" /></mask>
+      <mask id="code-mask-2"><rect x="300" y="235" width="0" height="30" fill="white" className="mask-2" /></mask>
+      <mask id="code-mask-3"><rect x="300" y="270" width="0" height="30" fill="white" className="mask-3" /></mask>
+      <mask id="code-mask-4"><rect x="300" y="305" width="0" height="30" fill="white" className="mask-4" /></mask>
+      <mask id="code-mask-5"><rect x="300" y="340" width="0" height="30" fill="white" className="mask-5" /></mask>
+      <mask id="code-mask-6"><rect x="300" y="375" width="0" height="30" fill="white" className="mask-6" /></mask>
+    </defs>
+    <rect width="900" height="600" fill="url(#hex-grid)" />
+    <g filter="url(#heavy-blur)" className="glow-pulse">
+      <circle cx="350" cy="200" r="110" fill="hsl(27deg 93% 60%)" opacity="0.6" />
+      <circle cx="680" cy="200" r="120" fill="#00a6ff" opacity="0.6" />
+      <circle cx="350" cy="400" r="100" fill="#ff0056" opacity="0.6" />
+      <circle cx="680" cy="400" r="130" fill="#6500ff" opacity="0.6" />
+    </g>
+    <g>
+      <rect x="260" y="140" width="520" height="320" rx="16" fill="#050505" stroke="#1e1e24" strokeWidth="2" opacity="0.9" />
+      <path d="M 260 156 A 16 16 0 0 1 276 140 L 764 140 A 16 16 0 0 1 780 156 L 780 170 L 260 170 Z" fill="#1e1e24" />
+      <circle cx="285" cy="155" r="6" fill="#ff0056" />
+      <circle cx="305" cy="155" r="6" fill="hsl(27deg 93% 60%)" />
+      <circle cx="325" cy="155" r="6" fill="#00a6ff" />
+      <text x="520" y="160" fill="url(#metal-text)" fontSize="14" fontFamily="monospace" fontWeight="bold" textAnchor="middle" letterSpacing="1">NEON_AGENT_MODULE.ts</text>
+      <line x1="260" y1="170" x2="780" y2="170" stroke="#1e1e24" strokeWidth="2" />
+      <g fontFamily="monospace" fontSize="14" fill="#626262" textAnchor="end">
+        <text x="285" y="220">1</text>
+        <text x="285" y="255">2</text>
+        <text x="285" y="290">3</text>
+        <text x="285" y="325">4</text>
+        <text x="285" y="360">5</text>
+        <text x="285" y="395">6</text>
       </g>
-      <g className="code-group">
-        <rect x="340" y="100" width="400" height="250" rx="16" fill="#111116" stroke="#2a2a35" strokeWidth="1.5" />
-        <circle cx="365" cy="125" r="5" fill="#ff5f57" />
-        <circle cx="385" cy="125" r="5" fill="#febc2e" />
-        <circle cx="405" cy="125" r="5" fill="#28c840" />
-        <text className="code-font" x="380" y="175" fill="#6b7280" clipPath="url(#clip1)">{"// Initialize Agent Pro"}</text>
-        <text className="code-font" x="380" y="215" fill="#60a5fa" clipPath="url(#clip2)">{"const agent = new AIAgent();"}</text>
-        <text className="code-font" x="380" y="255" fill="#34d399" clipPath="url(#clip3)">{"agent.connect"}<tspan className="cursor" fill="#fff">|</tspan></text>
+      <line x1="292" y1="170" x2="292" y2="460" stroke="#1e1e24" strokeWidth="1" />
+    </g>
+    <g className="code-font code-group">
+      <g mask="url(#code-mask-1)">
+        <text x="300" y="220" fill="url(#metal-text)">// Initialize Agent Protocol</text>
       </g>
-      <text x="400" y="400" textAnchor="middle" fill="#ff0056" fontFamily="monospace" fontSize="13" letterSpacing="2">SYS_READY: Агент компилирует код ..</text>
-    </svg>
-  );
-}
+      <g mask="url(#code-mask-2)">
+        <text x="300" y="255">
+          <tspan fill="#8e44ff">const</tspan>{" "}<tspan fill="#00a6ff">agent</tspan>{" "}<tspan fill="#ffffff">=</tspan>{" "}<tspan fill="#8e44ff">new</tspan>{" "}<tspan fill="hsl(27deg 93% 60%)">AIAgent</tspan>{"();"}
+        </text>
+      </g>
+      <g mask="url(#code-mask-3)">
+        <text x="300" y="290">
+          <tspan fill="#00a6ff">agent</tspan>{"."}<tspan fill="#ff0056">connect</tspan>{"({"}
+        </text>
+      </g>
+      <g mask="url(#code-mask-4)">
+        <text x="300" y="325">
+          <tspan fill="#ffffff">{"  mode:"}</tspan>{" "}<tspan fill="hsl(27deg 93% 60%)">"autonomous"</tspan><tspan fill="#ffffff">,</tspan>
+        </text>
+      </g>
+      <g mask="url(#code-mask-5)">
+        <text x="300" y="360" fill="#ffffff">{"});"}</text>
+      </g>
+      <g mask="url(#code-mask-6)">
+        <text x="300" y="395">
+          <tspan fill="#8e44ff">await</tspan>{" "}<tspan fill="#00a6ff">agent</tspan>{"."}<tspan fill="#ff0056">deploy</tspan>{"();"}
+        </text>
+      </g>
+    </g>
+    <g className="code-group">
+      <rect className="cursor c1" width="10" height="18" fill="#fff" />
+      <rect className="cursor c2" width="10" height="18" fill="#fff" />
+      <rect className="cursor c3" width="10" height="18" fill="#fff" />
+      <rect className="cursor c4" width="10" height="18" fill="#fff" />
+      <rect className="cursor c5" width="10" height="18" fill="#fff" />
+      <rect className="cursor c6" width="10" height="18" fill="#fff" />
+    </g>
+    <g className="robot-float" style={{ transform: "translate(30px, 30px)" }}>
+      <line x1="130" y1="155" x2="130" y2="185" stroke="#626262" strokeWidth="2"/>
+      <circle cx="130" cy="148" r="7" className="antenna-glow"/>
+      <rect x="70" y="180" width="120" height="100" rx="25" fill="#1e1e24" stroke="#626262" strokeWidth="1.5"/>
+      <rect x="55" y="210" width="20" height="40" rx="5" fill="#050505" stroke="#1e1e24" strokeWidth="2"/>
+      <rect x="185" y="210" width="20" height="40" rx="5" fill="#050505" stroke="#1e1e24" strokeWidth="2"/>
+      <rect x="85" y="195" width="90" height="55" rx="12" fill="#050505" stroke="#1e1e24" strokeWidth="2"/>
+      <g className="eye-blink">
+        <circle cx="110" cy="225" r="8" fill="#00a6ff" filter="url(#glow-light)"/>
+        <circle cx="110" cy="225" r="3" fill="#ffffff" className="pupil" style={{ transformOrigin: "110px 225px" }}/>
+        <circle cx="150" cy="225" r="8" fill="#00a6ff" filter="url(#glow-light)"/>
+        <circle cx="150" cy="225" r="3" fill="#ffffff" className="pupil" style={{ transformOrigin: "150px 225px" }}/>
+      </g>
+      <rect x="115" y="280" width="30" height="15" fill="#1e1e24" />
+      <g className="hand-left">
+        <rect x="85" y="300" width="30" height="15" rx="7" fill="#ff0056" filter="url(#glow-light)"/>
+      </g>
+      <g className="hand-right">
+        <rect x="145" y="300" width="30" height="15" rx="7" fill="#00a6ff" filter="url(#glow-light)"/>
+      </g>
+    </g>
+    <text x="450" y="540" fontSize="20" fontWeight="bold" letterSpacing="2" textAnchor="middle">
+      <tspan fill="#ff0056" filter="url(#glow-light)">SYS_READY: </tspan>
+      <tspan fill="url(#metal-text)">Агент компилирует код</tspan>
+      <tspan className="dot" fill="url(#metal-text)">.</tspan>
+      <tspan className="dot" fill="url(#metal-text)">.</tspan>
+      <tspan className="dot" fill="url(#metal-text)">.</tspan>
+    </text>
+    <path d="M 170 530 L 160 530 L 160 545 L 170 545" fill="none" stroke="#626262" strokeWidth="2" />
+    <path d="M 730 530 L 740 530 L 740 545 L 730 545" fill="none" stroke="#626262" strokeWidth="2" />
+  </svg>
+);
 
 const YandexIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
