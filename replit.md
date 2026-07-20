@@ -126,7 +126,7 @@ AI-powered website builder that generates HTML/CSS/JS websites from text prompts
 
 ## Publish Limits & Billing
 - No per-plan limit on number of published sites (all tariffs can publish unlimited sites)
-- Daily cost: 20 tokens per published site, charged at 03:00 via setInterval/setTimeout cron
+- Daily cost: 35 tokens per published site, charged at 03:00 via setInterval/setTimeout cron
 - If user has insufficient balance: sites are suspended (unpublished from Yandex Cloud with placeholder page)
 - Suspended sites can be re-published when user tops up balance
 - `DAILY_PUBLISH_COST` constant in server/routes.ts

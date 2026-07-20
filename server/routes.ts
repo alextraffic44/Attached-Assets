@@ -2147,7 +2147,7 @@ const WAVESPEED_API_KEY = process.env.WAVESPEED_API_KEY;
 const WAVESPEED_3D_URL = "https://api.wavespeed.ai/api/v3/wavespeed-ai/hunyuan3d-v3/image-to-3d";
 const MODEL_3D_COST = 100;
 
-const DAILY_PUBLISH_COST = 20;
+const DAILY_PUBLISH_COST = 35;
 
 const SYSTEM_PROMPT = `Ты — креативный frontend-разработчик мирового уровня. Генерируй полные HTML-документы.
 
@@ -4916,7 +4916,7 @@ ${designAnalysis}
 
 
       if (user.credits < DAILY_PUBLISH_COST) {
-        return res.status(403).json({ message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 20 токенов/сайт." });
+        return res.status(403).json({ message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 35 токенов/сайт." });
       }
 
       await storage.updateProject(projectId, { publishStatus: "publishing" });
