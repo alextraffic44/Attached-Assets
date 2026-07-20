@@ -37,6 +37,7 @@ import {
   X,
 } from "lucide-react";
 import { useRef, useCallback } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { STYLE_PICKER_BY_CATEGORY, type UITemplate } from "@/components/ui-templates";
 
 function StyleTemplateCard({ tmpl, isCard, onClick }: { tmpl: UITemplate; isCard: boolean; onClick: () => void }) {
@@ -130,16 +131,18 @@ function TourTooltip({ steps, currentStep, onNext, onPrev, onClose }: {
       let top = 0;
       let left = 0;
       let arrowSide = "top";
+      const preferBottom = window.innerWidth < 640 && (step.position === "left" || step.position === "right");
+      const effectivePos = preferBottom ? "bottom" : step.position;
 
-      if (step.position === "bottom") {
+      if (effectivePos === "bottom") {
         top = rect.bottom + gap;
         left = rect.left + rect.width / 2 - tooltipW / 2;
         arrowSide = "top";
-      } else if (step.position === "top") {
+      } else if (effectivePos === "top") {
         top = rect.top - tooltipH - gap;
         left = rect.left + rect.width / 2 - tooltipW / 2;
         arrowSide = "bottom";
-      } else if (step.position === "left") {
+      } else if (effectivePos === "left") {
         top = rect.top + rect.height / 2 - tooltipH / 2;
         left = rect.left - tooltipW - gap;
         arrowSide = "right";
@@ -413,9 +416,26 @@ export default function DashboardPage() {
   });
 
   const appleFont = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
+  const isMobile = useIsMobile();
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isMobile || !showProfile) return;
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setShowProfile(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
+  }, [isMobile, showProfile]);
 
   return (
-    <div className="min-h-screen relative overflow-hidden" style={{ background: '#FBFBFD', fontFamily: appleFont, display: 'flex', flexDirection: 'column' }}>
+    <div className="min-h-screen relative overflow-x-hidden" style={{ background: '#FBFBFD', fontFamily: appleFont, display: 'flex', flexDirection: 'column' }}>
       <style dangerouslySetInnerHTML={{ __html: `
         :root { --rainbow-grad: linear-gradient(90deg, #FF4242, #A5FF42, #42A5FF, #42E6FF, #B742FF, #FF4242); }
         @keyframes db-rainbow { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
@@ -428,6 +448,26 @@ export default function DashboardPage() {
           border: 1.3px solid transparent;
           background: linear-gradient(#fff, #fff) padding-box, var(--rainbow-grad) border-box;
           background-size: 200% auto; animation: db-rainbow 3s linear infinite;
+        }
+        @media (max-width: 639px) {
+          .db-magic-btn { height: 2.25rem; padding: 0 0.75rem; font-size: 0.8rem; }
+          .db-tpl-layout { flex-direction: column !important; height: min(85dvh, 720px) !important; min-height: 0 !important; }
+          .db-tpl-sidebar { width: 100% !important; border-right: none !important; border-bottom: 1px solid rgba(0,0,0,0.07) !important; padding: 0.75rem 0 !important; max-height: none !important; }
+          .db-tpl-cats { flex-direction: row !important; overflow-x: auto !important; gap: 0.35rem !important; padding: 0 0.75rem !important; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+          .db-tpl-cats::-webkit-scrollbar { display: none; }
+          .db-tpl-cats button { width: auto !important; flex-shrink: 0; white-space: nowrap; }
+          .db-tpl-back { display: none !important; }
+          .db-tpl-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .db-topup-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 0.75rem !important; }
+          .db-topup-pad { padding: 1.25rem 1rem 1.5rem !important; }
+          .topup-m2card { padding: 1.25rem 0.75rem !important; border-radius: 18px !important; }
+          .topup-m2card span[style*="2.2rem"] { font-size: 1.5rem !important; }
+          .db-create-pad { padding: 1.25rem 1rem !important; min-height: 0 !important; }
+          .db-mode-card { min-height: 0 !important; padding: 1.1rem 1rem !important; flex-direction: row !important; text-align: left !important; align-items: center !important; gap: 0.85rem; }
+          .db-mode-card .db-mode-icon { margin-bottom: 0 !important; width: 44px !important; height: 44px !important; flex-shrink: 0; }
+          .db-mode-card h3 { margin-bottom: 2px !important; font-size: 0.95rem !important; }
+          .db-mode-card p { font-size: 0.75rem !important; }
+          .db-details-grid { grid-template-columns: 1fr !important; }
         }
         .db-magic-btn::before {
           content: ''; position: absolute; bottom: -20%; left: 50%; z-index: -1;
@@ -455,11 +495,11 @@ export default function DashboardPage() {
       <div className="absolute top-0 left-0 right-0 h-px pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent, rgba(66,165,255,0.3), rgba(181,66,255,0.3), transparent)' }} />
 
       {/* Header — matching landing page nav */}
-      <header className="fixed top-0 left-0 right-0 z-50" style={{ padding: '1rem 0', transition: 'all 0.3s', background: 'rgba(251,251,253,0.85)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+      <header className="fixed top-0 left-0 right-0 z-50" style={{ padding: '0.75rem 0', transition: 'all 0.3s', background: 'rgba(251,251,253,0.85)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center justify-between gap-2">
           {/* Logo identical to landing page */}
-          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setLocation("/")}>
-            <svg viewBox="0 0 32 32" stroke="currentColor" strokeWidth="2" fill="none" style={{ width: 32, height: 32 }}>
+          <div className="flex items-center gap-2 sm:gap-2.5 cursor-pointer shrink-0" onClick={() => setLocation("/")}>
+            <svg viewBox="0 0 32 32" stroke="currentColor" strokeWidth="2" fill="none" className="w-7 h-7 sm:w-8 sm:h-8 shrink-0">
               <defs>
                 <linearGradient id="db-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%"><animate attributeName="stop-color" values="#FF4242;#A5FF42;#42A5FF;#42E6FF;#B742FF;#FF4242" dur="5s" repeatCount="indefinite"/></stop>
@@ -473,19 +513,21 @@ export default function DashboardPage() {
               <line x1="15" y1="20" x2="17" y2="20" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
               <path d="M8 26 h16 M10 28 h12" stroke="url(#db-logo-grad)" strokeLinecap="round"/>
             </svg>
-            <span style={{ fontWeight: 700, fontSize: '1.1rem', letterSpacing: '-0.03em', color: '#1D1D1F' }}>Craft AI</span>
+            <span className="hidden sm:inline" style={{ fontWeight: 700, fontSize: '1.1rem', letterSpacing: '-0.03em', color: '#1D1D1F' }}>Craft AI</span>
+            <span className="sm:hidden" style={{ fontWeight: 700, fontSize: '0.95rem', letterSpacing: '-0.03em', color: '#1D1D1F' }}>Craft</span>
           </div>
 
           {/* Right controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
             <button
               onClick={() => setLocation("/leads")}
               data-testid="button-leads"
-              className="relative flex items-center gap-2 transition-all"
-              style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: '0.45rem 1.1rem', fontSize: '0.82rem', fontWeight: 600, color: '#1D1D1F', cursor: 'pointer' }}
+              className="relative flex items-center justify-center gap-2 transition-all shrink-0"
+              style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: isMobile ? '0.45rem' : '0.45rem 1.1rem', fontSize: '0.82rem', fontWeight: 600, color: '#1D1D1F', cursor: 'pointer', width: isMobile ? 36 : undefined, height: isMobile ? 36 : undefined }}
+              title="Лиды"
             >
               <Inbox className="w-3.5 h-3.5" style={{ color: '#86868B' }} />
-              <span>Лиды</span>
+              <span className="hidden sm:inline">Лиды</span>
               {(unreadData?.count ?? 0) > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center text-white text-[10px] font-black rounded-full px-1" style={{ background: 'linear-gradient(135deg,#FF4242,#B742FF)' }}>
                   {unreadData!.count}
@@ -496,36 +538,41 @@ export default function DashboardPage() {
             <button
               onClick={() => setLocation("/generations")}
               data-testid="button-generations"
-              className="flex items-center gap-2 transition-all"
-              style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: '0.45rem 1.1rem', fontSize: '0.82rem', fontWeight: 600, color: '#1D1D1F', cursor: 'pointer' }}
+              className="flex items-center justify-center gap-2 transition-all shrink-0"
+              style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: isMobile ? '0.45rem' : '0.45rem 1.1rem', fontSize: '0.82rem', fontWeight: 600, color: '#1D1D1F', cursor: 'pointer', width: isMobile ? 36 : undefined, height: isMobile ? 36 : undefined }}
+              title="Генерации"
             >
               <ImageIcon className="w-3.5 h-3.5" style={{ color: '#86868B' }} />
-              <span>Генерации</span>
+              <span className="hidden sm:inline">Генерации</span>
             </button>
 
-            <div className="flex items-center gap-1.5" style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: '0.45rem 1.1rem' }}>
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0" style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: isMobile ? '0.4rem 0.65rem' : '0.45rem 1.1rem' }}>
               <Coins className="w-3.5 h-3.5" style={{ color: '#86868B' }} />
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1D1D1F' }}>{user?.credits ?? 0}</span>
-              <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#86868B', textTransform: 'uppercase', letterSpacing: '0.08em' }}>токенов</span>
+              <span style={{ fontSize: isMobile ? '0.78rem' : '0.85rem', fontWeight: 700, color: '#1D1D1F' }}>{user?.credits ?? 0}</span>
+              <span className="hidden sm:inline" style={{ fontSize: '0.65rem', fontWeight: 600, color: '#86868B', textTransform: 'uppercase', letterSpacing: '0.08em' }}>токенов</span>
             </div>
 
             <button
               data-testid="button-topup"
               onClick={() => setShowTopUpModal(true)}
-              className="db-magic-btn"
+              className="db-magic-btn shrink-0"
             >
-              Пополнить
+              {isMobile ? '+' : 'Пополнить'}
             </button>
 
             {/* Profile avatar button */}
             <div
+              ref={profileMenuRef}
               style={{ position: 'relative' }}
-              onMouseEnter={() => setShowProfile(true)}
-              onMouseLeave={() => setShowProfile(false)}
+              onMouseEnter={!isMobile ? () => setShowProfile(true) : undefined}
+              onMouseLeave={!isMobile ? () => setShowProfile(false) : undefined}
             >
               <button
                 data-testid="button-profile"
-                onClick={() => setLocation('/profile')}
+                onClick={() => {
+                  if (isMobile) setShowProfile(v => !v);
+                  else setLocation('/profile');
+                }}
                 style={{ width: 36, height: 36, borderRadius: '50%', border: '2px solid rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', background: 'linear-gradient(135deg,hsl(27deg 93% 60%),#00a6ff)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}
               >
                 {user?.avatarUrl ? (
@@ -553,7 +600,7 @@ export default function DashboardPage() {
                     ].map((item, i) => (
                       <button
                         key={i}
-                        onClick={item.onClick}
+                        onClick={() => { setShowProfile(false); item.onClick(); }}
                         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.55rem 0.9rem', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 500, color: '#1D1D1F', textAlign: 'left', fontFamily: appleFont }}
                         onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.04)')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -564,7 +611,7 @@ export default function DashboardPage() {
                     ))}
                     <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', margin: '0.35rem 0' }} />
                     <button
-                      onClick={async () => { await logout(); setLocation("/auth"); }}
+                      onClick={async () => { setShowProfile(false); await logout(); setLocation("/auth"); }}
                       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.55rem 0.9rem', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 500, color: '#FF3B30', textAlign: 'left', fontFamily: appleFont }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,59,48,0.05)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -580,18 +627,18 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6" style={{ paddingTop: '6.5rem', flex: 1, paddingBottom: '3rem' }}>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6" style={{ paddingTop: '5.5rem', flex: 1, paddingBottom: '3rem' }}>
         {/* Page header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '3rem' }}>
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 sm:mb-12">
+          <div className="min-w-0">
             <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#86868B', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>
               Добро пожаловать, {user?.displayName || user?.email?.split('@')[0]}
             </p>
-            <h1 style={{ fontSize: 'clamp(1.8rem,4vw,3rem)', fontWeight: 700, letterSpacing: '-0.04em', color: '#1D1D1F', lineHeight: 1.1, margin: 0 }}>
+            <h1 style={{ fontSize: 'clamp(1.6rem,4vw,3rem)', fontWeight: 700, letterSpacing: '-0.04em', color: '#1D1D1F', lineHeight: 1.1, margin: 0 }}>
               Ваши проекты
             </h1>
           </div>
-          <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5 w-full sm:w-auto">
             <button
               disabled={creatingSeo}
               onClick={async () => {
@@ -607,8 +654,8 @@ export default function DashboardPage() {
                   setCreatingSeo(false);
                 }
               }}
-              className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
-              style={{ background: 'linear-gradient(135deg,#1a1a3e,#312e81)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 16, padding: '0.85rem 1.4rem', fontSize: '0.88rem', fontWeight: 600, cursor: creatingSeo ? 'wait' : 'pointer', letterSpacing: '-0.01em', opacity: creatingSeo ? 0.7 : 1 }}
+              className="flex w-full sm:w-auto items-center justify-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+              style={{ background: 'linear-gradient(135deg,#1a1a3e,#312e81)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 16, padding: isMobile ? '0.75rem 1rem' : '0.85rem 1.4rem', fontSize: isMobile ? '0.8rem' : '0.88rem', fontWeight: 600, cursor: creatingSeo ? 'wait' : 'pointer', letterSpacing: '-0.01em', opacity: creatingSeo ? 0.7 : 1 }}
               title="Создать SEO-сайт из ключевых слов"
             >
               {creatingSeo ? <Loader2 className="w-4 h-4 animate-spin" /> : <span style={{ fontSize: '1rem' }}>📊</span>}
@@ -616,8 +663,8 @@ export default function DashboardPage() {
             </button>
             <button
               onClick={() => { setCreateStep("choose"); setTitle(""); setDescription(""); setIsEnhanced(false); setResearchData(""); setMultiPageEnabled(false); setPageNames(["О нас", "Услуги", "Контакты"]); setSeoEnabled(false); setSeoH1(""); setSeoH2s(["", ""]); setPhotoImages([]); setSelectedStyleTemplate(null); setSelectedTemplate(""); setStyleCategory("buttons"); setShowCreateModal(true); }}
-              className="flex items-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
-              style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: '0.85rem 1.6rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
+              className="flex w-full sm:w-auto items-center justify-center gap-2 transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+              style={{ background: 'linear-gradient(135deg,#1D1D1F,#3a3a3c)', color: '#fff', border: 'none', borderRadius: 16, padding: isMobile ? '0.75rem 1rem' : '0.85rem 1.6rem', fontSize: isMobile ? '0.8rem' : '0.9rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', letterSpacing: '-0.01em' }}
             >
               <Plus className="w-5 h-5" />
               Новый сайт
@@ -632,12 +679,12 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : userProjects.length === 0 ? (
-          <GlassCard className="flex flex-col items-center justify-center py-32 text-center space-y-8">
-            <div className="w-24 h-24 rounded-[2rem] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>
-              <FolderOpen className="w-12 h-12" style={{ color: 'rgba(0,0,0,0.12)' }} />
+          <GlassCard className="flex flex-col items-center justify-center py-16 sm:py-32 text-center space-y-6 sm:space-y-8">
+            <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-[1.5rem] sm:rounded-[2rem] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>
+              <FolderOpen className="w-8 h-8 sm:w-12 sm:h-12" style={{ color: 'rgba(0,0,0,0.12)' }} />
             </div>
             <div className="space-y-3">
-              <h2 style={{ fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.03em', color: '#1D1D1F' }}>Пока здесь пусто</h2>
+              <h2 className="text-xl sm:text-[1.8rem]" style={{ fontWeight: 700, letterSpacing: '-0.03em', color: '#1D1D1F' }}>Пока здесь пусто</h2>
               <p style={{ color: '#86868B', maxWidth: 360, margin: '0 auto', fontSize: '1rem', lineHeight: 1.6 }}>Создайте свой первый проект, используя возможности искусственного интеллекта.</p>
             </div>
             <button onClick={() => setShowCreateModal(true)} className="transition-all hover:opacity-80" style={{ background: '#1D1D1F', color: '#fff', border: 'none', borderRadius: 14, padding: '0.85rem 2rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer' }}>
@@ -693,7 +740,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <button
-                      className="opacity-0 group-hover:opacity-100 transition-all duration-300"
+                      className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-300"
                       disabled={deleteMutation.isPending && deleteMutation.variables === project.id}
                       onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(project.id); }}
                       style={{ background: 'rgba(255,59,48,0.08)', border: 'none', borderRadius: 10, padding: '0.4rem', cursor: 'pointer', color: '#FF3B30', flexShrink: 0 }}
@@ -711,11 +758,11 @@ export default function DashboardPage() {
       </main>
 
       <Dialog open={showCreateModal} onOpenChange={(open) => { if (!open && isResearching) return; setShowCreateModal(open); if (!open) { setResearchData(""); setDeepResearchEnabled(false); setIsResearching(false); } }}>
-        <DialogContent className="p-0 overflow-hidden" style={{ width: '92vw', maxWidth: createStep === "templates" ? 1080 : 860, borderRadius: 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont, transition: 'max-width 0.3s ease' }}>
-          <div style={{ padding: createStep === "templates" ? '0' : '2rem 2.5rem', minHeight: createStep === "templates" ? 0 : 440, display: 'flex', flexDirection: 'column' }}>
+        <DialogContent className={`p-0 max-h-[92dvh] ${createStep === "templates" ? "overflow-hidden" : "overflow-y-auto"}`} style={{ width: '92vw', maxWidth: createStep === "templates" ? 1080 : 860, borderRadius: isMobile ? 20 : 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont, transition: 'max-width 0.3s ease' }}>
+          <div className={createStep === "templates" ? undefined : "db-create-pad"} style={{ padding: createStep === "templates" ? '0' : (isMobile ? '1.25rem 1rem' : '2rem 2.5rem'), minHeight: createStep === "templates" ? 0 : (isMobile ? 0 : 440), display: 'flex', flexDirection: 'column' }}>
             {createStep !== "templates" && (
               <DialogHeader>
-                <DialogTitle style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F', textAlign: 'center' }}>
+                <DialogTitle style={{ fontSize: isMobile ? '1.25rem' : '1.5rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F', textAlign: 'center' }}>
                   {createStep === "choose" ? "С чего начнём?" : "Оживите мечту"}
                 </DialogTitle>
               </DialogHeader>
@@ -723,7 +770,7 @@ export default function DashboardPage() {
 
             <AnimatePresence mode="wait">
               {createStep === "choose" ? (
-                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="grid grid-cols-3 gap-4 flex-1 items-center" style={{ marginTop: 32 }}>
+                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 flex-1 items-stretch sm:items-center" style={{ marginTop: isMobile ? 20 : 32 }}>
                   {[
                     {
                       m: "prompt",
@@ -778,27 +825,29 @@ export default function DashboardPage() {
                       key={x.m}
                       data-testid={`button-create-${x.m}`}
                       data-tour={`mode-${x.m}`}
-                      className="group flex flex-col items-center justify-center text-center transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none"
+                      className="db-mode-card group flex flex-col items-center justify-center text-center transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none"
                       style={{ padding: '2rem 1.5rem', borderRadius: 20, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', cursor: 'pointer', minHeight: 180 }}
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.04)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.12)'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.02)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(0,0,0,0.06)'; }}
                       onClick={() => { setSelectedMode(x.m as any); setCreateStep("details"); }}
                     >
-                      <div className="flex items-center justify-center mb-4" style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
+                      <div className="db-mode-icon flex items-center justify-center mb-4" style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         {x.icon}
                       </div>
+                      <div className="min-w-0">
                       <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#1D1D1F', marginBottom: 4, letterSpacing: '-0.02em' }}>{x.t}</h3>
                       <p style={{ fontSize: '0.82rem', color: '#86868B', fontWeight: 400, lineHeight: 1.4 }}>{x.d}</p>
+                      </div>
                     </button>
                   ))}
                 </motion.div>
               ) : createStep === "templates" ? (
-                <motion.div key="t" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} style={{ display: 'flex', height: '80vh', minHeight: 520 }}>
-                  <div style={{ width: 200, borderRight: '1px solid rgba(0,0,0,0.07)', padding: '1.5rem 0', flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+                <motion.div key="t" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="db-tpl-layout" style={{ display: 'flex', height: '80vh', minHeight: 520 }}>
+                  <div className="db-tpl-sidebar" style={{ width: 200, borderRight: '1px solid rgba(0,0,0,0.07)', padding: '1.5rem 0', flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
                     <div style={{ padding: '0 1.25rem 1rem', fontSize: '1.05rem', fontWeight: 700, color: '#1D1D1F', letterSpacing: '-0.02em' }}>
                       Стили UI
                     </div>
-                    <div className="flex flex-col gap-0.5" style={{ padding: '0 0.5rem', flex: 1 }}>
+                    <div className="db-tpl-cats flex flex-col gap-0.5" style={{ padding: '0 0.5rem', flex: 1 }}>
                       {STYLE_PICKER_BY_CATEGORY.map(cat => (
                         <button
                           key={cat.key}
@@ -818,7 +867,7 @@ export default function DashboardPage() {
                         </button>
                       ))}
                     </div>
-                    <div style={{ padding: '1rem 0.75rem 0' }}>
+                    <div className="db-tpl-back" style={{ padding: '1rem 0.75rem 0' }}>
                       <button
                         data-testid="button-templates-back"
                         onClick={() => setCreateStep("choose")}
@@ -832,16 +881,27 @@ export default function DashboardPage() {
                   </div>
 
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-                    <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid rgba(0,0,0,0.07)', flexShrink: 0 }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#1D1D1F', margin: 0 }}>
-                        {STYLE_PICKER_BY_CATEGORY.find(c => c.key === styleCategory)?.label}
-                      </h3>
-                      <p style={{ fontSize: '0.72rem', color: '#86868B', margin: '0.15rem 0 0' }}>
-                        {STYLE_PICKER_BY_CATEGORY.find(c => c.key === styleCategory)?.templates.length} шаблонов
-                      </p>
+                    <div style={{ padding: isMobile ? '0.75rem 1rem' : '1rem 1.5rem', borderBottom: '1px solid rgba(0,0,0,0.07)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div>
+                        <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#1D1D1F', margin: 0 }}>
+                          {STYLE_PICKER_BY_CATEGORY.find(c => c.key === styleCategory)?.label}
+                        </h3>
+                        <p style={{ fontSize: '0.72rem', color: '#86868B', margin: '0.15rem 0 0' }}>
+                          {STYLE_PICKER_BY_CATEGORY.find(c => c.key === styleCategory)?.templates.length} шаблонов
+                        </p>
+                      </div>
+                      {isMobile && (
+                        <button
+                          data-testid="button-templates-back-mobile"
+                          onClick={() => setCreateStep("choose")}
+                          style={{ background: 'rgba(0,0,0,0.04)', border: 'none', cursor: 'pointer', padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 600, color: '#86868B', borderRadius: 10, flexShrink: 0 }}
+                        >
+                          ← Назад
+                        </button>
+                      )}
                     </div>
-                    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', paddingBottom: '1rem' }}>
+                    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? '0.85rem 1rem' : '1.25rem 1.5rem' }}>
+                      <div className="db-tpl-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', paddingBottom: '1rem' }}>
                         {(STYLE_PICKER_BY_CATEGORY.find(c => c.key === styleCategory)?.templates || []).map(tmpl => (
                           <StyleTemplateCard
                             key={tmpl.id}
@@ -865,7 +925,7 @@ export default function DashboardPage() {
                       </span>
                     </div>
                   )}
-                  <div className="grid gap-6 flex-1" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                  <div className="db-details-grid grid gap-4 sm:gap-6 flex-1" style={{ gridTemplateColumns: '1fr 1fr' }}>
                     <div className="flex flex-col gap-3">
                       <div className="space-y-1.5" data-tour="photo-title">
                         <Label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Название</Label>
@@ -900,7 +960,7 @@ export default function DashboardPage() {
                         <div className="flex flex-col gap-3 flex-1">
                           {/* Style picker */}
                           <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Стиль анимации</div>
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             {[
                               {
                                 id: "parallax" as const,
@@ -1055,7 +1115,7 @@ export default function DashboardPage() {
                           />
                           {photoImages.length > 0 ? (
                             <div className="flex flex-col gap-2 flex-1">
-                              <div className="grid grid-cols-3 gap-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                 {photoImages.map((img, i) => (
                                   <div key={i} className="relative rounded-xl overflow-hidden" style={{ border: '1px solid rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.04)', aspectRatio: '1/1' }}>
                                     <img src={img.preview} alt={`Референс ${i + 1}`} className="w-full h-full object-cover" />
@@ -1107,7 +1167,7 @@ export default function DashboardPage() {
                                 </div>
                               </button>
                               <div className="rounded-xl p-2.5" data-tour="photo-ai-gen" style={{ background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.15)' }}>
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2">
                                   <input
                                     type="text"
                                     data-testid="input-mockup-prompt"
@@ -1170,7 +1230,7 @@ export default function DashboardPage() {
                                         setMockupGenerating(false);
                                       }
                                     }}
-                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
+                                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
                                     style={{ background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)', cursor: mockupGenerating ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}
                                   >
                                     {mockupGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
@@ -1189,12 +1249,12 @@ export default function DashboardPage() {
                         <button type="button" onClick={() => setAgentVersion("v1")}
                           className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all"
                           style={{ background: agentVersion === "v1" ? '#fff' : 'transparent', color: agentVersion === "v1" ? '#1d1d1f' : '#86868B', boxShadow: agentVersion === "v1" ? '0 1px 4px rgba(0,0,0,0.12)' : 'none', cursor: 'pointer' }}>
-                          V1 · Claude Sonnet 5
+                          {isMobile ? 'V1' : 'V1 · Claude Sonnet 5'}
                         </button>
                         <button type="button" onClick={() => setAgentVersion("v2")}
                           className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all"
                           style={{ background: agentVersion === "v2" ? 'linear-gradient(135deg,#4f46e5,#7c3aed)' : 'transparent', color: agentVersion === "v2" ? '#fff' : '#86868B', boxShadow: agentVersion === "v2" ? '0 1px 6px rgba(99,102,241,0.4)' : 'none', cursor: 'pointer' }}>
-                          ✦ V2 · Gemini Flash
+                          {isMobile ? '✦ V2' : '✦ V2 · Gemini Flash'}
                         </button>
                       </div>
 
@@ -1275,7 +1335,7 @@ export default function DashboardPage() {
                       )}
                     </div>
                   </div>
-                  <div className={`grid gap-3 ${selectedMode === "photo" ? "grid-cols-2" : "grid-cols-4"}`} style={{ marginTop: 16 }}>
+                  <div className={`grid gap-2 sm:gap-3 ${selectedMode === "photo" ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`} style={{ marginTop: 16 }}>
                     <button
                       className="h-10 font-semibold transition-all text-sm"
                       style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, color: '#86868B', cursor: 'pointer' }}
@@ -1366,7 +1426,7 @@ export default function DashboardPage() {
 
 
       <Dialog open={showTopUpModal} onOpenChange={setShowTopUpModal}>
-        <DialogContent className="p-0 overflow-visible" style={{ maxWidth: 900, borderRadius: 28, border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 40px 100px rgba(0,0,0,0.5)', background: 'linear-gradient(135deg,#1e1e24 10%,#050505 60%)', fontFamily: appleFont }}>
+        <DialogContent className="p-0 overflow-y-auto max-h-[92dvh]" style={{ maxWidth: 900, width: '92vw', borderRadius: isMobile ? 20 : 28, border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 40px 100px rgba(0,0,0,0.5)', background: 'linear-gradient(135deg,#1e1e24 10%,#050505 60%)', fontFamily: appleFont }}>
           <style dangerouslySetInnerHTML={{ __html: `
             @keyframes m2-gradient-shift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
             @keyframes m2-blur{to{filter:blur(3vmin);transform:scale(1.05)}}
@@ -1395,14 +1455,14 @@ export default function DashboardPage() {
             .topup-m2card::after{--size:2px;z-index:-1}
             .topup-m2card::before{--size:10px;z-index:-2;filter:blur(2vmin);animation:m2-blur 3s ease-in-out alternate infinite;}
           `}} />
-          <div style={{ padding: '2.5rem 2.5rem 2.5rem' }}>
+          <div className="db-topup-pad" style={{ padding: '2.5rem 2.5rem 2.5rem' }}>
             <DialogHeader>
-              <DialogTitle style={{ fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#fff' }}>
+              <DialogTitle style={{ fontSize: isMobile ? '1.35rem' : '1.8rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#fff' }}>
                 Пополнить баланс
               </DialogTitle>
             </DialogHeader>
-            <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)', marginTop: '0.4rem', marginBottom: '2rem' }}>Выберите подходящий тариф для пополнения токенов</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+            <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)', marginTop: '0.4rem', marginBottom: isMobile ? '1.25rem' : '2rem' }}>Выберите подходящий тариф для пополнения токенов</p>
+            <div className="db-topup-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
               {[
                 { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["1 сайт", "10 итераций редактирования"] },
                 { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["2 сайта", "19 итераций редактирования"] },
@@ -1463,12 +1523,12 @@ export default function DashboardPage() {
 
       {/* Footer */}
       <footer style={{ textAlign: 'center', padding: '2rem 1rem 2.5rem', color: '#86868B', fontSize: '0.78rem', lineHeight: 1.8 }}>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginBottom: '0.5rem' }}>
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-2 sm:gap-6 mb-2">
           <a href="/oferta" style={{ color: '#86868B', textDecoration: 'none' }}>Договор оферты</a>
           <a href="/privacy" style={{ color: '#86868B', textDecoration: 'none' }}>Политика конфиденциальности</a>
         </div>
         <div>© 2026 Craft AI. Все права защищены.</div>
-        <div>ИП Pushkaryov Sergey Borisovich (ПИНФЛ 30904686530039) &nbsp;·&nbsp; <a href="mailto:psb-trx1@yandex.ru" style={{ color: 'inherit', textDecoration: 'none' }}>psb-trx1@yandex.ru</a></div>
+        <div className="px-2 break-words">ИП Pushkaryov Sergey Borisovich (ПИНФЛ 30904686530039) &nbsp;·&nbsp; <a href="mailto:psb-trx1@yandex.ru" style={{ color: 'inherit', textDecoration: 'none' }}>psb-trx1@yandex.ru</a></div>
       </footer>
 
       <style dangerouslySetInnerHTML={{ __html: `
