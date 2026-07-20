@@ -10,6 +10,7 @@ import { useLocation, useParams } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Project, ProjectMessage, ProjectImage, ProjectVersion, ProjectFile } from "@shared/schema";
+import { isEditorVisibleProjectFile, isInternalAgentFile } from "@shared/project-files";
 import JSZip from "jszip";
 import { UITemplatesModal } from "@/components/ui-templates";
 import {
@@ -186,7 +187,9 @@ export default function EditorPage() {
   const [yandexSaving, setYandexSaving] = useState(false);
   const [agentVersion, setAgentVersion] = useState<"v1" | "v2">(() => {
     const p = new URLSearchParams(window.location.search);
-    return p.get("agent") === "v2" ? "v2" : "v1";
+    const q = p.get("agent");
+    if (q === "v1") return "v1";
+    return "v2";
   });
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditRunning, setAuditRunning] = useState(false);
@@ -286,7 +289,7 @@ export default function EditorPage() {
 
   const allFiles = [
     { filename: "index.html", code: project?.generatedCode || "" },
-    ...projectFiles.filter(f => f.filename !== "index.html"),
+    ...projectFiles.filter(f => isEditorVisibleProjectFile(f.filename)),
   ];
 
   const activeFileCode = activeFile === "index.html"
@@ -294,6 +297,19 @@ export default function EditorPage() {
     : (projectFiles.find(f => f.filename === activeFile)?.code || "");
 
   const currentCode = activeFileCode;
+
+  useEffect(() => {
+    if (isInternalAgentFile(activeFile)) {
+      setActiveFile("index.html");
+      return;
+    }
+    if (
+      activeFile !== "index.html" &&
+      !projectFiles.some((f) => f.filename === activeFile && isEditorVisibleProjectFile(f.filename))
+    ) {
+      setActiveFile("index.html");
+    }
+  }, [activeFile, projectFiles]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -531,9 +547,7 @@ export default function EditorPage() {
       if (leadFormEnabled === false) {
         bodyData.leadForm = false;
       }
-      if (agentVersion === "v2") {
-        bodyData.agentVersion = "v2";
-      }
+      bodyData.agentVersion = agentVersion;
       if (interactiveMode) {
         bodyData.interactiveMode = true;
         if (interactiveStyle) bodyData.interactiveStyle = interactiveStyle;
@@ -898,7 +912,8 @@ export default function EditorPage() {
     zip.file("index.html", htmlCode);
 
     for (const pf of projectFiles) {
-      if (pf.filename !== "index.html") {
+      if (!isEditorVisibleProjectFile(pf.filename)) continue;
+      {
         let pfCode = pf.code;
         Array.from(allImageUrls.entries()).forEach(([remoteUrl, localPath]) => {
           pfCode = pfCode.split(remoteUrl).join(localPath);

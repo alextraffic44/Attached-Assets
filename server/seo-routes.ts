@@ -1,6 +1,7 @@
 import { type Express } from "express";
 import type { IStorage } from "./storage";
 import { deployToYandex } from "./yandex-deploy";
+import { isInternalAgentFile } from "@shared/project-files";
 import type { SeoConfig, SeoCluster, SeoKeyword, SeoTheme } from "@shared/schema";
 import crypto from "crypto";
 
@@ -1360,7 +1361,9 @@ Respond with ONLY valid JSON, no explanation:
     }
 
     const allFiles = await storage.getProjectFiles(proj.id);
-    const deployFiles = allFiles.map(f => ({ filename: f.filename, content: f.code }));
+    const deployFiles = allFiles
+      .filter((f) => !isInternalAgentFile(f.filename))
+      .map(f => ({ filename: f.filename, content: f.code }));
 
     try {
       // Deploys to the project bucket AND mirrors into the domain-named
