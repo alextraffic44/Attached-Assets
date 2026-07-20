@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -188,6 +188,12 @@ export default function EditorPage() {
   const pendingScrollYRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingImageTarget = useRef<string | null>(null);
+  // Latest HTML from in-iframe edits — persisted silently so srcDoc is not rewritten (avoids reload loop).
+  const latestEditHtmlRef = useRef<string | null>(null);
+  const editModeRef = useRef(false);
+  const selectorModeRef = useRef(false);
+  editModeRef.current = editMode;
+  selectorModeRef.current = selectorMode;
 
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [imagePickerTab, setImagePickerTab] = useState<"library" | "upload">("library");
@@ -1946,96 +1952,86 @@ window.__PROJECT_ID__=${projectId};
     return code + previewInject;
   }, [projectId]);
 
-  const getEditableCode = useCallback((code: string) => {
-    if (selectorMode && code) {
-      const selectorStyle = `<style data-nz-selector>
-.__nz-sel-hover{outline:2px dashed rgba(59,130,246,0.7)!important;outline-offset:2px!important;cursor:crosshair!important}
-.__nz-sel-active{outline:3px solid rgba(59,130,246,1)!important;outline-offset:2px!important;background:rgba(59,130,246,0.05)!important}
-.__nz-sel-label{position:fixed;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:4px 12px;border-radius:8px;font-size:11px;font-weight:700;pointer-events:none;z-index:99999;white-space:nowrap;box-shadow:0 4px 12px rgba(59,130,246,0.3)}
-*{cursor:crosshair!important}
-</style>`;
-      const selectorJs = `<script data-nz-selector>
-document.addEventListener('DOMContentLoaded',function(){
-  var hovered=null,selected=null,label=null;
-  var allLinks=document.querySelectorAll('a[href]');
-  for(var i=0;i<allLinks.length;i++){allLinks[i].setAttribute('data-nz-href',allLinks[i].getAttribute('href'));allLinks[i].removeAttribute('href')}
-  var allBtns=document.querySelectorAll('button[type="submit"],input[type="submit"]');
-  for(var i=0;i<allBtns.length;i++){allBtns[i].setAttribute('type','button')}
-  var allForms=document.querySelectorAll('form');
-  for(var i=0;i<allForms.length;i++){allForms[i].addEventListener('submit',function(ev){ev.preventDefault();ev.stopPropagation()},true)}
-  function blockEvent(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();return false}
-  ['mousedown','mouseup','touchstart','touchend','dblclick','contextmenu','auxclick','submit'].forEach(function(evt){document.addEventListener(evt,blockEvent,true)});
-  function getPath(el){var p=[];var n=el;while(n&&n!==document.body){var idx=0;var s=n;while(s.previousElementSibling){s=s.previousElementSibling;idx++}p.unshift(idx);n=n.parentElement}return p.join(',')}
-  function getLbl(el){var t=el.tagName.toLowerCase();var c=el.className&&typeof el.className==='string'?'.'+el.className.trim().split(/\\s+/).slice(0,2).join('.'):'';return '<'+t+c+'>'}
-  function showLabel(el){
-    if(!label){label=document.createElement('div');label.className='__nz-sel-label';document.body.appendChild(label)}
-    label.textContent=getLbl(el);var r=el.getBoundingClientRect();
-    label.style.left=Math.max(0,r.left)+'px';label.style.top=Math.max(0,r.top-32)+'px';label.style.display='block';
-  }
-  function hideLabel(){if(label)label.style.display='none'}
-  document.addEventListener('mouseover',function(e){
-    var t=e.target;if(t===document.body||t===document.documentElement||t.hasAttribute('data-nz-selector'))return;
-    if(hovered&&hovered!==selected)hovered.classList.remove('__nz-sel-hover');
-    hovered=t;if(t!==selected)t.classList.add('__nz-sel-hover');
-    showLabel(t);
-  },true);
-  document.addEventListener('mouseout',function(e){
-    if(hovered&&hovered!==selected)hovered.classList.remove('__nz-sel-hover');hideLabel();
-  },true);
-  document.addEventListener('click',function(e){
-    e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
-    var t=e.target;if(t===document.body||t===document.documentElement||t.hasAttribute('data-nz-selector'))return;
-    if(selected)selected.classList.remove('__nz-sel-active');
-    selected=t;t.classList.remove('__nz-sel-hover');t.classList.add('__nz-sel-active');
-    var snippet=t.outerHTML;if(snippet.length>300)snippet=snippet.substring(0,300)+'...';
-    var textContent=t.textContent||'';if(textContent.length>100)textContent=textContent.substring(0,100)+'...';
-    window.parent.postMessage({type:'nz-element-selected',tag:t.tagName.toLowerCase(),text:textContent.trim(),classes:typeof t.className==='string'?t.className.replace(/__nz-sel-[a-z]+/g,'').trim():'',path:getPath(t),outerSnippet:snippet},'*');
-  },true);
-  function getCleanHtmlSel(){
-    var clone=document.documentElement.cloneNode(true);
-    var sels=clone.querySelectorAll('[data-nz-selector],[data-nz-leads]');
-    for(var i=0;i<sels.length;i++) sels[i].parentNode.removeChild(sels[i]);
-    var cls=clone.querySelectorAll('.__nz-sel-hover,.__nz-sel-active,.__nz-sel-label');
-    for(var i=0;i<cls.length;i++){cls[i].classList.remove('__nz-sel-hover','__nz-sel-active','__nz-sel-label')}
-    var restoredLinks=clone.querySelectorAll('[data-nz-href]');
-    for(var i=0;i<restoredLinks.length;i++){restoredLinks[i].setAttribute('href',restoredLinks[i].getAttribute('data-nz-href'));restoredLinks[i].removeAttribute('data-nz-href')}
-    return '<!DOCTYPE html>\\n'+clone.outerHTML;
-  }
-  window.addEventListener('message',function(e){
-    if(e.data&&e.data.type==='nz-delete-element'){
-      var path=e.data.path.split(',').map(Number);var node=document.body;
-      for(var i=0;i<path.length;i++){if(node.children[path[i]])node=node.children[path[i]];else return}
-      if(node&&node!==document.body&&node!==document.documentElement){
-        node.parentNode.removeChild(node);
-        if(selected===node){selected=null;hideLabel()}
-        window.parent.postMessage({type:'nz-element-deleted',html:getCleanHtmlSel()},'*');
-      }
+  // Stable preview HTML — never depends on edit/selector mode (avoids iframe remount + scroll jump to hero).
+  const getPreviewCode = useCallback((code: string) => {
+    if (!code) return code;
+    return injectProjectId(code);
+  }, [injectProjectId]);
+
+  const clearInPlacePreviewTools = useCallback((doc: Document) => {
+    try {
+      const w = doc.defaultView as (Window & { __nzPreviewToolsAbort?: AbortController }) | null;
+      w?.__nzPreviewToolsAbort?.abort();
+      if (w) w.__nzPreviewToolsAbort = undefined;
+    } catch {}
+    doc.querySelectorAll("[data-nz-editor],[data-nz-selector],.__nz-tooltip,.__nz-sel-label").forEach((el) => el.remove());
+    doc.querySelectorAll("[contenteditable]").forEach((el) => el.removeAttribute("contenteditable"));
+    doc.querySelectorAll(".__nz-sel-hover,.__nz-sel-active").forEach((el) => {
+      el.classList.remove("__nz-sel-hover", "__nz-sel-active");
+    });
+    doc.querySelectorAll("[data-nz-href]").forEach((el) => {
+      const href = el.getAttribute("data-nz-href");
+      if (href != null) el.setAttribute("href", href);
+      el.removeAttribute("data-nz-href");
+    });
+    doc.querySelectorAll("[data-nz-orig-type]").forEach((el) => {
+      const t = el.getAttribute("data-nz-orig-type");
+      if (t) el.setAttribute("type", t);
+      else el.removeAttribute("type");
+      el.removeAttribute("data-nz-orig-type");
+    });
+  }, []);
+
+  const applyInPlacePreviewMode = useCallback((mode: "view" | "edit" | "selector") => {
+    const iframe = iframeRef.current;
+    const win = iframe?.contentWindow;
+    const doc = iframe?.contentDocument;
+    if (!doc?.body || !win) return;
+
+    // Hard-lock scroll so enabling tools never jumps to hero / top.
+    const y = win.scrollY || doc.documentElement.scrollTop || doc.body.scrollTop || 0;
+    const lockScroll = () => {
+      try { win.scrollTo(0, y); } catch {}
+    };
+    const prevBehavior = doc.documentElement.style.scrollBehavior;
+    doc.documentElement.style.scrollBehavior = "auto";
+    doc.documentElement.style.overflowAnchor = "none";
+
+    clearInPlacePreviewTools(doc);
+    lockScroll();
+
+    if (mode === "view") {
+      doc.documentElement.style.scrollBehavior = prevBehavior;
+      lockScroll();
+      return;
     }
-  });
-});
-<\/script>`;
-      let injected = code.replace('</head>', selectorStyle + '</head>');
-      injected = injected.replace('</body>', selectorJs + '</body>');
-      return injectProjectId(injected);
-    }
-    if (!editMode || !code) return injectProjectId(code);
-    const editorScript = `<!--NZ_EDITOR_START--><style data-nz-editor>
-[contenteditable]:hover{outline:2px dashed rgba(59,130,246,0.5);outline-offset:2px;cursor:text}
+
+    if (mode === "edit") {
+      const style = doc.createElement("style");
+      style.setAttribute("data-nz-editor", "1");
+      style.textContent = `[contenteditable]:hover{outline:2px dashed rgba(59,130,246,0.5);outline-offset:2px;cursor:text}
 [contenteditable]:focus{outline:2px solid rgba(59,130,246,0.8);outline-offset:2px}
 img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"]:not(input):hover{outline:2px dashed rgba(168,85,247,0.6);outline-offset:2px;cursor:pointer}
-.__nz-tooltip{position:fixed;background:#1e293b;color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;pointer-events:none;z-index:99999;white-space:nowrap}
-</style><script data-nz-editor>
-(function(){
+.__nz-tooltip{position:fixed;background:#1e293b;color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;pointer-events:none;z-index:99999;white-space:nowrap}`;
+      doc.head.appendChild(style);
+
+      const script = doc.createElement("script");
+      script.setAttribute("data-nz-editor", "1");
+      script.textContent = `(function(){
+  var lockedY=${Math.round(y)};
+  try{if(window.__nzPreviewToolsAbort)window.__nzPreviewToolsAbort.abort();}catch(e){}
+  var __nzAc=new AbortController();window.__nzPreviewToolsAbort=__nzAc;var __nzSig=__nzAc.signal;
+  function keepScroll(){try{window.scrollTo(0,lockedY);}catch(e){}}
+  keepScroll();
   function getCleanHtml(){
     var clone=document.documentElement.cloneNode(true);
-    var eds=clone.querySelectorAll('[data-nz-editor],[data-nz-leads]');
+    var eds=clone.querySelectorAll('[data-nz-editor],[data-nz-leads],[data-nz-stickyfix],[data-nz-preloader-kill],[data-nz-selector]');
     for(var i=0;i<eds.length;i++) eds[i].parentNode.removeChild(eds[i]);
     var tips=clone.querySelectorAll('.__nz-tooltip');
     for(var i=0;i<tips.length;i++) tips[i].parentNode.removeChild(tips[i]);
     var ces=clone.querySelectorAll('[contenteditable]');
     for(var i=0;i<ces.length;i++) ces[i].removeAttribute('contenteditable');
     var html=clone.outerHTML;
-    html=html.replace(/<!--NZ_EDITOR_START-->|<!--NZ_EDITOR_END-->/g,'');
     return '<!DOCTYPE html>\\n'+html;
   }
   function getPath(el){
@@ -2054,24 +2050,24 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     tooltip.style.left=r.left+'px';tooltip.style.top=(r.top-28)+'px';tooltip.style.display='block';
   }
   function hideTip(){if(tooltip)tooltip.style.display='none'}
-
   function makeEditable(el){
       el.setAttribute('contenteditable','true');
       var savedBg='';var savedClip='';var savedFill='';
-      el.addEventListener('mouseenter',function(){showTip(el,'Клик для редактирования')});
-      el.addEventListener('mouseleave',hideTip);
+      el.addEventListener('mouseenter',function(){showTip(el,'Клик для редактирования')},{signal:__nzSig});
+      el.addEventListener('mouseleave',hideTip,{signal:__nzSig});
       el.addEventListener('focus',function(){
+        keepScroll();
         var cs=window.getComputedStyle(el);
         if(cs.webkitBackgroundClip==='text'||cs.backgroundClip==='text'){
           savedBg=el.style.background||'';savedClip=el.style.webkitBackgroundClip||el.style.backgroundClip||'';savedFill=el.style.webkitTextFillColor||'';
           el.style.webkitBackgroundClip='unset';el.style.backgroundClip='unset';
           el.style.webkitTextFillColor=cs.color||'#fff';el.style.background='transparent';
         }
-      });
+      },{signal:__nzSig});
       el.addEventListener('blur',function(){
         if(savedClip){el.style.background=savedBg;el.style.webkitBackgroundClip=savedClip;el.style.backgroundClip=savedClip;el.style.webkitTextFillColor=savedFill;savedClip=''}
         window.parent.postMessage({type:'nz-text-edit',html:getCleanHtml()},'*');
-      });
+      },{signal:__nzSig});
   }
   document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,td,th,button,label,figcaption,blockquote,strong,em,b,i,u,small').forEach(function(el){
     var txt=(el.textContent||'').trim();
@@ -2087,25 +2083,26 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
     if(el.children.length>2)return;
     makeEditable(el);
   });
+  keepScroll();
   document.querySelectorAll('img').forEach(function(img){
     img.style.cursor='pointer';
-    img.addEventListener('mouseenter',function(){showTip(img,'Клик для замены')});
-    img.addEventListener('mouseleave',hideTip);
+    img.addEventListener('mouseenter',function(){showTip(img,'Клик для замены')},{signal:__nzSig});
+    img.addEventListener('mouseleave',hideTip,{signal:__nzSig});
     img.addEventListener('click',function(e){
       e.preventDefault();e.stopPropagation();hideTip();
       window.parent.postMessage({type:'nz-img-click',path:getPath(img),src:img.src},'*');
-    });
+    },{signal:__nzSig});
   });
   var phSelectors='.image-placeholder,[data-image-hint],[class*="placeholder"],[class*="img-placeholder"]';
   document.querySelectorAll(phSelectors).forEach(function(ph){
     if(ph.tagName==='IMG') return;
     ph.style.cursor='pointer';ph.style.position=ph.style.position||'relative';
-    ph.addEventListener('mouseenter',function(){showTip(ph,'Клик для добавления изображения')});
-    ph.addEventListener('mouseleave',hideTip);
+    ph.addEventListener('mouseenter',function(){showTip(ph,'Клик для добавления изображения')},{signal:__nzSig});
+    ph.addEventListener('mouseleave',hideTip,{signal:__nzSig});
     ph.addEventListener('click',function(e){
       e.preventDefault();e.stopPropagation();hideTip();
       window.parent.postMessage({type:'nz-placeholder-click',path:getPath(ph),hint:ph.getAttribute('data-image-hint')||ph.textContent.trim().substring(0,100)||''},'*');
-    });
+    },{signal:__nzSig});
     var kids=ph.querySelectorAll('*');
     for(var k=0;k<kids.length;k++){
       kids[k].style.pointerEvents='none';
@@ -2129,11 +2126,109 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       }
       window.parent.postMessage({type:'nz-text-edit',html:getCleanHtml()},'*');
     }
-  });
-})();
-<\/script><!--NZ_EDITOR_END-->`;
-    return injectProjectId(code.replace('</body>', editorScript + '</body>'));
-  }, [editMode, selectorMode, injectProjectId]);
+  },{signal:__nzSig});
+  keepScroll();
+  requestAnimationFrame(keepScroll);
+  setTimeout(keepScroll,0);
+  setTimeout(keepScroll,50);
+})();`;
+      doc.body.appendChild(script);
+      lockScroll();
+      requestAnimationFrame(lockScroll);
+      setTimeout(lockScroll, 0);
+      setTimeout(lockScroll, 50);
+      doc.documentElement.style.scrollBehavior = prevBehavior;
+      return;
+    }
+
+    // selector mode
+    const style = doc.createElement("style");
+    style.setAttribute("data-nz-selector", "1");
+    style.textContent = `.__nz-sel-hover{outline:2px dashed rgba(59,130,246,0.7)!important;outline-offset:2px!important;cursor:crosshair!important}
+.__nz-sel-active{outline:3px solid rgba(59,130,246,1)!important;outline-offset:2px!important;background:rgba(59,130,246,0.05)!important}
+.__nz-sel-label{position:fixed;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:4px 12px;border-radius:8px;font-size:11px;font-weight:700;pointer-events:none;z-index:99999;white-space:nowrap;box-shadow:0 4px 12px rgba(59,130,246,0.3)}
+*{cursor:crosshair!important}`;
+    doc.head.appendChild(style);
+
+    const script = doc.createElement("script");
+    script.setAttribute("data-nz-selector", "1");
+    script.textContent = `(function(){
+  var lockedY=${Math.round(y)};
+  try{if(window.__nzPreviewToolsAbort)window.__nzPreviewToolsAbort.abort();}catch(e){}
+  var __nzAc=new AbortController();window.__nzPreviewToolsAbort=__nzAc;var __nzSig=__nzAc.signal;
+  function keepScroll(){try{window.scrollTo(0,lockedY);}catch(e){}}
+  keepScroll();
+  var hovered=null,selected=null,label=null;
+  var allLinks=document.querySelectorAll('a[href]');
+  for(var i=0;i<allLinks.length;i++){allLinks[i].setAttribute('data-nz-href',allLinks[i].getAttribute('href'));allLinks[i].removeAttribute('href')}
+  var allBtns=document.querySelectorAll('button[type="submit"],input[type="submit"]');
+  for(var i=0;i<allBtns.length;i++){if(!allBtns[i].hasAttribute('data-nz-orig-type'))allBtns[i].setAttribute('data-nz-orig-type',allBtns[i].getAttribute('type')||'');allBtns[i].setAttribute('type','button')}
+  var allForms=document.querySelectorAll('form');
+  for(var i=0;i<allForms.length;i++){allForms[i].addEventListener('submit',function(ev){ev.preventDefault();ev.stopPropagation()},{capture:true,signal:__nzSig})}
+  function blockEvent(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();return false}
+  ['mousedown','mouseup','touchstart','touchend','dblclick','contextmenu','auxclick','submit'].forEach(function(evt){document.addEventListener(evt,blockEvent,{capture:true,signal:__nzSig})});
+  function getPath(el){var p=[];var n=el;while(n&&n!==document.body){var idx=0;var s=n;while(s.previousElementSibling){s=s.previousElementSibling;idx++}p.unshift(idx);n=n.parentElement}return p.join(',')}
+  function getLbl(el){var t=el.tagName.toLowerCase();var c=el.className&&typeof el.className==='string'?'.'+el.className.trim().split(/\\s+/).slice(0,2).join('.'):'';return '<'+t+c+'>'}
+  function showLabel(el){
+    if(!label){label=document.createElement('div');label.className='__nz-sel-label';document.body.appendChild(label)}
+    label.textContent=getLbl(el);var r=el.getBoundingClientRect();
+    label.style.left=Math.max(0,r.left)+'px';label.style.top=Math.max(0,r.top-32)+'px';label.style.display='block';
+  }
+  function hideLabel(){if(label)label.style.display='none'}
+  document.addEventListener('mouseover',function(e){
+    var t=e.target;if(t===document.body||t===document.documentElement||t.hasAttribute('data-nz-selector'))return;
+    if(hovered&&hovered!==selected)hovered.classList.remove('__nz-sel-hover');
+    hovered=t;if(t!==selected)t.classList.add('__nz-sel-hover');
+    showLabel(t);
+  },{capture:true,signal:__nzSig});
+  document.addEventListener('mouseout',function(e){
+    if(hovered&&hovered!==selected)hovered.classList.remove('__nz-sel-hover');hideLabel();
+  },{capture:true,signal:__nzSig});
+  document.addEventListener('click',function(e){
+    e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+    var t=e.target;if(t===document.body||t===document.documentElement||t.hasAttribute('data-nz-selector'))return;
+    if(selected)selected.classList.remove('__nz-sel-active');
+    selected=t;t.classList.remove('__nz-sel-hover');t.classList.add('__nz-sel-active');
+    var snippet=t.outerHTML;if(snippet.length>300)snippet=snippet.substring(0,300)+'...';
+    var textContent=t.textContent||'';if(textContent.length>100)textContent=textContent.substring(0,100)+'...';
+    window.parent.postMessage({type:'nz-element-selected',tag:t.tagName.toLowerCase(),text:textContent.trim(),classes:typeof t.className==='string'?t.className.replace(/__nz-sel-[a-z]+/g,'').trim():'',path:getPath(t),outerSnippet:snippet},'*');
+  },{capture:true,signal:__nzSig});
+  function getCleanHtmlSel(){
+    var clone=document.documentElement.cloneNode(true);
+    var sels=clone.querySelectorAll('[data-nz-selector],[data-nz-leads],[data-nz-stickyfix],[data-nz-preloader-kill]');
+    for(var i=0;i<sels.length;i++) sels[i].parentNode.removeChild(sels[i]);
+    var cls=clone.querySelectorAll('.__nz-sel-hover,.__nz-sel-active,.__nz-sel-label');
+    for(var i=0;i<cls.length;i++){cls[i].classList.remove('__nz-sel-hover','__nz-sel-active','__nz-sel-label')}
+    var restoredLinks=clone.querySelectorAll('[data-nz-href]');
+    for(var i=0;i<restoredLinks.length;i++){restoredLinks[i].setAttribute('href',restoredLinks[i].getAttribute('data-nz-href'));restoredLinks[i].removeAttribute('data-nz-href')}
+    return '<!DOCTYPE html>\\n'+clone.outerHTML;
+  }
+  window.addEventListener('message',function(e){
+    if(e.data&&e.data.type==='nz-delete-element'){
+      var path=e.data.path.split(',').map(Number);var node=document.body;
+      for(var i=0;i<path.length;i++){if(node.children[path[i]])node=node.children[path[i]];else return}
+      if(node&&node!==document.body&&node!==document.documentElement){
+        node.parentNode.removeChild(node);
+        if(selected===node){selected=null;hideLabel()}
+        window.parent.postMessage({type:'nz-element-deleted',html:getCleanHtmlSel()},'*');
+      }
+    }
+  },{signal:__nzSig});
+  keepScroll();
+  requestAnimationFrame(keepScroll);
+  setTimeout(keepScroll,0);
+  setTimeout(keepScroll,50);
+})();`;
+    doc.body.appendChild(script);
+    lockScroll();
+    requestAnimationFrame(lockScroll);
+    setTimeout(lockScroll, 0);
+    setTimeout(lockScroll, 50);
+    doc.documentElement.style.scrollBehavior = prevBehavior;
+  }, [clearInPlacePreviewTools]);
+
+  // Keep legacy name used by generation blob updates — view-only, no mode-dependent remount.
+  const getEditableCode = getPreviewCode;
 
   const requestIframeScrollY = useCallback((): Promise<number> => {
     return new Promise((resolve) => {
@@ -2194,44 +2289,42 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
   }, [requestIframeScrollY, editMode, selectorMode]);
 
   useEffect(() => {
+    const persistHtml = (finalHtml: string, opts?: { invalidate?: boolean; updateState?: boolean }) => {
+      const invalidate = opts?.invalidate ?? true;
+      const updateState = opts?.updateState ?? true;
+      latestEditHtmlRef.current = finalHtml;
+      if (updateState) {
+        if (activeFile === "index.html") setStreamedCode(finalHtml);
+      }
+      if (activeFile === "index.html") {
+        fetch(`/api/projects/${projectId}/code`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ generatedCode: finalHtml }),
+          credentials: "include",
+        }).then(() => {
+          if (invalidate) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+        }).catch(() => {});
+      } else {
+        fetch(`/api/projects/${projectId}/files/${activeFile}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: finalHtml }),
+          credentials: "include",
+        }).then(() => {
+          if (invalidate) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+        }).catch(() => {});
+      }
+    };
+
     const handler = (e: MessageEvent) => {
       if (!e.data || typeof e.data !== 'object') return;
       if (iframeRef.current && e.source && e.source !== iframeRef.current.contentWindow) return;
       if (e.data.type === 'nz-text-edit') {
         const finalHtml = e.data.html;
-        const seq = ++saveSeqRef.current;
-        setOptimisticFiles(prev => ({ ...prev, [activeFile]: finalHtml }));
-        if (activeFile === "index.html") {
-          setStreamedCode(finalHtml);
-          setStreamedFile("index.html");
-          fetch(`/api/projects/${projectId}/code`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ generatedCode: finalHtml }),
-            credentials: "include",
-          }).then(async (resp) => {
-            if (seq !== saveSeqRef.current) return;
-            if (!resp.ok) throw new Error("save failed");
-            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
-          }).catch(() => {
-            if (seq === saveSeqRef.current) toast({ title: "Не удалось сохранить", variant: "destructive" });
-          });
-        } else {
-          setStreamedCode(finalHtml);
-          setStreamedFile(activeFile);
-          fetch(`/api/projects/${projectId}/files/${encodeURIComponent(activeFile)}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: finalHtml }),
-            credentials: "include",
-          }).then(async (resp) => {
-            if (seq !== saveSeqRef.current) return;
-            if (!resp.ok) throw new Error("save failed");
-            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
-          }).catch(() => {
-            if (seq === saveSeqRef.current) toast({ title: "Не удалось сохранить", variant: "destructive" });
-          });
-        }
+        // While visual editing: save quietly — never rewrite srcDoc (that remounts the iframe).
+        const liveEditing = editModeRef.current || selectorModeRef.current;
+        persistHtml(finalHtml, { invalidate: !liveEditing, updateState: !liveEditing });
       }
       if (e.data.type === 'nz-navigate-file') {
         if (isGenerating) return;
@@ -2248,12 +2341,7 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
         }
         setActiveFile(filename);
         setStreamedCode("");
-        setStreamedFile(filename);
-        if (anchor) {
-          setTimeout(() => {
-            iframeRef.current?.contentWindow?.postMessage({ type: "nz-scroll-anchor", anchor }, "*");
-          }, 120);
-        }
+        latestEditHtmlRef.current = null;
       }
       if (e.data.type === 'nz-img-click' || e.data.type === 'nz-placeholder-click') {
         pendingImageTarget.current = e.data.path;
@@ -2272,42 +2360,58 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
       if (e.data.type === 'nz-element-deleted') {
         const finalHtml = e.data.html;
         setSelectedElement(null);
-        const seq = ++saveSeqRef.current;
-        setOptimisticFiles(prev => ({ ...prev, [activeFile]: finalHtml }));
-        const savePromise = activeFile === "index.html"
-          ? fetch(`/api/projects/${projectId}/code`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ generatedCode: finalHtml }),
-              credentials: "include",
-            })
-          : fetch(`/api/projects/${projectId}/files/${encodeURIComponent(activeFile)}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ code: finalHtml }),
-              credentials: "include",
-            });
-        if (activeFile === "index.html") {
-          setStreamedCode(finalHtml);
-          setStreamedFile("index.html");
-        } else {
-          setStreamedCode(finalHtml);
-          setStreamedFile(activeFile);
-        }
-        savePromise.then(async (resp) => {
-          if (seq !== saveSeqRef.current) return;
-          if (!resp.ok) throw new Error("save failed");
-          queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
-          queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
-          toast({ title: "Элемент удалён", description: "Изменения сохранены" });
-        }).catch(() => {
-          if (seq === saveSeqRef.current) toast({ title: "Не удалось сохранить удаление", variant: "destructive" });
-        });
+        const liveEditing = editModeRef.current || selectorModeRef.current;
+        persistHtml(finalHtml, { invalidate: !liveEditing, updateState: !liveEditing });
+        toast({ title: "Элемент удалён", description: "Изменения сохранены" });
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [projectId, activeFile, allFiles, isGenerating, projectFiles, optimisticFiles, toast]);
+  }, [projectId, activeFile, isGenerating, toast]);
+
+  const flushPendingEditHtml = useCallback(() => {
+    const html = latestEditHtmlRef.current;
+    if (!html) return;
+    if (activeFile === "index.html") {
+      setStreamedCode(html);
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+    }
+  }, [activeFile, projectId]);
+
+  const togglePreviewMode = useCallback((mode: "edit" | "selector") => {
+    if (mode === "edit") {
+      if (editMode) flushPendingEditHtml();
+      const next = !editMode;
+      // Apply tools first (sync) so React re-render cannot remount before injection.
+      if (next) setSelectorMode(false);
+      applyInPlacePreviewMode(next ? "edit" : "view");
+      setEditMode(next);
+    } else {
+      if (selectorMode) flushPendingEditHtml();
+      const next = !selectorMode;
+      if (next) {
+        setEditMode(false);
+        setSelectedElement(null);
+      }
+      applyInPlacePreviewMode(next ? "selector" : "view");
+      setSelectorMode(next);
+    }
+  }, [editMode, selectorMode, flushPendingEditHtml, applyInPlacePreviewMode]);
+
+  const handlePreviewLoad = useCallback(() => {
+    // Re-apply mode after any real document load (file switch / generation), without scroll restore hacks.
+    if (editModeRef.current) applyInPlacePreviewMode("edit");
+    else if (selectorModeRef.current) applyInPlacePreviewMode("selector");
+    else applyInPlacePreviewMode("view");
+  }, [applyInPlacePreviewMode]);
+
+  // Freeze iframe HTML identity — never rebuild from edit/selector mode.
+  const previewSrcDoc = useMemo(() => {
+    if (isGenerating) return getPreviewCode(project?.generatedCode || "") || "";
+    return getPreviewCode(currentCode) || "";
+  }, [isGenerating, project?.generatedCode, currentCode, getPreviewCode]);
 
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: isMobile ? "100%" : "375px" };
 
@@ -2400,7 +2504,14 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
 
           {/* Code toggle */}
           <button
-            onClick={() => { setShowCode(!showCode); if (!showCode) setEditMode(false); }}
+            onClick={() => {
+              setShowCode(!showCode);
+              if (!showCode) {
+                setEditMode(false);
+                setSelectorMode(false);
+                applyInPlacePreviewMode("view");
+              }
+            }}
             data-testid="button-toggle-code"
             title={showCode ? "Просмотр сайта" : "Код"}
             className={`flex items-center gap-2 h-9 sm:h-10 px-2.5 sm:px-4 rounded-full text-sm font-medium transition-all duration-200 ${showCode
@@ -3096,8 +3207,8 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               </div>
             ) : currentCode || isGenerating ? (
               <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
-                 <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { e.preventDefault(); e.stopPropagation(); iframeRef.current?.contentWindow?.postMessage({ type: 'nz-wheel', dx: e.deltaX, dy: e.deltaY }, '*'); }}>
-                    <iframe key={selectorMode ? 'sel' : editMode ? 'edit' : 'view'} ref={iframeRef} srcDoc={getEditableCode(isGenerating ? (streamedCode || currentCode || project?.generatedCode || "") : currentCode)} className="w-full h-full border-none" sandbox="allow-scripts allow-forms" onLoad={restoreIframeScroll} />
+                 <div className="bg-white rounded-2xl shadow-sm transition-all duration-500 overflow-hidden border border-slate-200" style={{ width: deviceWidths[previewDevice], height: '100%' }} onWheel={(e) => { const iw = iframeRef.current?.contentWindow; if (!iw) return; e.preventDefault(); e.stopPropagation(); iw.scrollBy(e.deltaX, e.deltaY); }}>
+                    <iframe key={activeFile} ref={iframeRef} srcDoc={previewSrcDoc} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-forms" onLoad={handlePreviewLoad} />
                  </div>
                  {isGenerating && (
                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style={{ background: 'rgba(11,15,25,0.92)', backdropFilter: 'blur(4px)' }}>
