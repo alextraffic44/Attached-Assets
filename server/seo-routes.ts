@@ -1368,7 +1368,12 @@ Respond with ONLY valid JSON, no explanation:
     try {
       // Deploys to the project bucket AND mirrors into the domain-named
       // bucket when a custom domain is attached (served by the Caddy proxy).
-      const { url, yandexProjectId } = await deployToYandex(proj.id, deployFiles, (proj as any).customDomain);
+      const { url, yandexProjectId, ycStoragePoolId } = await deployToYandex(
+        proj.id,
+        deployFiles,
+        (proj as any).customDomain,
+        (proj as any).ycStoragePoolId,
+      );
       const finalUrl = url;
 
       const updatedCfg: SeoConfig = { ...cfg, publishUrl: finalUrl };
@@ -1376,6 +1381,7 @@ Respond with ONLY valid JSON, no explanation:
         publishedUrl: finalUrl,
         publishStatus: "published",
         vercelProjectId: yandexProjectId,
+        ycStoragePoolId,
         seoConfig: updatedCfg,
       } as any);
 

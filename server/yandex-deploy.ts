@@ -8,9 +8,14 @@ import {
   ListObjectsV2Command,
   CopyObjectCommand,
 } from "@aws-sdk/client-s3";
-
-const YC_KEY_ID = process.env.YC_KEY_ID;
-const YC_SECRET = process.env.YC_SECRET;
+import {
+  acquireStoragePool,
+  bumpPoolBucketCount,
+  getPoolS3Client,
+  getStoragePoolById,
+  resolvePoolForProject,
+  type StoragePool,
+} from "./yc-storage-pools";
 
 // IP of our Caddy reverse-proxy VPS (Timeweb) that terminates TLS for client
 // custom domains via Let's Encrypt on-demand certificates. The client points
@@ -18,20 +23,6 @@ const YC_SECRET = process.env.YC_SECRET;
 // bucket ({domain}.website.yandexcloud.net).
 export function getDomainProxyIp(): string {
   return process.env.DOMAIN_PROXY_IP || "";
-}
-
-// ═══ Object Storage (S3-compatible) ═══
-
-let s3Client: S3Client | null = null;
-function getS3Client(): S3Client {
-  if (s3Client) return s3Client;
-  if (!YC_KEY_ID || !YC_SECRET) throw new Error("YC_KEY_ID / YC_SECRET не настроены");
-  s3Client = new S3Client({
-    region: "ru-central1",
-    endpoint: "https://storage.yandexcloud.net",
-    credentials: { accessKeyId: YC_KEY_ID, secretAccessKey: YC_SECRET },
-  });
-  return s3Client;
 }
 
 export interface DeployFile {
@@ -84,33 +75,58 @@ export function domainBucketFor(domain: string): string {
   return domain.replace(/^www\./, "").toLowerCase();
 }
 
-async function ensureBucketReady(bucket: string): Promise<void> {
-  const client = getS3Client();
-  try {
-    await client.send(new CreateBucketCommand({ Bucket: bucket }));
-  } catch (err: any) {
-    if (err?.name !== "BucketAlreadyOwnedByYou" && err?.name !== "BucketAlreadyExists") {
-      throw err;
-    }
-  }
-  await client.send(
-    new PutBucketWebsiteCommand({
-      Bucket: bucket,
-      WebsiteConfiguration: {
-        IndexDocument: { Suffix: "index.html" },
-        ErrorDocument: { Key: "index.html" },
-      },
-    })
+function isQuotaError(err: any): boolean {
+  const s = `${err?.name || ""} ${err?.Code || ""} ${err?.message || ""}`.toLowerCase();
+  return (
+    s.includes("toomanybuckets") ||
+    s.includes("too many buckets") ||
+    s.includes("quota") ||
+    s.includes("buckets.count") ||
+    s.includes("limit exceeded")
   );
 }
 
-async function listAllKeys(bucket: string): Promise<string[]> {
-  const client = getS3Client();
+async function ensureBucketReady(
+  client: S3Client,
+  bucket: string,
+): Promise<"created" | "owned" | "taken"> {
+  try {
+    await client.send(new CreateBucketCommand({ Bucket: bucket }));
+    await client.send(
+      new PutBucketWebsiteCommand({
+        Bucket: bucket,
+        WebsiteConfiguration: {
+          IndexDocument: { Suffix: "index.html" },
+          ErrorDocument: { Key: "index.html" },
+        },
+      }),
+    );
+    return "created";
+  } catch (err: any) {
+    const name = err?.name || err?.Code || "";
+    if (name === "BucketAlreadyOwnedByYou") {
+      await client.send(
+        new PutBucketWebsiteCommand({
+          Bucket: bucket,
+          WebsiteConfiguration: {
+            IndexDocument: { Suffix: "index.html" },
+            ErrorDocument: { Key: "index.html" },
+          },
+        }),
+      );
+      return "owned";
+    }
+    if (name === "BucketAlreadyExists") return "taken";
+    throw err;
+  }
+}
+
+async function listAllKeys(client: S3Client, bucket: string): Promise<string[]> {
   const keys: string[] = [];
   let continuationToken: string | undefined;
   do {
     const list = await client.send(
-      new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: continuationToken })
+      new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: continuationToken }),
     );
     for (const obj of list.Contents || []) {
       if (obj.Key) keys.push(obj.Key);
@@ -120,9 +136,8 @@ async function listAllKeys(bucket: string): Promise<string[]> {
   return keys;
 }
 
-async function clearBucket(bucket: string): Promise<void> {
-  const client = getS3Client();
-  const keys = await listAllKeys(bucket);
+async function clearBucket(client: S3Client, bucket: string): Promise<void> {
+  const keys = await listAllKeys(client, bucket);
   for (let i = 0; i < keys.length; i += 1000) {
     const batch = keys.slice(i, i + 1000).map((Key) => ({ Key }));
     if (batch.length === 0) continue;
@@ -131,15 +146,23 @@ async function clearBucket(bucket: string): Promise<void> {
 }
 
 /**
- * Deploy files into a specific bucket. Existing objects are cleared first so
- * stale assets from a previous version never linger ("replace the whole
- * deploy" semantics).
+ * Deploy files into a specific bucket on a given storage pool.
  */
-export async function deployFilesToBucket(bucket: string, files: DeployFile[]): Promise<void> {
-  const client = getS3Client();
-  await ensureBucketReady(bucket);
+export async function deployFilesToBucket(
+  bucket: string,
+  files: DeployFile[],
+  pool: StoragePool,
+): Promise<void> {
+  const client = getPoolS3Client(pool);
+  const created = await ensureBucketReady(client, bucket);
+  if (created === "created") {
+    await bumpPoolBucketCount(pool.id, 1);
+  }
+  if (created === "taken") {
+    throw new Error(`Бакет ${bucket} уже занят в Object Storage`);
+  }
   try {
-    await clearBucket(bucket);
+    await clearBucket(client, bucket);
   } catch (err) {
     console.warn(`[Yandex] Failed to clear old objects in ${bucket} (non-fatal):`, err);
   }
@@ -153,37 +176,74 @@ export async function deployFilesToBucket(bucket: string, files: DeployFile[]): 
         Body: buf,
         ContentType: contentTypeFor(key),
         ACL: "public-read",
-      })
+      }),
     );
+  }
+}
+
+async function deployFilesWithPoolFailover(
+  bucket: string,
+  files: DeployFile[],
+  preferred: StoragePool,
+  slotsHint = 1,
+): Promise<StoragePool> {
+  try {
+    await deployFilesToBucket(bucket, files, preferred);
+    return preferred;
+  } catch (err: any) {
+    if (!isQuotaError(err)) throw err;
+    console.warn(`[Yandex] pool #${preferred.id} quota hit for ${bucket}, acquiring new cloud…`);
+    const next = await acquireStoragePool(slotsHint);
+    if (next.id === preferred.id) throw err;
+    await deployFilesToBucket(bucket, files, next);
+    return next;
   }
 }
 
 /**
  * Deploy files to the project's dedicated bucket, and — when a custom domain
  * is attached — mirror the same files into the domain-named bucket so the
- * Caddy proxy serves the fresh version immediately (no CDN cache to purge).
+ * Caddy proxy serves the fresh version immediately.
  */
 export async function deployToYandex(
   projectId: number,
   files: DeployFile[],
-  customDomain?: string | null
-): Promise<{ url: string; deploymentId: string; yandexProjectId: string }> {
+  customDomain?: string | null,
+  existingPoolId?: number | null,
+): Promise<{ url: string; deploymentId: string; yandexProjectId: string; ycStoragePoolId: number }> {
+  const slots = customDomain ? 2 : 1;
+  let pool = await resolvePoolForProject({ ycStoragePoolId: existingPoolId });
+  // If republishing into an existing pool that is full, still try that pool first
+  // (bucket likely already exists). Only allocate a new pool when creating fresh.
+  if (!existingPoolId) {
+    pool = await acquireStoragePool(slots);
+  }
+
   const bucket = bucketNameFor(projectId);
-  await deployFilesToBucket(bucket, files);
+  pool = await deployFilesWithPoolFailover(bucket, files, pool, slots);
 
   if (customDomain) {
     const domainBucket = domainBucketFor(customDomain);
     try {
-      await deployFilesToBucket(domainBucket, files);
+      await deployFilesToBucket(domainBucket, files, pool);
     } catch (err) {
       console.warn(`[Yandex] Mirror deploy to domain bucket ${domainBucket} failed (non-fatal):`, err);
     }
   }
 
-  return { url: siteUrlFor(projectId), deploymentId: `${bucket}-${Date.now()}`, yandexProjectId: bucket };
+  return {
+    url: siteUrlFor(projectId),
+    deploymentId: `${bucket}-${Date.now()}`,
+    yandexProjectId: bucket,
+    ycStoragePoolId: pool.id,
+  };
 }
 
-export async function unpublishFromYandex(projectId: number, customDomain?: string | null): Promise<void> {
+export async function unpublishFromYandex(
+  projectId: number,
+  customDomain?: string | null,
+  existingPoolId?: number | null,
+): Promise<void> {
   const suspendedPage = `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -210,19 +270,19 @@ a{color:#3b82f6;text-decoration:none}
 </html>`;
 
   try {
-    await deployToYandex(projectId, [{ filename: "index.html", content: suspendedPage }], customDomain);
+    await deployToYandex(
+      projectId,
+      [{ filename: "index.html", content: suspendedPage }],
+      customDomain,
+      existingPoolId,
+    );
   } catch (err) {
     console.error(`[Yandex] Failed to unpublish project ${projectId}:`, err);
   }
 }
 
-/**
- * Server-side copy of every object from one bucket to another (used when a
- * custom domain is attached to an already-published site — no regeneration).
- */
-async function copyBucketContents(srcBucket: string, destBucket: string): Promise<void> {
-  const client = getS3Client();
-  const keys = await listAllKeys(srcBucket);
+async function copyBucketContents(client: S3Client, srcBucket: string, destBucket: string): Promise<void> {
+  const keys = await listAllKeys(client, srcBucket);
   for (const key of keys) {
     await client.send(
       new CopyObjectCommand({
@@ -230,18 +290,18 @@ async function copyBucketContents(srcBucket: string, destBucket: string): Promis
         Key: key,
         CopySource: `/${srcBucket}/${encodeURIComponent(key).replace(/%2F/g, "/")}`,
         ACL: "public-read",
-      })
+      }),
     );
   }
 }
 
 /** Empties and deletes a bucket. NoSuchBucket is silently ignored. */
-async function deleteBucketFully(bucket: string): Promise<void> {
-  const client = getS3Client();
+async function deleteBucketFully(client: S3Client, bucket: string, poolId?: number): Promise<void> {
   try {
-    await clearBucket(bucket);
+    await clearBucket(client, bucket);
     await client.send(new DeleteBucketCommand({ Bucket: bucket }));
     console.log(`[Yandex] Bucket ${bucket} deleted`);
+    if (poolId) await bumpPoolBucketCount(poolId, -1);
   } catch (err: any) {
     if (err?.Code !== "NoSuchBucket" && err?.name !== "NoSuchBucket") {
       console.warn(`[Yandex] Bucket cleanup non-fatal for ${bucket}:`, err?.message || err);
@@ -256,8 +316,9 @@ async function deleteBucketFully(bucket: string): Promise<void> {
  */
 export async function addCustomDomain(
   projectBucket: string,
-  domain: string
-): Promise<{ verified: boolean; aRecordIp: string }> {
+  domain: string,
+  existingPoolId?: number | null,
+): Promise<{ verified: boolean; aRecordIp: string; ycStoragePoolId: number }> {
   const apex = domainBucketFor(domain);
   if (apex.length > 63) {
     throw new Error("Домен слишком длинный (максимум 63 символа)");
@@ -267,40 +328,48 @@ export async function addCustomDomain(
     throw new Error("Прокси-сервер доменов не настроен — обратитесь в поддержку");
   }
 
-  const client = getS3Client();
+  let pool = await resolvePoolForProject({ ycStoragePoolId: existingPoolId });
+  // Domain bucket needs a free slot — if current pool is full, open a new cloud.
+  if (pool.bucketCount + 1 > pool.bucketLimit) {
+    pool = await acquireStoragePool(1);
+  }
+
+  const client = getPoolS3Client(pool);
   try {
-    await client.send(new CreateBucketCommand({ Bucket: apex }));
-  } catch (err: any) {
-    if (err?.name === "BucketAlreadyOwnedByYou") {
-      // fine — re-attaching the same domain
-    } else if (err?.name === "BucketAlreadyExists") {
+    const created = await ensureBucketReady(client, apex);
+    if (created === "taken") {
       throw new Error("Это доменное имя уже занято в облачном хранилище — обратитесь в поддержку");
+    }
+    if (created === "created") await bumpPoolBucketCount(pool.id, 1);
+  } catch (err: any) {
+    if (isQuotaError(err)) {
+      pool = await acquireStoragePool(1);
+      const created = await ensureBucketReady(getPoolS3Client(pool), apex);
+      if (created === "taken") {
+        throw new Error("Это доменное имя уже занято в облачном хранилище — обратитесь в поддержку");
+      }
+      if (created === "created") await bumpPoolBucketCount(pool.id, 1);
     } else {
       throw err;
     }
   }
-  await client.send(
-    new PutBucketWebsiteCommand({
-      Bucket: apex,
-      WebsiteConfiguration: {
-        IndexDocument: { Suffix: "index.html" },
-        ErrorDocument: { Key: "index.html" },
-      },
-    })
-  );
 
   try {
-    await copyBucketContents(projectBucket, apex);
+    await copyBucketContents(getPoolS3Client(pool), projectBucket, apex);
   } catch (err) {
     console.warn(`[Yandex] Copy ${projectBucket} → ${apex} failed (non-fatal, next publish will fill it):`, err);
   }
 
-  return { verified: false, aRecordIp: proxyIp };
+  return { verified: false, aRecordIp: proxyIp, ycStoragePoolId: pool.id };
 }
 
 /** Detach a custom domain: deletes the domain-named bucket. */
-export async function removeCustomDomain(domain: string): Promise<void> {
-  await deleteBucketFully(domainBucketFor(domain));
+export async function removeCustomDomain(
+  domain: string,
+  existingPoolId?: number | null,
+): Promise<void> {
+  const pool = await resolvePoolForProject({ ycStoragePoolId: existingPoolId });
+  await deleteBucketFully(getPoolS3Client(pool), domainBucketFor(domain), pool.id);
 }
 
 /**
@@ -309,7 +378,7 @@ export async function removeCustomDomain(domain: string): Promise<void> {
  * certificate issuance, which can take ~5-15 seconds).
  */
 export async function checkDomainStatus(
-  domain: string
+  domain: string,
 ): Promise<{ verified: boolean; dnsReady: boolean; message?: string }> {
   const { promises: dns } = await import("dns");
   const apex = domainBucketFor(domain);
@@ -331,16 +400,27 @@ export async function checkDomainStatus(
     };
   }
 
-  // The first HTTPS request makes Caddy mint the certificate — allow up to 25s.
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
-    const httpsRes = await fetch(`https://${apex}`, { method: "HEAD", signal: controller.signal, redirect: "follow" });
+    const httpsRes = await fetch(`https://${apex}`, {
+      method: "HEAD",
+      signal: controller.signal,
+      redirect: "follow",
+    });
     clearTimeout(timeout);
     if (httpsRes.status < 500) return { verified: true, dnsReady: true };
-    return { verified: false, dnsReady: true, message: "DNS готов, SSL-сертификат выпускается — проверьте через минуту" };
+    return {
+      verified: false,
+      dnsReady: true,
+      message: "DNS готов, SSL-сертификат выпускается — проверьте через минуту",
+    };
   } catch {
-    return { verified: false, dnsReady: true, message: "DNS готов, SSL-сертификат выпускается — проверьте через минуту" };
+    return {
+      verified: false,
+      dnsReady: true,
+      message: "DNS готов, SSL-сертификат выпускается — проверьте через минуту",
+    };
   }
 }
 
@@ -348,13 +428,18 @@ export async function checkDomainStatus(
  * Fully removes a project from Yandex Cloud:
  * 1. Deletes the domain-named bucket if a custom domain was attached.
  * 2. Empties and deletes the project's dedicated bucket.
- *
- * Called when the user deletes a project from the dashboard.
- * All errors are caught and logged so the project can still be removed from the DB.
  */
-export async function deleteProjectFromYandex(projectId: number, customDomain?: string | null): Promise<void> {
+export async function deleteProjectFromYandex(
+  projectId: number,
+  customDomain?: string | null,
+  existingPoolId?: number | null,
+): Promise<void> {
+  const pool =
+    (existingPoolId ? await getStoragePoolById(existingPoolId) : null) ||
+    (await resolvePoolForProject({ ycStoragePoolId: existingPoolId }));
+  const client = getPoolS3Client(pool);
   if (customDomain) {
-    await deleteBucketFully(domainBucketFor(customDomain));
+    await deleteBucketFully(client, domainBucketFor(customDomain), pool.id);
   }
-  await deleteBucketFully(bucketNameFor(projectId));
+  await deleteBucketFully(client, bucketNameFor(projectId), pool.id);
 }
