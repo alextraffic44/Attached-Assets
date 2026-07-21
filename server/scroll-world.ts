@@ -28,35 +28,32 @@ const MAX_CLIP_ATTEMPTS = 3;
 const MAX_STILL_ATTEMPTS = 4;
 const PROMPT_MAX = 2500;
 
-/** Clay / cream theme — matches scroll-world index-template + prompts.md default. */
-const SW_BG = "#F5EDE0";
-const SW_INK = "#241d2b";
-const SW_INK_SOFT = "#6a6072";
-const SW_ACCENT_DEFAULT = "#9B7EBD";
-
-const PALETTE_NAMED =
-  "taro #9B7EBD, cream #F5EDE0, caramel #C88A5A, matcha #8FB98A, plum #3A2E48";
+/** Neutral luxury theme — matches scroll-world professional landing pages. */
+const SW_BG = "#F4F0EA";
+const SW_INK = "#1a1510";
+const SW_INK_SOFT = "#6a6258";
+const SW_ACCENT_DEFAULT = "#8B7355";
 
 const SECTION_ACCENTS = [
-  "#8FB98A", // matcha
-  "#C88A5A", // caramel
-  "#9B7EBD", // taro
-  "#6B8F71", // deep matcha
-  "#B07A4A", // deep caramel
-  "#7A6B9A", // muted taro
-  "#3A2E48", // plum
+  "#8B7355", // warm gold
+  "#6B7C8F", // slate blue
+  "#9A7B6A", // terracotta
+  "#5C6B5A", // sage
+  "#7A6B8F", // muted plum
+  "#A6896B", // caramel
+  "#4A5568", // charcoal blue
 ];
 
-/** Byte-identical style preamble across all stills (prompts.md). */
+/** Byte-identical style preamble across all stills — photorealistic cinematic. */
 const STYLE_PREAMBLE =
-  `Isometric low-poly 3D diorama floating as a small rounded island on a plain solid ` +
-  `${SW_BG} background with a soft contact shadow beneath it. Soft matte clay 3D render, ` +
-  `rounded toy-model shapes, gentle warm studio lighting, soft long shadows, tilt-shift ` +
-  `miniature look. Cohesive color palette of ${PALETTE_NAMED}. Highly detailed, centered ` +
-  `composition, absolutely no text, no letters, no numbers, no logos.`;
+  `Ultra high-end commercial photography, photorealistic cinematic film still, ` +
+  `shallow depth of field, soft natural lighting with gentle volumetric haze, ` +
+  `premium luxury brand aesthetic, immaculate composition, rich textures, ` +
+  `editorial quality, 8K detail. Absolutely no text, no letters, no numbers, no logos.`;
 
 const STYLE_TAIL =
-  `soft matte clay diorama, tilt-shift miniature, warm studio light, palette ${PALETTE_NAMED}`;
+  `photorealistic cinematic commercial photography, shallow depth of field, ` +
+  `premium luxury lighting, editorial film still`;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -190,34 +187,34 @@ function sanitizePrompt(p: string): string {
   const base =
     stripped.length > 20
       ? stripped
-      : "cozy miniature clay diorama world, warm studio light, friendly toy-model scenes";
-  return `${base}, clean family-friendly commercial miniature diorama, safe for work, soft clay render`;
+      : "premium cinematic commercial environment, soft natural lighting, photorealistic";
+  return `${base}, clean family-friendly commercial photography, safe for work, photorealistic cinematic`;
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function synthesizeEyebrow(title: string, sub: string): string {
-  const src = (title || sub || "Scene").trim();
-  const words = src.split(/\s+/).filter(Boolean).slice(0, 4);
-  return (words.join(" ") || "Scene").toUpperCase();
+function synthesizeEyebrow(_title: string, _sub: string, sceneIndex: number): string {
+  return `SCENE ${String(sceneIndex + 1).padStart(2, "0")}`;
 }
 
 function synthesizeSubject(title: string, sub: string, worldHint: string, isFinale: boolean): string {
   const core = [title, sub].filter(Boolean).join(". ").trim();
   if (isFinale) {
     return (
-      `Hero finale centerpiece for this miniature world` +
+      `Hero finale shot` +
       (core ? `: ${core}` : "") +
-      (worldHint ? `. World context: ${worldHint}` : "") +
-      `. A single oversized product or landmark floating on the same cream background with a few small orbiting props.`
+      (worldHint ? `. Brand world: ${worldHint}` : "") +
+      `. A single stunning hero product or signature moment in a luxurious setting, ` +
+      `soft bokeh background, premium commercial photography.`
     );
   }
   return (
-    (core || "A miniature diorama scene from the journey") +
-    (worldHint ? `. Part of a connected miniature world: ${worldHint}` : "") +
-    `. Show the building/space, a few tiny clay characters at work, and concrete props that signal this stage.`
+    (core || "A cinematic scene from the brand journey") +
+    (worldHint ? `. Part of a connected brand world: ${worldHint}` : "") +
+    `. Show a real architectural space or environment with rich detail, ` +
+    `professional lighting, and concrete props that signal this stage of the journey.`
   );
 }
 
@@ -254,7 +251,7 @@ function mapTextsToScenes(texts: SwText[], worldHint: string): ScenePlan[] {
     const isFinale = i === SW_SCENE_COUNT - 1;
     const title = t.title || `Scene ${i + 1}`;
     const body = t.sub || "";
-    const eyebrow = synthesizeEyebrow(title, body);
+    const eyebrow = synthesizeEyebrow(title, body, i);
     const id = `sw${i + 1}-${title
       .toLowerCase()
       .replace(/[^a-z0-9\u0400-\u04FF]+/gi, "-")
@@ -277,8 +274,8 @@ function stillPromptFor(scene: ScenePlan): string {
   if (scene.isFinale) {
     return (
       `${STYLE_PREAMBLE} ` +
-      `Finale hero shot (drop the floating-island framing): ${scene.subject} ` +
-      `Same cream ${SW_BG} background, soft contact shadow, cohesive clay-toy style. ` +
+      `Finale hero shot: ${scene.subject} ` +
+      `Luxurious setting, soft bokeh, premium commercial photography. ` +
       `Absolutely no text, no letters, no logos.`
     );
   }
@@ -287,14 +284,14 @@ function stillPromptFor(scene: ScenePlan): string {
 
 function divePromptFor(scene: ScenePlan): string {
   const focal = scene.title || "the heart of the scene";
-  const roofClause = scene.isFinale
-    ? `the camera glides in close until the hero centerpiece fills the frame warmly`
-    : `As the camera pushes in, the roof and upper structure gently lift and open away to reveal the warm interior`;
+  const revealClause = scene.isFinale
+    ? `the camera glides in close until the hero product or centerpiece fills the frame with dramatic beauty`
+    : `As the camera pushes forward, doors open or the space reveals its interior with warm inviting light`;
   return (
-    `Single continuous cinematic camera move, no cuts. Begin high and far, looking down at the ` +
-    `whole ${scene.subject} from outside like a tiny model. The camera slowly glides forward ` +
-    `and descends toward it, sweeping in toward ${focal}, as if flying inside. ${roofClause}. ` +
-    `${STYLE_TAIL}. Smooth, graceful, slow motion, subtle parallax. No text, no captions.`
+    `Single continuous cinematic camera move, no cuts. Begin with a wide establishing shot of ` +
+    `${scene.subject}. The camera slowly glides forward and descends toward ${focal}, ` +
+    `as if flying into the scene. ${revealClause}. ` +
+    `${STYLE_TAIL}. Smooth, graceful, slow motion, subtle parallax, IMAX-quality. No text, no captions.`
   ).slice(0, PROMPT_MAX);
 }
 
@@ -302,17 +299,17 @@ function connectorPromptFor(from: ScenePlan, to: ScenePlan): string {
   if (to.isFinale) {
     return (
       `Single continuous cinematic camera move, no cuts. The camera smoothly pulls up and back ` +
-      `out of ${from.title || from.subject}, rising into the sky, then glides forward and the ` +
-      `miniature world dissolves toward a single giant hero centerpiece (${to.title || to.subject}) ` +
-      `floating in soft ${SW_BG} space, arriving in front of it. One connected miniature clay world, ` +
-      `seamless flowing aerial transition. ${STYLE_TAIL}. Smooth graceful slow motion. No text, no captions.`
+      `out of ${from.title || from.subject}, rising gracefully, then glides forward through ` +
+      `atmospheric haze toward the hero finale (${to.title || to.subject}), arriving in front of it. ` +
+      `One connected brand world, seamless flowing aerial transition. ` +
+      `${STYLE_TAIL}. Smooth graceful slow motion. No text, no captions.`
     ).slice(0, PROMPT_MAX);
   }
   return (
     `Single continuous cinematic camera move, no cuts. The camera smoothly pulls up and back ` +
-    `out of ${from.title || from.subject}, rising into the sky, then glides forward across the ` +
-    `connected miniature world and arrives above ${to.title || to.subject}, beginning to descend ` +
-    `toward it. One connected miniature clay world, seamless flowing aerial transition. ` +
+    `out of ${from.title || from.subject}, rising into the sky, then glides forward across ` +
+    `the landscape and arrives above ${to.title || to.subject}, beginning to descend toward it. ` +
+    `One connected brand world, seamless flowing aerial transition. ` +
     `${STYLE_TAIL}. Smooth graceful slow motion. No text, no captions.`
   ).slice(0, PROMPT_MAX);
 }
@@ -668,13 +665,22 @@ async function downloadEncodeUploadMp4(
   }
 }
 
+// ─── Immersion nav controller (hide site header during scroll-world) ───────────
+
+const IMMERSION_NAV_CTL = `
+<style>
+header{transition:background .45s ease,background-color .45s ease,backdrop-filter .45s ease,-webkit-backdrop-filter .45s ease,border-color .45s ease,box-shadow .45s ease,opacity .45s ease,visibility .45s ease;}
+body:not(.craft-anim-passed) header{visibility:hidden!important;opacity:0!important;pointer-events:none!important;background:transparent!important;background-color:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-color:transparent!important;box-shadow:none!important;}
+#craft-scroll-world-pending{display:none!important;}
+</style>
+<script>(function(){if(window.__craftNavCtl)return;window.__craftNavCtl=true;function fixSticky(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;for(var i=0;i<s.length;i++){var el=s[i];while(el&&el.nodeType===1&&el!==document.documentElement){var cs=getComputedStyle(el);if(cs.overflowX==='hidden')el.style.overflowX='clip';if(cs.overflowY==='hidden')el.style.overflowY='clip';el=el.parentElement;}}var de=document.documentElement,b=document.body;[de,b].forEach(function(n){if(!n)return;var c=getComputedStyle(n);if(c.overflowX==='hidden')n.style.overflowX='clip';if(c.overflowY==='hidden')n.style.overflowY='clip';});}function u(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;var h=document.querySelector('header');var th=h?h.offsetHeight:64;var passed=true;for(var i=0;i<s.length;i++){if(s[i].getBoundingClientRect().bottom>th){passed=false;break;}}document.body.classList.toggle('craft-anim-passed',passed);}window.addEventListener('scroll',u,{passive:true});window.addEventListener('resize',u);if(document.readyState!=='loading'){fixSticky();u();}else{document.addEventListener('DOMContentLoaded',function(){fixSticky();u();});}fixSticky();u();})();</script>`;
+
 // ─── HTML builders ───────────────────────────────────────────────────────────
 
 export function buildImmersionPendingHtml(
   videoPrompt: string,
   texts: SwText[],
 ): string {
-  const first = texts[0] || { title: "", sub: "" };
   const tid = "swp" + Math.random().toString(36).slice(2, 8);
   const _pa = videoPrompt
     ? ` data-scroll-anim-prompt="${encodeURIComponent(videoPrompt)}"`
@@ -694,21 +700,20 @@ export function buildImmersionPendingHtml(
 @keyframes ${tid}-fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 @keyframes ${tid}-drift{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 </style>
-<div style="text-align:center;color:#F5EDE0;z-index:2;padding:40px;max-width:580px;animation:${tid}-fade .7s ease both;">
-  ${first.title ? `<div style="font-size:clamp(1.5rem,4vw,2.6rem);font-weight:800;margin:0 0 .35em;letter-spacing:-0.02em;line-height:1.15;color:#F5EDE0;">${escHtml(first.title)}</div>` : ""}
-  ${first.sub ? `<div style="font-size:clamp(.9rem,2vw,1.1rem);color:rgba(245,237,224,.55);margin:0 0 2.2rem;line-height:1.5;">${escHtml(first.sub)}</div>` : ""}
-  <div style="display:inline-flex;align-items:center;gap:14px;background:rgba(245,237,224,.06);border:1px solid rgba(245,237,224,.12);border-radius:16px;padding:18px 28px;margin-bottom:1.4rem;animation:${tid}-drift 3.2s ease-in-out infinite;">
-    <div style="width:36px;height:36px;border:2.5px solid rgba(245,237,224,.12);border-top-color:#C88A5A;border-radius:50%;flex-shrink:0;animation:${tid}-spin .95s linear infinite;"></div>
+<div style="text-align:center;color:#F4F0EA;z-index:2;padding:40px;max-width:580px;animation:${tid}-fade .7s ease both;">
+  <div style="display:inline-flex;align-items:center;gap:14px;background:rgba(244,240,234,.06);border:1px solid rgba(244,240,234,.12);border-radius:16px;padding:18px 28px;margin-bottom:1.4rem;animation:${tid}-drift 3.2s ease-in-out infinite;">
+    <div style="width:36px;height:36px;border:2.5px solid rgba(244,240,234,.12);border-top-color:#8B7355;border-radius:50%;flex-shrink:0;animation:${tid}-spin .95s linear infinite;"></div>
     <div style="text-align:left;">
-      <div style="font-size:.95rem;font-weight:600;color:#F5EDE0;margin-bottom:2px;">Собираем мир…</div>
-      <div style="font-size:.8rem;color:rgba(245,237,224,.5);">Сцены, полёты и перелёты — обычно 15–40 минут</div>
+      <div style="font-size:.95rem;font-weight:600;color:#F4F0EA;margin-bottom:2px;">Собираем сцены…</div>
+      <div style="font-size:.8rem;color:rgba(244,240,234,.5);">Кинематографичные кадры и полёты — обычно 15–40 минут</div>
     </div>
   </div>
-  <div style="width:240px;height:3px;background:rgba(245,237,224,.08);border-radius:99px;margin:0 auto 1.4rem;overflow:hidden;">
-    <div style="height:100%;background:linear-gradient(90deg,#C88A5A,#9B7EBD);border-radius:99px;animation:${tid}-bar 18s cubic-bezier(.4,0,.2,1) forwards;"></div>
+  <div style="width:240px;height:3px;background:rgba(244,240,234,.08);border-radius:99px;margin:0 auto 1.4rem;overflow:hidden;">
+    <div style="height:100%;background:linear-gradient(90deg,#8B7355,#6B7C8F);border-radius:99px;animation:${tid}-bar 18s cubic-bezier(.4,0,.2,1) forwards;"></div>
   </div>
-  <div style="font-size:.78rem;color:rgba(245,237,224,.32);line-height:1.6;animation:${tid}-pulse 2.6s ease-in-out infinite;">Страница обновится автоматически.<br>Остальные секции уже готовы — прокрутите вниз ↓</div>
+  <div style="font-size:.78rem;color:rgba(244,240,234,.32);line-height:1.6;animation:${tid}-pulse 2.6s ease-in-out infinite;">Страница обновится автоматически.<br>Остальные секции уже готовы — прокрутите вниз ↓</div>
 </div>
+${IMMERSION_NAV_CTL}
 </section>`;
 }
 
@@ -717,7 +722,6 @@ function buildImmersionHtml(opts: {
   stillUrls: string[];
   diveUrls: string[];
   connectorUrls: Array<string | null>;
-  brandName?: string;
 }): string {
   const { scenes, stillUrls, diveUrls, connectorUrls } = opts;
 
@@ -748,9 +752,7 @@ function buildImmersionHtml(opts: {
     crossfade: 0.12,
     atmosphere: true,
     nav: true,
-    brand: opts.brandName
-      ? { name: opts.brandName, href: "#top" }
-      : undefined,
+    brand: { name: "Craft AI", href: "#top" },
     sections,
     connectors: connectorUrls,
   };
@@ -772,6 +774,9 @@ function buildImmersionHtml(opts: {
   --sw-accent: ${SW_ACCENT_DEFAULT};
 }
 #craft-scroll-world-root .sw-root { background: var(--sw-bg); }
+#craft-scroll-world-root .sw-topbar { justify-content: center; }
+#craft-scroll-world-root .sw-nav { display: none; }
+#craft-scroll-world-root .sw-brand { margin: 0 auto; }
 </style>
 <script data-craft-scroll-world-engine>
 ${engineSrc}
@@ -782,8 +787,13 @@ ${engineSrc}
   if (!el || typeof mountScrollWorld !== 'function') return;
   var cfg = ${configJson};
   mountScrollWorld(el, cfg);
+  try {
+  var pending = document.getElementById('craft-scroll-world-pending');
+  if (pending) pending.style.display = 'none';
+  window.dispatchEvent(new Event('craft:frames-ready'));
+  } catch(e) {}
 })();
-</script>
+</script>${IMMERSION_NAV_CTL}
 </section>`;
 }
 
@@ -806,7 +816,7 @@ export async function generateScrollWorld(opts: {
   const worldHint =
     cleanedWorld.length > 15
       ? cleanedWorld
-      : "a cohesive miniature clay diorama world, warm journey through connected scenes";
+      : "a cohesive premium cinematic brand world, photorealistic commercial photography";
 
   const scenes = mapTextsToScenes(opts.texts || [], worldHint);
   log(
@@ -966,15 +976,11 @@ export async function generateScrollWorld(opts: {
 
     // ── 5. Build HTML ──────────────────────────────────────────────────────
     status(deps, "Собираем полётный HTML…");
-    const brandGuess =
-      (opts.texts[0]?.title || "").split(/[—–|:·]/)[0]?.trim().slice(0, 40) || undefined;
-
     const html = buildImmersionHtml({
       scenes,
       stillUrls,
       diveUrls,
       connectorUrls,
-      brandName: brandGuess,
     });
 
     const mp4Urls = [
