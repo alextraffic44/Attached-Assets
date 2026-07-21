@@ -1078,7 +1078,7 @@ export default function DashboardPage() {
                               {
                                 id: "site3d" as const,
                                 label: "3D сайт",
-                                desc: "Видео-фон и 3D-блоки при скролле",
+                                desc: "Видео-фон + 3D-карточки (Kling)",
                                 icon: (
                                   <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
                                     <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
