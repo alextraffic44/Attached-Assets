@@ -9,6 +9,12 @@ import {
   type GenerateScrollWorldDeps,
 } from "./scroll-world";
 import { buildSite3dAnimHtml } from "./site3d-anim";
+import {
+  SCROLL_MOTION_COST,
+  generateMotionRevealPair,
+  buildMotionRevealHtml,
+  type GenerateMotionRevealDeps,
+} from "./motion-reveal";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
 import { deployToYandex, addCustomDomain, removeCustomDomain, checkDomainStatus, unpublishFromYandex, deleteProjectFromYandex, getDomainProxyIp } from "./yandex-deploy";
@@ -212,13 +218,14 @@ const SCROLL_VIDEO_DURATION = 5;   // seconds
 // richer, smoother slow-motion / bullet-time scrub.
 const SCROLL_ACTION_VIDEO_DURATION = 6;  // seconds (blockbuster shot length)
 const SCROLL_ACTION_FRAME_COUNT = 96;    // sliced frames for the clip (matches ~16fps density used at 10s)
-type ScrollAnimLayout = "parallax" | "split" | "action" | "immersion" | "site3d";
+type ScrollAnimLayout = "parallax" | "split" | "action" | "immersion" | "site3d" | "motion";
 
 function resolveScrollAnimLayout(style?: string | null): ScrollAnimLayout {
   if (style === "split") return "split";
   if (style === "action") return "action";
   if (style === "immersion") return "immersion";
   if (style === "site3d") return "site3d";
+  if (style === "motion") return "motion";
   return "parallax";
 }
 const KLING_IMG2VID_MODEL = "kling/v3-turbo-image-to-video";
@@ -1289,11 +1296,14 @@ function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, vid
   if (style === "immersion") {
     return buildImmersionPendingHtml(videoPrompt || "", texts);
   }
+  const isMotion = style === "motion";
   const first = texts[0] || { title: "", sub: "" };
   const tid = "pnd" + Math.random().toString(36).slice(2, 8);
   const _pa = videoPrompt ? ` data-scroll-anim-prompt="${encodeURIComponent(videoPrompt)}"` : "";
   const _sa = style ? ` data-scroll-anim-style="${encodeURIComponent(style)}"` : "";
   const _ta = texts.length ? ` data-scroll-anim-texts="${encodeURIComponent(texts.map(t => `${t.title}::${t.sub}`).join("||"))}"` : "";
+  const pendingTitle = isMotion ? "✨ Генерация моушн-эффекта" : "🎬 Генерация видеоанимации";
+  const pendingSub = isMotion ? "Обычно занимает 1–4 минуты" : "Обычно занимает 2–10 минут";
   return `<section data-scroll-anim-pending="1"${_pa}${_sa}${_ta} style="position:relative;height:100vh;min-height:600px;background:linear-gradient(135deg,#0a0a0a 0%,#16213e 50%,#0a0a0a 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;">
 <style>
 @keyframes ${tid}-spin{to{transform:rotate(360deg)}}
@@ -1307,8 +1317,8 @@ function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, vid
   <div style="display:inline-flex;align-items:center;gap:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:18px 28px;margin-bottom:1.5rem;">
     <div style="width:36px;height:36px;border:2.5px solid rgba(255,255,255,.1);border-top-color:#a78bfa;border-radius:50%;flex-shrink:0;animation:${tid}-spin .9s linear infinite;"></div>
     <div style="text-align:left;">
-      <div style="font-size:.95rem;font-weight:600;color:#fff;margin-bottom:2px;">🎬 Генерация видеоанимации</div>
-      <div style="font-size:.8rem;color:rgba(255,255,255,.5);">Обычно занимает 2–10 минут</div>
+      <div style="font-size:.95rem;font-weight:600;color:#fff;margin-bottom:2px;">${pendingTitle}</div>
+      <div style="font-size:.8rem;color:rgba(255,255,255,.5);">${pendingSub}</div>
     </div>
   </div>
   <div style="width:220px;height:3px;background:rgba(255,255,255,.08);border-radius:99px;margin:0 auto 1.5rem;overflow:hidden;">
@@ -1376,6 +1386,7 @@ function buildScrollAnimHtml(frames: string[], texts: Array<{ title: string; sub
   if (layout === "site3d") {
     return buildSite3dAnimHtml(frames, texts, navCtl, csaEsc);
   }
+  // motion layout is built via buildMotionRevealHtml (image pair), not video frames.
 
   // ── Parallax (full-screen) layout ──────────────────────────────────────────
   if (!isSplit) {
@@ -1533,6 +1544,23 @@ function buildScrollWorldDeps(opts: {
   };
 }
 
+function buildMotionRevealDeps(opts: {
+  shouldStop: () => boolean;
+  onStatus?: (msg: string) => void;
+  appBaseUrl?: string;
+}): GenerateMotionRevealDeps {
+  return {
+    kieApiKey: KIE_API_KEY || "",
+    createUrl: NANO_BANANA_CREATE_URL,
+    statusUrl: NANO_BANANA_STATUS_URL,
+    kieRequestJson,
+    uploadToObjectStorage,
+    appBaseUrl: opts.appBaseUrl || process.env.APP_BASE_URL || "https://craft-ai.ru",
+    shouldStop: opts.shouldStop,
+    onStatus: opts.onStatus,
+  };
+}
+
 async function resolveScrollAnimMarkers(
   filesMap: Map<string, string>,
   projectId: number,
@@ -1582,7 +1610,8 @@ async function resolveScrollAnimMarkers(
   const layout = resolveScrollAnimLayout(interactiveStyle);
   const planned = entries.slice(0, layout === "immersion" ? 1 : 2); // immersion: one world; others: at most 2
   // Immersion runs 2N−1 Kling jobs (dives + connectors); allow a longer wall-clock budget.
-  const phaseDeadline = Date.now() + (layout === "immersion" ? 5400000 : 2520000); // 90 min immersion / 42 min others
+  // Motion is image-only (2 stills) — shorter budget is enough.
+  const phaseDeadline = Date.now() + (layout === "immersion" ? 5400000 : layout === "motion" ? 900000 : 2520000);
 
   // Product still is regenerated lazily (ONCE) AFTER the first successful credit
   // deduction inside the loop, so we never spend external API budget on a user who
@@ -1597,11 +1626,14 @@ async function resolveScrollAnimMarkers(
   for (const [raw, parsed] of planned) {
     if (isAborted() || Date.now() >= phaseDeadline) break;
     const isImmersion = layout === "immersion";
-    const blockCost = isImmersion ? SCROLL_IMMERSION_COST : SCROLL_ANIM_COST;
-    const blockReason = isImmersion ? "scroll-world" : "scroll-anim";
+    const isMotion = layout === "motion";
+    const blockCost = isImmersion ? SCROLL_IMMERSION_COST : isMotion ? SCROLL_MOTION_COST : SCROLL_ANIM_COST;
+    const blockReason = isImmersion ? "scroll-world" : isMotion ? "motion-reveal" : "scroll-anim";
     try {
       res.write(`data: ${JSON.stringify({ status: isImmersion
         ? `Собираем мир погружения (${SW_SCENE_COUNT} сцен, ${2 * SW_SCENE_COUNT - 1} роликов Kling 3.0)…`
+        : isMotion
+        ? "Моушн: генерирую пару кадров для hover-reveal…"
         : "Рендерю видео для анимации прокрутки (до 35 минут, зависит от очереди KIE)..." })}\n\n`);
     } catch {}
 
@@ -1641,6 +1673,39 @@ async function resolveScrollAnimMarkers(
         generated++;
         if (billed) creditsUsed += blockCost;
         try { res.write(`data: ${JSON.stringify({ status: `Мир готов (${world.mp4Urls.length} роликов, ${world.stillUrls.length} сцен)` })}\n\n`); } catch {}
+      } else if (billed && userId) {
+        try { await storage.refundCredits(userId, blockCost); } catch {}
+      }
+      continue;
+    }
+
+    // Motion: dual-image WebGL hover reveal (no Kling video).
+    if (isMotion) {
+      const keepAliveInterval = setInterval(() => {
+        try { res.write(`data: ${JSON.stringify({ status: "Моушн: жду пару кадров от KIE…" })}\n\n`); } catch {}
+      }, 15000);
+      let pair: Awaited<ReturnType<typeof generateMotionRevealPair>> = null;
+      try {
+        pair = await generateMotionRevealPair({
+          scenePrompt: parsed.videoPrompt,
+          productImageUrl,
+          deps: buildMotionRevealDeps({
+            shouldStop: () => isAborted() || Date.now() >= phaseDeadline,
+            onStatus: (msg) => {
+              try { res.write(`data: ${JSON.stringify({ status: msg })}\n\n`); } catch {}
+            },
+          }),
+        });
+      } finally {
+        clearInterval(keepAliveInterval);
+      }
+      if (pair?.baseUrl && pair?.revealUrl) {
+        // Build navCtl the same way as buildScrollAnimHtml (header transparency + sticky fix).
+        const navCtl = `\n<style>header{transition:background .45s ease,background-color .45s ease,backdrop-filter .45s ease,-webkit-backdrop-filter .45s ease,border-color .45s ease,box-shadow .45s ease;}body:not(.craft-anim-passed) header{background:transparent!important;background-color:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-color:transparent!important;box-shadow:none!important;}</style>\n<script>(function(){if(window.__craftNavCtl)return;window.__craftNavCtl=true;function fixSticky(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;for(var i=0;i<s.length;i++){var el=s[i];while(el&&el.nodeType===1&&el!==document.documentElement){var cs=getComputedStyle(el);if(cs.overflowX==='hidden')el.style.overflowX='clip';if(cs.overflowY==='hidden')el.style.overflowY='clip';el=el.parentElement;}}var de=document.documentElement,b=document.body;[de,b].forEach(function(n){if(!n)return;var c=getComputedStyle(n);if(c.overflowX==='hidden')n.style.overflowX='clip';if(c.overflowY==='hidden')n.style.overflowY='clip';});}function u(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;var h=document.querySelector('header');var th=h?h.offsetHeight:64;var passed=true;for(var i=0;i<s.length;i++){if(s[i].getBoundingClientRect().bottom>th){passed=false;break;}}document.body.classList.toggle('craft-anim-passed',passed);}window.addEventListener('scroll',u,{passive:true});window.addEventListener('resize',u);if(document.readyState!=='loading'){fixSticky();u();}else{document.addEventListener('DOMContentLoaded',function(){fixSticky();u();});}fixSticky();u();})();</script>`;
+        replaceMap.set(raw, buildMotionRevealHtml(pair.baseUrl, pair.revealUrl, parsed.texts, navCtl, csaEsc));
+        generated++;
+        if (billed) creditsUsed += blockCost;
+        try { res.write(`data: ${JSON.stringify({ status: "Моушн готов — hover-reveal активен" })}\n\n`); } catch {}
       } else if (billed && userId) {
         try { await storage.refundCredits(userId, blockCost); } catch {}
       }
@@ -2925,6 +2990,8 @@ export async function registerRoutes(
         generate: "Генерация сайта",
         image: "Изображение",
         "scroll-anim": "Видеоанимация",
+        "scroll-world": "Погружение",
+        "motion-reveal": "Моушн",
         enhance: "Улучшение промпта",
         "deep-research": "Deep Research",
         "3d": "3D модель",
@@ -3209,6 +3276,30 @@ VIDEO_PROMPT (на английском) — кинематографичный 
 ⚠️ НЕ создавай canvas/3D-код вручную. Маркер заменяется автоматически системой (видео-фон + 3D-стек карточек).
 🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
 ═══ КОНЕЦ РЕЖИМА 3D САЙТ ═══\n`;
+        } else if (interactiveStyle === "motion") {
+          systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
+═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — МОУШН» (WebGL hover-reveal как Lando Norris) ═══
+Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
+
+ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
+→ СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
+{{SCROLLANIM:HERO_SUBJECT_PROMPT_IN_ENGLISH|Блок1::Текст1||Блок2::Текст2||Блок3::Текст3||Блок4::Текст4}}
+
+HERO_SUBJECT_PROMPT (на английском) — опиши ГЕРОЯ для парных кадров: базовый чёрно-белый editorial-портрет/продукт + цветное преображение (mask/helmet/aura/neon brand metamorphosis) при наведении курсора. Один и тот же субъект, одна композиция, мощный иконический кадр по центру. Это НЕ видео и НЕ скролл-кадры — это hover-reveal. ТОЛЬКО запятые (без | :: и фигурных скобок):
+- Мода/бьюти: "striking fashion portrait of a confident model with dramatic jewelry, centered close-up, iconic editorial hero"
+- Спорт/авто: "intense close-up of a racing driver face ready for helmet reveal metamorphosis, cinematic hero framing"
+- Продукт/техника: "hero product centered in dark studio, iconic silhouette ready for neon chromatic reveal"
+- Еда/напитки: "dramatic hero bottle or dish centered, premium campaign still ready for colorful iridescent reveal"
+- Общее/услуги: "powerful brand hero subject centered, iconic editorial composition ready for neon color metamorphosis"
+
+Тексты — РОВНО 4 пары на РУССКОМ (Заголовок::Подзаголовок): короткие мощные фразы поверх reveal (оффер → характер бренда → выгода → CTA).
+
+После маркера — обычные секции сайта (преимущества, отзывы, CTA, форма, футер).
+
+⚠️ НЕ пиши <section> или Hero-раздел ДО этого маркера. Маркер И ЕСТЬ Hero.
+⚠️ НЕ создавай canvas/WebGL-код вручную. Маркер заменяется автоматически системой (пара кадров + fluid mouse reveal).
+🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
+═══ КОНЕЦ РЕЖИМА МОУШН ═══\n`;
         } else if (interactiveStyle === "immersion") {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
 ═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — ПОГРУЖЕНИЕ» (scroll-world / cinematic brand journey) ═══
@@ -4203,6 +4294,9 @@ ${designAnalysis}
         } else if (interactiveStyle === "site3d") {
           videoPromptAuto = "breathtaking cinematic forward flight into a premium brand environment, volumetric god rays, atmospheric depth and elegant bokeh, the camera gliding deeper through the space, epic film-still lighting, photorealistic";
           textsAuto = "Новый уровень::Почувствуйте атмосферу бренда||Суть предложения::То, что меняет опыт||Как это работает::Простой и ясный путь||Почему мы::Доказанное качество||Ваш ход::Начните прямо сейчас";
+        } else if (interactiveStyle === "motion") {
+          videoPromptAuto = "powerful brand hero subject centered, iconic editorial close-up composition ready for neon color metamorphosis reveal, premium campaign still";
+          textsAuto = "Прикоснись::Открой другую сторону бренда||Характер::Сила в деталях||Преображение::Когда стиль говорит громче||Твой ход::Начни прямо сейчас";
         } else {
           videoPromptAuto = absoluteProductImageUrl
             ? "premium product with soft cinematic accents — gentle drifting petals and slow sweeping light, studio lighting, clean solid background, cinematic macro detail"
@@ -4538,14 +4632,15 @@ ${designAnalysis}
       const noopRes = { write: () => {}, end: () => {} };
       const MAX_REGEN_ATTEMPTS = 2;
       const REGEN_RETRY_DELAY = 3 * 60 * 1000;
-      const layout: ScrollAnimLayout = animStyle === "split" ? "split" : animStyle === "action" ? "action" : animStyle === "immersion" ? "immersion" : "parallax";
+      const layout: ScrollAnimLayout = animStyle === "split" ? "split" : animStyle === "action" ? "action" : animStyle === "immersion" ? "immersion" : animStyle === "site3d" ? "site3d" : animStyle === "motion" ? "motion" : "parallax";
       (async () => {
         let succeeded = false;
 
         // Fast path: if the caller supplied an existing completed video task ID, skip video
         // creation and just resume from that task (download mp4 → slice frames → inject HTML).
         // Immersion is a multi-clip pipeline — never resume via single-frame slicing.
-        if (existingTaskId && layout !== "immersion") {
+        // Motion is image-pair only — never resume via video frames.
+        if (existingTaskId && layout !== "immersion" && layout !== "motion") {
           console.log(`[REGEN ANIM] resuming from existing task ${existingTaskId} for project ${projectId}`);
           try {
             const scrollOutcome = await generateScrollFrames(
@@ -6704,10 +6799,10 @@ ${fullHtml}`;
 
           // Background: try to fetch the already-created Kling video and build the animation,
           // so the user gets the real animation without paying again or losing the video.
-          if (savedTaskId && KIE_API_KEY && savedStyle !== "immersion") {
+          if (savedTaskId && KIE_API_KEY && savedStyle !== "immersion" && savedStyle !== "motion") {
             const _projId  = proj.id;
             const _layout: ScrollAnimLayout =
-              savedStyle === "split" ? "split" : savedStyle === "action" ? "action" : "parallax";
+              savedStyle === "split" ? "split" : savedStyle === "action" ? "action" : savedStyle === "site3d" ? "site3d" : "parallax";
             const _vidDur  = _layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
             const _frCnt   = _layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : SCROLL_FRAME_COUNT;
             const _texts   = savedTexts;
@@ -6851,11 +6946,12 @@ ${fullHtml}`;
             const textsEnc   = sectionTag.match(/data-scroll-anim-texts="([^"]*)"/)?.[1] || "";
             const animStyle: string = styleEnc ? decodeURIComponent(styleEnc) : "parallax";
             // Immersion uses multi-clip scroll-world pipeline — single-task frame resume does not apply.
-            if (animStyle === "immersion") {
-              console.log(`[KLINGTASK] project ${proj.id}: immersion style — skip single-clip frame resume`);
+            // Motion uses dual stills (no Kling video) — skip frame resume.
+            if (animStyle === "immersion" || animStyle === "motion") {
+              console.log(`[KLINGTASK] project ${proj.id}: ${animStyle} style — skip single-clip frame resume`);
               continue;
             }
-            const layout: ScrollAnimLayout = animStyle === "split" ? "split" : animStyle === "action" ? "action" : "parallax";
+            const layout: ScrollAnimLayout = animStyle === "split" ? "split" : animStyle === "action" ? "action" : animStyle === "site3d" ? "site3d" : "parallax";
             const vidDur  = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
             const frCnt   = layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : SCROLL_FRAME_COUNT;
             const texts: Array<{title:string;sub:string}> = textsEnc
