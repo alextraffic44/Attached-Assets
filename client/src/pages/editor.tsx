@@ -448,9 +448,9 @@ export default function EditorPage() {
       if (animPollRef.current) { clearInterval(animPollRef.current); animPollRef.current = null; }
       setIsGenerating(false);
       setGenerationStatus(null);
+      // Do not strip pending — keep spinner until real hero lands.
       if (rawCode && !isCraftGeneratingHtml(rawCode)) {
-        const cleaned = rawCode.replace(/<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g, "");
-        if (cleaned) setStreamedCode(cleaned);
+        setStreamedCode(rawCode);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
@@ -780,14 +780,20 @@ export default function EditorPage() {
               if (animPollRef.current) clearInterval(animPollRef.current);
               const pollStart = Date.now();
               const POLL_INTERVAL = 12000;
-              const POLL_TIMEOUT = 20 * 60 * 1000; // 20 min hard cap
-              const finishAnim = (rawCode: string) => {
+              const POLL_TIMEOUT = 45 * 60 * 1000; // match Kling queue (up to ~35 min)
+              const finishAnim = (rawCode: string, timedOut = false) => {
                 clearInterval(animPollRef.current!);
                 animPollRef.current = null;
                 setGenerationStatus(null);
-                // Never reveal the dark "video pending" placeholder — strip it if it's
-                // still present (only happens on the timeout fallback path).
-                const code = (rawCode || "").replace(/<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g, "");
+                // Keep pending/spinner if still rendering — never strip the hero away.
+                // Only clear pending visually when a real craft-scrollanim (or fallback) is present.
+                let code = rawCode || "";
+                if (timedOut && code.includes('data-scroll-anim-pending="1"')) {
+                  toast({
+                    title: "Видео ещё рендерится",
+                    description: "Hero появится автоматически — обновите страницу через несколько минут.",
+                  });
+                }
                 if (code) {
                   setStreamedCode(code);
                   if (iframeRef.current) {
@@ -800,12 +806,11 @@ export default function EditorPage() {
               };
               animPollRef.current = setInterval(async () => {
                 if (Date.now() - pollStart > POLL_TIMEOUT) {
-                  // Give up waiting — reveal whatever is in the DB so we never hang forever
                   try {
                     const resp = await fetch(`/api/projects/${projectId}`, { credentials: "include" });
                     const proj = resp.ok ? await resp.json() : null;
-                    finishAnim(proj?.generatedCode || "");
-                  } catch { finishAnim(""); }
+                    finishAnim(proj?.generatedCode || "", true);
+                  } catch { finishAnim("", true); }
                   return;
                 }
                 try {
@@ -813,7 +818,10 @@ export default function EditorPage() {
                   if (!resp.ok) return;
                   const proj = await resp.json();
                   const code: string = proj?.generatedCode || "";
-                  if (code && !code.includes('data-scroll-anim-pending="1"')) {
+                  // Ready when pending is gone AND we have a real hero engine (or static fallback)
+                  const pending = code.includes('data-scroll-anim-pending="1"');
+                  const hasHero = code.includes("data-craft-scrollanim") || code.includes('data-scroll-anim-fallback="1"');
+                  if (code && !pending && hasHero) {
                     finishAnim(code);
                     toast({ title: "✅ Сайт готов!", description: "Видеоанимация встроена." });
                   }

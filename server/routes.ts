@@ -1335,6 +1335,133 @@ function safeReplaceScrollAnimPending(html: string, replacement: string): string
   return result;
 }
 
+/**
+ * Extract finished scroll-anim blocks including the trailing <style>/<script>
+ * siblings that carry height CSS and the canvas/WebGL engine.
+ * Immersion keeps engine inside the section; site3d/motion/parallax place
+ * style+script immediately after </section> — dropping those siblings left
+ * a zero-height hollow hero after BG merge.
+ */
+function extractCraftScrollAnimBlocks(html: string): string[] {
+  const blocks: string[] = [];
+  const openRe = /<section\b[^>]*data-craft-scrollanim[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = openRe.exec(html)) !== null) {
+    const start = m.index;
+    let depth = 0;
+    let pos = start;
+    let end = -1;
+    while (pos < html.length) {
+      const nextOpen = html.indexOf("<section", pos + 1);
+      const nextClose = html.indexOf("</section>", pos + 1);
+      if (nextClose === -1) break;
+      if (nextOpen !== -1 && nextOpen < nextClose) {
+        depth++;
+        pos = nextOpen;
+      } else {
+        if (depth === 0) {
+          end = nextClose + "</section>".length;
+          break;
+        }
+        depth--;
+        pos = nextClose;
+      }
+    }
+    if (end === -1) continue;
+    let cursor = end;
+    // Pull contiguous style/script engine + navCtl that follow the section.
+    for (;;) {
+      const wsMatch = html.slice(cursor).match(/^\s*/);
+      cursor += wsMatch ? wsMatch[0].length : 0;
+      const rest = html.slice(cursor);
+      const lower = rest.slice(0, 16).toLowerCase();
+      if (lower.startsWith("<style")) {
+        const close = html.indexOf("</style>", cursor);
+        if (close === -1) break;
+        cursor = close + "</style>".length;
+        continue;
+      }
+      if (lower.startsWith("<script")) {
+        const close = html.indexOf("</script>", cursor);
+        if (close === -1) break;
+        cursor = close + "</script>".length;
+        continue;
+      }
+      break;
+    }
+    blocks.push(html.slice(start, cursor));
+  }
+  return blocks;
+}
+
+/** True when a craft-scrollanim section exists but its engine CSS/JS was stripped. */
+function isHollowCraftScrollAnim(html: string): boolean {
+  if (!html.includes("data-craft-scrollanim")) return false;
+  const blocks = extractCraftScrollAnimBlocks(html);
+  if (!blocks.length) return true;
+  return blocks.some((b) => {
+    const hasEngine = /<script[\s>]/i.test(b);
+    const hasCss = /<style[\s>]/i.test(b) || /\bstyle\s*=\s*["'][^"']*height\s*:/i.test(b);
+    return !hasEngine || !hasCss;
+  });
+}
+
+/**
+ * Replace hollow (CSS/JS-stripped) craft-scrollanim section(s) with full blocks.
+ */
+function replaceHollowCraftScrollAnim(html: string, fullBlocks: string[]): string {
+  if (!fullBlocks.length) return html;
+  let result = html;
+  const openRe = /<section\b[^>]*data-craft-scrollanim[^>]*>/i;
+  for (const block of fullBlocks) {
+    const m = openRe.exec(result);
+    if (!m) break;
+    const start = m.index;
+    let depth = 0;
+    let pos = start;
+    let end = -1;
+    while (pos < result.length) {
+      const nextOpen = result.indexOf("<section", pos + 1);
+      const nextClose = result.indexOf("</section>", pos + 1);
+      if (nextClose === -1) break;
+      if (nextOpen !== -1 && nextOpen < nextClose) {
+        depth++;
+        pos = nextOpen;
+      } else {
+        if (depth === 0) {
+          end = nextClose + "</section>".length;
+          break;
+        }
+        depth--;
+        pos = nextClose;
+      }
+    }
+    if (end === -1) break;
+    // Also drop any leftover orphan style/script that belonged to a prior hollow bake
+    let cursor = end;
+    for (;;) {
+      const wsMatch = result.slice(cursor).match(/^\s*/);
+      cursor += wsMatch ? wsMatch[0].length : 0;
+      const lower = result.slice(cursor, cursor + 16).toLowerCase();
+      if (lower.startsWith("<style")) {
+        const close = result.indexOf("</style>", cursor);
+        if (close === -1) break;
+        cursor = close + "</style>".length;
+        continue;
+      }
+      if (lower.startsWith("<script")) {
+        const close = result.indexOf("</script>", cursor);
+        if (close === -1) break;
+        cursor = close + "</script>".length;
+        continue;
+      }
+      break;
+    }
+    result = result.slice(0, start) + block + result.slice(cursor);
+  }
+  return result;
+}
+
 function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, videoPrompt?: string, style?: string): string {
   if (style === "immersion") {
     return buildImmersionPendingHtml(videoPrompt || "", texts);
@@ -4573,38 +4700,56 @@ ${designAnalysis}
             try {
               console.log(`[BG ANIM] Starting attempt ${animAttempt + 1}/${MAX_ANIM_ATTEMPTS} for project ${project.id}`);
               const scrollResult = await resolveScrollAnimMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl, _animStyle);
+              // Soft-fail (0 generated) still puts fallback HTML into bgFilesMap via finalize().
+              // Do NOT treat that as success — leave pending so Kling task ID / retry can finish.
+              if (!scrollResult.generated) {
+                console.warn(`[BG ANIM] attempt ${animAttempt + 1}: no frames/pair yet for project ${project.id} — keeping pending`);
+                bgFilesMap.set("index.html", mainHtmlCode);
+                continue;
+              }
               let animatedCode = bgFilesMap.get("index.html") ?? immediateHtml;
               animatedCode = injectLoadingOverlay(animatedCode);
-              // Extract only the finished animation section(s) and merge into the
-              // LATEST project HTML so concurrent user edits are not overwritten.
+              // Extract FULL animation blocks (section + trailing style/script engine).
+              // Merging section-only previously dropped CSS/JS → hollow zero-height hero.
               const curProj = await storage.getProject(project.id);
               const curHtml = curProj?.generatedCode || immediateHtml;
               let mergedHtml = curHtml;
+              const finishedBlocks = extractCraftScrollAnimBlocks(animatedCode);
               if (curHtml.includes('data-scroll-anim-pending="1"')) {
-                // Pull finished section(s) from animatedCode (no pending markers)
-                const finishedSections: string[] = [];
-                const sectionRe = /<section\b[^>]*data-craft-scrollanim[^>]*>[\s\S]*?<\/section>/gi;
-                let sm: RegExpExecArray | null;
-                while ((sm = sectionRe.exec(animatedCode)) !== null) finishedSections.push(sm[0]);
-                if (finishedSections.length === 0) {
-                  // Fallback: take body chunk that replaced pending
-                  mergedHtml = safeReplaceScrollAnimPending(curHtml, animatedCode.includes('data-craft-scrollanim')
-                    ? (animatedCode.match(/<section\b[\s\S]*data-craft-scrollanim[\s\S]*?<\/section>/i)?.[0] || animatedCode)
-                    : animatedCode);
+                if (finishedBlocks.length === 0) {
+                  console.warn(`[BG ANIM] generated>0 but no craft-scrollanim block found — writing fallback with task id`);
+                  const pendingTagM = curHtml.match(/<section[^>]*data-scroll-anim-pending="1"[^>]*>/);
+                  const pendingTag = pendingTagM ? pendingTagM[0] : "";
+                  const savedTaskIdEnc = pendingTag.match(/data-scroll-anim-task-id="([^"]*)"/)?.[1] || "";
+                  const savedTaskId = savedTaskIdEnc ? decodeURIComponent(savedTaskIdEnc) : undefined;
+                  mergedHtml = safeReplaceScrollAnimPending(
+                    curHtml,
+                    scrollAnimFallbackHtml(_animTexts, _animVideoPrompt, _animStyle, savedTaskId),
+                  );
                 } else {
                   let tmp = curHtml;
-                  for (const sec of finishedSections) {
+                  for (const block of finishedBlocks) {
                     if (!tmp.includes('data-scroll-anim-pending="1"')) break;
-                    tmp = safeReplaceScrollAnimPending(tmp, sec);
+                    tmp = safeReplaceScrollAnimPending(tmp, block);
                   }
                   mergedHtml = tmp;
                 }
-              } else if (!curHtml.includes('data-craft-scrollanim') && animatedCode.includes('data-craft-scrollanim')) {
-                // Pending was lost somehow — don't overwrite whole page; skip merge
-                console.warn(`[BG ANIM] No pending marker in current HTML for project ${project.id} — skipping overwrite to preserve edits`);
-                mergedHtml = curHtml;
+              } else if (isHollowCraftScrollAnim(curHtml) && finishedBlocks.length) {
+                // Pending already gone but hero CSS/JS was stripped on a prior buggy merge — repair.
+                console.warn(`[BG ANIM] Repairing hollow craft-scrollanim hero for project ${project.id}`);
+                mergedHtml = replaceHollowCraftScrollAnim(curHtml, finishedBlocks);
+              } else if (!curHtml.includes('data-craft-scrollanim') && finishedBlocks.length) {
+                // Pending lost — inject first finished block after </header> or <body>
+                const block = finishedBlocks[0];
+                if (curHtml.includes("</header>")) {
+                  mergedHtml = curHtml.replace("</header>", `</header>\n${block}`);
+                } else if (/<body[^>]*>/i.test(curHtml)) {
+                  mergedHtml = curHtml.replace(/<body[^>]*>/i, (m) => `${m}\n${block}`);
+                } else {
+                  mergedHtml = block + curHtml;
+                }
+                console.warn(`[BG ANIM] Injected missing hero block for project ${project.id}`);
               } else {
-                // Already has animation or no pending — keep current
                 mergedHtml = curHtml;
               }
               await storage.updateProject(project.id, { generatedCode: mergedHtml });
@@ -4694,10 +4839,9 @@ ${designAnalysis}
     }
   });
 
-  // ── Re-generate animation for a site that has the static fallback ────────────────
-  // Reads data-scroll-anim-prompt/style from the fallback section, re-injects the
-  // {{SCROLLANIM}} marker, saves a pending placeholder immediately so the editor can
-  // start polling, then runs the full video pipeline in the background.
+  // ── Re-generate / repair scroll animation ───────────────────────────────────
+  // Handles: fallback, pending, hollow craft-scrollanim (CSS/JS stripped), or
+  // missing hero. Optional body.taskId resumes a completed KIE Kling job.
   app.post("/api/projects/:id/regen-animation", requireAuth, async (req, res) => {
     try {
       const projectId = parseInt(req.params.id);
@@ -4706,52 +4850,107 @@ ${designAnalysis}
       if (!project || project.userId !== user.id) {
         return res.status(404).json({ message: "Проект не найден" });
       }
-      const html = project.generatedCode || "";
-      if (!html.includes('data-scroll-anim-fallback="1"') && !html.includes('data-scroll-anim-pending="1"')) {
+      let html = project.generatedCode || "";
+      const bodyTaskId = typeof req.body?.taskId === "string" ? req.body.taskId.trim() : "";
+      const bodyStyle = typeof req.body?.style === "string" ? req.body.style.trim() : "";
+      const bodyPrompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
+      const isPending = html.includes('data-scroll-anim-pending="1"');
+      const isFallback = html.includes('data-scroll-anim-fallback="1"');
+      const isHollow = isHollowCraftScrollAnim(html);
+      const missingHero = !html.includes("data-craft-scrollanim") && !isPending && !isFallback;
+
+      if (!isPending && !isFallback && !isHollow && !missingHero && !bodyTaskId) {
         return res.status(400).json({ message: "Анимация уже есть или сайт не интерактивный" });
       }
-      // Extract embedded prompt + style + task ID from the fallback section data-attributes.
-      // The task ID is stored automatically when the fallback is written, so if the Kling video
-      // already completed the server can skip re-generation entirely (no user action needed).
-      const tagMatch = html.match(/<section[^>]*data-scroll-anim-fallback="1"[^>]*>/);
+
+      // Prefer attrs from fallback/pending; allow body overrides for hollow repair.
+      const tagMatch = html.match(/<section[^>]*data-scroll-anim-(?:fallback|pending)="1"[^>]*>/)
+        || html.match(/<section[^>]*data-craft-scrollanim[^>]*>/);
       const tag = tagMatch ? tagMatch[0] : "";
       const promptRaw = tag.match(/data-scroll-anim-prompt="([^"]*)"/)?.[1] || "";
-      const styleRaw = tag.match(/data-scroll-anim-style="([^"]*)"/)?.[1] || "";
+      const styleRaw = tag.match(/data-scroll-anim-style="([^"]*)"/)?.[1]
+        || tag.match(/data-layout="([^"]*)"/)?.[1]
+        || "";
       const taskIdRaw = tag.match(/data-scroll-anim-task-id="([^"]*)"/)?.[1] || "";
-      const existingTaskId: string | undefined = taskIdRaw ? decodeURIComponent(taskIdRaw) : undefined;
-      const videoPrompt = promptRaw
-        ? decodeURIComponent(promptRaw)
-        : "breathtaking cinematic forward flight into the scene, volumetric god rays and drifting atmospheric haze, epic film-still lighting, photorealistic";
-      const animStyle = styleRaw ? decodeURIComponent(styleRaw) : "parallax";
+      const existingTaskId: string | undefined = bodyTaskId
+        || (taskIdRaw ? decodeURIComponent(taskIdRaw) : undefined);
+      const videoPrompt = bodyPrompt
+        || (promptRaw ? decodeURIComponent(promptRaw) : "")
+        || "breathtaking cinematic forward flight into the scene, volumetric god rays and drifting atmospheric haze, epic film-still lighting, photorealistic";
+      const animStyle = bodyStyle
+        || (styleRaw ? decodeURIComponent(styleRaw) : "")
+        || "site3d";
 
-      // Extract text pairs from fallback h2/p elements
-      const secMatch = html.match(/<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/);
       const animTexts: Array<{title: string; sub: string}> = [];
-      if (secMatch) {
-        const h2s = Array.from(secMatch[0].matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g)).map(m => m[1].replace(/<[^>]+>/g, "").trim());
-        const ps  = Array.from(secMatch[0].matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)).map(m => m[1].replace(/<[^>]+>/g, "").trim());
-        const n = Math.max(h2s.length, ps.length, 1);
-        for (let i = 0; i < n; i++) animTexts.push({ title: h2s[i] || "", sub: ps[i] || "" });
+      if (Array.isArray(req.body?.texts)) {
+        for (const t of req.body.texts) {
+          animTexts.push({ title: String(t?.title || "").trim(), sub: String(t?.sub || "").trim() });
+        }
       }
-      if (animTexts.length === 0) animTexts.push({ title: "", sub: "" });
+      if (!animTexts.length) {
+        const textsEnc = tag.match(/data-scroll-anim-texts="([^"]*)"/)?.[1] || "";
+        if (textsEnc) {
+          for (const seg of decodeURIComponent(textsEnc).split("||")) {
+            const [t, s] = seg.split("::");
+            animTexts.push({ title: (t || "").trim(), sub: (s || "").trim() });
+          }
+        }
+      }
+      if (!animTexts.length) {
+        const secMatch = html.match(/<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/);
+        if (secMatch) {
+          const h2s = Array.from(secMatch[0].matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g)).map(m => m[1].replace(/<[^>]+>/g, "").trim());
+          const ps  = Array.from(secMatch[0].matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)).map(m => m[1].replace(/<[^>]+>/g, "").trim());
+          const n = Math.max(h2s.length, ps.length, 1);
+          for (let i = 0; i < n; i++) animTexts.push({ title: h2s[i] || "", sub: ps[i] || "" });
+        }
+      }
+      if (animTexts.length === 0) {
+        animTexts.push(
+          { title: "Новый уровень", sub: "Почувствуйте атмосферу бренда" },
+          { title: "Суть предложения", sub: "То, что меняет опыт" },
+          { title: "Ваш ход", sub: "Начните прямо сейчас" },
+        );
+      }
 
-      // Build the {{SCROLLANIM:...}} marker for the BG pipeline
       const textsStr = animTexts.map(t => `${t.title}::${t.sub}`).join("||");
       const marker = `\n{{SCROLLANIM:${videoPrompt}|${textsStr}}}\n`;
+      const pendingBlock = scrollAnimPendingHtml(animTexts, videoPrompt, animStyle)
+        .replace(
+          /(<section[^>]*data-scroll-anim-pending="1")/,
+          existingTaskId
+            ? `$1 data-scroll-anim-task-id="${encodeURIComponent(existingTaskId)}"`
+            : "$1",
+        );
 
-      // Replace fallback with pending spinner (shown to user immediately)
-      const pendingHtml = html.replace(
-        /<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/,
-        scrollAnimPendingHtml(animTexts, videoPrompt, animStyle),
-      );
-      // Replace fallback with {{SCROLLANIM}} marker (used by the BG pipeline)
-      const markerHtml = html.replace(
-        /<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/,
-        marker,
-      );
+      // Normalize HTML → pending placeholder + marker HTML for BG pipeline
+      let pendingHtml = html;
+      let markerHtml = html;
+      if (isFallback) {
+        pendingHtml = html.replace(/<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/, pendingBlock);
+        markerHtml = html.replace(/<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/, marker);
+      } else if (isPending) {
+        pendingHtml = safeReplaceScrollAnimPending(html, pendingBlock);
+        markerHtml = safeReplaceScrollAnimPending(html, marker);
+      } else if (isHollow) {
+        pendingHtml = replaceHollowCraftScrollAnim(html, [pendingBlock]);
+        markerHtml = replaceHollowCraftScrollAnim(html, [marker]);
+      } else {
+        // Missing hero — inject after header
+        if (html.includes("</header>")) {
+          pendingHtml = html.replace("</header>", `</header>\n${pendingBlock}`);
+          markerHtml = html.replace("</header>", `</header>\n${marker}`);
+        } else if (/<body[^>]*>/i.test(html)) {
+          pendingHtml = html.replace(/<body[^>]*>/i, (m) => `${m}\n${pendingBlock}`);
+          markerHtml = html.replace(/<body[^>]*>/i, (m) => `${m}\n${marker}`);
+        } else {
+          pendingHtml = pendingBlock + html;
+          markerHtml = marker + html;
+        }
+      }
 
       await storage.updateProject(projectId, { generatedCode: pendingHtml });
-      res.json({ animPending: true });
+      res.json({ animPending: true, resumedTaskId: existingTaskId || null, style: animStyle });
 
       // ── Run video generation in background ──
       const runKey = `regen-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
@@ -4759,14 +4958,11 @@ ${designAnalysis}
       const noopRes = { write: () => {}, end: () => {} };
       const MAX_REGEN_ATTEMPTS = 2;
       const REGEN_RETRY_DELAY = 3 * 60 * 1000;
-      const layout: ScrollAnimLayout = animStyle === "split" ? "split" : animStyle === "action" ? "action" : animStyle === "immersion" ? "immersion" : animStyle === "site3d" ? "site3d" : animStyle === "motion" ? "motion" : "parallax";
+      const layout: ScrollAnimLayout = resolveScrollAnimLayout(animStyle);
       (async () => {
         let succeeded = false;
 
-        // Fast path: if the caller supplied an existing completed video task ID, skip video
-        // creation and just resume from that task (download mp4 → slice frames → inject HTML).
-        // Immersion is a multi-clip pipeline — never resume via single-frame slicing.
-        // Motion is image-pair only — never resume via video frames.
+        // Fast path: resume completed Kling task (site3d / parallax / etc.)
         if (existingTaskId && layout !== "immersion" && layout !== "motion") {
           console.log(`[REGEN ANIM] resuming from existing task ${existingTaskId} for project ${projectId}`);
           try {
@@ -4777,6 +4973,9 @@ ${designAnalysis}
             if (frames.length >= 60) {
               const canvasHtml = buildScrollAnimHtml(frames, animTexts, layout);
               let finalCode = safeReplaceScrollAnimPending(pendingHtml, canvasHtml);
+              if (isHollowCraftScrollAnim(finalCode)) {
+                finalCode = replaceHollowCraftScrollAnim(finalCode, [canvasHtml]);
+              }
               finalCode = injectLoadingOverlay(finalCode);
               await storage.updateProject(projectId, { generatedCode: finalCode });
               console.log(`[REGEN ANIM] Resume done for project ${projectId} — ${frames.length} frames`);
@@ -4794,12 +4993,34 @@ ${designAnalysis}
             if (attempt > 0) {
               console.log(`[REGEN ANIM] Waiting ${REGEN_RETRY_DELAY / 60000} min before retry for project ${projectId}...`);
               await new Promise(r => setTimeout(r, REGEN_RETRY_DELAY));
-              bgMap.set("index.html", markerHtml); // reset for clean retry
+              bgMap.set("index.html", markerHtml);
             }
             try {
               console.log(`[REGEN ANIM] Attempt ${attempt + 1}/${MAX_REGEN_ATTEMPTS} for project ${projectId}`);
               const result = await resolveScrollAnimMarkers(bgMap, projectId, user.id, runKey, noopRes, () => false, undefined, animStyle);
-              let finalCode = bgMap.get("index.html") ?? pendingHtml;
+              if (!result.generated) {
+                console.warn(`[REGEN ANIM] attempt ${attempt + 1}: nothing generated`);
+                continue;
+              }
+              const animatedCode = injectLoadingOverlay(bgMap.get("index.html") ?? pendingHtml);
+              const blocks = extractCraftScrollAnimBlocks(animatedCode);
+              let finalCode = pendingHtml;
+              const cur = await storage.getProject(projectId);
+              const curHtml = cur?.generatedCode || pendingHtml;
+              if (blocks.length && curHtml.includes('data-scroll-anim-pending="1"')) {
+                let tmp = curHtml;
+                for (const b of blocks) {
+                  if (!tmp.includes('data-scroll-anim-pending="1"')) break;
+                  tmp = safeReplaceScrollAnimPending(tmp, b);
+                }
+                finalCode = tmp;
+              } else if (blocks.length && isHollowCraftScrollAnim(curHtml)) {
+                finalCode = replaceHollowCraftScrollAnim(curHtml, blocks);
+              } else if (blocks.length) {
+                finalCode = animatedCode;
+              } else {
+                continue;
+              }
               finalCode = injectLoadingOverlay(finalCode);
               await storage.updateProject(projectId, { generatedCode: finalCode });
               console.log(`[REGEN ANIM] Done (attempt ${attempt + 1}) for project ${projectId} — frames: ${result.generated}`);
@@ -4815,7 +5036,7 @@ ${designAnalysis}
           try {
             const fallback = safeReplaceScrollAnimPending(
               pendingHtml,
-              scrollAnimFallbackHtml(animTexts, videoPrompt, animStyle),
+              scrollAnimFallbackHtml(animTexts, videoPrompt, animStyle, existingTaskId),
             );
             await storage.updateProject(projectId, { generatedCode: fallback });
             console.warn(`[REGEN ANIM] All attempts failed for project ${projectId} — fallback written`);
@@ -7061,15 +7282,25 @@ ${fullHtml}`;
             if (!cur) continue;
             const curHtml: string = cur.generatedCode || "";
 
-            // Detect section type (pending vs fallback) and extract metadata
+            // Detect section type (pending vs fallback) and extract metadata.
+            // Also repair hollow craft-scrollanim heroes (section without engine CSS/JS)
+            // left by a prior buggy merge — treat them as needing re-inject.
             const isPending  = curHtml.includes('data-scroll-anim-pending="1"');
             const isFallback = curHtml.includes('data-scroll-anim-fallback="1"');
-            if (!isPending && !isFallback) { console.log(`[KLINGTASK] project ${proj.id}: task ${taskId.slice(0,12)}… already resolved`); continue; }
+            const isHollow   = isHollowCraftScrollAnim(curHtml);
+            if (!isPending && !isFallback && !isHollow) {
+              console.log(`[KLINGTASK] project ${proj.id}: task ${taskId.slice(0,12)}… already resolved`);
+              continue;
+            }
 
             const sectionTag = (curHtml.match(isPending
               ? /<section[^>]*data-scroll-anim-pending="1"[^>]*>/
-              : /<section[^>]*data-scroll-anim-fallback="1"[^>]*>/) || [""])[0];
-            const styleEnc   = sectionTag.match(/data-scroll-anim-style="([^"]*)"/)?.[1] || "";
+              : isFallback
+              ? /<section[^>]*data-scroll-anim-fallback="1"[^>]*>/
+              : /<section[^>]*data-craft-scrollanim[^>]*>/) || [""])[0];
+            const styleEnc   = sectionTag.match(/data-scroll-anim-style="([^"]*)"/)?.[1]
+              || sectionTag.match(/data-layout="([^"]*)"/)?.[1]
+              || "";
             const textsEnc   = sectionTag.match(/data-scroll-anim-texts="([^"]*)"/)?.[1] || "";
             const animStyle: string = styleEnc ? decodeURIComponent(styleEnc) : "parallax";
             // Immersion uses multi-clip scroll-world pipeline — single-task frame resume does not apply.
@@ -7124,12 +7355,30 @@ ${fullHtml}`;
                 const latestHtml: string = latest.generatedCode || "";
                 const stillPending  = latestHtml.includes('data-scroll-anim-pending="1"');
                 const stillFallback = latestHtml.includes('data-scroll-anim-fallback="1"');
-                if (!stillPending && !stillFallback) { console.log(`[KLINGTASK] project ${proj.id}: resolved by another path while we were processing`); continue; }
+                const stillHollow   = isHollowCraftScrollAnim(latestHtml);
+                const stillMissing  = !latestHtml.includes("data-craft-scrollanim") && !stillPending && !stillFallback;
+                if (!stillPending && !stillFallback && !stillHollow && !stillMissing) {
+                  console.log(`[KLINGTASK] project ${proj.id}: resolved by another path while we were processing`);
+                  continue;
+                }
 
                 const canvasHtml = buildScrollAnimHtml(frameUrls, texts, layout);
                 let finalCode = latestHtml;
-                if (stillPending)  finalCode = safeReplaceScrollAnimPending(finalCode, canvasHtml);
-                if (stillFallback) finalCode = finalCode.replace(/<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/, canvasHtml);
+                if (stillPending) {
+                  finalCode = safeReplaceScrollAnimPending(finalCode, canvasHtml);
+                } else if (stillFallback) {
+                  finalCode = finalCode.replace(/<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/, canvasHtml);
+                } else if (stillHollow) {
+                  finalCode = replaceHollowCraftScrollAnim(finalCode, [canvasHtml]);
+                } else if (stillMissing) {
+                  if (finalCode.includes("</header>")) {
+                    finalCode = finalCode.replace("</header>", `</header>\n${canvasHtml}`);
+                  } else if (/<body[^>]*>/i.test(finalCode)) {
+                    finalCode = finalCode.replace(/<body[^>]*>/i, (m) => `${m}\n${canvasHtml}`);
+                  } else {
+                    finalCode = canvasHtml + finalCode;
+                  }
+                }
                 finalCode = injectLoadingOverlay(finalCode);
                 await storage.updateProject(proj.id, { generatedCode: finalCode });
                 console.log(`[KLINGTASK] project ${proj.id}: ✓ animation injected (${frameUrls.length} frames, layout=${layout})`);
