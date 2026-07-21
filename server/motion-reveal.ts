@@ -32,7 +32,24 @@ function cleanEnglishPrompt(raw: string): string {
     .trim();
   return cleaned.length > 12
     ? cleaned
-    : "premium brand hero subject, cinematic editorial portrait, centered composition";
+    : "premium brand scene for the business niche, cinematic editorial composition";
+}
+
+/** Split AI dual prompt: "BASE /// REVEAL" (or ::: / →). Falls back to one scene for both. */
+export function parseMotionDualPrompt(raw: string): { baseScene: string; revealScene: string } {
+  const cleaned = cleanEnglishPrompt(raw);
+  const separators = [" /// ", " ::: ", " → ", " -> ", " /+/ "];
+  for (const sep of separators) {
+    const idx = cleaned.indexOf(sep);
+    if (idx > 8) {
+      const baseScene = cleaned.slice(0, idx).trim();
+      const revealScene = cleaned.slice(idx + sep.length).trim();
+      if (baseScene.length > 8 && revealScene.length > 8) {
+        return { baseScene, revealScene };
+      }
+    }
+  }
+  return { baseScene: cleaned, revealScene: cleaned };
 }
 
 async function reuploadStable(
@@ -123,47 +140,46 @@ async function createStill(
   return null;
 }
 
-function buildBasePrompt(scene: string, hasProduct: boolean): string {
+function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
   if (hasProduct) {
     return (
       `Take the exact product from the reference image and keep it perfectly identical ` +
-      `(same shape, label, text, colors and proportions). Place it as a hero product shot ` +
-      `centered in frame on a dark premium studio backdrop. Convert the whole frame to ` +
-      `high-contrast black-and-white editorial photography (gradient-map monochrome), ` +
-      `dramatic rim light, soft volumetric haze, magazine cover composition. ` +
-      `No text, no watermark, no logos added. Ultra-high detail, 8K, 16:9. ` +
-      `Subject context: ${scene}`
+      `(same shape, label, text, colors and proportions). Place it as the clear hero inside this niche scene: ${baseScene}. ` +
+      `Render the WHOLE frame as high-contrast BLACK AND WHITE editorial commercial photography ` +
+      `(gradient-map monochrome), dramatic directional light, soft volumetric haze, premium campaign still. ` +
+      `Match the niche environment and props from the description — do NOT invent an unrelated portrait. ` +
+      `No text, no watermark, no logos added. Ultra-high detail, 8K, 16:9.`
     );
   }
   return (
-    `${scene}. Create a striking HERO still for a premium interactive website. ` +
-    `Centered subject (person, product or brand icon matching the niche), tight cinematic framing, ` +
-    `high-contrast BLACK AND WHITE editorial photograph (gradient-map monochrome), ` +
-    `dramatic studio key + rim light, soft atmospheric haze, shallow depth of field, ` +
-    `clean dark background, powerful and iconic like a luxury campaign. ` +
+    `${baseScene}. ` +
+    `Create a photorealistic commercial HERO still tailored to this exact business niche and subject. ` +
+    `Follow the described scene, environment, props and composition closely — it may be a person, product, ` +
+    `interior, workspace, dish, building, vehicle, tool, or any niche-specific subject (NOT forced to be a fashion portrait). ` +
+    `Render as high-contrast BLACK AND WHITE editorial photography (gradient-map monochrome), ` +
+    `cinematic lighting, soft atmospheric haze, powerful iconic framing suitable for a premium website hero. ` +
     `No text, no watermark, no logos. Ultra-high detail, 8K, 16:9 aspect ratio.`
   );
 }
 
-function buildRevealPrompt(scene: string, hasProduct: boolean): string {
+function buildRevealPrompt(revealScene: string, hasProduct: boolean): string {
   if (hasProduct) {
     return (
-      `Keep the EXACT same product, pose, framing and composition as the reference image. ` +
-      `Transform it into a vivid COLOR reveal: neon chromatic glow, rich saturated brand colors ` +
-      `(warm orange into electric cyan/magenta accents), glossy premium lighting, ` +
-      `subtle liquid iridescence and lens chromatic aberration around edges, ` +
-      `cinematic luxury commercial look. The product identity must stay identical. ` +
-      `No text, no watermark. Ultra-high detail, 8K, 16:9. Context: ${scene}`
+      `Keep the EXACT same product identity, pose, framing and composition as the reference image. ` +
+      `Transform into the COLOR reveal for this niche: ${revealScene}. ` +
+      `Full vivid color, rich premium commercial lighting, subtle chromatic edges, liquid iridescence where it fits. ` +
+      `The metamorphosis must feel native to the niche (not a random helmet/mask unless the niche calls for it). ` +
+      `Product identity stays identical. No text, no watermark. Ultra-high detail, 8K, 16:9.`
     );
   }
   return (
-    `Keep the EXACT same subject identity, pose, framing and composition as the reference. ` +
-    `Reveal a spectacular COLOR transformation of the same hero: vibrant neon gradient map ` +
-    `(deep blacks into electric orange, magenta and cyan), premium brand metamorphosis ` +
-    `(mask, helmet, luminous aura, couture detail or product glow that fits the niche), ` +
-    `chromatic aberration edges, glossy cinematic lighting, liquid iridescence. ` +
-    `Same silhouette and camera angle as the reference — only the look transforms. ` +
-    `No text, no watermark. Ultra-high detail, 8K, 16:9. Niche: ${scene}`
+    `Keep the EXACT same subject identity, camera angle, pose and composition as the reference image. ` +
+    `Reveal the COLOR metamorphosis described here: ${revealScene}. ` +
+    `Same silhouette and framing — only the look, materials, lighting and atmosphere transform. ` +
+    `Full vivid color, niche-authentic reveal (before→after that makes sense for THIS business), ` +
+    `premium commercial photography, subtle chromatic aberration on reveal edges, cinematic gloss. ` +
+    `Do NOT force fashion helmets or unrelated sci-fi props unless the niche description asks for them. ` +
+    `No text, no watermark. Ultra-high detail, 8K, 16:9.`
   );
 }
 
@@ -173,13 +189,13 @@ export async function generateMotionRevealPair(opts: {
   deps: GenerateMotionRevealDeps;
 }): Promise<{ baseUrl: string; revealUrl: string } | null> {
   const { deps } = opts;
-  const scene = cleanEnglishPrompt(opts.scenePrompt);
+  const { baseScene, revealScene } = parseMotionDualPrompt(opts.scenePrompt);
   const hasProduct = !!opts.productImageUrl;
 
-  deps.onStatus?.("Моушн: генерирую базовый кадр (чёрно-белый герой)…");
+  deps.onStatus?.("Моушн: генерирую базовый кадр под нишу (Ч/Б)…");
   const baseUrl = await createStill(
     deps,
-    buildBasePrompt(scene, hasProduct),
+    buildBasePrompt(baseScene, hasProduct),
     "MOTION base",
     opts.productImageUrl,
   );
@@ -188,10 +204,10 @@ export async function generateMotionRevealPair(opts: {
     return null;
   }
 
-  deps.onStatus?.("Моушн: генерирую reveal-кадр (цветное преображение)…");
+  deps.onStatus?.("Моушн: генерирую reveal-кадр под нишу (цвет)…");
   let revealUrl = await createStill(
     deps,
-    buildRevealPrompt(scene, hasProduct),
+    buildRevealPrompt(revealScene, hasProduct),
     "MOTION reveal",
     baseUrl,
   );
@@ -200,7 +216,7 @@ export async function generateMotionRevealPair(opts: {
     console.warn("[MOTION] reveal i2i failed — trying text-to-image");
     revealUrl = await createStill(
       deps,
-      buildRevealPrompt(scene, false) + ` Match this subject: ${scene}`,
+      buildRevealPrompt(revealScene, false) + ` Match composition of: ${baseScene}`,
       "MOTION reveal-t2i",
     );
   }

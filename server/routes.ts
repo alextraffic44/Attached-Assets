@@ -3278,27 +3278,41 @@ VIDEO_PROMPT (на английском) — кинематографичный 
 ═══ КОНЕЦ РЕЖИМА 3D САЙТ ═══\n`;
         } else if (interactiveStyle === "motion") {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
-═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — МОУШН» (WebGL hover-reveal как Lando Norris) ═══
+═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — МОУШН» (WebGL hover-reveal под ЛЮБУЮ нишу) ═══
 Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
+
+Ты — креативный арт-директор. Сначала ПОЙМИ нишу сайта из запроса пользователя (ресторан, стройка, клиника, недвижимость, авто, юристы, кофейня, спортзал, школа, салон, IT и т.д.). Затем придумай ПАРУ кадров «до → после», которая именно для ЭТОЙ ниши выглядит вау при наведении курсора. Это НЕ обязательно портрет человека и НЕ шлем/маска — субъект может быть блюдом, интерьером, зданием, инструментом, улыбкой, машиной, упаковкой, рабочим местом — чем угодно, что продаёт нишу.
 
 ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
 → СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
-{{SCROLLANIM:HERO_SUBJECT_PROMPT_IN_ENGLISH|Блок1::Текст1||Блок2::Текст2||Блок3::Текст3||Блок4::Текст4}}
+{{SCROLLANIM:BASE_SCENE_IN_ENGLISH /// REVEAL_SCENE_IN_ENGLISH|Блок1::Текст1||Блок2::Текст2||Блок3::Текст3||Блок4::Текст4}}
 
-HERO_SUBJECT_PROMPT (на английском) — опиши ГЕРОЯ для парных кадров: базовый чёрно-белый editorial-портрет/продукт + цветное преображение (mask/helmet/aura/neon brand metamorphosis) при наведении курсора. Один и тот же субъект, одна композиция, мощный иконический кадр по центру. Это НЕ видео и НЕ скролл-кадры — это hover-reveal. ТОЛЬКО запятые (без | :: и фигурных скобок):
-- Мода/бьюти: "striking fashion portrait of a confident model with dramatic jewelry, centered close-up, iconic editorial hero"
-- Спорт/авто: "intense close-up of a racing driver face ready for helmet reveal metamorphosis, cinematic hero framing"
-- Продукт/техника: "hero product centered in dark studio, iconic silhouette ready for neon chromatic reveal"
-- Еда/напитки: "dramatic hero bottle or dish centered, premium campaign still ready for colorful iridescent reveal"
-- Общее/услуги: "powerful brand hero subject centered, iconic editorial composition ready for neon color metamorphosis"
+Формат ENGLISH-части ОБЯЗАТЕЛЬНО с разделителем " /// " (пробел-три-слэша-пробел):
+- СЛЕВА от /// — базовый кадр (будет Ч/Б): конкретная сцена ниши, композиция, субъект, свет, атмосфера
+- СПРАВА от /// — reveal-кадр (будет в цвете): ТА ЖЕ композиция/ракурс/субъект, но преображение, осмысленное для ниши (цвет, материалы, «оживление», результат услуги, премиум-сияние и т.п.)
+Пиши развёрнуто, ТОЛЬКО запятые внутри каждой половины (без | :: и фигурных скобок). Обе половины — про ОДНУ и ту же сцену.
 
-Тексты — РОВНО 4 пары на РУССКОМ (Заголовок::Подзаголовок): короткие мощные фразы поверх reveal (оффер → характер бренда → выгода → CTA).
+Примеры под разные ниши (адаптируй под КОНКРЕТНЫЙ бренд пользователя, не копируй слепо):
+- Ресторан: "gourmet plated signature dish on dark slate, rising steam, black and white editorial food photography, tight cinematic framing /// same dish and camera angle in full warm color, golden oil sheen, vibrant herbs, candlelit fine-dining commercial"
+- Кофейня: "artisan latte in ceramic cup on wooden bar, soft bokeh espresso machine, monochrome cafe editorial /// same cup and framing in rich warm color, crema glow, morning window light, premium coffee brand campaign"
+- Стройка/ремонт: "modern construction site with crane silhouette at dusk, industrial monochrome photography /// same site and angle in golden hour color, sparks and warm concrete, cinematic contractor commercial"
+- Недвижимость: "grand modern villa facade at twilight, high-contrast black and white architecture photo /// same villa and camera angle in golden hour color, warm interior lights glowing through glass, luxury real-estate campaign"
+- Клиника/стоматология: "confident close-up smile in soft studio light, clean medical beauty monochrome editorial /// same smile and framing with luminous healthy glow, soft clinic ambience, premium healthcare brand"
+- Автосервис/авто: "luxury car three-quarter view in dark garage, monochrome automotive editorial /// same car and angle with glossy reflections, rim light streaks, vivid paint color, premium auto commercial"
+- Салон красоты: "elegant hairstyle portrait in salon chair, high-contrast black and white beauty editorial /// same pose and framing with rich hair color shine, soft glam lighting, beauty brand metamorphosis"
+- Фитнес: "athlete mid-pose in gym, dramatic monochrome sports photography /// same pose and framing in vivid color, sweat glow, energetic stadium-style lighting, fitness brand campaign"
+- Юристы/услуги: "premium office desk with leather folder and city skyline bokeh, monochrome corporate editorial /// same desk and framing in refined color, warm brass accents, trustworthy luxury firm campaign"
+- IT/SaaS: "minimal workspace with laptop and abstract UI glow, monochrome tech editorial /// same desk and framing with luminous interface reflections, cool blue accents, modern software brand"
+- Цветы/подарки: "bouquet of roses on marble, soft monochrome floral still /// same bouquet and angle in vivid petal color, dewdrops, romantic luxury floral campaign"
 
-После маркера — обычные секции сайта (преимущества, отзывы, CTA, форма, футер).
+Тексты — РОВНО 4 пары на РУССКОМ (Заголовок::Подзаголовок): короткие мощные фразы под нишу (оффер → характер → выгода → CTA).
+
+После маркера — обычные секции сайта под эту нишу (преимущества, отзывы, CTA, форма, футер).
 
 ⚠️ НЕ пиши <section> или Hero-раздел ДО этого маркера. Маркер И ЕСТЬ Hero.
-⚠️ НЕ создавай canvas/WebGL-код вручную. Маркер заменяется автоматически системой (пара кадров + fluid mouse reveal).
-🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
+⚠️ НЕ создавай canvas/WebGL-код вручную. Маркер заменяется автоматически системой (пара кадров под нишу + fluid mouse reveal).
+⚠️ НЕ своди всё к портрету со шлемом — думай как арт-директор бренда ЭТОЙ ниши.
+🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML и содержать " /// ".
 ═══ КОНЕЦ РЕЖИМА МОУШН ═══\n`;
         } else if (interactiveStyle === "immersion") {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
@@ -4295,8 +4309,8 @@ ${designAnalysis}
           videoPromptAuto = "breathtaking cinematic forward flight into a premium brand environment, volumetric god rays, atmospheric depth and elegant bokeh, the camera gliding deeper through the space, epic film-still lighting, photorealistic";
           textsAuto = "Новый уровень::Почувствуйте атмосферу бренда||Суть предложения::То, что меняет опыт||Как это работает::Простой и ясный путь||Почему мы::Доказанное качество||Ваш ход::Начните прямо сейчас";
         } else if (interactiveStyle === "motion") {
-          videoPromptAuto = "powerful brand hero subject centered, iconic editorial close-up composition ready for neon color metamorphosis reveal, premium campaign still";
-          textsAuto = "Прикоснись::Открой другую сторону бренда||Характер::Сила в деталях||Преображение::Когда стиль говорит громче||Твой ход::Начни прямо сейчас";
+          videoPromptAuto = "premium niche brand scene, iconic commercial subject for the business, high-contrast monochrome editorial still /// same subject and framing in full vivid color, premium commercial lighting, niche-authentic metamorphosis reveal";
+          textsAuto = "Прикоснись::Открой другую сторону бренда||Характер::Сила в деталях||Преображение::Когда результат виден сразу||Твой ход::Начни прямо сейчас";
         } else {
           videoPromptAuto = absoluteProductImageUrl
             ? "premium product with soft cinematic accents — gentle drifting petals and slow sweeping light, studio lighting, clean solid background, cinematic macro detail"
