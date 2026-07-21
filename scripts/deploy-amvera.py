@@ -25,6 +25,7 @@ DEFAULT_FILES = [
     "server/scroll-world.ts",
     "server/site3d-anim.ts",
     "server/motion-reveal.ts",
+    "server/animational.ts",
     "server/kie-errors.ts",
     "server/agent-runtime.ts",
     "server/seo-routes.ts",

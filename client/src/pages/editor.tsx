@@ -439,6 +439,8 @@ export default function EditorPage() {
     setIsGenerating(true);
     setGenerationStatus(waitingSite
       ? "Генерация продолжается на сервере…"
+      : code.includes('data-animational-pending="1"')
+      ? "Собираем анимационный сайт…"
       : "Рендерю видеоанимацию…");
 
     const pollStart = Date.now();
