@@ -1,8 +1,11 @@
 /**
  * «Моушн» — WebGL mouse-trail image reveal (Lando Norris / Unicorn Studio style).
  *
- * Pipeline: 2 paired stills via KIE (nano-banana-2 + gpt-image-2-image-to-image)
+ * Pipeline: 2 paired stills in PARALLEL via KIE nano-banana-2 (1K, fast poll)
  * → self-contained HTML with fluid cursor reveal, chromatic edges, soft pixelation.
+ *
+ * Speed notes: previously base→reveal ran sequentially with I2I + 4×3min retries
+ * (worst case ~24 min). Now both frames fire together; target wall-clock ~30–90s.
  */
 export const SCROLL_MOTION_COST = 120;
 
@@ -20,9 +23,11 @@ export type GenerateMotionRevealDeps = {
 };
 
 const STILL_MODEL = "nano-banana-2";
-const I2I_MODEL = "gpt-image-2-image-to-image";
-const STILL_DEADLINE_MS = 3 * 60 * 1000;
-const MAX_STILL_ATTEMPTS = 4;
+/** 1K is plenty for full-bleed web hero and ~2× faster than 2K on nano-banana-2. */
+const STILL_RESOLUTION = "1K";
+const STILL_DEADLINE_MS = 90 * 1000;
+const MAX_STILL_ATTEMPTS = 2;
+const POLL_MS = 1500;
 
 function cleanEnglishPrompt(raw: string): string {
   const cleaned = raw
@@ -75,13 +80,16 @@ async function pollImageTask(
   label: string,
 ): Promise<string | null> {
   const deadline = Date.now() + STILL_DEADLINE_MS;
+  // First poll quickly — nano-banana-2 often finishes in <15s at 1K
+  let wait = POLL_MS;
   while (Date.now() < deadline) {
     if (deps.shouldStop()) return null;
-    await new Promise((r) => setTimeout(r, 4000));
+    await new Promise((r) => setTimeout(r, wait));
+    wait = POLL_MS;
     const body: any = await deps.kieRequestJson(
       `${deps.statusUrl}?taskId=${taskId}`,
       { headers: { Authorization: `Bearer ${deps.kieApiKey}` } },
-      { label: `${label}-poll`, retries: 2, shouldStop: () => deps.shouldStop() || Date.now() >= deadline },
+      { label: `${label}-poll`, retries: 1, shouldStop: () => deps.shouldStop() || Date.now() >= deadline },
     );
     if (!body || body.code !== 200 || !body.data) continue;
     const state = body.data.state;
@@ -101,6 +109,7 @@ async function pollImageTask(
       return null;
     }
   }
+  console.warn(`[MOTION] ${label} timed out after ${STILL_DEADLINE_MS / 1000}s`);
   return null;
 }
 
@@ -113,11 +122,23 @@ async function createStill(
   if (!deps.kieApiKey) return null;
   for (let attempt = 0; attempt < MAX_STILL_ATTEMPTS; attempt++) {
     if (deps.shouldStop()) return null;
-    if (attempt > 0) await new Promise((r) => setTimeout(r, 4000));
-    const model = inputUrl ? I2I_MODEL : STILL_MODEL;
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+    // Prefer nano-banana-2 for both T2I and reference-image edits (fast).
+    // image_input keeps product identity without the slower gpt-image-2 i2i queue.
     const input: any = inputUrl
-      ? { prompt, input_urls: [inputUrl], aspect_ratio: "16:9", resolution: "2K" }
-      : { prompt, aspect_ratio: "16:9", resolution: "2K" };
+      ? {
+          prompt,
+          image_input: [inputUrl],
+          aspect_ratio: "16:9",
+          resolution: STILL_RESOLUTION,
+          output_format: "jpg",
+        }
+      : {
+          prompt,
+          aspect_ratio: "16:9",
+          resolution: STILL_RESOLUTION,
+          output_format: "jpg",
+        };
     const createBody: any = await deps.kieRequestJson(
       deps.createUrl,
       {
@@ -126,9 +147,9 @@ async function createStill(
           "Content-Type": "application/json",
           Authorization: `Bearer ${deps.kieApiKey}`,
         },
-        body: JSON.stringify({ model, input }),
+        body: JSON.stringify({ model: STILL_MODEL, input }),
       },
-      { label: `${label}-create`, retries: 4, shouldStop: deps.shouldStop },
+      { label: `${label}-create`, retries: 2, shouldStop: deps.shouldStop },
     );
     if (createBody?.code !== 200 || !createBody?.data?.taskId) {
       console.warn(`[MOTION] ${label} create failed:`, createBody?.msg);
@@ -191,40 +212,35 @@ export async function generateMotionRevealPair(opts: {
   const { deps } = opts;
   const { baseScene, revealScene } = parseMotionDualPrompt(opts.scenePrompt);
   const hasProduct = !!opts.productImageUrl;
+  const t0 = Date.now();
 
-  deps.onStatus?.("Моушн: генерирую базовый кадр под нишу (Ч/Б)…");
-  const baseUrl = await createStill(
-    deps,
-    buildBasePrompt(baseScene, hasProduct),
-    "MOTION base",
-    opts.productImageUrl,
-  );
-  if (!baseUrl) {
-    console.warn("[MOTION] base still failed");
-    return null;
-  }
-
-  deps.onStatus?.("Моушн: генерирую reveal-кадр под нишу (цвет)…");
-  let revealUrl = await createStill(
-    deps,
-    buildRevealPrompt(revealScene, hasProduct),
-    "MOTION reveal",
-    baseUrl,
-  );
-  // Fallback: text-to-image reveal if i2i fails
-  if (!revealUrl) {
-    console.warn("[MOTION] reveal i2i failed — trying text-to-image");
-    revealUrl = await createStill(
+  // Fire BOTH stills in parallel — the old sequential base→i2i-reveal path
+  // could burn 10–25 minutes when KIE was slow or retried.
+  deps.onStatus?.("Моушн: генерирую пару кадров параллельно (Ч/Б + цвет)…");
+  const [baseUrl, revealUrl] = await Promise.all([
+    createStill(
       deps,
-      buildRevealPrompt(revealScene, false) + ` Match composition of: ${baseScene}`,
-      "MOTION reveal-t2i",
+      buildBasePrompt(baseScene, hasProduct),
+      "MOTION base",
+      opts.productImageUrl,
+    ),
+    createStill(
+      deps,
+      buildRevealPrompt(revealScene, hasProduct),
+      "MOTION reveal",
+      opts.productImageUrl,
+    ),
+  ]);
+
+  if (!baseUrl || !revealUrl) {
+    console.warn(
+      `[MOTION] pair incomplete base=${!!baseUrl} reveal=${!!revealUrl} after ${Date.now() - t0}ms`,
     );
-  }
-  if (!revealUrl) {
-    console.warn("[MOTION] reveal still failed");
     return null;
   }
 
+  console.log(`[MOTION] pair ready in ${Date.now() - t0}ms`);
+  deps.onStatus?.(`Моушн готов за ${Math.round((Date.now() - t0) / 1000)} с`);
   return { baseUrl, revealUrl };
 }
 

@@ -408,29 +408,39 @@ async function generateStillForVideo(
       `composition that draws the eye deep into the scene, with a slightly calmer focal area where large overlay text can stay legible. ` +
       `Bold directional key light with soft volumetric god rays, rich filmic color grading, deep elegant shadows and luminous ` +
       `highlights, gentle atmospheric haze for depth, immersive premium Hollywood mood. No text, no watermark, no logos, ultra-high detail, 8K, 16:9 aspect ratio.`;
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     if (shouldStop()) return null;
-    if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
+    if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
     let taskId: string | null = null;
     const createBody: any = await kieRequestJson(
       NANO_BANANA_CREATE_URL,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({ model: "nano-banana-2", input: { prompt: imagePrompt, aspect_ratio: "16:9", resolution: "2K" } }),
+        body: JSON.stringify({
+          model: "nano-banana-2",
+          input: {
+            prompt: imagePrompt,
+            aspect_ratio: "16:9",
+            resolution: "1K",
+            output_format: "jpg",
+          },
+        }),
       },
-      { label: "SCROLLANIM still-create", retries: 4, shouldStop },
+      { label: "SCROLLANIM still-create", retries: 2, shouldStop },
     );
     if (createBody?.code === 200 && createBody?.data?.taskId) taskId = createBody.data.taskId;
     else { console.warn("[SCROLLANIM] still-image create failed:", createBody?.msg); continue; }
-    const imgDeadline = Date.now() + 180000; // 3 min per attempt
+    const imgDeadline = Date.now() + 90000; // 90s per attempt — nano-banana 1K is usually <20s
+    let pollWait = 1500;
     while (Date.now() < imgDeadline) {
       if (shouldStop()) return null;
-      await new Promise(r => setTimeout(r, 4000));
+      await new Promise(r => setTimeout(r, pollWait));
+      pollWait = 1500;
       const body: any = await kieRequestJson(
         `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
         { headers: { "Authorization": `Bearer ${KIE_API_KEY}` } },
-        { label: "SCROLLANIM still-poll", retries: 2, shouldStop: () => shouldStop() || Date.now() >= imgDeadline },
+        { label: "SCROLLANIM still-poll", retries: 1, shouldStop: () => shouldStop() || Date.now() >= imgDeadline },
       );
       if (!body || body.code !== 200 || !body.data) continue;
       const state = body.data.state;
@@ -776,29 +786,41 @@ async function generateProductStill(
     `deep elegant shadows and rich glossy reflections for real depth. ${bgGuard}` +
     `A subtle realistic contact shadow under the product, photorealistic, ultra-high detail, 8K, 16:9 aspect ratio. ` +
     `${creative}Keep the product's own label and text exactly intact; add no extra text, captions or watermark.`;
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     if (shouldStop()) return null;
-    if (attempt > 0) await new Promise(r => setTimeout(r, 4000));
+    if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
     let taskId: string | null = null;
+    // nano-banana-2 + image_input is much faster than gpt-image-2-image-to-image queue
     const createBody: any = await kieRequestJson(
       NANO_BANANA_CREATE_URL,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({ model: "gpt-image-2-image-to-image", input: { prompt, input_urls: [productImageUrl], aspect_ratio: "16:9", resolution: "2K" } }),
+        body: JSON.stringify({
+          model: "nano-banana-2",
+          input: {
+            prompt,
+            image_input: [productImageUrl],
+            aspect_ratio: "16:9",
+            resolution: "1K",
+            output_format: "jpg",
+          },
+        }),
       },
-      { label: "SCROLLANIM product-create", retries: 4, shouldStop },
+      { label: "SCROLLANIM product-create", retries: 2, shouldStop },
     );
     if (createBody?.code === 200 && createBody?.data?.taskId) taskId = createBody.data.taskId;
     else { console.warn("[SCROLLANIM] product-still create failed:", createBody?.msg); continue; }
-    const imgDeadline = Date.now() + 180000; // 3 min per attempt
+    const imgDeadline = Date.now() + 90000;
+    let pollWait = 1500;
     while (Date.now() < imgDeadline) {
       if (shouldStop()) return null;
-      await new Promise(r => setTimeout(r, 4000));
+      await new Promise(r => setTimeout(r, pollWait));
+      pollWait = 1500;
       const body: any = await kieRequestJson(
         `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
         { headers: { "Authorization": `Bearer ${KIE_API_KEY}` } },
-        { label: "SCROLLANIM product-poll", retries: 2, shouldStop: () => shouldStop() || Date.now() >= imgDeadline },
+        { label: "SCROLLANIM product-poll", retries: 1, shouldStop: () => shouldStop() || Date.now() >= imgDeadline },
       );
       if (!body || body.code !== 200 || !body.data) continue;
       const state = body.data.state;
@@ -908,9 +930,11 @@ async function generateScrollFrames(
   const videoDuration = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
   const targetFrameCount = layout === "action" ? SCROLL_ACTION_FRAME_COUNT : SCROLL_FRAME_COUNT;
 
-  // Overall deadline shared across all retry attempts (still image time already consumed)
-  const deadline = Date.now() + 2400000; // 40 min cap (Kling can take up to 35 min)
-  const MAX_VIDEO_ATTEMPTS = 4; // retry on API failure (e.g. upstream timeout)
+  // Overall deadline shared across all retry attempts (still image time already consumed).
+  // site3d/parallax: keep a generous Kling budget, but fewer create retries so we fail fast
+  // and let the BG soft-retry / task-id resume finish the job instead of stacking 4×35min.
+  const deadline = Date.now() + (layout === "site3d" ? 1800000 : 2400000); // site3d 30m, others 40m
+  const MAX_VIDEO_ATTEMPTS = layout === "site3d" || layout === "parallax" || layout === "split" ? 2 : 4;
   let mp4Url: string | null = null;
 
   // Detects Kling content-moderation failures (error 400 "community guidelines")
@@ -1015,13 +1039,13 @@ async function generateScrollFrames(
     let pollCount = 0;
     while (Date.now() < deadline) {
       if (shouldStop()) return { frames: [], confirmedKieFailure: false };
-      await new Promise(r => setTimeout(r, 5000));
+      await new Promise(r => setTimeout(r, layout === "site3d" ? 3000 : 5000));
       pollCount++;
       try {
         const body: any = await kieRequestJson(
           `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
           { headers: { "Authorization": `Bearer ${KIE_API_KEY}` } },
-          { label: "SCROLLANIM video-poll", retries: 2, shouldStop: () => shouldStop() || Date.now() >= deadline },
+          { label: "SCROLLANIM video-poll", retries: 1, shouldStop: () => shouldStop() || Date.now() >= deadline },
         );
         if (!body || body.code !== 200 || !body.data) { console.log(`[SCROLLANIM] poll #${pollCount}: no data`); continue; }
         const state = body.data.state;
@@ -1472,8 +1496,13 @@ function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, vid
   const _pa = videoPrompt ? ` data-scroll-anim-prompt="${encodeURIComponent(videoPrompt)}"` : "";
   const _sa = style ? ` data-scroll-anim-style="${encodeURIComponent(style)}"` : "";
   const _ta = texts.length ? ` data-scroll-anim-texts="${encodeURIComponent(texts.map(t => `${t.title}::${t.sub}`).join("||"))}"` : "";
-  const pendingTitle = isMotion ? "✨ Генерация моушн-эффекта" : "🎬 Генерация видеоанимации";
-  const pendingSub = isMotion ? "Обычно занимает 1–4 минуты" : "Обычно занимает 2–10 минут";
+  const pendingTitle = isMotion ? "Генерация моушн-эффекта" : "Генерация видеоанимации";
+  const pendingSub = isMotion
+    ? "Обычно 30–90 секунд (2 кадра параллельно)"
+    : style === "site3d"
+    ? "Видео Kling: обычно 3–12 минут"
+    : "Обычно 3–12 минут (видео Kling)";
+  const barSecs = isMotion ? 45 : 180;
   return `<section data-scroll-anim-pending="1"${_pa}${_sa}${_ta} style="position:relative;height:100vh;min-height:600px;background:linear-gradient(135deg,#0a0a0a 0%,#16213e 50%,#0a0a0a 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;">
 <style>
 @keyframes ${tid}-spin{to{transform:rotate(360deg)}}
@@ -1492,7 +1521,7 @@ function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, vid
     </div>
   </div>
   <div style="width:220px;height:3px;background:rgba(255,255,255,.08);border-radius:99px;margin:0 auto 1.5rem;overflow:hidden;">
-    <div style="height:100%;background:linear-gradient(90deg,#a78bfa,#60a5fa);border-radius:99px;animation:${tid}-bar 9s cubic-bezier(.4,0,.2,1) forwards;"></div>
+    <div style="height:100%;background:linear-gradient(90deg,#a78bfa,#60a5fa);border-radius:99px;animation:${tid}-bar ${barSecs}s cubic-bezier(.4,0,.2,1) forwards;"></div>
   </div>
   <div style="font-size:.78rem;color:rgba(255,255,255,.3);line-height:1.6;animation:${tid}-pulse 2.5s ease-in-out infinite;">Страница обновится автоматически.<br>Остальные секции сайта уже готовы — прокрутите вниз ↓</div>
 </div>
@@ -1781,7 +1810,7 @@ async function resolveScrollAnimMarkers(
   const planned = entries.slice(0, layout === "immersion" ? 1 : 2); // immersion: one world; others: at most 2
   // Immersion runs 2N−1 Kling jobs (dives + connectors); allow a longer wall-clock budget.
   // Motion is image-only (2 stills) — shorter budget is enough.
-  const phaseDeadline = Date.now() + (layout === "immersion" ? 5400000 : layout === "motion" ? 900000 : 2520000);
+  const phaseDeadline = Date.now() + (layout === "immersion" ? 5400000 : layout === "motion" ? 240000 : 2520000);
 
   // Product still is regenerated lazily (ONCE) AFTER the first successful credit
   // deduction inside the loop, so we never spend external API budget on a user who
@@ -1803,7 +1832,7 @@ async function resolveScrollAnimMarkers(
       res.write(`data: ${JSON.stringify({ status: isImmersion
         ? `Собираем мир погружения (${SW_SCENE_COUNT} сцен, ${2 * SW_SCENE_COUNT - 1} роликов Kling 3.0)…`
         : isMotion
-        ? "Моушн: генерирую пару кадров для hover-reveal…"
+        ? "Моушн: генерирую 2 кадра параллельно (обычно <2 мин)…"
         : "Рендерю видео для анимации прокрутки (до 35 минут, зависит от очереди KIE)..." })}\n\n`);
     } catch {}
 
@@ -4687,7 +4716,8 @@ ${designAnalysis}
         const _animStyle = interactiveStyle || "parallax";
         (async () => {
           const MAX_ANIM_ATTEMPTS = 2;
-          const RETRY_DELAY_MS = 3 * 60 * 1000; // 3 min before automatic retry
+          // Motion is image-only — retry quickly. Video modes keep a longer pause for Kling recovery.
+          const RETRY_DELAY_MS = _animStyle === "motion" ? 45 * 1000 : 3 * 60 * 1000;
           let animSucceeded = false;
           for (let animAttempt = 0; animAttempt < MAX_ANIM_ATTEMPTS; animAttempt++) {
             if (animAttempt > 0) {
