@@ -12,7 +12,9 @@
        diveScroll: 1.3,   // viewport-heights of scroll per dive clip
        connScroll: 0.9,   // ...per connector clip
        hint: 'scroll to fly in',
-       nav: true,         // show the top section nav
+       nav: true,         // show the top section nav (set false to omit)
+       route: true,       // show the right-side scene dots (set false to omit)
+       brand: null,       // optional { name, href }; omit for animation-only embeds
        atmosphere: true,  // subtle gradient + drifting particles behind the clips
        sections: [
          { id, label, still, stillMobile, clip, clipMobile, accent,
@@ -112,15 +114,21 @@ function mountScrollWorld(container, config) {
   const scrollbar = el('div', 'sw-scrollbar');
   const scrollbarFill = el('span'); scrollbar.appendChild(scrollbarFill);
 
+  const showBrand = !!(config.brand && config.brand.name);
+  const showNav = config.nav !== false;
+  const showCta = !!(config.cta && config.cta.label);
+  const showTopbar = showBrand || showNav || showCta;
+  const showRoute = config.route !== false;
+
   const topbar = el('div', 'sw-topbar');
-  if (config.brand) {
+  if (showBrand) {
     const brand = el('a', 'sw-brand'); brand.href = (config.brand.href || '#');
     brand.appendChild(el('span', 'sw-brand__mark'));
     const nm = el('span', 'sw-brand__name'); nm.textContent = config.brand.name || ''; brand.appendChild(nm);
     topbar.appendChild(brand);
   }
-  const nav = el('nav', 'sw-nav'); if (config.nav !== false) topbar.appendChild(nav);
-  if (config.cta && config.cta.label) {
+  const nav = el('nav', 'sw-nav'); if (showNav) topbar.appendChild(nav);
+  if (showCta) {
     const c = el('a', 'sw-topcta'); c.href = config.cta.href || '#'; c.textContent = config.cta.label;
     topbar.appendChild(c);
   }
@@ -133,7 +141,12 @@ function mountScrollWorld(container, config) {
   hint.appendChild(el('i'));
   const track = el('div', 'sw-track');
 
-  [sky, scrollbar, topbar, stage, copylayer, route, hint, track].forEach(n => container.appendChild(n));
+  const mountNodes = [sky, scrollbar];
+  if (showTopbar) mountNodes.push(topbar);
+  mountNodes.push(stage, copylayer);
+  if (showRoute) mountNodes.push(route);
+  mountNodes.push(hint, track);
+  mountNodes.forEach(n => container.appendChild(n));
 
   // segment scenes
   SEGMENTS.forEach(s => {
@@ -159,11 +172,13 @@ function mountScrollWorld(container, config) {
       (s.cta ? `<div class="sw-copy__cta">${ctaBtns(s.cta)}</div>` : '');
     copylayer.appendChild(c); copies.push(c);
 
-    const dot = el('button', 'sw-route__dot'); dot.style.setProperty('--sw-accent', s.accent || '');
-    dot.innerHTML = `<span class="sw-route__label">${esc(s.label || '')}</span><i></i>`;
-    dot.addEventListener('click', () => jumpTo(i)); route.appendChild(dot); dots.push(dot);
+    if (showRoute) {
+      const dot = el('button', 'sw-route__dot'); dot.style.setProperty('--sw-accent', s.accent || '');
+      dot.innerHTML = `<span class="sw-route__label">${esc(s.label || '')}</span><i></i>`;
+      dot.addEventListener('click', () => jumpTo(i)); route.appendChild(dot); dots.push(dot);
+    }
 
-    if (config.nav !== false) {
+    if (showNav) {
       const b = el('button', 'sw-nav__item'); b.textContent = s.label || '';
       b.addEventListener('click', () => jumpTo(i)); nav.appendChild(b);
     }
@@ -247,7 +262,8 @@ function mountScrollWorld(container, config) {
       const before = y < seg.start, after = y > seg.end;
       let cop;
       if (i === 0) cop = after ? 0 : smooth(1 - pr / 0.62);            // greets on landing
-      else if (i === N - 1) cop = before ? 0 : smooth(pr / 0.4);       // holds CTA at the end
+      // Finale: rise in, then clear when the dive ends — never hold over the site below.
+      else if (i === N - 1) cop = (before || after) ? 0 : smooth(Math.min(1, pr / 0.4) * (pr < 0.78 ? 1 : (1 - pr) / 0.22));
       else cop = (before || after) ? 0 : smooth(1 - Math.abs(pr - 0.5) / 0.5);
       const c = copies[i];
       c.style.opacity = cop;
@@ -255,17 +271,22 @@ function mountScrollWorld(container, config) {
       c.style.pointerEvents = cop > 0.5 ? 'auto' : 'none';
     }
 
+    // Tear down fixed chrome once the flight track is done so agent-written
+    // page content below is never covered by sky / stage / copy layers.
+    const pastTrack = y >= totalW * vh - 2;
+    container.classList.toggle('is-passed', pastTrack);
+
     const cur = SEGMENTS[ci];
     const near = clamp(cur.kind === 'dive' ? cur.si
       : (((y - cur.start) / (cur.end - cur.start)) > 0.5 ? cur.si + 1 : cur.si), 0, N - 1);
     if (near !== activeIndex) {
       activeIndex = near;
-      dots.forEach((d, k) => d.classList.toggle('is-active', k === near));
-      nav.querySelectorAll('.sw-nav__item').forEach((n, k) => n.classList.toggle('is-active', k === near));
+      if (showRoute) dots.forEach((d, k) => d.classList.toggle('is-active', k === near));
+      if (showNav) nav.querySelectorAll('.sw-nav__item').forEach((n, k) => n.classList.toggle('is-active', k === near));
       container.style.setProperty('--sw-accent', SECTIONS[near].accent || '');
     }
     scrollbarFill.style.transform = `scaleX(${clamp(y / (totalW * vh))})`;
-    hint.style.opacity = clamp(1 - y / (0.5 * vh));
+    hint.style.opacity = pastTrack ? 0 : clamp(1 - y / (0.5 * vh));
     if (particles) particles.style.transform = `translate3d(0, ${-y * 0.05}px, 0)`;
     ticking = false;
   }
@@ -409,6 +430,17 @@ function injectCSS() {
   .sw-hint i::after{content:"";position:absolute;left:50%;top:7px;width:4px;height:7px;border-radius:2px;background:var(--sw-accent);transform:translateX(-50%);animation:sw-wheel 1.7s ease-in-out infinite;}
   @keyframes sw-wheel{0%{opacity:0;top:6px}40%{opacity:1}100%{opacity:0;top:17px}}
   .sw-track{position:relative;z-index:1;width:100%;pointer-events:none;}
+  /* After the scroll track ends, hide all viewport-fixed layers so the host page shows through. */
+  .sw-root.is-passed .sw-sky,
+  .sw-root.is-passed .sw-stage,
+  .sw-root.is-passed .sw-copylayer,
+  .sw-root.is-passed .sw-topbar,
+  .sw-root.is-passed .sw-route,
+  .sw-root.is-passed .sw-hint,
+  .sw-root.is-passed .sw-scrollbar{
+    opacity:0!important;visibility:hidden!important;pointer-events:none!important;
+    transition:opacity .35s ease,visibility .35s ease;
+  }
   @media (max-width:860px){
     .sw-nav{display:none;}
     .sw-copylayer::before{width:100%;height:60%;top:auto;bottom:0;background:linear-gradient(0deg,var(--sw-bg) 8%,color-mix(in srgb,var(--sw-bg) 70%,transparent) 46%,transparent 100%);}

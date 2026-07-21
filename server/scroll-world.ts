@@ -670,8 +670,6 @@ async function downloadEncodeUploadMp4(
 const IMMERSION_NAV_CTL = `
 <style>
 header{transition:background .45s ease,background-color .45s ease,backdrop-filter .45s ease,-webkit-backdrop-filter .45s ease,border-color .45s ease,box-shadow .45s ease,opacity .45s ease,visibility .45s ease;}
-body:not(.craft-anim-passed) header{visibility:hidden!important;opacity:0!important;pointer-events:none!important;background:transparent!important;background-color:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-color:transparent!important;box-shadow:none!important;}
-#craft-scroll-world-pending{display:none!important;}
 </style>
 <script>(function(){if(window.__craftNavCtl)return;window.__craftNavCtl=true;function fixSticky(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;for(var i=0;i<s.length;i++){var el=s[i];while(el&&el.nodeType===1&&el!==document.documentElement){var cs=getComputedStyle(el);if(cs.overflowX==='hidden')el.style.overflowX='clip';if(cs.overflowY==='hidden')el.style.overflowY='clip';el=el.parentElement;}}var de=document.documentElement,b=document.body;[de,b].forEach(function(n){if(!n)return;var c=getComputedStyle(n);if(c.overflowX==='hidden')n.style.overflowX='clip';if(c.overflowY==='hidden')n.style.overflowY='clip';});}function u(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;var h=document.querySelector('header');var th=h?h.offsetHeight:64;var passed=true;for(var i=0;i<s.length;i++){if(s[i].getBoundingClientRect().bottom>th){passed=false;break;}}document.body.classList.toggle('craft-anim-passed',passed);}window.addEventListener('scroll',u,{passive:true});window.addEventListener('resize',u);if(document.readyState!=='loading'){fixSticky();u();}else{document.addEventListener('DOMContentLoaded',function(){fixSticky();u();});}fixSticky();u();})();</script>`;
 
@@ -735,24 +733,18 @@ function buildImmersionHtml(opts: {
     title: s.title,
     body: s.body,
     tags: [] as string[],
-    ...(s.isFinale
-      ? {
-          cta: {
-            primary: { label: "Начать", href: "#contact" },
-            secondary: { label: "Ещё", href: "#top" },
-          },
-        }
-      : {}),
   }));
 
+  // Animation-only embed: no Craft AI brand, no engine scene rail, no top nav.
+  // The agent-written header + site sections after the marker own the page chrome.
   const config = {
     hint: "листайте, чтобы полететь · scroll to fly in",
     diveScroll: 1.3,
     connScroll: 0.9,
     crossfade: 0.12,
     atmosphere: true,
-    nav: true,
-    brand: { name: "Craft AI", href: "#top" },
+    nav: false,
+    route: false,
     sections,
     connectors: connectorUrls,
   };
@@ -774,9 +766,6 @@ function buildImmersionHtml(opts: {
   --sw-accent: ${SW_ACCENT_DEFAULT};
 }
 #craft-scroll-world-root .sw-root { background: var(--sw-bg); }
-#craft-scroll-world-root .sw-topbar { justify-content: center; }
-#craft-scroll-world-root .sw-nav { display: none; }
-#craft-scroll-world-root .sw-brand { margin: 0 auto; }
 </style>
 <script data-craft-scroll-world-engine>
 ${engineSrc}
