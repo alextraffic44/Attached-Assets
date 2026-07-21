@@ -1,11 +1,12 @@
 /**
  * «Моушн» — WebGL mouse-trail image reveal (Lando Norris / Unicorn Studio style).
  *
- * Pipeline: 2 paired stills in PARALLEL via KIE nano-banana-2 (1K, fast poll)
+ * Pipeline: 2 paired FULL-COLOR stills in PARALLEL via KIE nano-banana-2 (1K, fast poll)
  * → self-contained HTML with fluid cursor reveal, chromatic edges, soft pixelation.
  *
  * Speed notes: previously base→reveal ran sequentially with I2I + 4×3min retries
  * (worst case ~24 min). Now both frames fire together; target wall-clock ~30–90s.
+ * Look: vivid color↔color morph (day/night, mood shift) — not forced B&W→color.
  */
 export const SCROLL_MOTION_COST = 120;
 
