@@ -23,6 +23,7 @@ DEFAULT_FILES = [
     "server/auth.ts",
     "server/storage.ts",
     "server/scroll-world.ts",
+    "server/site3d-anim.ts",
     "server/kie-errors.ts",
     "server/agent-runtime.ts",
     "server/seo-routes.ts",
