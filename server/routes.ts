@@ -2662,6 +2662,37 @@ export async function registerRoutes(
     console.warn("[boot] project_files unique index:", e?.message?.slice?.(0, 200) || e);
   }
 
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS yc_storage_pools (
+        id serial PRIMARY KEY,
+        name text NOT NULL,
+        cloud_id text NOT NULL,
+        folder_id text NOT NULL,
+        access_key_id text NOT NULL,
+        secret_access_key text NOT NULL,
+        bucket_count integer NOT NULL DEFAULT 0,
+        bucket_limit integer NOT NULL DEFAULT 20,
+        status text NOT NULL DEFAULT 'active',
+        created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS yc_storage_pool_id integer
+    `);
+  } catch (e: any) {
+    console.warn("[boot] yc_storage_pools migrate:", e?.message?.slice?.(0, 200) || e);
+  }
+
+  // Bootstrap primary Object Storage pool from env (non-fatal if keys missing at boot).
+  try {
+    const { ensurePrimaryPoolBootstrapped } = await import("./yc-storage-pools");
+    await ensurePrimaryPoolBootstrapped();
+  } catch (e: any) {
+    console.warn("[boot] yc storage pool bootstrap:", e?.message?.slice?.(0, 200) || e);
+  }
+
   const uploadsDir = path.join(process.cwd(), "uploads");
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
   const express = (await import("express")).default;
@@ -2862,7 +2893,7 @@ export async function registerRoutes(
       // — removes CDN resource + DNS zone + certificate (if custom domain was set)
       // — empties and deletes the Object Storage bucket
       if (project.publishStatus && project.publishStatus !== "draft") {
-        deleteProjectFromYandex(project.id, project.customDomain).catch((e) =>
+        deleteProjectFromYandex(project.id, project.customDomain, project.ycStoragePoolId).catch((e) =>
           console.warn(`[delete] Yandex cleanup non-fatal for project ${project.id}:`, e?.message)
         );
       }
@@ -5753,12 +5784,18 @@ ${designAnalysis}
 
       // Deploys to the project bucket AND (if a custom domain is attached)
       // mirrors into the domain-named bucket served by the Caddy proxy.
-      const { url, yandexProjectId } = await deployToYandex(projectId, files, project.customDomain);
+      const { url, yandexProjectId, ycStoragePoolId } = await deployToYandex(
+        projectId,
+        files,
+        project.customDomain,
+        project.ycStoragePoolId,
+      );
 
       await storage.updateProject(projectId, {
         publishStatus: "published",
         publishedUrl: url,
         vercelProjectId: yandexProjectId,
+        ycStoragePoolId,
       });
 
       res.json({ url });
@@ -5954,10 +5991,19 @@ ${fullHtml}`;
 
       const oldDomain = project.customDomain;
       if (oldDomain && oldDomain.replace(/^www\./, "") !== apexDomain) {
-        removeCustomDomain(oldDomain).catch((e) => console.warn("[domain change] cleanup old domain non-fatal:", e));
+        removeCustomDomain(oldDomain, project.ycStoragePoolId).catch((e) =>
+          console.warn("[domain change] cleanup old domain non-fatal:", e),
+        );
       }
-      const result = await addCustomDomain(project.vercelProjectId, apexDomain);
-      await storage.updateProject(projectId, { customDomain: apexDomain });
+      const result = await addCustomDomain(
+        project.vercelProjectId,
+        apexDomain,
+        project.ycStoragePoolId,
+      );
+      await storage.updateProject(projectId, {
+        customDomain: apexDomain,
+        ycStoragePoolId: result.ycStoragePoolId,
+      });
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Ошибка добавления домена" });
@@ -6148,7 +6194,7 @@ ${fullHtml}`;
       if (project.userId !== (req.user as any).id) return res.status(403).json({ message: "Нет доступа" });
       if (project.publishStatus !== "published") return res.status(400).json({ message: "Проект не опубликован" });
 
-      await unpublishFromYandex(projectId, project.customDomain);
+      await unpublishFromYandex(projectId, project.customDomain, project.ycStoragePoolId);
       // Voluntary unpublish frees the plan slot → "draft". "suspended" is reserved for
       // billing suspension (insufficient balance), which legitimately keeps holding a slot.
       await storage.updateProject(projectId, { publishStatus: "draft" });
@@ -6497,7 +6543,7 @@ ${fullHtml}`;
           if (result.success) {
             console.log(`[Billing] User ${userId}: charged ${DAILY_PUBLISH_COST} tokens for project ${proj.id} (${proj.title}). Balance: ${result.newBalance}`);
           } else {
-            await unpublishFromYandex(proj.id, proj.customDomain);
+            await unpublishFromYandex(proj.id, proj.customDomain, proj.ycStoragePoolId);
             await storage.updateProject(proj.id, { publishStatus: "suspended" });
             console.log(`[Billing] User ${userId}: suspended project ${proj.id} (${proj.title}) — insufficient balance (${result.newBalance} tokens)`);
           }

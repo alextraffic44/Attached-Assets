@@ -84,12 +84,35 @@ export const projects = pgTable("projects", {
   publishedUrl: text("published_url"),
   publishStatus: text("publish_status").notNull().default("draft"),
   vercelProjectId: text("vercel_project_id"),
+  /** Yandex Object Storage pool (cloud) where the project bucket lives. */
+  ycStoragePoolId: integer("yc_storage_pool_id"),
   customDomain: text("custom_domain"),
   type: varchar("type", { length: 20 }).notNull().default("website"),
   seoConfig: json("seo_config").$type<SeoConfig>(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
+
+/**
+ * One row = one Yandex Cloud used as an Object Storage pool.
+ * Default quota is 25 buckets/cloud; we keep a soft limit and auto-create
+ * a new cloud when the active pool is full.
+ */
+export const ycStoragePools = pgTable("yc_storage_pools", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  cloudId: text("cloud_id").notNull(),
+  folderId: text("folder_id").notNull(),
+  accessKeyId: text("access_key_id").notNull(),
+  secretAccessKey: text("secret_access_key").notNull(),
+  bucketCount: integer("bucket_count").notNull().default(0),
+  bucketLimit: integer("bucket_limit").notNull().default(20),
+  status: text("status").notNull().default("active"), // active | full | error
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type YcStoragePool = typeof ycStoragePools.$inferSelect;
 
 export const projectMessages = pgTable("project_messages", {
   id: serial("id").primaryKey(),
