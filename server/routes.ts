@@ -868,7 +868,7 @@ async function generateScrollFrames(
   layout: ScrollAnimLayout = "parallax",
   onTaskCreated?: (taskId: string) => void,
   existingTaskId?: string,
-): Promise<{ frames: string[]; confirmedKieFailure: boolean }> {
+): Promise<{ frames: string[]; videoUrl?: string; confirmedKieFailure: boolean }> {
   if (!KIE_API_KEY) { console.warn("[SCROLLANIM] missing KIE_API_KEY"); return { frames: [], confirmedKieFailure: false }; }
 
   let confirmedKieFailure = false;
@@ -925,10 +925,20 @@ async function generateScrollFrames(
     `and rich filmic color grading. Do not warp, melt or distort the main subject or any architecture, ` +
     `no text, no captions, no watermark, no camera shake, no flicker, no jump cuts.`;
 
-  // Per-mode clip length + sliced-frame budget: "action" uses a longer 10s clip and more
-  // frames for a richer, smoother slow-motion scrub; other modes keep the 5s / 90-frame default.
-  const videoDuration = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
-  const targetFrameCount = layout === "action" ? SCROLL_ACTION_FRAME_COUNT : SCROLL_FRAME_COUNT;
+  // Per-mode clip length + sliced-frame budget.
+  // site3d uses a short 3s / 720p clip and prefers MP4 scrub (no ffmpeg) for speed.
+  const videoDuration = layout === "action"
+    ? SCROLL_ACTION_VIDEO_DURATION
+    : layout === "site3d"
+    ? 3
+    : SCROLL_VIDEO_DURATION;
+  const targetFrameCount = layout === "action"
+    ? SCROLL_ACTION_FRAME_COUNT
+    : layout === "site3d"
+    ? 48
+    : SCROLL_FRAME_COUNT;
+  const videoResolution = layout === "site3d" ? "720p" : "1080p";
+  const useVideoScrub = layout === "site3d"; // skip ffmpeg + 90 uploads
 
   // Overall deadline shared across all retry attempts (still image time already consumed).
   // site3d/parallax: keep a generous Kling budget, but fewer create retries so we fail fast
@@ -1018,7 +1028,12 @@ async function generateScrollFrames(
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
         body: JSON.stringify({
           model: KLING_IMG2VID_MODEL,
-          input: { prompt: animPrompt.slice(0, 2500), image_urls: [currentStillUrl], duration: String(videoDuration), resolution: "1080p" },
+          input: {
+            prompt: animPrompt.slice(0, 2500),
+            image_urls: [currentStillUrl],
+            duration: String(videoDuration),
+            resolution: videoResolution,
+          },
         }),
       },
       { label: "SCROLLANIM video-create", retries: 4, shouldStop: () => shouldStop() || Date.now() >= deadline },
@@ -1124,6 +1139,7 @@ async function generateScrollFrames(
   const videoPath = path.join(tmpDir, "src.mp4");
   const framesDir = path.join(tmpDir, "frames");
   let mp4Downloaded = false;
+  let mp4Buf: Buffer | null = null;
   for (let dlAttempt = 0; dlAttempt < 3 && !mp4Downloaded; dlAttempt++) {
     if (dlAttempt > 0) {
       console.log(`[SCROLLANIM] mp4 download retry ${dlAttempt + 1}/3 in 10s…`);
@@ -1133,7 +1149,7 @@ async function generateScrollFrames(
       console.log(`[SCROLLANIM] downloading mp4 (attempt ${dlAttempt + 1}): ${mp4Url}`);
       const vresp = await fetch(mp4Url!);
       if (!vresp.ok) throw new Error(`HTTP ${vresp.status}`);
-      const mp4Buf = Buffer.from(await vresp.arrayBuffer());
+      mp4Buf = Buffer.from(await vresp.arrayBuffer());
       if (mp4Buf.length < 10000) throw new Error(`file too small: ${mp4Buf.length} bytes`);
       fs.writeFileSync(videoPath, mp4Buf);
       fs.mkdirSync(framesDir, { recursive: true });
@@ -1143,11 +1159,25 @@ async function generateScrollFrames(
       console.warn(`[SCROLLANIM] mp4 download attempt ${dlAttempt + 1} failed:`, e?.message);
     }
   }
-  if (!mp4Downloaded) {
+  if (!mp4Downloaded || !mp4Buf) {
     console.warn("[SCROLLANIM] all mp4 download attempts failed — giving up");
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-    // CDN download of KIE result URL failed — treat as KIE delivery failure
     return { frames: [], confirmedKieFailure: true };
+  }
+
+  // site3d fast path: upload ONE mp4 and scrub it in the browser — skip ffmpeg + N uploads.
+  if (useVideoScrub) {
+    try {
+      const relUrl = await uploadToObjectStorage(mp4Buf, "video/mp4", "mp4");
+      const appBase = process.env.APP_BASE_URL || "https://craft-ai.ru";
+      const stableVideo = `${appBase}${relUrl}`;
+      console.log(`[SCROLLANIM] site3d video scrub ready: ${stableVideo} (${mp4Buf.length} bytes)`);
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+      return { frames: [], videoUrl: stableVideo, confirmedKieFailure: false };
+    } catch (upErr: any) {
+      console.warn("[SCROLLANIM] site3d mp4 upload failed, falling back to frame extract:", upErr?.message);
+      // fall through to ffmpeg path
+    }
   }
 
   // Step 4 — extract frames with ffmpeg (direct spawn + retry; see extractFramesWithFfmpeg)
@@ -1158,19 +1188,22 @@ async function generateScrollFrames(
   } catch (e: any) {
     console.warn("[SCROLLANIM] ffmpeg extraction failed:", e?.message);
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-    // Local ffmpeg — NOT a KIE API failure
     return { frames: [], confirmedKieFailure: false };
   }
 
-  // Step 5 — upload raw JPEG frames to object storage (no compression)
+  // Step 5 — upload frames in parallel batches (was sequential — slow for 90 files)
   const urls: string[] = [];
   try {
     const files = fs.readdirSync(framesDir).filter(f => /\.jpg$/i.test(f)).sort();
-    for (const f of files) {
+    const BATCH = 8;
+    for (let i = 0; i < files.length; i += BATCH) {
       if (shouldStop()) break;
-      const raw = fs.readFileSync(path.join(framesDir, f));
-      const url = await uploadToObjectStorage(raw, "image/jpeg", "jpg");
-      urls.push(url);
+      const slice = files.slice(i, i + BATCH);
+      const batchUrls = await Promise.all(slice.map(async (f) => {
+        const raw = fs.readFileSync(path.join(framesDir, f));
+        return uploadToObjectStorage(raw, "image/jpeg", "jpg");
+      }));
+      urls.push(...batchUrls);
     }
   } catch (e: any) {
     console.warn("[SCROLLANIM] frame upload failed:", e?.message);
@@ -1500,7 +1533,7 @@ function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, vid
   const pendingSub = isMotion
     ? "Обычно 30–90 секунд (2 кадра параллельно)"
     : style === "site3d"
-    ? "Видео Kling: обычно 3–12 минут"
+    ? "Видео Kling 3с/720p: обычно 2–8 минут"
     : "Обычно 3–12 минут (видео Kling)";
   const barSecs = isMotion ? 45 : 180;
   return `<section data-scroll-anim-pending="1"${_pa}${_sa}${_ta} style="position:relative;height:100vh;min-height:600px;background:linear-gradient(135deg,#0a0a0a 0%,#16213e 50%,#0a0a0a 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;">
@@ -1550,7 +1583,12 @@ function scrollAnimFallbackHtml(
 
 // Build a self-contained scroll-bound Canvas animation block (section + style + script).
 // layout: "parallax" — full-screen text; "split" — text left; "site3d" — stacked 3D cards over video.
-function buildScrollAnimHtml(frames: string[], texts: Array<{ title: string; sub: string }>, layout: ScrollAnimLayout = "parallax"): string {
+function buildScrollAnimHtml(
+  frames: string[],
+  texts: Array<{ title: string; sub: string }>,
+  layout: ScrollAnimLayout = "parallax",
+  videoUrl?: string,
+): string {
   const cid = "csa" + Math.random().toString(36).slice(2, 8);
   const framesJson = JSON.stringify(frames).replace(/'/g, "&#39;");
   const isSplit = layout === "split";
@@ -1583,7 +1621,7 @@ function buildScrollAnimHtml(frames: string[], texts: Array<{ title: string; sub
   const navCtl = `\n<style>header{transition:background .45s ease,background-color .45s ease,backdrop-filter .45s ease,-webkit-backdrop-filter .45s ease,border-color .45s ease,box-shadow .45s ease;}body:not(.craft-anim-passed) header{background:transparent!important;background-color:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-color:transparent!important;box-shadow:none!important;}</style>\n<script>(function(){if(window.__craftNavCtl)return;window.__craftNavCtl=true;function fixSticky(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;for(var i=0;i<s.length;i++){var el=s[i];while(el&&el.nodeType===1&&el!==document.documentElement){var cs=getComputedStyle(el);if(cs.overflowX==='hidden')el.style.overflowX='clip';if(cs.overflowY==='hidden')el.style.overflowY='clip';el=el.parentElement;}}var de=document.documentElement,b=document.body;[de,b].forEach(function(n){if(!n)return;var c=getComputedStyle(n);if(c.overflowX==='hidden')n.style.overflowX='clip';if(c.overflowY==='hidden')n.style.overflowY='clip';});}function u(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;var h=document.querySelector('header');var th=h?h.offsetHeight:64;var passed=true;for(var i=0;i<s.length;i++){if(s[i].getBoundingClientRect().bottom>th){passed=false;break;}}document.body.classList.toggle('craft-anim-passed',passed);}window.addEventListener('scroll',u,{passive:true});window.addEventListener('resize',u);if(document.readyState!=='loading'){fixSticky();u();}else{document.addEventListener('DOMContentLoaded',function(){fixSticky();u();});}fixSticky();u();})();</script>`;
 
   if (layout === "site3d") {
-    return buildSite3dAnimHtml(frames, texts, navCtl, csaEsc);
+    return buildSite3dAnimHtml(frames, texts, navCtl, csaEsc, videoUrl);
   }
   // motion layout is built via buildMotionRevealHtml (image pair), not video frames.
 
@@ -1913,10 +1951,9 @@ async function resolveScrollAnimMarkers(
 
     // User is confirmed billable → safe to spend external API. Regenerate the uploaded
     // product photo ONCE onto a clean SOLID background (product positioned per layout)
-    // and feed THAT still to Kling, so the scroll video always has a uniform background
-    // instead of the raw busy photo. On failure referenceStill stays undefined and
-    // generateScrollFrames falls back to a text-to-image still (still a solid bg).
-    if (productImageUrl && !productStillResolved) {
+    // and feed THAT still to Kling. site3d uses cinematic environment flight — skip the
+    // product/vision detour (saves 20–60s of Gemini + product-still before Kling even starts).
+    if (productImageUrl && !productStillResolved && layout !== "site3d") {
       productStillResolved = true;
       // Analyze the product ONCE and invent a creative, product-aware concept.
       if (!creativeConceptResolved) {
@@ -1948,8 +1985,10 @@ async function resolveScrollAnimMarkers(
 
     // Keep the SSE connection alive with periodic status pings while video renders
     const keepAliveInterval = setInterval(() => {
-      try { res.write(`data: ${JSON.stringify({ status: "Рендерю видео для анимации прокрутки (ожидаю результат от KIE)..." })}\n\n`); } catch {}
-    }, 20000);
+      try { res.write(`data: ${JSON.stringify({ status: layout === "site3d"
+        ? "3D сайт: жду Kling (3с / 720p)…"
+        : "Рендерю видео для анимации прокрутки (ожидаю результат от KIE)..." })}\n\n`); } catch {}
+    }, layout === "site3d" ? 12000 : 20000);
 
     // For product-photo sites, drive Kling with the vision-derived creative motion
     // (falls back to the LLM's videoPrompt when no concept was produced).
@@ -1957,6 +1996,7 @@ async function resolveScrollAnimMarkers(
       ? creativeConcept.motionPrompt
       : parsed.videoPrompt;
     let frames: string[] = [];
+    let videoUrl: string | undefined;
     let scrollKieFailed = false;
     try {
       const scrollOutcome = await generateScrollFrames(
@@ -1981,16 +2021,25 @@ async function resolveScrollAnimMarkers(
         } : undefined,
       );
       frames = scrollOutcome.frames;
+      videoUrl = scrollOutcome.videoUrl;
       scrollKieFailed = scrollOutcome.confirmedKieFailure;
     } finally {
       clearInterval(keepAliveInterval);
     }
 
-    if (frames.length >= 60) {
-      replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts, layout));
+    const site3dReady = layout === "site3d" && !!videoUrl;
+    const framesReady = frames.length >= (layout === "site3d" ? 30 : 60);
+    if (site3dReady || framesReady) {
+      replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts, layout, videoUrl));
       generated++;
       if (billed) creditsUsed += blockCost;
-      try { res.write(`data: ${JSON.stringify({ status: `Анимация готова (${frames.length} кадров)` })}\n\n`); } catch {}
+      try {
+        res.write(`data: ${JSON.stringify({
+          status: site3dReady
+            ? "3D сайт готов (видео-скролл)"
+            : `Анимация готова (${frames.length} кадров)`,
+        })}\n\n`);
+      } catch {}
     } else if (billed && userId && scrollKieFailed) {
       await refundIfConfirmedKie(true, userId, blockCost, ikey, true, "scroll-anim-empty-frames");
     }
@@ -5001,15 +5050,17 @@ ${designAnalysis}
               videoPrompt, () => false, undefined, layout, undefined, existingTaskId,
             );
             const frames = scrollOutcome.frames;
-            if (frames.length >= 60) {
-              const canvasHtml = buildScrollAnimHtml(frames, animTexts, layout);
+            const videoUrl = scrollOutcome.videoUrl;
+            const ready = (layout === "site3d" && !!videoUrl) || frames.length >= (layout === "site3d" ? 30 : 60);
+            if (ready) {
+              const canvasHtml = buildScrollAnimHtml(frames, animTexts, layout, videoUrl);
               let finalCode = safeReplaceScrollAnimPending(pendingHtml, canvasHtml);
               if (isHollowCraftScrollAnim(finalCode)) {
                 finalCode = replaceHollowCraftScrollAnim(finalCode, [canvasHtml]);
               }
               finalCode = injectLoadingOverlay(finalCode);
               await storage.updateProject(projectId, { generatedCode: finalCode });
-              console.log(`[REGEN ANIM] Resume done for project ${projectId} — ${frames.length} frames`);
+              console.log(`[REGEN ANIM] Resume done for project ${projectId} — ${videoUrl ? "video scrub" : frames.length + " frames"}`);
               succeeded = true;
             } else {
               console.warn(`[REGEN ANIM] Resume produced too few frames (${frames.length}) — falling through to full regen`);

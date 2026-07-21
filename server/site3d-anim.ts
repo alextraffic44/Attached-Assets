@@ -1,18 +1,22 @@
 /**
- * «3D сайт» scroll layout — cinematic scrubbed video background + stacked 3D cards
- * (smooth perspective cards like popular 3D scroll Shorts demos).
+ * «3D сайт» scroll layout — cinematic scrubbed video background + stacked 3D cards.
+ *
+ * Prefer a single MP4 scrub (fast path): after Kling finishes we upload one video
+ * and seek by scroll — no ffmpeg / 90-frame upload loop.
+ * Frame arrays remain supported as a fallback for older regenerations.
  */
 export function buildSite3dAnimHtml(
   frames: string[],
   texts: Array<{ title: string; sub: string }>,
   navCtl: string,
   esc: (s: string) => string,
+  videoUrl?: string,
 ): string {
   const cid = "s3d" + Math.random().toString(36).slice(2, 8);
-  const framesJson = JSON.stringify(frames).replace(/'/g, "&#39;");
+  const framesJson = JSON.stringify(frames || []).replace(/'/g, "&#39;");
+  const vidEsc = videoUrl ? esc(videoUrl) : "";
   const cards = (texts.length ? texts : [{ title: "", sub: "" }]).slice(0, 6);
   const n = Math.max(1, cards.length);
-  // ~1.15 viewport of scroll per card so the stack feels cinematic
   const scrollVh = Math.max(280, Math.min(720, Math.round(n * 115 + 80)));
 
   const cardsHtml = cards
@@ -29,9 +33,11 @@ export function buildSite3dAnimHtml(
     .join("\n");
 
   return `
-<section class="${cid}-scroll" data-frames='${framesJson}' data-layout="site3d" data-craft-scrollanim="1" data-cards="${n}">
+<section class="${cid}-scroll" data-frames='${framesJson}'${vidEsc ? ` data-video="${vidEsc}"` : ""} data-layout="site3d" data-craft-scrollanim="1" data-cards="${n}">
   <div class="${cid}-sticky">
-    <canvas class="${cid}-canvas" aria-hidden="true"></canvas>
+    ${vidEsc
+      ? `<video class="${cid}-video" src="${vidEsc}" muted playsinline preload="auto" aria-hidden="true"></video>`
+      : `<canvas class="${cid}-canvas" aria-hidden="true"></canvas>`}
     <div class="${cid}-veil"></div>
     <div class="${cid}-glow"></div>
     <div class="${cid}-stage" aria-live="polite">
@@ -44,7 +50,7 @@ ${cardsHtml}
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600&display=swap');
 .${cid}-scroll{position:relative;height:${scrollVh}vh;margin:0;padding:0;background:#050505;}
 .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#050505;perspective:1400px;perspective-origin:50% 42%;}
-.${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0;transform:scale(1.06);}
+.${cid}-canvas,.${cid}-video{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0;transform:scale(1.06);object-fit:cover;}
 .${cid}-veil{position:absolute;inset:0;z-index:1;pointer-events:none;background:
   radial-gradient(ellipse 70% 55% at 50% 40%,rgba(0,0,0,0.15) 0%,rgba(0,0,0,0.55) 70%,rgba(0,0,0,0.82) 100%),
   linear-gradient(180deg,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0.1) 35%,rgba(0,0,0,0.55) 100%);}
@@ -80,23 +86,94 @@ ${cardsHtml}
   var roots=document.querySelectorAll('.${cid}-scroll');
   roots.forEach(function(root){
     if(root.__csaInit)return;root.__csaInit=true;
-    var frames;try{frames=JSON.parse(root.getAttribute('data-frames')||'[]');}catch(e){frames=[];}
-    if(!frames.length)return;
     var sticky=root.querySelector('.${cid}-sticky');
-    var canvas=root.querySelector('.${cid}-canvas');
     var hint=root.querySelector('.${cid}-hint');
-    var ctx=canvas.getContext('2d');
     var cards=[].slice.call(root.querySelectorAll('.${cid}-card'));
     var N=cards.length||1;
+    var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var video=root.querySelector('.${cid}-video');
+    var videoUrl=root.getAttribute('data-video')||'';
+
+    function syncCards(p){
+      for(var i=0;i<N;i++){
+        var c=cards[i]; if(!c)continue;
+        var start=i/N, end=(i+1)/N, mid=(start+end)/2;
+        var local=(p-start)/(end-start);
+        var opacity=0, ty=80, tz=-220, rx=14, sc=.88;
+        if(local>=0 && local<=1){
+          if(local<.18){var t=local/.18;opacity=t;ty=80*(1-t);tz=-220+220*t;rx=14*(1-t);sc=.88+.12*t;}
+          else if(local>.82){var t2=(local-.82)/.18;opacity=1-t2;ty=-40*t2;tz=-80*t2;rx=-8*t2;sc=1-.06*t2;}
+          else{opacity=1;ty=0;tz=0;rx=0;sc=1;}
+        } else if(p>mid){opacity=0;ty=-50;tz=-120;}
+        c.style.opacity=String(opacity);
+        c.style.transform='translate3d(0,'+ty.toFixed(1)+'px,'+tz.toFixed(1)+'px) rotateX('+rx.toFixed(2)+'deg) scale('+sc.toFixed(3)+')';
+        c.style.pointerEvents='none';
+      }
+      if(hint)hint.style.opacity=p<.08?'1':'0';
+    }
+
+    function progress(){
+      var r=root.getBoundingClientRect();
+      var total=Math.max(1,root.offsetHeight-window.innerHeight);
+      return Math.max(0,Math.min(1,(-r.top)/total));
+    }
+
+    // ── Fast path: scrub a single MP4 by scroll ──
+    if(video && videoUrl){
+      video.muted=true;video.playsInline=true;video.preload='auto';
+      var ready=false, seeking=false, want=0;
+      function applySeek(){
+        if(!ready||seeking||!isFinite(video.duration)||video.duration<=0)return;
+        var t=want*Math.max(0.05,video.duration-0.08);
+        if(Math.abs(video.currentTime-t)<0.04)return;
+        seeking=true;
+        try{video.currentTime=t;}catch(e){seeking=false;}
+      }
+      video.addEventListener('seeked',function(){seeking=false;});
+      video.addEventListener('loadedmetadata',function(){
+        ready=true;applySeek();
+        try{window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));window.dispatchEvent(new Event('craft:frames-ready'));}catch(e){}
+      });
+      if(video.readyState>=1){ready=true;applySeek();try{window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));window.dispatchEvent(new Event('craft:frames-ready'));}catch(e){}}
+      function onScroll(){
+        var p=progress();
+        want=reduce?0:p;
+        applySeek();
+        syncCards(p);
+      }
+      window.addEventListener('scroll',onScroll,{passive:true});
+      window.addEventListener('resize',onScroll);
+      onScroll();
+      return;
+    }
+
+    // ── Fallback: JPEG frame scrub on canvas ──
+    var frames;try{frames=JSON.parse(root.getAttribute('data-frames')||'[]');}catch(e){frames=[];}
+    if(!frames.length)return;
+    var canvas=root.querySelector('.${cid}-canvas');
+    if(!canvas)return;
+    var ctx=canvas.getContext('2d');
     var imgs=new Array(frames.length),started=new Array(frames.length),cur=-1;
     var dpr=Math.min(window.devicePixelRatio||1,2);
-    var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     function cover(img){
       var cw=sticky.clientWidth,ch=sticky.clientHeight,iw=img.naturalWidth,ih=img.naturalHeight;
       if(!iw||!ih)return;
       var s=Math.max(cw/iw,ch/ih),dw=iw*s,dh=ih*s,dx=(cw-dw)/2,dy=(ch-dh)/2;
       ctx.clearRect(0,0,cw,ch);ctx.drawImage(img,dx,dy,dw,dh);
+    }
+    function resize(){
+      var w=sticky.clientWidth,h=sticky.clientHeight;
+      canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      if(cur>=0&&imgs[cur])cover(imgs[cur]);
+    }
+    function ensure(i){
+      if(i<0||i>=frames.length||started[i])return;
+      started[i]=1;
+      var im=new Image();im.decoding='async';imgs[i]=im;
+      im.onload=function(){if(i===cur)cover(im);};
+      im.src=frames[i];
     }
     function nearest(i){
       if(imgs[i]&&imgs[i].complete&&imgs[i].naturalWidth)return i;
@@ -110,73 +187,29 @@ ${cardsHtml}
     function paint(i){
       i=Math.max(0,Math.min(frames.length-1,i));cur=i;
       var use=nearest(i);if(use!==-1)cover(imgs[use]);ensure(i);
+      for(var k=1;k<=3;k++){ensure(i+k);ensure(i-k);}
     }
-    function resize(){
-      var w=sticky.clientWidth,h=sticky.clientHeight;
-      canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
-      canvas.style.width=w+'px';canvas.style.height=h+'px';
-      ctx.setTransform(dpr,0,0,dpr,0,0);paint(cur<0?0:cur);
-    }
-    function signalReady(){
-      try{window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));window.dispatchEvent(new Event('craft:frames-ready'));}catch(e){}
+    function onScrollFrames(){
+      var p=progress();
+      var idx=Math.round(p*(frames.length-1));
+      if(idx!==cur)paint(idx);
+      syncCards(p);
     }
     var loadedCount=0,total=frames.length,activeCount=0,MAXP=6,nextSeq=0;
-    function startLoad(idx){
-      if(started[idx])return;started[idx]=true;activeCount++;
-      var im=new Image(),settled=false;
-      function _done(){if(settled)return;settled=true;activeCount--;loadedCount++;if(loadedCount>=total)signalReady();if(idx===cur||nearest(cur)===idx)paint(cur<0?0:cur);pump();}
-      im.decoding='async';imgs[idx]=im;im.onload=_done;im.onerror=_done;setTimeout(_done,12000);im.src=frames[idx];
-    }
-    function pump(){while(activeCount<MAXP&&nextSeq<total){if(started[nextSeq]){nextSeq++;continue;}startLoad(nextSeq++);}}
-    function ensure(i){var lo=Math.max(0,i-2),hi=Math.min(total-1,i+8);for(var k=lo;k<=hi;k++){if(!started[k])startLoad(k);}}
-    startLoad(0);pump();
-
-    function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
-    function smooth(x){x=clamp(x,0,1);return x*x*(3-2*x);}
-
-    function setP(p){
-      p=clamp(p,0,1);
-      var idx=Math.round(p*(frames.length-1));if(idx!==cur)paint(idx);
-      if(hint)hint.style.opacity=String(clamp(1-p*4.5,0,1));
-
-      // Stacked 3D cards: one active in front, previous shrink into depth, next rises from below.
-      var pos=p*(N-0.001);
-      for(var i=0;i<N;i++){
-        var el=cards[i];
-        var local=pos-i; // 0 = fully active
-        var op=0, ty=0, tz=0, sc=1, rx=0;
-        if(local<-0.15){
-          // waiting below
-          op=0; ty=72; tz=-80; sc=0.92; rx=8;
-        }else if(local<0){
-          // rising into view
-          var u=smooth((local+0.15)/0.15);
-          op=u; ty=(1-u)*72; tz=-80+(u*80); sc=0.92+0.08*u; rx=(1-u)*8;
-        }else if(local<=1){
-          // active → stacking back
-          var v=smooth(local);
-          op=1-v*0.22; ty=-v*34; tz=-v*180; sc=1-v*0.12; rx=-v*6;
-        }else{
-          // deep stack
-          var w=clamp(local-1,0,2);
-          op=Math.max(0,0.78-w*0.35); ty=-34-w*18; tz=-180-w*90; sc=0.88-w*0.05; rx=-6;
-        }
-        if(reduce){op=local>=-0.05&&local<0.95?1:0;ty=0;tz=0;sc=1;rx=0;}
-        el.style.opacity=op.toFixed(3);
-        el.style.zIndex=String(100+Math.round((1-Math.abs(local))*20));
-        el.style.transform='translate3d(-50%,-50%,0) translateY('+ty.toFixed(2)+'vh) translateZ('+tz.toFixed(1)+'px) rotateX('+rx.toFixed(2)+'deg) scale('+sc.toFixed(3)+')';
-        el.style.left='50%';el.style.top='50%';
-        el.style.pointerEvents=op>0.55?'auto':'none';
+    function pump(){
+      while(activeCount<MAXP&&nextSeq<total){
+        var i=nextSeq++;activeCount++;
+        var im=new Image();im.decoding='async';imgs[i]=im;started[i]=1;
+        im.onload=im.onerror=function(){activeCount--;loadedCount++;if(loadedCount===1)paint(0);if(loadedCount>=total){try{window.__craftAnimReady=true;window.dispatchEvent(new Event('craft:anim-ready'));window.dispatchEvent(new Event('craft:frames-ready'));}catch(e){}}pump();};
+        im.src=frames[i];
       }
     }
-
-    function secTop(){return root.getBoundingClientRect().top+(window.pageYOffset||document.documentElement.scrollTop);}
-    function totH(){return Math.max(1,root.offsetHeight-window.innerHeight);}
-    function syncScroll(){var s=secTop(),t=totH(),top=window.pageYOffset||document.documentElement.scrollTop;setP((top-s)/t);}
-    window.addEventListener('scroll',syncScroll,{passive:true});
-    window.addEventListener('resize',resize);
-    resize();syncScroll();
+    window.addEventListener('scroll',onScrollFrames,{passive:true});
+    window.addEventListener('resize',function(){resize();onScrollFrames();});
+    resize();pump();onScrollFrames();
   });
 })();
-</script>${navCtl}`;
+</script>
+${navCtl}
+`;
 }
