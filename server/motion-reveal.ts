@@ -166,20 +166,19 @@ function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
     return (
       `Take the exact product from the reference image and keep it perfectly identical ` +
       `(same shape, label, text, colors and proportions). Place it as the clear hero inside this niche scene: ${baseScene}. ` +
-      `Render the WHOLE frame as high-contrast BLACK AND WHITE editorial commercial photography ` +
-      `(gradient-map monochrome), dramatic directional light, soft volumetric haze, premium campaign still. ` +
-      `Match the niche environment and props from the description — do NOT invent an unrelated portrait. ` +
-      `No text, no watermark, no logos added. Ultra-high detail, 8K, 16:9.`
+      `FULL VIVID COLOR photorealistic commercial photography — rich brand colors, dramatic directional light, ` +
+      `soft volumetric haze, premium campaign still. Match the niche environment and props from the description. ` +
+      `Do NOT invent an unrelated portrait. No text, no watermark, no logos added. Ultra-high detail, 16:9.`
     );
   }
   return (
     `${baseScene}. ` +
-    `Create a photorealistic commercial HERO still tailored to this exact business niche and subject. ` +
+    `Create a photorealistic FULL-COLOR commercial HERO still tailored to this exact business niche and subject. ` +
     `Follow the described scene, environment, props and composition closely — it may be a person, product, ` +
     `interior, workspace, dish, building, vehicle, tool, or any niche-specific subject (NOT forced to be a fashion portrait). ` +
-    `Render as high-contrast BLACK AND WHITE editorial photography (gradient-map monochrome), ` +
-    `cinematic lighting, soft atmospheric haze, powerful iconic framing suitable for a premium website hero. ` +
-    `No text, no watermark, no logos. Ultra-high detail, 8K, 16:9 aspect ratio.`
+    `Vivid saturated color, cinematic lighting, soft atmospheric haze, powerful iconic framing for a premium website hero. ` +
+    `Do NOT render black-and-white or desaturated monochrome unless the scene itself asks for night/shadow mood in color. ` +
+    `No text, no watermark, no logos. Ultra-high detail, 16:9 aspect ratio.`
   );
 }
 
@@ -187,20 +186,22 @@ function buildRevealPrompt(revealScene: string, hasProduct: boolean): string {
   if (hasProduct) {
     return (
       `Keep the EXACT same product identity, pose, framing and composition as the reference image. ` +
-      `Transform into the COLOR reveal for this niche: ${revealScene}. ` +
-      `Full vivid color, rich premium commercial lighting, subtle chromatic edges, liquid iridescence where it fits. ` +
-      `The metamorphosis must feel native to the niche (not a random helmet/mask unless the niche calls for it). ` +
-      `Product identity stays identical. No text, no watermark. Ultra-high detail, 8K, 16:9.`
+      `Transform into the ALTERNATE COLOR state for this niche: ${revealScene}. ` +
+      `FULL VIVID COLOR, richer premium commercial lighting, stronger accents, subtle chromatic edges, liquid iridescence where it fits. ` +
+      `Same camera angle — only mood, materials, light and atmosphere change (day↔night, calm↔energy, before↔after). ` +
+      `The metamorphosis must feel native to the niche. Product identity stays identical. ` +
+      `No black-and-white. No text, no watermark. Ultra-high detail, 16:9.`
     );
   }
   return (
     `Keep the EXACT same subject identity, camera angle, pose and composition as the reference image. ` +
-    `Reveal the COLOR metamorphosis described here: ${revealScene}. ` +
+    `Reveal the ALTERNATE COLOR metamorphosis described here: ${revealScene}. ` +
     `Same silhouette and framing — only the look, materials, lighting and atmosphere transform. ` +
-    `Full vivid color, niche-authentic reveal (before→after that makes sense for THIS business), ` +
+    `FULL VIVID COLOR, niche-authentic before→after that makes sense for THIS business ` +
+    `(warm→cool, dusk→dawn, raw→finished, quiet→festive — always in color), ` +
     `premium commercial photography, subtle chromatic aberration on reveal edges, cinematic gloss. ` +
-    `Do NOT force fashion helmets or unrelated sci-fi props unless the niche description asks for them. ` +
-    `No text, no watermark. Ultra-high detail, 8K, 16:9.`
+    `Do NOT force black-and-white, fashion helmets or unrelated sci-fi props unless the niche asks for them. ` +
+    `No text, no watermark. Ultra-high detail, 16:9.`
   );
 }
 
@@ -216,7 +217,7 @@ export async function generateMotionRevealPair(opts: {
 
   // Fire BOTH stills in parallel — the old sequential base→i2i-reveal path
   // could burn 10–25 minutes when KIE was slow or retried.
-  deps.onStatus?.("Моушн: генерирую пару кадров параллельно (Ч/Б + цвет)…");
+  deps.onStatus?.("Моушн: генерирую пару цветных кадров параллельно…");
   const [baseUrl, revealUrl] = await Promise.all([
     createStill(
       deps,

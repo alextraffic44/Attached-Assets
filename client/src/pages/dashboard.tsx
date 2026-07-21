@@ -1093,7 +1093,7 @@ export default function DashboardPage() {
                               {
                                 id: "motion" as const,
                                 label: "Моушн",
-                                desc: "Ч/Б → цвет под любую нишу",
+                                desc: "Цветной morph под любую нишу",
                                 icon: (
                                   <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
                                     <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>

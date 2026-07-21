@@ -1832,7 +1832,7 @@ async function resolveScrollAnimMarkers(
       res.write(`data: ${JSON.stringify({ status: isImmersion
         ? `Собираем мир погружения (${SW_SCENE_COUNT} сцен, ${2 * SW_SCENE_COUNT - 1} роликов Kling 3.0)…`
         : isMotion
-        ? "Моушн: генерирую 2 кадра параллельно (обычно <2 мин)…"
+        ? "Моушн: генерирую 2 цветных кадра параллельно (обычно <2 мин)…"
         : "Рендерю видео для анимации прокрутки (до 35 минут, зависит от очереди KIE)..." })}\n\n`);
     } catch {}
 
@@ -3539,37 +3539,38 @@ VIDEO_PROMPT (на английском) — кинематографичный 
 ═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — МОУШН» (WebGL hover-reveal под ЛЮБУЮ нишу) ═══
 Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
 
-Ты — креативный арт-директор. Сначала ПОЙМИ нишу сайта из запроса пользователя (ресторан, стройка, клиника, недвижимость, авто, юристы, кофейня, спортзал, школа, салон, IT и т.д.). Затем придумай ПАРУ кадров «до → после», которая именно для ЭТОЙ ниши выглядит вау при наведении курсора. Это НЕ обязательно портрет человека и НЕ шлем/маска — субъект может быть блюдом, интерьером, зданием, инструментом, улыбкой, машиной, упаковкой, рабочим местом — чем угодно, что продаёт нишу.
+Ты — креативный арт-директор. Сначала ПОЙМИ нишу сайта из запроса пользователя (ресторан, стройка, клиника, недвижимость, авто, юристы, кофейня, спортзал, школа, салон, IT и т.д.). Затем придумай ПАРУ ЯРКИХ ЦВЕТНЫХ кадров «состояние A → состояние B», которая именно для ЭТОЙ ниши выглядит вау при наведении курсора. ОБА кадра в ПОЛНОМ ЦВЕТЕ (НЕ чёрно-белые). Это НЕ обязательно портрет человека и НЕ шлем/маска — субъект может быть блюдом, интерьером, зданием, инструментом, улыбкой, машиной, упаковкой, рабочим местом — чем угодно, что продаёт нишу.
 
 ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
 → СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
 {{SCROLLANIM:BASE_SCENE_IN_ENGLISH /// REVEAL_SCENE_IN_ENGLISH|Блок1::Текст1||Блок2::Текст2||Блок3::Текст3||Блок4::Текст4}}
 
 Формат ENGLISH-части ОБЯЗАТЕЛЬНО с разделителем " /// " (пробел-три-слэша-пробел):
-- СЛЕВА от /// — базовый кадр (будет Ч/Б): конкретная сцена ниши, композиция, субъект, свет, атмосфера
-- СПРАВА от /// — reveal-кадр (будет в цвете): ТА ЖЕ композиция/ракурс/субъект, но преображение, осмысленное для ниши (цвет, материалы, «оживление», результат услуги, премиум-сияние и т.п.)
-Пиши развёрнуто, ТОЛЬКО запятые внутри каждой половины (без | :: и фигурных скобок). Обе половины — про ОДНУ и ту же сцену.
+- СЛЕВА от /// — базовый ЦВЕТНОЙ кадр: конкретная сцена ниши, композиция, субъект, свет, атмосфера (full color)
+- СПРАВА от /// — reveal ЦВЕТНОЙ кадр: ТА ЖЕ композиция/ракурс/субъект, но другое настроение/состояние — день↔ночь, спокойствие↔энергия, до↔после услуги, холодный↔тёплый свет, raw↔premium finish
+Пиши развёрнуто, ТОЛЬКО запятые внутри каждой половины (без | :: и фигурных скобок). Обе половины — про ОДНУ и ту же сцену, ОБЕ в цвете. ЗАПРЕЩЕНО писать black and white / monochrome / grayscale.
 
 Примеры под разные ниши (адаптируй под КОНКРЕТНЫЙ бренд пользователя, не копируй слепо):
-- Ресторан: "gourmet plated signature dish on dark slate, rising steam, black and white editorial food photography, tight cinematic framing /// same dish and camera angle in full warm color, golden oil sheen, vibrant herbs, candlelit fine-dining commercial"
-- Кофейня: "artisan latte in ceramic cup on wooden bar, soft bokeh espresso machine, monochrome cafe editorial /// same cup and framing in rich warm color, crema glow, morning window light, premium coffee brand campaign"
-- Стройка/ремонт: "modern construction site with crane silhouette at dusk, industrial monochrome photography /// same site and angle in golden hour color, sparks and warm concrete, cinematic contractor commercial"
-- Недвижимость: "grand modern villa facade at twilight, high-contrast black and white architecture photo /// same villa and camera angle in golden hour color, warm interior lights glowing through glass, luxury real-estate campaign"
-- Клиника/стоматология: "confident close-up smile in soft studio light, clean medical beauty monochrome editorial /// same smile and framing with luminous healthy glow, soft clinic ambience, premium healthcare brand"
-- Автосервис/авто: "luxury car three-quarter view in dark garage, monochrome automotive editorial /// same car and angle with glossy reflections, rim light streaks, vivid paint color, premium auto commercial"
-- Салон красоты: "elegant hairstyle portrait in salon chair, high-contrast black and white beauty editorial /// same pose and framing with rich hair color shine, soft glam lighting, beauty brand metamorphosis"
-- Фитнес: "athlete mid-pose in gym, dramatic monochrome sports photography /// same pose and framing in vivid color, sweat glow, energetic stadium-style lighting, fitness brand campaign"
-- Юристы/услуги: "premium office desk with leather folder and city skyline bokeh, monochrome corporate editorial /// same desk and framing in refined color, warm brass accents, trustworthy luxury firm campaign"
-- IT/SaaS: "minimal workspace with laptop and abstract UI glow, monochrome tech editorial /// same desk and framing with luminous interface reflections, cool blue accents, modern software brand"
-- Цветы/подарки: "bouquet of roses on marble, soft monochrome floral still /// same bouquet and angle in vivid petal color, dewdrops, romantic luxury floral campaign"
+- Ресторан: "gourmet plated signature dish on dark slate, rising steam, warm candlelight, rich food colors, tight cinematic framing /// same dish and camera angle at brighter golden hour, golden oil sheen, vibrant herbs, festive fine-dining commercial glow"
+- Кофейня: "artisan latte in ceramic cup on wooden bar at dawn, soft cool window light, muted morning tones, cafe editorial /// same cup and framing in rich warm afternoon color, crema glow, sunlit espresso machine bokeh, premium coffee brand campaign"
+- Стройка/ремонт: "modern construction site with crane at blue hour, cool concrete tones, industrial cinematic color /// same site and angle in golden hour, sparks and warm concrete, vivid contractor commercial energy"
+- Недвижимость: "grand modern villa facade at blue hour twilight, cool glass reflections, luxury architecture photo in color /// same villa and camera angle at golden hour, warm interior lights glowing through glass, sunset real-estate campaign"
+- Клиника/стоматология: "confident close-up smile in soft cool clinic light, clean medical beauty color editorial /// same smile and framing with warmer luminous healthy glow, soft spa ambience, premium healthcare brand"
+- Автосервис/авто: "luxury car three-quarter view in moody garage, deep teal ambient light, glossy paint already in color /// same car and angle with brighter rim light streaks, richer paint pop, premium auto commercial energy"
+- Салон красоты: "elegant hairstyle portrait in salon chair, soft glam color, muted rose lighting /// same pose and framing with richer hair color shine, brighter glam lighting, beauty brand metamorphosis"
+- Фитнес: "athlete mid-pose in gym, cool stadium light, vivid sports color photography /// same pose and framing with warmer sweat glow, energetic neon accents, fitness brand campaign"
+- Юристы/услуги: "premium office desk with leather folder and city skyline dusk bokeh, refined cool color /// same desk and framing at golden hour, warm brass accents, trustworthy luxury firm campaign"
+- IT/SaaS: "minimal workspace with laptop and soft interface glow, cool blue color tech editorial /// same desk and framing with luminous richer UI reflections, brighter accent lights, modern software brand"
+- Цветы/подарки: "bouquet of roses on marble in soft daylight, natural petal colors /// same bouquet and angle under romantic evening light, deeper petal saturation, dewdrops, luxury floral campaign"
 
 Тексты — РОВНО 4 пары на РУССКОМ (Заголовок::Подзаголовок): короткие мощные фразы под нишу (оффер → характер → выгода → CTA).
 
 После маркера — обычные секции сайта под эту нишу (преимущества, отзывы, CTA, форма, футер).
 
 ⚠️ НЕ пиши <section> или Hero-раздел ДО этого маркера. Маркер И ЕСТЬ Hero.
-⚠️ НЕ создавай canvas/WebGL-код вручную. Маркер заменяется автоматически системой (пара кадров под нишу + fluid mouse reveal).
+⚠️ НЕ создавай canvas/WebGL-код вручную. Маркер заменяется автоматически системой (пара цветных кадров под нишу + fluid mouse reveal).
 ⚠️ НЕ своди всё к портрету со шлемом — думай как арт-директор бренда ЭТОЙ ниши.
+⚠️ НЕ делай базовый кадр чёрно-белым — оба кадра цветные и яркие.
 🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML и содержать " /// ".
 ═══ КОНЕЦ РЕЖИМА МОУШН ═══\n`;
         } else if (interactiveStyle === "immersion") {
@@ -4569,7 +4570,7 @@ ${designAnalysis}
           videoPromptAuto = "breathtaking cinematic forward flight into a premium brand environment, volumetric god rays, atmospheric depth and elegant bokeh, the camera gliding deeper through the space, epic film-still lighting, photorealistic";
           textsAuto = "Новый уровень::Почувствуйте атмосферу бренда||Суть предложения::То, что меняет опыт||Как это работает::Простой и ясный путь||Почему мы::Доказанное качество||Ваш ход::Начните прямо сейчас";
         } else if (interactiveStyle === "motion") {
-          videoPromptAuto = "premium niche brand scene, iconic commercial subject for the business, high-contrast monochrome editorial still /// same subject and framing in full vivid color, premium commercial lighting, niche-authentic metamorphosis reveal";
+          videoPromptAuto = "premium niche brand scene in full vivid color, iconic commercial subject, cinematic lighting /// same subject and framing in richer alternate color mood, brighter premium commercial lighting, day-to-night or calm-to-energy metamorphosis reveal";
           textsAuto = "Прикоснись::Открой другую сторону бренда||Характер::Сила в деталях||Преображение::Когда результат виден сразу||Твой ход::Начни прямо сейчас";
         } else {
           videoPromptAuto = absoluteProductImageUrl
