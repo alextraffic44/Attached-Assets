@@ -1612,7 +1612,16 @@ export default function DashboardPage() {
                         }
                       } catch (err: any) {
                         if (payWin && !payWin.closed) payWin.close();
-                        toast({ title: "Ошибка", description: "Не удалось создать платёж", variant: "destructive" });
+                        const raw = String(err?.message || "");
+                        let detail = "Не удалось создать платёж";
+                        try {
+                          const jsonStart = raw.indexOf("{");
+                          if (jsonStart >= 0) {
+                            const parsed = JSON.parse(raw.slice(jsonStart));
+                            if (parsed?.message) detail = String(parsed.message);
+                          }
+                        } catch { /* keep default */ }
+                        toast({ title: "Ошибка", description: detail, variant: "destructive" });
                       } finally {
                         setPaymentLoading(null);
                       }
