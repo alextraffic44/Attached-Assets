@@ -926,18 +926,18 @@ async function generateScrollFrames(
     `no text, no captions, no watermark, no camera shake, no flicker, no jump cuts.`;
 
   // Per-mode clip length + sliced-frame budget.
-  // site3d uses a short 3s / 720p clip and prefers MP4 scrub (no ffmpeg) for speed.
+  // site3d: cinematic 6s / 1080p — quality first; speed win is MP4 scrub (no ffmpeg).
   const videoDuration = layout === "action"
     ? SCROLL_ACTION_VIDEO_DURATION
     : layout === "site3d"
-    ? 3
+    ? 6
     : SCROLL_VIDEO_DURATION;
   const targetFrameCount = layout === "action"
     ? SCROLL_ACTION_FRAME_COUNT
     : layout === "site3d"
-    ? 48
+    ? 90
     : SCROLL_FRAME_COUNT;
-  const videoResolution = layout === "site3d" ? "720p" : "1080p";
+  const videoResolution = "1080p";
   const useVideoScrub = layout === "site3d"; // skip ffmpeg + 90 uploads
 
   // Overall deadline shared across all retry attempts (still image time already consumed).
@@ -1533,7 +1533,7 @@ function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, vid
   const pendingSub = isMotion
     ? "Обычно 30–90 секунд (2 кадра параллельно)"
     : style === "site3d"
-    ? "Видео Kling 3с/720p: обычно 2–8 минут"
+    ? "Видео Kling 6с / 1080p: обычно 3–12 минут"
     : "Обычно 3–12 минут (видео Kling)";
   const barSecs = isMotion ? 45 : 180;
   return `<section data-scroll-anim-pending="1"${_pa}${_sa}${_ta} style="position:relative;height:100vh;min-height:600px;background:linear-gradient(135deg,#0a0a0a 0%,#16213e 50%,#0a0a0a 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;">
@@ -1986,7 +1986,7 @@ async function resolveScrollAnimMarkers(
     // Keep the SSE connection alive with periodic status pings while video renders
     const keepAliveInterval = setInterval(() => {
       try { res.write(`data: ${JSON.stringify({ status: layout === "site3d"
-        ? "3D сайт: жду Kling (3с / 720p)…"
+        ? "3D сайт: жду Kling (6с / 1080p)…"
         : "Рендерю видео для анимации прокрутки (ожидаю результат от KIE)..." })}\n\n`); } catch {}
     }, layout === "site3d" ? 12000 : 20000);
 
