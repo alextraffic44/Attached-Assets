@@ -14,6 +14,11 @@ import type { Project, ProjectMessage, ProjectImage, ProjectVersion, ProjectFile
 import { isEditorVisibleProjectFile, isInternalAgentFile } from "@shared/project-files";
 import JSZip from "jszip";
 import { UITemplatesModal } from "@/components/ui-templates";
+
+/** Server-side generation still running (tab may have been closed). */
+function isCraftGeneratingHtml(code?: string | null): boolean {
+  return !!(code && code.includes('data-craft-generating="1"'));
+}
 import {
   ArrowLeft,
   Send,
@@ -421,22 +426,35 @@ export default function EditorPage() {
     return () => { if (animPollRef.current) clearInterval(animPollRef.current); };
   }, []);
 
-  // Auto-restart animation poll when the editor loads and the project already has a
-  // stuck pending placeholder — covers page refresh / navigation away during generation.
+  // Auto-resume when the editor loads and generation (or video) is still running
+  // server-side — covers page refresh / tab close / dropped SSE.
   useEffect(() => {
     if (!project) return;
     const code = project.generatedCode || "";
-    if (!code.includes('data-scroll-anim-pending="1"')) return;
+    const waitingSite = isCraftGeneratingHtml(code);
+    const waitingAnim = code.includes('data-scroll-anim-pending="1"');
+    if (!waitingSite && !waitingAnim) return;
     if (animPollRef.current) return; // poll already running (from live generation)
 
+    setIsGenerating(true);
+    setGenerationStatus(waitingSite
+      ? "Генерация продолжается на сервере…"
+      : "Рендерю видеоанимацию…");
+
     const pollStart = Date.now();
-    const POLL_TIMEOUT = 20 * 60 * 1000; // 20 min hard cap
+    const POLL_TIMEOUT = 45 * 60 * 1000;
 
     const done = (rawCode: string) => {
       if (animPollRef.current) { clearInterval(animPollRef.current); animPollRef.current = null; }
-      const cleaned = (rawCode || "").replace(/<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g, "");
-      if (cleaned) setStreamedCode(cleaned);
+      setIsGenerating(false);
+      setGenerationStatus(null);
+      if (rawCode && !isCraftGeneratingHtml(rawCode)) {
+        const cleaned = rawCode.replace(/<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g, "");
+        if (cleaned) setStreamedCode(cleaned);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
     };
 
     animPollRef.current = setInterval(async () => {
@@ -445,11 +463,13 @@ export default function EditorPage() {
         if (!resp.ok) return;
         const proj = await resp.json();
         const c: string = proj?.generatedCode || "";
-        if (!c.includes('data-scroll-anim-pending="1"') || Date.now() - pollStart > POLL_TIMEOUT) {
+        const stillSite = isCraftGeneratingHtml(c);
+        const stillAnim = c.includes('data-scroll-anim-pending="1"');
+        if ((!stillSite && !stillAnim) || Date.now() - pollStart > POLL_TIMEOUT) {
           done(c);
         }
       } catch {}
-    }, 12000);
+    }, 8000);
   }, [project, projectId]);
 
   const handleAddPage = useCallback(async () => {
@@ -613,6 +633,35 @@ export default function EditorPage() {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => null);
+        if (response.status === 409 && errData?.generating) {
+          // Generation already running server-side — poll until the site appears.
+          setGenerationStatus("Генерация уже идёт на сервере…");
+          const pollStart = Date.now();
+          const POLL_TIMEOUT = 45 * 60 * 1000;
+          await new Promise<void>((resolve) => {
+            if (animPollRef.current) clearInterval(animPollRef.current);
+            animPollRef.current = setInterval(async () => {
+              try {
+                const resp = await fetch(`/api/projects/${projectId}`, { credentials: "include" });
+                if (!resp.ok) return;
+                const proj = await resp.json();
+                const c: string = proj?.generatedCode || "";
+                if (!isCraftGeneratingHtml(c) || Date.now() - pollStart > POLL_TIMEOUT) {
+                  clearInterval(animPollRef.current!);
+                  animPollRef.current = null;
+                  if (c && !isCraftGeneratingHtml(c)) {
+                    setStreamedCode(c);
+                    gotFinalCode = true;
+                  }
+                  queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
+                  resolve();
+                }
+              } catch {}
+            }, 8000);
+          });
+          return;
+        }
         const errMsg = errData?.message || "Ошибка генерации";
         throw new Error(errMsg);
       }
@@ -792,24 +841,66 @@ export default function EditorPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
     } catch (err: any) {
-      errorShown = true;
-      toast({ title: "Ошибка", description: err.message, variant: "destructive" });
+      const msg = String(err?.message || "");
+      const isNetwork = /network|fetch|abort|failed to fetch|load failed|connection|premature/i.test(msg);
+      // Tab close / dropped SSE — server keeps generating; finally block will poll.
+      if (!(isNetwork && !gotFinalCode)) {
+        errorShown = true;
+        toast({ title: "Ошибка", description: err.message, variant: "destructive" });
+      }
     } finally {
       // Keep the loading screen up while the video animation is still rendering —
       // the poll loop will flip this off once the full site is ready.
       if (!waitingForAnim) setIsGenerating(false);
-      // If the stream ended without ever delivering the final code (server restart,
-      // 503, dropped connection, etc.), never leave the preview frozen on the
-      // half-streamed custom preloader. Drop the partial buffer so the preview falls
-      // back to the saved code (blank for a brand-new project, or the previous
-      // version for an edit) and make sure the user is told to retry.
-      if (!gotFinalCode && !waitingForAnim) {
+      // If the stream ended without the final payload (tab close / network drop),
+      // do NOT tell the user to retry — the server keeps generating. Poll the DB.
+      if (!gotFinalCode && !waitingForAnim && !errorShown) {
+        setGenerationStatus("Соединение прервалось — дожидаемся сайт на сервере…");
+        setIsGenerating(true);
+        const pollStart = Date.now();
+        const POLL_TIMEOUT = 45 * 60 * 1000;
+        if (animPollRef.current) clearInterval(animPollRef.current);
+        animPollRef.current = setInterval(async () => {
+          try {
+            const resp = await fetch(`/api/projects/${projectId}`, { credentials: "include" });
+            if (!resp.ok) return;
+            const proj = await resp.json();
+            const c: string = proj?.generatedCode || "";
+            const stillGenerating = isCraftGeneratingHtml(c);
+            const stillAnim = c.includes('data-scroll-anim-pending="1"');
+            if ((!stillGenerating && c && c.length > 80) || Date.now() - pollStart > POLL_TIMEOUT) {
+              clearInterval(animPollRef.current!);
+              animPollRef.current = null;
+              setIsGenerating(false);
+              setGenerationStatus(null);
+              if (c && !isCraftGeneratingHtml(c)) {
+                const cleaned = stillAnim
+                  ? c
+                  : c.replace(/<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g, "");
+                setStreamedCode(cleaned || c);
+              } else if (!c || isCraftGeneratingHtml(c)) {
+                toast({
+                  title: "Генерация не завершилась",
+                  description: "Попробуйте сгенерировать ещё раз.",
+                  variant: "destructive",
+                });
+                setStreamedCode("");
+              }
+              queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+              queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
+              // If anim still pending, keep a lighter wait via the remount poll pattern
+              if (stillAnim && c && !isCraftGeneratingHtml(c)) {
+                setIsGenerating(true);
+                setGenerationStatus("Рендерю видеоанимацию…");
+              }
+            }
+          } catch {}
+        }, 8000);
+      } else if (!gotFinalCode && !waitingForAnim && errorShown) {
         setStreamedCode("");
         setStreamingReply("");
         setGenerationStatus(null);
-        if (!errorShown) {
-          toast({ title: "Генерация прервалась", description: "Похоже, соединение прервалось. Попробуйте сгенерировать ещё раз.", variant: "destructive" });
-        }
       }
     }
   }, [prompt, projectId, project?.generatedCode, attachedImages, attachedVideos, attachedModels, attachedAudios, mockupMode, activeFile, toast, selectedElement]);

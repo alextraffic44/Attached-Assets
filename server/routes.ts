@@ -1248,6 +1248,49 @@ function injectLoadingOverlay(html: string): string {
   return html + '\n' + inject;
 }
 
+/** True while a new-site generation is still running server-side (client may have disconnected). */
+function isCraftGeneratingHtml(code?: string | null): boolean {
+  return !!(code && code.includes('data-craft-generating="1"'));
+}
+
+function isStaleCraftGenerating(project: { generatedCode?: string | null; updatedAt?: Date | string | null }): boolean {
+  if (!isCraftGeneratingHtml(project.generatedCode)) return false;
+  const t = project.updatedAt ? new Date(project.updatedAt as any).getTime() : 0;
+  return !t || Date.now() - t > 45 * 60 * 1000;
+}
+
+/** Lightweight HTML saved immediately so reconnect/reload can poll until the real site is ready. */
+function craftGeneratingPlaceholderHtml(promptHint?: string): string {
+  const hint = String(promptHint || "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    .slice(0, 120);
+  return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Генерация…</title>
+<style>
+html,body{margin:0;height:100%;background:#07070c;color:#fff;font-family:system-ui,sans-serif}
+.wrap{min-height:100vh;display:grid;place-items:center;text-align:center;padding:40px 24px}
+.spin{width:42px;height:42px;border:3px solid rgba(255,255,255,.12);border-top-color:#7c9cff;border-radius:50%;margin:0 auto 18px;animation:s .9s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+h1{margin:0 0 .4em;font-size:clamp(1.2rem,3vw,1.7rem);font-weight:700}
+p{margin:0;opacity:.55;font-size:.95rem;line-height:1.5}
+</style>
+</head>
+<body>
+<section data-craft-generating="1" class="wrap">
+  <div>
+    <div class="spin" aria-hidden="true"></div>
+    <h1>Генерируем сайт…</h1>
+    <p>Можно закрыть вкладку — сайт сохранится автоматически.${hint ? `<br/><span style="opacity:.7">${hint}</span>` : ""}</p>
+  </div>
+</section>
+</body>
+</html>`;
+}
+
 /**
  * Safely replace the `data-scroll-anim-pending="1"` section in an HTML string
  * without using a regex with [\s\S]*? (catastrophic backtracking risk on large files).
@@ -3105,6 +3148,8 @@ export async function registerRoutes(
     let generationCost = 0;
     let billedUserId: number | undefined;
     let genIkeyForRefund = "";
+    let wroteGeneratingPlaceholder = false;
+    let generateProjectId: number | undefined;
     try {
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project) {
@@ -3112,12 +3157,47 @@ export async function registerRoutes(
       }
       const user = req.user as any;
       billedUserId = user.id;
+      generateProjectId = project.id;
       if (project.userId !== user.id) {
         return res.status(403).json({ message: "Доступ запрещён" });
       }
 
       let clientGone = false;
       req.on("close", () => { clientGone = true; });
+      // Never let a dead SSE socket abort the handler: wrap write/end so closed-socket
+      // errors become no-ops. Generation must finish and persist even if the tab is closed.
+      const _origWrite = res.write.bind(res);
+      const _origEnd = res.end.bind(res);
+      (res as any).write = function (chunk: any, encoding?: any, cb?: any) {
+        try {
+          if ((res as any).writableEnded || (res as any).destroyed) {
+            if (typeof encoding === "function") encoding();
+            else if (typeof cb === "function") cb();
+            return true;
+          }
+          return _origWrite(chunk, encoding, cb);
+        } catch {
+          clientGone = true;
+          if (typeof encoding === "function") encoding();
+          else if (typeof cb === "function") cb();
+          return true;
+        }
+      };
+      (res as any).end = function (chunk?: any, encoding?: any, cb?: any) {
+        try {
+          if ((res as any).writableEnded || (res as any).destroyed) {
+            if (typeof encoding === "function") encoding();
+            else if (typeof cb === "function") cb();
+            return res;
+          }
+          return _origEnd(chunk, encoding, cb);
+        } catch {
+          clientGone = true;
+          if (typeof encoding === "function") encoding();
+          else if (typeof cb === "function") cb();
+          return res;
+        }
+      };
 
       const NEW_SITE_GENERATION_COST = 100;
       const EDIT_GENERATION_COST = 30;
@@ -3144,6 +3224,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Запрос обязателен" });
       }
 
+      // Another generate is already running for this project (client may have disconnected).
+      if (isCraftGeneratingHtml(project.generatedCode) && !isStaleCraftGenerating(project)) {
+        return res.status(409).json({
+          message: "Генерация уже идёт на сервере. Обновите страницу через минуту — сайт появится автоматически.",
+          generating: true,
+        });
+      }
+
       // Capture history BEFORE saving the current prompt so we don't duplicate it
       // in conversationHistory + the active user message.
       const priorMessages = await storage.getProjectMessages(project.id);
@@ -3154,7 +3242,8 @@ export async function registerRoutes(
         content: prompt,
       });
 
-      const isNewSite = !project.generatedCode;
+      // Treat stale generating placeholders as empty so a retry counts as a new site.
+      const isNewSite = !project.generatedCode || isCraftGeneratingHtml(project.generatedCode);
       const GENERATION_COST = isNewSite ? NEW_SITE_GENERATION_COST : EDIT_GENERATION_COST;
 
       const genIkey = idempotencyKey || `gen-${project.id}-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
@@ -3177,12 +3266,25 @@ export async function registerRoutes(
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
+      // Persist a generating placeholder ASAP so reload/disconnect can poll the project
+      // until the real HTML is written. Edits keep the previous site visible in DB.
+      if (isNewSite) {
+        try {
+          await storage.updateProject(project.id, {
+            generatedCode: craftGeneratingPlaceholderHtml(prompt),
+          });
+          wroteGeneratingPlaceholder = true;
+        } catch (e: any) {
+          console.warn("[GENERATE] failed to write generating placeholder:", e?.message);
+        }
+      }
+
       let researchData = deepResearchData || "";
 
       let enhancedPrompt = prompt;
 
       if (isNewSite) {
-        res.write(`data: ${JSON.stringify({ status: "Генерируем сайт..." })}\n\n`);
+        res.write(`data: ${JSON.stringify({ status: "Генерируем сайт...", generating: true })}\n\n`);
       }
 
       let systemContent = SYSTEM_PROMPT;
@@ -4231,7 +4333,9 @@ ${designAnalysis}
       const referenceImageUrlsForGen = (mockupMode && savedImageUrls.length > 0)
         ? savedImageUrls.map(u => (u.startsWith("http") ? u : `${baseUrl}${u}`))
         : [];
-      const genImgResult = await resolveGenImgMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => clientGone, referenceImageUrlsForGen);
+      // Always finish image generation even if the client disconnected — the site must
+      // be saved complete. SSE status pings are already soft-fail via the write wrapper.
+      const genImgResult = await resolveGenImgMarkers(genFilesMap, project.id, user?.id, genRunKey, res, () => false, referenceImageUrlsForGen);
       mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
       // Persist secondary pages that received GENIMG / IMGPENDING resolution
       for (const [filename, code] of Array.from(genFilesMap.entries())) {
@@ -4248,10 +4352,10 @@ ${designAnalysis}
       // generation for each, then convert any survivors to gradient placeholders.
       let reviewCreditsUsed = 0;
       let reviewFilled = 0;
-      if (isNewSite && !clientGone) {
+      if (isNewSite) {
         const reviewResult = await autoFillMissingImages(
           genFilesMap, project.id, user?.id,
-          `rv-${genRunKey}`, res, () => clientGone,
+          `rv-${genRunKey}`, res, () => false,
         );
         reviewCreditsUsed = reviewResult.creditsUsed;
         reviewFilled = reviewResult.filled;
@@ -4539,6 +4643,15 @@ ${designAnalysis}
       }
     } catch (err: any) {
       console.error("Generation error:", err?.message || err);
+      // Clear the generating placeholder so the user can retry (and polling stops).
+      if (wroteGeneratingPlaceholder && generateProjectId) {
+        try {
+          const cur = await storage.getProject(generateProjectId);
+          if (cur && isCraftGeneratingHtml(cur.generatedCode)) {
+            await storage.updateProject(generateProjectId, { generatedCode: "" });
+          }
+        } catch {}
+      }
       let refunded = false;
       try {
         if (genBilled && billedUserId && generationCost > 0 && isConfirmedKieApiFailure(err)) {
