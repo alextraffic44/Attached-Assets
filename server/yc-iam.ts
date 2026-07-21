@@ -20,16 +20,38 @@ function b64url(input: Buffer | string): string {
 }
 
 export function loadAuthorizedKeyFromEnv(): YcAuthorizedKey | null {
-  const raw = process.env.YC_SERVICE_ACCOUNT_KEY || "";
-  if (!raw.trim()) return null;
+  const raw = (process.env.YC_SERVICE_ACCOUNT_KEY || "").trim();
+  if (!raw) return null;
+
+  const tryParse = (text: string): YcAuthorizedKey | null => {
+    try {
+      const parsed = JSON.parse(text) as YcAuthorizedKey;
+      if (!parsed?.id || !parsed?.service_account_id || !parsed?.private_key) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  // 1) Raw JSON (works in most hosts)
+  const asJson = tryParse(raw);
+  if (asJson) return asJson;
+
+  // 2) Base64 of JSON — Amvera forbids " and ! in env values, so paste:
+  //    base64 -w0 key.json
   try {
-    const parsed = JSON.parse(raw) as YcAuthorizedKey;
-    if (!parsed?.id || !parsed?.service_account_id || !parsed?.private_key) return null;
-    return parsed;
+    const decoded = Buffer.from(raw.replace(/\s+/g, ""), "base64").toString("utf8");
+    const asB64 = tryParse(decoded);
+    if (asB64) return asB64;
   } catch {
-    console.warn("[YC-IAM] YC_SERVICE_ACCOUNT_KEY is not valid JSON");
-    return null;
+    /* ignore */
   }
+
+  console.warn(
+    "[YC-IAM] YC_SERVICE_ACCOUNT_KEY invalid — use JSON or base64(JSON). " +
+      "Amvera: encode with `base64 -w0 authorized-key.json`",
+  );
+  return null;
 }
 
 /** Build a PS256 JWT for https://iam.api.cloud.yandex.net/iam/v1/tokens */
