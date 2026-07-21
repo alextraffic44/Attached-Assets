@@ -15,6 +15,15 @@ import {
   buildMotionRevealHtml,
   type GenerateMotionRevealDeps,
 } from "./motion-reveal";
+import {
+  SCROLL_ANIMATIONAL_COST,
+  ANIMATIONAL_SYSTEM_PROMPT,
+  generateAnimationalSite,
+  buildAnimationalPendingHtml,
+  buildAnimationalFallbackHtml,
+  parseAnimationalMarker,
+  type GenerateAnimationalDeps,
+} from "./animational";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
 import { deployToYandex, addCustomDomain, removeCustomDomain, checkDomainStatus, unpublishFromYandex, deleteProjectFromYandex, getDomainProxyIp } from "./yandex-deploy";
@@ -218,7 +227,7 @@ const SCROLL_VIDEO_DURATION = 5;   // seconds
 // richer, smoother slow-motion / bullet-time scrub.
 const SCROLL_ACTION_VIDEO_DURATION = 6;  // seconds (blockbuster shot length)
 const SCROLL_ACTION_FRAME_COUNT = 96;    // sliced frames for the clip (matches ~16fps density used at 10s)
-type ScrollAnimLayout = "parallax" | "split" | "action" | "immersion" | "site3d" | "motion";
+type ScrollAnimLayout = "parallax" | "split" | "action" | "immersion" | "site3d" | "motion" | "animational";
 
 function resolveScrollAnimLayout(style?: string | null): ScrollAnimLayout {
   if (style === "split") return "split";
@@ -226,6 +235,7 @@ function resolveScrollAnimLayout(style?: string | null): ScrollAnimLayout {
   if (style === "immersion") return "immersion";
   if (style === "site3d") return "site3d";
   if (style === "motion") return "motion";
+  if (style === "animational") return "animational";
   return "parallax";
 }
 const KLING_IMG2VID_MODEL = "kling/v3-turbo-image-to-video";
@@ -1523,6 +1533,10 @@ function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, vid
   if (style === "immersion") {
     return buildImmersionPendingHtml(videoPrompt || "", texts);
   }
+  if (style === "animational") {
+    const brandHint = texts[0]?.title || undefined;
+    return buildAnimationalPendingHtml(brandHint, videoPrompt);
+  }
   const isMotion = style === "motion";
   const first = texts[0] || { title: "", sub: "" };
   const tid = "pnd" + Math.random().toString(36).slice(2, 8);
@@ -1796,6 +1810,119 @@ function buildMotionRevealDeps(opts: {
     shouldStop: opts.shouldStop,
     onStatus: opts.onStatus,
   };
+}
+
+function buildAnimationalDeps(opts: {
+  shouldStop: () => boolean;
+  onStatus?: (msg: string) => void;
+  appBaseUrl?: string;
+}): GenerateAnimationalDeps {
+  return {
+    kieApiKey: KIE_API_KEY || "",
+    createUrl: NANO_BANANA_CREATE_URL,
+    statusUrl: NANO_BANANA_STATUS_URL,
+    kieRequestJson,
+    uploadToObjectStorage,
+    appBaseUrl: opts.appBaseUrl || process.env.APP_BASE_URL || "https://craft-ai.ru",
+    shouldStop: opts.shouldStop,
+    onStatus: opts.onStatus,
+  };
+}
+
+async function resolveAnimationalMarkers(
+  filesMap: Map<string, string>,
+  projectId: number,
+  userId: number | undefined,
+  runKey: string,
+  res: any,
+  isAborted: () => boolean = () => false,
+): Promise<{ generated: number; creditsUsed: number }> {
+  const RE = /\{\{ANIMATIONAL:([\s\S]+?)\}\}/g;
+  const markers = new Map<string, string>();
+  for (const code of Array.from(filesMap.values())) {
+    let m: RegExpExecArray | null;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(code)) !== null) {
+      const raw = m[1].trim();
+      if (!markers.has(raw)) markers.set(raw, raw);
+    }
+  }
+  if (markers.size === 0) return { generated: 0, creditsUsed: 0 };
+
+  const replaceMap = new Map<string, string>();
+  let generated = 0;
+  let creditsUsed = 0;
+  const phaseDeadline = Date.now() + 900000; // 15 min — image-only pipeline
+
+  for (const [raw] of Array.from(markers.entries()).slice(0, 1)) {
+    if (isAborted() || Date.now() >= phaseDeadline) break;
+    try {
+      res.write(`data: ${JSON.stringify({ status: "Анимационный: генерирую кадры через KIE…" })}\n\n`);
+    } catch {}
+
+    let billed = false;
+    let ikey: string | undefined;
+    try {
+      if (userId) {
+        ikey = `animational-${projectId}-${runKey}-${crypto.createHash("md5").update(raw).digest("hex").slice(0, 8)}`;
+        const ded = await storage.deductCredits(userId, SCROLL_ANIMATIONAL_COST, "animational", ikey);
+        if (!ded.success) break;
+        billed = !ded.alreadyProcessed;
+      }
+
+      const keepAliveInterval = setInterval(() => {
+        try {
+          res.write(`data: ${JSON.stringify({ status: "Анимационный: жду кадры от KIE…" })}\n\n`);
+        } catch {}
+      }, 15000);
+
+      let site: Awaited<ReturnType<typeof generateAnimationalSite>> = null;
+      try {
+        site = await generateAnimationalSite({
+          markerInner: raw,
+          deps: buildAnimationalDeps({
+            shouldStop: () => isAborted() || Date.now() >= phaseDeadline,
+            onStatus: (msg) => {
+              try {
+                res.write(`data: ${JSON.stringify({ status: msg })}\n\n`);
+              } catch {}
+            },
+          }),
+        });
+      } finally {
+        clearInterval(keepAliveInterval);
+      }
+
+      if (site?.html) {
+        replaceMap.set(raw, site.html);
+        generated++;
+        if (billed) creditsUsed += SCROLL_ANIMATIONAL_COST;
+        try {
+          res.write(`data: ${JSON.stringify({ status: "Анимационный сайт готов" })}\n\n`);
+        } catch {}
+      } else if (billed && userId) {
+        try {
+          await storage.refundCredits(userId, SCROLL_ANIMATIONAL_COST);
+        } catch {}
+      }
+    } catch (e: any) {
+      console.error("[ANI] resolve failed:", e?.message || e);
+      if (billed && userId) {
+        try {
+          await storage.refundCredits(userId, SCROLL_ANIMATIONAL_COST);
+        } catch {}
+      }
+    }
+  }
+
+  for (const [filename, code] of Array.from(filesMap.entries())) {
+    const newCode = code.replace(/\{\{ANIMATIONAL:([\s\S]+?)\}\}/g, (_full, inner) => {
+      const key = String(inner).trim();
+      return replaceMap.get(key) ?? buildAnimationalFallbackHtml(key);
+    });
+    filesMap.set(filename, newCode);
+  }
+  return { generated, creditsUsed };
 }
 
 async function resolveScrollAnimMarkers(
@@ -3240,6 +3367,7 @@ export async function registerRoutes(
         "scroll-anim": "Видеоанимация",
         "scroll-world": "Погружение",
         "motion-reveal": "Моушн",
+        animational: "Анимационный",
         enhance: "Улучшение промпта",
         "deep-research": "Deep Research",
         "3d": "3D модель",
@@ -3493,10 +3621,15 @@ export async function registerRoutes(
       }
 
       let systemContent = SYSTEM_PROMPT;
+      const isAnimationalMode = !!(interactiveMode && isNewSite && interactiveStyle === "animational");
+      if (isAnimationalMode) {
+        // Full replace — own prompt, no master SYSTEM_PROMPT / interactive SCROLLANIM rules.
+        systemContent = ANIMATIONAL_SYSTEM_PROMPT;
+      }
       if (researchData) {
         systemContent += `\n\n═══ РЕЗУЛЬТАТЫ DEEP RESEARCH ═══\nИспользуй следующие РЕАЛЬНЫЕ факты и данные из исследования при создании контента сайта:\n${researchData}\n═══ КОНЕЦ ИССЛЕДОВАНИЯ ═══\n`;
       }
-      if (multiPagesData && typeof multiPagesData === "string" && multiPagesData.trim()) {
+      if (!isAnimationalMode && multiPagesData && typeof multiPagesData === "string" && multiPagesData.trim()) {
         const pageList = multiPagesData.split(",").map((p: string) => p.trim()).filter(Boolean);
         const fileNames = pageList.map((p: string) => {
           const slug = p.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
@@ -3506,7 +3639,7 @@ export async function registerRoutes(
       } else {
         systemContent += `\n\n⚠️ ОДНОСТРАНИЧНЫЙ РЕЖИМ: Создай ОДИН файл index.html. ЗАПРЕЩЕНО использовать маркеры --- FILE: --- или разбивать на несколько файлов. Весь сайт — один HTML-документ.`;
       }
-      if (interactiveMode && isNewSite) {
+      if (interactiveMode && isNewSite && !isAnimationalMode) {
         const isSplitLayout = interactiveStyle === "split";
         const hasProductImage = !!absoluteProductImageUrl;
         if (isSplitLayout) {
@@ -4578,7 +4711,7 @@ ${designAnalysis}
         mainHtmlCode = genFilesMap.get("index.html") ?? mainHtmlCode;
       }
 
-      // ── Normalize malformed SCROLLANIM markers before any detection ──
+      // ── Normalize malformed SCROLLANIM / ANIMATIONAL markers before any detection ──
       // The model sometimes deviates from the exact `{{SCROLLANIM:...}}` syntax —
       // adds spaces ({{ SCROLLANIM :), changes case ({{scrollanim:), or wraps the
       // marker in markdown code fences / backticks. Any of those makes the strict
@@ -4589,14 +4722,30 @@ ${designAnalysis}
         mainHtmlCode = mainHtmlCode
           // 1. canonical opening tag first: {{  scrollanim  :  →  {{SCROLLANIM:
           .replace(/\{\{\s*SCROLLANIM\s*:/gi, "{{SCROLLANIM:")
+          .replace(/\{\{\s*ANIMATIONAL\s*:/gi, "{{ANIMATIONAL:")
           // 2. unwrap backticks / code fences ONLY when they hug a FULL canonical marker
           //    on both sides — anchored to {{...}} so unrelated `SCROLLANIM:` text in
           //    scripts/content is never touched.
-          .replace(/`+[ \t]*\n?[ \t]*(\{\{SCROLLANIM:[\s\S]*?\}\})[ \t]*\n?[ \t]*`+/g, "$1");
+          .replace(/`+[ \t]*\n?[ \t]*(\{\{SCROLLANIM:[\s\S]*?\}\})[ \t]*\n?[ \t]*`+/g, "$1")
+          .replace(/`+[ \t]*\n?[ \t]*(\{\{ANIMATIONAL:[\s\S]*?\}\})[ \t]*\n?[ \t]*`+/g, "$1");
+      }
+
+      // ── Auto-inject ANIMATIONAL if mode but AI missed the marker ──
+      if (interactiveMode && isNewSite && interactiveStyle === "animational" && !mainHtmlCode.includes("{{ANIMATIONAL:")) {
+        const brandGuess = (project.title || "Studio").replace(/[|{}]/g, "").slice(0, 40);
+        const markerAuto = `\n{{ANIMATIONAL:${brandGuess}|Создаём впечатления|#E8FF47|#0B0B0C|#F5F2EC|cinematic premium brand hero scene, dramatic monochrome editorial /// same composition vivid color metamorphosis reveal|atmospheric brand still one,atmospheric brand still two,atmospheric brand still three,atmospheric brand still four,atmospheric brand still five,atmospheric brand still six|Атмосфера::Почувствуйте характер бренда::cinematic brand atmosphere chapter||Детали::Сила в каждой детали::editorial detail close-up||Результат::Когда вау становится нормой::hero result scene||Ваш ход::Начните прямо сейчас::premium call to action scene|Обсудить проект}}\n`;
+        if (mainHtmlCode.includes("</header>")) {
+          mainHtmlCode = mainHtmlCode.replace("</header>", `</header>${markerAuto}`);
+        } else if (/<body[^>]*>/i.test(mainHtmlCode)) {
+          mainHtmlCode = mainHtmlCode.replace(/<body[^>]*>/i, (m) => `${m}${markerAuto}`);
+        } else {
+          mainHtmlCode = markerAuto + mainHtmlCode;
+        }
+        console.log(`[ANIMATIONAL] Auto-injected marker (AI missed it)`);
       }
 
       // ── Auto-inject SCROLLANIM if interactive mode but AI missed the marker ──
-      if (interactiveMode && isNewSite && !mainHtmlCode.includes("{{SCROLLANIM:")) {
+      if (interactiveMode && isNewSite && interactiveStyle !== "animational" && !mainHtmlCode.includes("{{SCROLLANIM:")) {
         const isSplitAuto = interactiveStyle === "split";
         const isActionAuto = interactiveStyle === "action";
         const isImmersionAuto = interactiveStyle === "immersion";
@@ -4638,14 +4787,18 @@ ${designAnalysis}
         console.log(`[SCROLLANIM] Auto-injected marker (AI missed it). Style: ${interactiveStyle}`);
       }
 
-      // ── Scroll animation: fire-and-forget approach ───────────────────────────
-      // Replace {{SCROLLANIM:...}} markers with a beautiful "pending" placeholder
-      // and deliver the site to the client immediately. The actual video + ffmpeg
-      // pipeline runs in the background and writes the final code to the DB once
-      // ready. The client polls for completion and auto-updates the preview.
-      const hasScrollMarkers = mainHtmlCode.includes("{{SCROLLANIM:");
+      // ── Scroll / Animational: fire-and-forget approach ───────────────────────
+      // Replace markers with pending placeholders and deliver immediately.
+      // Background pipeline bakes the final experience into the DB.
+      const hasAniMarkers = mainHtmlCode.includes("{{ANIMATIONAL:");
+      const hasScrollMarkers = mainHtmlCode.includes("{{SCROLLANIM:") || hasAniMarkers;
       let immediateHtml = mainHtmlCode;
-      if (hasScrollMarkers) {
+      if (hasAniMarkers) {
+        immediateHtml = mainHtmlCode.replace(/\{\{ANIMATIONAL:([\s\S]+?)\}\}/g, (_full, inner) => {
+          const brief = parseAnimationalMarker(String(inner));
+          return buildAnimationalPendingHtml(brief.brand, String(inner).trim());
+        });
+      } else if (mainHtmlCode.includes("{{SCROLLANIM:")) {
         immediateHtml = mainHtmlCode.replace(/\{\{SCROLLANIM:([\s\S]+?)\}\}/g, (_full, inner) => {
           const pipe = (inner as string).indexOf("|");
           const textPart = pipe === -1 ? "" : (inner as string).slice(pipe + 1);
@@ -4671,17 +4824,23 @@ ${designAnalysis}
       }
 
       // Inject loading overlay into all interactive-mode sites (and any new site with video/images)
-      if (interactiveMode || hasScrollMarkers) {
+      // Animational ships its own loader — skip craft overlay to avoid double splash.
+      if ((interactiveMode || hasScrollMarkers) && !hasAniMarkers) {
         immediateHtml = injectLoadingOverlay(immediateHtml);
       }
 
       await storage.updateProject(project.id, { generatedCode: immediateHtml });
+      const animPendingCost = hasAniMarkers
+        ? SCROLL_ANIMATIONAL_COST
+        : hasScrollMarkers
+        ? SCROLL_ANIM_COST
+        : 0;
       const creditBreakdown = {
         generate: GENERATION_COST,
         images: genImgResult.creditsUsed + reviewCreditsUsed,
         imagesCount: genImgResult.generated + reviewFilled,
         videoPending: hasScrollMarkers,
-        videoCostIfCharged: hasScrollMarkers ? SCROLL_ANIM_COST : 0,
+        videoCostIfCharged: animPendingCost,
         total: GENERATION_COST + genImgResult.creditsUsed + reviewCreditsUsed,
       };
       const spendNote =
@@ -4691,7 +4850,9 @@ ${designAnalysis}
           ? ` + изображения ${creditBreakdown.imagesCount}×${AUTO_IMAGE_COST}=${creditBreakdown.images}`
           : "") +
         ")" +
-        (hasScrollMarkers
+        (hasAniMarkers
+          ? `. Анимационный сайт рендерится отдельно (−${SCROLL_ANIMATIONAL_COST} ток. при успехе).`
+          : hasScrollMarkers
           ? `. Видеоанимация рендерится отдельно (−${SCROLL_ANIM_COST} ток. при успехе).`
           : "");
       await storage.createProjectMessage({
@@ -4751,35 +4912,40 @@ ${designAnalysis}
       // ── Background: resolve animation markers, then update DB ─────────────
       if (hasScrollMarkers) {
         const bgFilesMap = new Map<string, string>();
-        bgFilesMap.set("index.html", mainHtmlCode); // original — still has {{SCROLLANIM}} markers
+        bgFilesMap.set("index.html", mainHtmlCode); // original — still has markers
         for (const f of secondaryForGen) {
           if (f.filename !== "index.html") bgFilesMap.set(f.filename, f.code);
         }
         const noopRes = { write: () => {}, end: () => {} };
         // Extract fallback texts + prompt once (used in both retry and fallback paths)
+        const _aniInner = mainHtmlCode.match(/\{\{ANIMATIONAL:([\s\S]+?)\}\}/)?.[1]?.trim() || "";
         const _animPipe = mainHtmlCode.match(/\{\{SCROLLANIM:([\s\S]+?)\}\}/)?.[1] || "";
         const _animPipeIdx = _animPipe.indexOf("|");
         const _animVideoPrompt = (_animPipeIdx === -1 ? _animPipe : _animPipe.slice(0, _animPipeIdx)).trim();
         const _animTextPart = _animPipeIdx === -1 ? "" : _animPipe.slice(_animPipeIdx + 1);
         const _animTexts = _animTextPart.split("||").map((seg: string) => { const [t, s] = seg.split("::"); return { title: (t||"").trim(), sub: (s||"").trim() }; }).filter((x: { title: string; sub: string }) => x.title || x.sub);
         if (_animTexts.length === 0) _animTexts.push({ title: "", sub: "" });
-        const _animStyle = interactiveStyle || "parallax";
+        const _animStyle = interactiveStyle || (hasAniMarkers ? "animational" : "parallax");
         (async () => {
           const MAX_ANIM_ATTEMPTS = 2;
-          // Motion is image-only — retry quickly. Video modes keep a longer pause for Kling recovery.
-          const RETRY_DELAY_MS = _animStyle === "motion" ? 45 * 1000 : 3 * 60 * 1000;
+          // Motion is image-only — retry quickly. Animational is lighter than Kling video.
+          // Other video modes keep a longer pause for Kling recovery.
+          const RETRY_DELAY_MS =
+            _animStyle === "motion" ? 45 * 1000
+            : hasAniMarkers || _animStyle === "animational" ? 60 * 1000
+            : 3 * 60 * 1000;
           let animSucceeded = false;
           for (let animAttempt = 0; animAttempt < MAX_ANIM_ATTEMPTS; animAttempt++) {
             if (animAttempt > 0) {
-              // Wait before retry so Kling has time to recover from a transient outage
               console.log(`[BG ANIM] Waiting ${RETRY_DELAY_MS / 60000} min before retry for project ${project.id}...`);
               await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
-              // Reload the filesMap from the original markers for a clean retry
               bgFilesMap.set("index.html", mainHtmlCode);
             }
             try {
-              console.log(`[BG ANIM] Starting attempt ${animAttempt + 1}/${MAX_ANIM_ATTEMPTS} for project ${project.id}`);
-              const scrollResult = await resolveScrollAnimMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl, _animStyle);
+              console.log(`[BG ANIM] Starting attempt ${animAttempt + 1}/${MAX_ANIM_ATTEMPTS} for project ${project.id} (style=${_animStyle})`);
+              const scrollResult = hasAniMarkers
+                ? await resolveAnimationalMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false)
+                : await resolveScrollAnimMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl, _animStyle);
               // Soft-fail (0 generated) still puts fallback HTML into bgFilesMap via finalize().
               // Do NOT treat that as success — leave pending so Kling task ID / retry can finish.
               if (!scrollResult.generated) {
@@ -4788,7 +4954,9 @@ ${designAnalysis}
                 continue;
               }
               let animatedCode = bgFilesMap.get("index.html") ?? immediateHtml;
-              animatedCode = injectLoadingOverlay(animatedCode);
+              if (!hasAniMarkers) {
+                animatedCode = injectLoadingOverlay(animatedCode);
+              }
               // Extract FULL animation blocks (section + trailing style/script engine).
               // Merging section-only previously dropped CSS/JS → hollow zero-height hero.
               const curProj = await storage.getProject(project.id);
@@ -4797,15 +4965,17 @@ ${designAnalysis}
               const finishedBlocks = extractCraftScrollAnimBlocks(animatedCode);
               if (curHtml.includes('data-scroll-anim-pending="1"')) {
                 if (finishedBlocks.length === 0) {
-                  console.warn(`[BG ANIM] generated>0 but no craft-scrollanim block found — writing fallback with task id`);
-                  const pendingTagM = curHtml.match(/<section[^>]*data-scroll-anim-pending="1"[^>]*>/);
-                  const pendingTag = pendingTagM ? pendingTagM[0] : "";
-                  const savedTaskIdEnc = pendingTag.match(/data-scroll-anim-task-id="([^"]*)"/)?.[1] || "";
-                  const savedTaskId = savedTaskIdEnc ? decodeURIComponent(savedTaskIdEnc) : undefined;
-                  mergedHtml = safeReplaceScrollAnimPending(
-                    curHtml,
-                    scrollAnimFallbackHtml(_animTexts, _animVideoPrompt, _animStyle, savedTaskId),
-                  );
+                  console.warn(`[BG ANIM] generated>0 but no craft-scrollanim block found — writing fallback`);
+                  const fb = hasAniMarkers
+                    ? buildAnimationalFallbackHtml(_aniInner)
+                    : (() => {
+                        const pendingTagM = curHtml.match(/<section[^>]*data-scroll-anim-pending="1"[^>]*>/);
+                        const pendingTag = pendingTagM ? pendingTagM[0] : "";
+                        const savedTaskIdEnc = pendingTag.match(/data-scroll-anim-task-id="([^"]*)"/)?.[1] || "";
+                        const savedTaskId = savedTaskIdEnc ? decodeURIComponent(savedTaskIdEnc) : undefined;
+                        return scrollAnimFallbackHtml(_animTexts, _animVideoPrompt, _animStyle, savedTaskId);
+                      })();
+                  mergedHtml = safeReplaceScrollAnimPending(curHtml, fb);
                 } else {
                   let tmp = curHtml;
                   for (const block of finishedBlocks) {
@@ -4845,21 +5015,20 @@ ${designAnalysis}
             }
           }
           if (!animSucceeded) {
-            // All attempts failed — replace pending with static fallback that embeds the
-            // prompt AND the Kling task ID (if one was created) so the periodic scanner
-            // can pick up the video once it eventually finishes on KIE.
+            // All attempts failed — replace pending with static fallback
             try {
-              // Re-read current code to capture any task ID written by onTaskCreated callback
               const curProj = await storage.getProject(project.id);
               const curHtml = curProj?.generatedCode || immediateHtml;
               const pendingTagM = curHtml.match(/<section[^>]*data-scroll-anim-pending="1"[^>]*>/);
               const pendingTag  = pendingTagM ? pendingTagM[0] : "";
               const savedTaskIdEnc = pendingTag.match(/data-scroll-anim-task-id="([^"]*)"/)?.[1] || "";
               const savedTaskId    = savedTaskIdEnc ? decodeURIComponent(savedTaskIdEnc) : undefined;
-              const fallbackCode = safeReplaceScrollAnimPending(
-                curHtml,
-                scrollAnimFallbackHtml(_animTexts, _animVideoPrompt, _animStyle, savedTaskId),
-              );
+              const fallbackCode = hasAniMarkers
+                ? safeReplaceScrollAnimPending(curHtml, buildAnimationalFallbackHtml(_aniInner))
+                : safeReplaceScrollAnimPending(
+                    curHtml,
+                    scrollAnimFallbackHtml(_animTexts, _animVideoPrompt, _animStyle, savedTaskId),
+                  );
               await storage.updateProject(project.id, { generatedCode: fallbackCode });
               console.warn(`[BG ANIM] All attempts failed for project ${project.id} — fallback saved${savedTaskId ? ` (task ${savedTaskId.slice(0,12)}… preserved)` : ""}`);
             } catch {}
@@ -4994,11 +5163,14 @@ ${designAnalysis}
       }
 
       const textsStr = animTexts.map(t => `${t.title}::${t.sub}`).join("||");
-      const marker = `\n{{SCROLLANIM:${videoPrompt}|${textsStr}}}\n`;
-      const pendingBlock = scrollAnimPendingHtml(animTexts, videoPrompt, animStyle)
+      const isAniRegen = animStyle === "animational" || html.includes('data-animational') || html.includes('data-animational-pending');
+      const marker = isAniRegen
+        ? `\n{{ANIMATIONAL:${videoPrompt.includes("|") ? videoPrompt : `${animTexts[0]?.title || "Studio"}|${animTexts[0]?.sub || "Создаём впечатления"}|#E8FF47|#0B0B0C|#F5F2EC|${videoPrompt}|atmospheric one,atmospheric two,atmospheric three,atmospheric four,atmospheric five,atmospheric six|${textsStr}|Обсудить проект`}}}\n`
+        : `\n{{SCROLLANIM:${videoPrompt}|${textsStr}}}\n`;
+      const pendingBlock = scrollAnimPendingHtml(animTexts, isAniRegen ? (videoPrompt.includes("|") ? videoPrompt : undefined) : videoPrompt, isAniRegen ? "animational" : animStyle)
         .replace(
           /(<section[^>]*data-scroll-anim-pending="1")/,
-          existingTaskId
+          existingTaskId && !isAniRegen
             ? `$1 data-scroll-anim-task-id="${encodeURIComponent(existingTaskId)}"`
             : "$1",
         );
@@ -5043,7 +5215,7 @@ ${designAnalysis}
         let succeeded = false;
 
         // Fast path: resume completed Kling task (site3d / parallax / etc.)
-        if (existingTaskId && layout !== "immersion" && layout !== "motion") {
+        if (existingTaskId && layout !== "immersion" && layout !== "motion" && layout !== "animational") {
           console.log(`[REGEN ANIM] resuming from existing task ${existingTaskId} for project ${projectId}`);
           try {
             const scrollOutcome = await generateScrollFrames(
@@ -5079,12 +5251,16 @@ ${designAnalysis}
             }
             try {
               console.log(`[REGEN ANIM] Attempt ${attempt + 1}/${MAX_REGEN_ATTEMPTS} for project ${projectId}`);
-              const result = await resolveScrollAnimMarkers(bgMap, projectId, user.id, runKey, noopRes, () => false, undefined, animStyle);
+              const result = isAniRegen
+                ? await resolveAnimationalMarkers(bgMap, projectId, user.id, runKey, noopRes, () => false)
+                : await resolveScrollAnimMarkers(bgMap, projectId, user.id, runKey, noopRes, () => false, undefined, animStyle);
               if (!result.generated) {
                 console.warn(`[REGEN ANIM] attempt ${attempt + 1}: nothing generated`);
                 continue;
               }
-              const animatedCode = injectLoadingOverlay(bgMap.get("index.html") ?? pendingHtml);
+              const animatedCode = isAniRegen
+                ? (bgMap.get("index.html") ?? pendingHtml)
+                : injectLoadingOverlay(bgMap.get("index.html") ?? pendingHtml);
               const blocks = extractCraftScrollAnimBlocks(animatedCode);
               let finalCode = pendingHtml;
               const cur = await storage.getProject(projectId);
@@ -7229,7 +7405,7 @@ ${fullHtml}`;
 
           // Background: try to fetch the already-created Kling video and build the animation,
           // so the user gets the real animation without paying again or losing the video.
-          if (savedTaskId && KIE_API_KEY && savedStyle !== "immersion" && savedStyle !== "motion") {
+          if (savedTaskId && KIE_API_KEY && savedStyle !== "immersion" && savedStyle !== "motion" && savedStyle !== "animational") {
             const _projId  = proj.id;
             const _layout: ScrollAnimLayout =
               savedStyle === "split" ? "split" : savedStyle === "action" ? "action" : savedStyle === "site3d" ? "site3d" : "parallax";
@@ -7387,7 +7563,7 @@ ${fullHtml}`;
             const animStyle: string = styleEnc ? decodeURIComponent(styleEnc) : "parallax";
             // Immersion uses multi-clip scroll-world pipeline — single-task frame resume does not apply.
             // Motion uses dual stills (no Kling video) — skip frame resume.
-            if (animStyle === "immersion" || animStyle === "motion") {
+            if (animStyle === "immersion" || animStyle === "motion" || animStyle === "animational") {
               console.log(`[KLINGTASK] project ${proj.id}: ${animStyle} style — skip single-clip frame resume`);
               continue;
             }
