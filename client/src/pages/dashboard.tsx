@@ -265,7 +265,7 @@ export default function DashboardPage() {
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImages, setPhotoImages] = useState<Array<{ base64: string; mimeType: string; preview: string }>>([]);
-  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split" | "action" | "immersion" | "motion">("parallax");
+  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split" | "action" | "immersion" | "site3d" | "motion">("parallax");
   const [interactiveProductImage, setInteractiveProductImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const [tourStep, setTourStep] = useState(-1);
   const [activeTour, setActiveTour] = useState<TourStep[] | null>(null);
@@ -1082,6 +1082,21 @@ export default function DashboardPage() {
                                 ),
                               },
                               {
+                                id: "site3d" as const,
+                                label: "3D",
+                                desc: "Продукт на чёрном + scroll-scrub",
+                                icon: (
+                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
+                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
+                                    <rect x="14" y="8" width="12" height="16" rx="2.5" fill="currentColor" opacity="0.35"/>
+                                    <path d="M14 12 H26 M14 16 H26 M14 20 H22" stroke="currentColor" strokeWidth="1" opacity="0.25"/>
+                                    <path d="M8 22 L12 10 L16 22" stroke="currentColor" strokeWidth="1.2" fill="none" opacity="0.4"/>
+                                    <path d="M24 22 L28 10 L32 22" stroke="currentColor" strokeWidth="1.2" fill="none" opacity="0.4"/>
+                                    <circle cx="20" cy="6" r="1.5" fill="currentColor" opacity="0.55"/>
+                                  </svg>
+                                ),
+                              },
+                              {
                                 id: "motion" as const,
                                 label: "Моушн",
                                 desc: "Цветной morph под любую нишу",
@@ -1116,7 +1131,9 @@ export default function DashboardPage() {
                           </div>
                           {/* Product photo upload (optional) */}
                           <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4, marginTop: 4 }}>
-                            Фото продукта <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#aaa' }}>(необязательно)</span>
+                            Фото продукта <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#aaa' }}>
+                              {interactiveStyle === "site3d" ? "(рекомендуется для 3D)" : "(необязательно)"}
+                            </span>
                           </div>
                           <input
                             ref={interactiveProductImgRef}
