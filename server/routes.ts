@@ -1533,6 +1533,9 @@ function extractCraftScrollAnimBlocks(html: string): string[] {
 /** True when a craft-scrollanim section exists but its engine CSS/JS was stripped. */
 function isHollowCraftScrollAnim(html: string): boolean {
   if (!html.includes("data-craft-scrollanim")) return false;
+  // Immersion/site3d without fixed video layer = broken merge (hero only, no film).
+  if (/data-layout=["']immersion["']/.test(html) && !html.includes("craft-immersion-bg")) return true;
+  if (/data-layout=["']site3d["']/.test(html) && !html.includes("craft-site3d-bg")) return true;
   const blocks = extractCraftScrollAnimBlocks(html);
   if (!blocks.length) return true;
   return blocks.some((b) => {
