@@ -35,6 +35,8 @@ DEFAULT_FILES = [
     "shared/project-files.ts",
     "client/src/pages/dashboard.tsx",
     "client/src/pages/editor.tsx",
+    "client/src/pages/seo-editor.tsx",
+    "client/src/components/dns-instructions.tsx",
     "client/src/pages/auth-page.tsx",
     "client/src/pages/landing.tsx",
     "client/src/pages/admin.tsx",
