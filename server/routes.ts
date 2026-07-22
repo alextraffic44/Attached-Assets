@@ -970,7 +970,7 @@ async function generateScrollFrames(
     : layout === "action"
     ? `the debris, shards, sparks, dust or particles already visible in the frame must keep physically moving and evolving throughout the whole clip — drifting, spinning, falling, colliding or scattering further in slow motion (the scene action must be the main event, not just the camera), combined with a bold Hollywood-blockbuster camera move — a dramatic slow-motion orbit/arc that flies AROUND the subject (bullet-time feel) or an explosive dynamic push-in, sweeping anamorphic lens flares, motion-blur streaks and deep dramatic contrast — epic, powerful and fluid, never shaky, camera movement alone is NOT enough`
     : layout === "immersion"
-    ? `IMMERSION fly-through: the FIRST frames must establish a clear THRESHOLD / PORTAL the viewer is looking through or into (airplane window, doorway, arch, glass facade, tunnel mouth, elevator doors, shop window, cave mouth, balcony frame — choose what fits the niche). Then the camera CONTINUOUSLY flies FORWARD THROUGH that threshold into the expanding world beyond (clouds, interiors, landscapes, brand spaces), with deep parallax, evolving light and a sense of falling into the scene — never a static orbit, never a product-on-black still life. The journey must clearly progress start→finish for scroll-scrub`
+    ? `IMMERSION 15s fly-through in FIVE continuous 3-second narrative beats that MUST logically continue each other (no jump cuts, no scene resets): Beat1 0-3s establish THRESHOLD/PORTAL (window, doorway, arch, facade, tunnel, balcony — niche-fit); Beat2 3-6s pass THROUGH the threshold into the first interior/world layer; Beat3 6-9s deepen into the core brand space with richer parallax; Beat4 9-12s reveal the emotional heart of the niche; Beat5 12-15s open toward a hopeful horizon / final payoff. Continuous POV forward flight, evolving light, never a static orbit, never product-on-black. Designed for scroll-scrub across 5 site blocks`
     : layout === "site3d"
     ? `hero product centered on a pure black void, photorealistic commercial, bold camera orbit or push-in around the product, second half MUST deliver a clear scroll payoff (ice crack / layers separate / product rotate / material reveal / light sweep transforming the hero), deep shadows, studio rim light, no environment set dressing that fills the frame, graceful and steady, never shaky`
     : `with bold immersive cinematic camera movement that pulls the viewer INTO the scene — a smooth forward dolly / push-in that glides deeper and naturally reveals depth and detail (e.g. gliding toward a doorway or through the space) — graceful and steady, never shaky`;
@@ -979,7 +979,7 @@ async function generateScrollFrames(
     : layout === "site3d"
     ? `Render as a premium product-hero commercial on pure black: the product is the only subject, clearly evolving motion with a second-half payoff designed for scroll-scrub`
     : layout === "immersion"
-    ? `Render as a continuous POV immersion flight: start behind/at a threshold, then pass through into the world — one unbroken cinematic camera move designed for scroll-scrub`
+    ? `Render as a continuous POV immersion flight lasting ~15 seconds: five contiguous 3-second beats that continue one story by meaning, start behind/at a threshold, then pass through into the world — one unbroken cinematic camera move designed for scroll-scrub`
     : `Render as a high-end Hollywood-grade cinematic shot: smooth, graceful but clearly visible motion (the scene must noticeably evolve and feel alive from start to finish)`;
   let animPrompt =
     `${safeVideoPrompt}. ${styleLead}, ${cameraGuidance}, premium dramatic lighting ` +
@@ -987,10 +987,12 @@ async function generateScrollFrames(
     `no text, no captions, no watermark, no camera shake, no flicker, no jump cuts.`;
 
   // Per-mode clip length + sliced-frame budget.
-  // immersion/site3d: MP4 scrub (no ffmpeg). Both use 12s for richer scroll payoff.
+  // immersion: 15s MP4 scrub (5×3s beats). site3d: 12s product scrub. Others: short clip + frames.
   const videoDuration = layout === "action"
     ? SCROLL_ACTION_VIDEO_DURATION
-    : layout === "immersion" || layout === "site3d"
+    : layout === "immersion"
+    ? 15
+    : layout === "site3d"
     ? 12
     : SCROLL_VIDEO_DURATION;
   const targetFrameCount = layout === "action"
@@ -2030,7 +2032,7 @@ async function resolveScrollAnimMarkers(
     const blockReason = isImmersion ? "immersion-glass" : isSite3d ? "site3d-product" : isMotion ? "motion-reveal" : "scroll-anim";
     try {
       res.write(`data: ${JSON.stringify({ status: isImmersion
-        ? "Погружение: рендерим кинематографичный видео-фон Kling (12 сек)…"
+        ? "Погружение: рендерим кинематографичный видео-фон Kling (15 сек · 5 сцен)…"
         : isSite3d
         ? "3D: рендерим продуктовый hero-ролик Kling (12 сек)…"
         : isMotion
@@ -2120,7 +2122,7 @@ async function resolveScrollAnimMarkers(
       try { res.write(`data: ${JSON.stringify({ status: layout === "site3d"
         ? "3D: жду Kling (12с / product hero)…"
         : layout === "immersion"
-        ? "Погружение: жду Kling (12с / video bg)…"
+        ? "Погружение: жду Kling (15с · 5 сцен / video bg)…"
         : "Рендерю видео для анимации прокрутки (ожидаю результат от KIE)..." })}\n\n`); } catch {}
     }, layout === "site3d" || layout === "immersion" ? 15000 : 20000);
 
@@ -3753,44 +3755,47 @@ VIDEO_PROMPT (английский) — ОДИН product-hero клип на PURE
 ═══ КОНЕЦ РЕЖИМА МОУШН ═══\n`;
         } else if (interactiveStyle === "immersion") {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
-═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — ПОГРУЖЕНИЕ» (threshold fly-through + glass site) ═══
+═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — ПОГРУЖЕНИЕ» (15с · 5 сцен × 3с · glass ≤35%) ═══
 Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
 
 РАЗДЕЛЕНИЕ РОЛЕЙ:
-→ ПАЙПЛАЙН заменяет маркер на ОДНО кинематографичное Kling-видео (12 сек) с эффектом ПОГРУЖЕНИЯ: фиксированный фон всего сайта, scrub по скроллу.
-→ ТЫ пишешь полноценный сайт клиента ПОВЕРХ: шапка бренда, glass-секции, футер.
+→ ПАЙПЛАЙН заменяет маркер на ОДНО кинематографичное Kling-видео (15 сек) + scroll-scrub по 5 блокам (каждый блок ≈3 сек видео). Фиксированный фон всего сайта.
+→ ТЫ пишешь шапку бренда + лёгкий контент ПОСЛЕ маркера. Сами 5 glass-карточек и смена hero-текста при скролле делает пайплайн из текстов маркера.
 
-ОБЯЗАТЕЛЬНАЯ СТРУКТУРА ВИДЕО (придумай под ЛЮБУЮ нишу пользователя):
-1) СТАРТОВЫЙ КАДР — порог / портал / рама, сквозь которую смотрит зритель:
-   окно самолёта, дверь, арка, витрина, тоннель, балкон, лифт, пещера, иллюминатор, рамка ворот — выбери то, что логично для ниши.
-2) ДАЛЬШЕ камера НЕПРЕРЫВНО летит ВПЕРЁД СКВОЗЬ этот порог в расширяющийся мир бренда
-   (облака, интерьер, природа, цех, зал, город — по смыслу ниши), с parallax и сменой света.
-3) Это НЕ орбита вокруг продукта на чёрном фоне и НЕ статичная студия. Это POV-погружение «сквозь → внутрь».
+ГЛАВНОЕ ПРАВИЛО ВИДЕО (для ЛЮБОЙ ниши):
+Один непрерывный пролёт из 5 смысловых сцен по 3 секунды. Каждая сцена ОБЯЗАНА логически ПРОДОЛЖАТЬ предыдущую (тот же мир, тот же путь камеры, без прыжков и смены локации «с нуля»):
+  Beat1 0–3с — порог / портал / рама (окно, дверь, арка, витрина, тоннель, балкон — по нише)
+  Beat2 3–6с — проход СКВОЗЬ порог в первый слой мира
+  Beat3 6–9с — углубление в пространство бренда
+  Beat4 9–12с — эмоциональное «сердце» ниши
+  Beat5 12–15с — горизонт / финальный payoff
+Это НЕ орбита продукта на чёрном и НЕ статичная студия. POV «сквозь → внутрь → дальше».
 
 СТРУКТУРА HTML:
-1) #site-preloader, затем <header> с логотипом БРЕНДА КЛИЕНТА (не Craft AI), меню по якорям, CTA. Шапка: glass / прозрачная поверх видео.
-2) СРАЗУ после </header> на отдельной строке:
-{{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|HeroЗаголовок::HeroПодзаголовок}}
-3) ПОСЛЕ маркера — полный контент: преимущества, услуги, отзывы, CTA, форма (если разрешена), футер. Секции с ПРОЗРАЧНЫМ фоном. Карточки — glass:
-   background: rgba(255,255,255,0.08–0.16); backdrop-filter: blur(16–24px); border: 1px solid rgba(255,255,255,0.18); border-radius: 20–28px; светлый текст.
+1) #site-preloader, затем <header> с логотипом БРЕНДА КЛИЕНТА (не Craft AI), меню по якорям, CTA.
+   Шапка: position:fixed; top:0; left:0; right:0; z-index:1000; базово полностью прозрачная поверх видео.
+2) СРАЗУ после </header> на отдельной строке РОВНО 5 пар текстов (по одной на сцену):
+{{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|Сцена1::Под1||Сцена2::Под2||Сцена3::Под3||Сцена4::Под4||Сцена5::Под5}}
+3) ПОСЛЕ маркера — короткий контент (услуги/CTA/футер). Секции с ПРОЗРАЧНЫМ фоном. Карточки — glass, НЕ перекрывают видео больше чем на ~35% высоты экрана:
+   max-height ≈ 35vh; не делай полноэкранные непрозрачные плиты.
 
-VIDEO_PROMPT (английский) — ОДИН continuous fly-through: START at threshold → fly THROUGH into the world. ТОЛЬКО запятые, без | :: {}. Примеры (адаптируй под нишу пользователя, не копируй слепо):
-- Путешествия/авиа: "looking out an airplane oval window at layered clouds at golden hour, the camera glides forward through the window frame into open sky and soft cloud canyons, continuous POV immersion flight, volumetric sunbeams, photorealistic cinematic"
-- Кофейня: "looking through a rain-speckled cafe window into a warm artisan roastery, the camera pushes through the glass into steaming cups and wooden counters then deeper toward glowing roasting drums, continuous immersion dolly, photorealistic"
-- Недвижимость: "standing before tall glass villa doors at golden hour, the camera flies through the opening doors into a luminous living room and out toward a panoramic terrace sea view, continuous immersion flight, photorealistic"
-- Спа/косметика: "looking through frosted spa doorway framed by botanicals, the camera drifts through into marble halls, soft steam and a serene treatment suite, continuous immersion push, photorealistic beauty film"
-- Фитнес: "looking through gym entrance glass at blue-hour neon, the camera flies through into a vast training floor with dynamic lights and motion blur athletes in depth, continuous immersion flight, photorealistic"
-- IT/SaaS: "looking through a dark server-hall threshold with cool LED glow, the camera flies through corridors of light into a luminous glass office overlooking a night city, continuous immersion dolly, photorealistic"
-- Ресторан: "looking through a candlelit restaurant doorway, the camera glides through into an open kitchen with rising steam and a chef plating, then toward a warm dining room, continuous immersion flight, photorealistic"
-- Общее под любую нишу: "looking through a symbolic threshold that fits the brand niche, the camera continuously flies forward through it into the expanding brand world with deep parallax and evolving light, POV immersion, photorealistic cinematic"
+VIDEO_PROMPT (английский) — ОДИН continuous 15s fly-through с явными 5 beats. ТОЛЬКО запятые, без | :: {}. Примеры (адаптируй под нишу, сохрани непрерывность сцен):
+- Путешествия/авиа: "0-3s looking out an airplane oval window at layered clouds at golden hour, 3-6s camera glides forward through the window frame into open sky, 6-9s deeper into soft cloud canyons with volumetric sunbeams, 9-12s sweeping above a luminous coastline horizon, 12-15s opening toward endless bright sky ahead, continuous POV immersion flight, photorealistic cinematic"
+- Кофейня: "0-3s looking through a rain-speckled cafe window into a warm artisan roastery, 3-6s camera pushes through the glass to steaming cups and wooden counters, 6-9s deeper toward glowing roasting drums, 9-12s close atmosphere of fresh beans and soft steam, 12-15s settles on a serene morning service moment, continuous immersion dolly, photorealistic"
+- Недвижимость: "0-3s standing before tall glass villa doors at golden hour, 3-6s camera flies through the opening doors into a luminous living room, 6-9s deeper toward panoramic terrace doors, 9-12s out onto a sunlit terrace with sea air haze, 12-15s opens to a wide hopeful sea horizon, continuous immersion flight, photorealistic"
+- Спа/косметика: "0-3s looking through frosted spa doorway framed by botanicals, 3-6s drifts through into marble halls with soft steam, 6-9s deeper into a serene treatment suite, 9-12s intimate glow of oils and linen, 12-15s calm luminous window light finale, continuous immersion push, photorealistic beauty film"
+- Фитнес: "0-3s looking through gym entrance glass at blue-hour neon, 3-6s flies through into a vast training floor, 6-9s deeper between dynamic light beams and motion-blur athletes in depth, 9-12s focuses on powerful equipment rhythm, 12-15s opens toward a bright victory corridor, continuous immersion flight, photorealistic"
+- IT/SaaS: "0-3s looking through a dark server-hall threshold with cool LED glow, 3-6s flies through corridors of light, 6-9s into a luminous glass office, 9-12s toward a panoramic night-city window, 12-15s settles on the glowing skyline horizon, continuous immersion dolly, photorealistic"
+- Ресторан: "0-3s looking through a candlelit restaurant doorway, 3-6s glides into an open kitchen with rising steam, 6-9s chef plating in warm focus, 9-12s toward a glowing dining room, 12-15s settles on a welcoming table finale, continuous immersion flight, photorealistic"
+- Общее: "0-3s looking through a symbolic niche-fit threshold, 3-6s flies through into the first brand world layer, 6-9s deepens with parallax, 9-12s reveals the emotional core of the niche, 12-15s opens to a hopeful final horizon, continuous POV immersion, photorealistic cinematic"
 
-Тексты в маркере — 1–2 пары на РУССКОМ (Hero::подзаголовок). Основной контент — секции ПОСЛЕ маркера.
+Тексты в маркере — РОВНО 5 пар на РУССКОМ (Заголовок::подзаголовок), короткие, продающие, по смыслу продолжают друг друга как 5 глав одной истории.
 
-⚠️ НЕ пиши Hero <section> ДО маркера. Маркер даёт видео-фон + hero-glass.
+⚠️ НЕ пиши Hero <section> ДО маркера. Маркер даёт видео-фон + 5 beat-текстов + glass-карточки.
 ⚠️ НЕ создавай video/canvas код вручную.
 ⚠️ НЕ пиши product-on-black / orbit around product — это режим 3D, не Погружение.
-⚠️ ЗАПРЕЩЕНО плотные непрозрачные фоны секций, которые полностью закрывают видео.
-🚨 ПРОВЕРЬ: маркер {{SCROLLANIM:...}} есть; промпт начинается с порога и пролёта сквозь; после маркера — glass-секции; в шапке — бренд клиента.
+⚠️ ЗАПРЕЩЕНО плотные непрозрачные фоны секций и карточки крупнее ~35% высоты экрана поверх видео.
+🚨 ПРОВЕРЬ: маркер {{SCROLLANIM:...}} есть; внутри РОВНО 5 пар Title::Sub через ||; промпт описывает 5 непрерывных 3с сцен; в шапке — бренд клиента и position:fixed.
 ═══ КОНЕЦ РЕЖИМА ПОГРУЖЕНИЕ ═══\n`;
         } else {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
@@ -4776,8 +4781,8 @@ ${designAnalysis}
             : "epic cinematic bullet-time shot orbiting the themed subject as particles, debris and light streaks are already bursting outward mid-air and keep drifting, spinning and scattering further in slow motion, the camera flying around in a dramatic arc, IMAX-grade blockbuster lighting, photorealistic";
           textsAuto = "Почувствуй мощь::Эффект, который впечатляет||Каждая деталь::Снято как в кино||Начни прямо сейчас::Сделай первый шаг";
         } else if (isImmersionAuto) {
-          videoPromptAuto = "looking through a symbolic brand threshold doorway framed by soft volumetric light, the camera continuously flies forward through the opening into an expanding premium brand world with deep parallax layers, evolving golden haze and cinematic depth, POV immersion flight, photorealistic";
-          textsAuto = "Погрузитесь::Мир бренда на весь экран";
+          videoPromptAuto = "0-3s looking through a symbolic brand threshold doorway framed by soft volumetric light, 3-6s camera continuously flies forward through the opening into the first brand world layer, 6-9s deeper parallax into the premium interior, 9-12s emotional core of the niche with evolving golden haze, 12-15s opens toward a hopeful luminous horizon, continuous POV immersion flight, photorealistic cinematic";
+          textsAuto = "Порог::Начните путешествие||Вход::Шаг внутрь мира бренда||Глубина::Пространство раскрывается||Суть::Главный смысл на экране||Горизонт::Ваш следующий шаг";
         } else if (interactiveStyle === "site3d") {
           videoPromptAuto = absoluteProductImageUrl
             ? "hero product centered on pure black void, cinematic orbit and push-in, second half clear scroll payoff with light sweep and material reveal, studio rim light, photorealistic commercial, no environment"
@@ -7438,7 +7443,7 @@ ${fullHtml}`;
               : savedStyle === "site3d" ? "site3d"
               : savedStyle === "immersion" ? "immersion"
               : "parallax";
-            const _vidDur  = _layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : (_layout === "immersion" || _layout === "site3d") ? 12 : SCROLL_VIDEO_DURATION;
+            const _vidDur  = _layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : _layout === "immersion" ? 15 : (_layout === "site3d") ? 12 : SCROLL_VIDEO_DURATION;
             const _frCnt   = _layout === "action" ? SCROLL_ACTION_FRAME_COUNT : 90;
             const _texts   = savedTexts;
             (async () => {
@@ -7619,7 +7624,7 @@ ${fullHtml}`;
               : animStyle === "site3d" ? "site3d"
               : animStyle === "immersion" ? "immersion"
               : "parallax";
-            const vidDur  = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : (layout === "immersion" || layout === "site3d") ? 12 : SCROLL_VIDEO_DURATION;
+            const vidDur  = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : layout === "immersion" ? 15 : (layout === "site3d") ? 12 : SCROLL_VIDEO_DURATION;
             const frCnt   = layout === "action" ? SCROLL_ACTION_FRAME_COUNT : 90;
             const texts: Array<{title:string;sub:string}> = textsEnc
               ? decodeURIComponent(textsEnc).split("||").map(seg => { const [t,s] = seg.split("::"); return {title:(t||"").trim(),sub:(s||"").trim()}; })
