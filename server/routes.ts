@@ -6962,6 +6962,35 @@ ${fullHtml}`;
     return crypto.createHash("md5").update(raw).digest("hex");
   }
 
+  // 1payment requires unique user_data (≤255 chars). JSON with quotes/braces
+  // is rejected as error_code 8 — use a compact alphanumeric token instead.
+  function encodePaymentUserData(orderId: number, userId: number, verifyHash: string): string {
+    return `o${orderId}u${userId}v${verifyHash}`;
+  }
+
+  function parsePaymentUserData(userData: unknown): { orderId: number; userId: number; v?: string } | null {
+    if (userData == null) return null;
+    const raw = String(userData);
+    const compact = raw.match(/^o(\d+)u(\d+)v([a-f0-9]{32})$/i);
+    if (compact) {
+      return { orderId: Number(compact[1]), userId: Number(compact[2]), v: compact[3].toLowerCase() };
+    }
+    // Legacy JSON payload (orders created before the compact format).
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && Number.isFinite(Number(parsed.orderId)) && Number.isFinite(Number(parsed.userId))) {
+        return {
+          orderId: Number(parsed.orderId),
+          userId: Number(parsed.userId),
+          v: typeof parsed.v === "string" ? parsed.v : undefined,
+        };
+      }
+    } catch {
+      /* not JSON */
+    }
+    return null;
+  }
+
   app.post("/api/payments/create", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ message: "Не авторизован" });
@@ -6984,18 +7013,22 @@ ${fullHtml}`;
         tokens: pack.tokens,
       });
 
-      const baseUrl = req.headers.origin || `https://${req.headers.host}`;
+      const baseUrl =
+        process.env.APP_BASE_URL ||
+        process.env.PUBLIC_URL ||
+        (typeof req.headers.origin === "string" ? req.headers.origin : null) ||
+        `https://${req.headers.host}`;
       const verifyHash = crypto.createHash("md5").update(`${order.id}:${userId}:${apiKey}`).digest("hex");
-      const userData = JSON.stringify({ orderId: order.id, userId, v: verifyHash });
+      const userData = encodePaymentUserData(order.id, userId, verifyHash);
 
       const user = req.user as any;
-      const paymentUserId = user.telegramId || user.yandexId || String(user.id);
+      const paymentUserId = String(user.telegramId || user.yandexId || user.id);
 
       const params: Record<string, string> = {
         partner_id: partnerId,
         project_id: projectId,
         amount: String(pack.price),
-        description: `Craft AI: ${pack.tokens} токенов (${pack.label})`,
+        description: `Craft AI: ${pack.tokens} tokens (${pack.label})`,
         success_url: `${baseUrl}/dashboard?payment=success`,
         failure_url: `${baseUrl}/dashboard?payment=failed`,
         shop_url: "https://craft-ai.ru",
@@ -7015,7 +7048,9 @@ ${fullHtml}`;
       const data = await response.json() as any;
       if (!data.url) {
         console.error("1payment error:", data);
-        return res.status(500).json({ message: "Ошибка создания платежа" });
+        try { await storage.updatePaymentOrderStatus(order.id, "failed"); } catch {}
+        const code = data?.error_code != null ? ` (код ${data.error_code})` : "";
+        return res.status(500).json({ message: `Ошибка создания платежа${code}`, errorCode: data?.error_code });
       }
 
       await storage.updatePaymentOrderStatus(order.id, "created", data.order_id || undefined, undefined);
@@ -7038,10 +7073,8 @@ ${fullHtml}`;
         return res.json({ status: "ok" });
       }
 
-      let parsed: { orderId: number; userId: number; v?: string };
-      try {
-        parsed = JSON.parse(user_data);
-      } catch {
+      const parsed = parsePaymentUserData(user_data);
+      if (!parsed) {
         console.error("Invalid user_data in webhook:", user_data);
         return res.json({ status: "ok" });
       }
