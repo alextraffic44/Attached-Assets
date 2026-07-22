@@ -35,6 +35,7 @@ import {
   Upload,
   ImageIcon,
   X,
+  Rocket,
 } from "lucide-react";
 import { useRef, useCallback } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -254,6 +255,7 @@ export default function DashboardPage() {
   const [researchData, setResearchData] = useState("");
   const [showDeepResearchPopup, setShowDeepResearchPopup] = useState(false);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [showPromoModal, setShowPromoModal] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState<number | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [multiPageEnabled, setMultiPageEnabled] = useState(false);
@@ -591,6 +593,17 @@ export default function DashboardPage() {
                   {unreadData!.count}
                 </span>
               )}
+            </button>
+
+            <button
+              onClick={() => setShowPromoModal(true)}
+              data-testid="button-promotion"
+              className="flex items-center justify-center gap-2 transition-all shrink-0"
+              style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: isMobile ? '0.45rem' : '0.45rem 1.1rem', fontSize: '0.82rem', fontWeight: 600, color: '#1D1D1F', cursor: 'pointer', width: isMobile ? 36 : undefined, height: isMobile ? 36 : undefined }}
+              title="Продвижение"
+            >
+              <Rocket className="w-3.5 h-3.5" style={{ color: '#86868B' }} />
+              <span className="hidden sm:inline">Продвижение</span>
             </button>
 
             <button
@@ -1619,6 +1632,67 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
+
+      <Dialog open={showPromoModal} onOpenChange={setShowPromoModal}>
+        <DialogContent
+          className="p-0 overflow-hidden"
+          style={{
+            maxWidth: 520,
+            width: '92vw',
+            borderRadius: isMobile ? 18 : 24,
+            border: '1px solid rgba(0,0,0,0.06)',
+            boxShadow: '0 28px 80px rgba(15,23,42,0.22)',
+            background: '#fff',
+            fontFamily: appleFont,
+          }}
+        >
+          <div style={{ position: 'relative' }}>
+            <img
+              src="/images/rookee-partner.jpg"
+              alt="Rookee — автоматическое SEO-продвижение"
+              style={{ display: 'block', width: '100%', height: 'auto', aspectRatio: '1074 / 480', objectFit: 'cover' }}
+            />
+          </div>
+          <div style={{ padding: isMobile ? '1.15rem 1.15rem 1.35rem' : '1.35rem 1.5rem 1.6rem' }}>
+            <DialogHeader className="space-y-2 text-left">
+              <DialogTitle style={{ fontSize: isMobile ? '1.15rem' : '1.35rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#0f172a', lineHeight: 1.2 }}>
+                Продвижение сайта в поиске
+              </DialogTitle>
+              <DialogDescription style={{ fontSize: '0.92rem', color: '#475569', lineHeight: 1.55 }}>
+                Это наши партнёры по <b style={{ color: '#0f172a', fontWeight: 700 }}>автоматическому SEO-продвижению</b> — Rookee.
+                Если нужно вывести сайт в топ Яндекса и Google, собрать семантику и вести позиции без рутины — обратитесь к ним.
+              </DialogDescription>
+            </DialogHeader>
+            <p style={{ margin: '0.9rem 0 1.15rem', fontSize: '0.86rem', color: '#64748b', lineHeight: 1.5 }}>
+              Создали сайт в Craft AI — следующий шаг: закажите SEO у Rookee и получайте стабильный органический трафик на ваши страницы.
+            </p>
+            <a
+              href="https://rookee.ru/?pid=444691eab5c96cc4daf30a755829e84d36c396&utm_source=_partnerprogram&utm_medium=_partnerprogram"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="button-rookee-try"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '0.85rem 1.1rem',
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, #2563eb 0%, #38bdf8 100%)',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '0.95rem',
+                textDecoration: 'none',
+                boxShadow: '0 10px 28px rgba(37,99,235,0.28)',
+              }}
+            >
+              <Rocket className="w-4 h-4" />
+              Попробовать
+            </a>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showTopUpModal} onOpenChange={setShowTopUpModal}>
         <DialogContent className="p-0 overflow-y-auto max-h-[92dvh]" style={{ maxWidth: 900, width: '92vw', borderRadius: isMobile ? 20 : 28, border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 40px 100px rgba(0,0,0,0.5)', background: 'linear-gradient(135deg,#1e1e24 10%,#050505 60%)', fontFamily: appleFont }}>
