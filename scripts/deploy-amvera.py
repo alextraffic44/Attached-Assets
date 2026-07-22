@@ -34,6 +34,8 @@ DEFAULT_FILES = [
     "shared/schema.ts",
     "shared/project-files.ts",
     "client/src/pages/dashboard.tsx",
+    "client/public/images/rookee-partner.jpg",
+    "client/public/images/rookee-logo.svg",
     "client/src/pages/editor.tsx",
     "client/src/pages/auth-page.tsx",
     "client/src/pages/landing.tsx",
