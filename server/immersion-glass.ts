@@ -56,7 +56,11 @@ export function buildImmersionGlassHtml(
   const heroTitle = hero.title ? esc(hero.title) : "";
   const heroSub = hero.sub ? esc(hero.sub) : "";
 
+  // IMPORTANT: wrap bg + hero + engine in craft-scrollanim-full comments so BG merge
+  // (extractCraftScrollAnimBlocks) keeps the fixed video layer — section-only extract
+  // previously dropped #craft-immersion-bg and left a hero without video.
   return `
+<!--craft-scrollanim-full-->
 <div id="craft-immersion-bg" class="${cid}-bg" data-layout="immersion" data-video="${vid}" aria-hidden="true">
   <video class="${cid}-video" src="${vid}" muted playsinline preload="auto"></video>
   <div class="${cid}-veil"></div>
@@ -76,20 +80,20 @@ html.craft-immersion-site,body.craft-immersion-site{background:#05070c!important
   radial-gradient(ellipse 75% 60% at 50% 40%,rgba(0,0,0,.12) 0%,rgba(0,0,0,.45) 72%,rgba(0,0,0,.72) 100%),
   linear-gradient(180deg,rgba(0,0,0,.28) 0%,rgba(0,0,0,.08) 40%,rgba(0,0,0,.55) 100%);
   pointer-events:none;}
-.${cid}-hero{position:relative;z-index:1;min-height:100vh;display:grid;place-items:center;padding:clamp(88px,12vh,140px) clamp(18px,5vw,64px) clamp(48px,8vh,96px);box-sizing:border-box;}
+.${cid}-hero{position:relative;z-index:1;min-height:100vh;display:grid;place-items:end center;padding:clamp(88px,12vh,140px) clamp(18px,5vw,64px) clamp(40px,8vh,80px);box-sizing:border-box;}
 .${cid}-hero__glass{
-  width:min(920px,100%);
-  padding:clamp(28px,4.5vw,52px) clamp(24px,4vw,48px);
-  border-radius:28px;
-  background:linear-gradient(155deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,.05) 50%,rgba(255,255,255,.03) 100%);
-  border:1px solid rgba(255,255,255,.22);
-  box-shadow:0 28px 80px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.28);
-  backdrop-filter:blur(22px) saturate(1.35);-webkit-backdrop-filter:blur(22px) saturate(1.35);
+  width:min(720px,100%);
+  padding:clamp(18px,3vw,32px) clamp(20px,3.5vw,40px);
+  border-radius:24px;
+  background:linear-gradient(155deg,rgba(255,255,255,.1) 0%,rgba(255,255,255,.03) 55%,rgba(255,255,255,.02) 100%);
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow:0 20px 60px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.2);
+  backdrop-filter:blur(16px) saturate(1.25);-webkit-backdrop-filter:blur(16px) saturate(1.25);
   text-align:center;color:#fff;
 }
-.${cid}-hero__title{margin:0;font-size:clamp(2.1rem,5.2vw,4.2rem);font-weight:800;letter-spacing:-.03em;line-height:1.05;text-shadow:0 8px 40px rgba(0,0,0,.45);}
-.${cid}-hero__sub{margin:1rem auto 0;max-width:42ch;font-size:clamp(1rem,1.6vw,1.2rem);line-height:1.55;color:rgba(255,255,255,.86);text-shadow:0 2px 16px rgba(0,0,0,.35);}
-.${cid}-hint{margin-top:1.6rem;display:inline-flex;flex-direction:column;align-items:center;gap:8px;font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);}
+.${cid}-hero__title{margin:0;font-size:clamp(1.7rem,4.2vw,3.2rem);font-weight:800;letter-spacing:-.03em;line-height:1.05;text-shadow:0 8px 40px rgba(0,0,0,.5);}
+.${cid}-hero__sub{margin:.75rem auto 0;max-width:40ch;font-size:clamp(.95rem,1.5vw,1.12rem);line-height:1.5;color:rgba(255,255,255,.86);text-shadow:0 2px 16px rgba(0,0,0,.4);}
+.${cid}-hint{margin-top:1.1rem;display:inline-flex;flex-direction:column;align-items:center;gap:8px;font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);}
 .${cid}-hint i{width:20px;height:32px;border:1.5px solid rgba(255,255,255,.35);border-radius:12px;position:relative;}
 .${cid}-hint i::after{content:"";position:absolute;left:50%;top:6px;width:3px;height:7px;border-radius:2px;background:#fff;transform:translateX(-50%);animation:${cid}-wheel 1.6s ease-in-out infinite;}
 @keyframes ${cid}-wheel{0%{opacity:0;top:6px}35%{opacity:1}100%{opacity:0;top:16px}}
@@ -176,5 +180,6 @@ body.craft-immersion-site p,body.craft-immersion-site li,body.craft-immersion-si
 })();
 </script>
 ${navCtl}
+<!--/craft-scrollanim-full-->
 `;
 }

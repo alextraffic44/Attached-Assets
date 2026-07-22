@@ -76,6 +76,7 @@ export function buildSite3dAnimHtml(
   const framesJson = JSON.stringify(frames || []).replace(/'/g, "&#39;");
 
   return `
+<!--craft-scrollanim-full-->
 <div id="craft-site3d-bg" class="${cid}-bg" data-layout="site3d"${vid ? ` data-video="${vid}"` : ""} data-frames='${framesJson}' aria-hidden="true">
   ${vid
     ? `<video class="${cid}-video" src="${vid}" muted playsinline preload="auto"></video>`
@@ -292,5 +293,6 @@ body.craft-site3d p,body.craft-site3d li,body.craft-site3d a,body.craft-site3d s
 })();
 </script>
 ${navCtl}
+<!--/craft-scrollanim-full-->
 `;
 }

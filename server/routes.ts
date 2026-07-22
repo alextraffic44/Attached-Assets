@@ -414,6 +414,10 @@ async function generateStillForVideo(
     ? `${scenePrompt.trim()}. Premium PRODUCT-HERO commercial still on a PURE BLACK void — no room, no floor, no environment set. ` +
       `The product is centered and is the only subject. Studio rim light, strong key light, deep elegant shadows, rich glossy reflections, ` +
       `photorealistic, ultra-high detail, 8K, 16:9. No text, no watermark, no logos.`
+    : layout === "immersion"
+    ? `${scenePrompt.trim()}. Freeze the OPENING THRESHOLD of an immersion fly-through: the viewer is looking through a portal ` +
+      `(window, doorway, arch, glass facade, tunnel mouth, balcony frame — matching the scene), about to fly through it. ` +
+      `Strong depth beyond the threshold, volumetric light, photorealistic cinematic still, 8K, 16:9. No text, no watermark, no logos.`
     : `${scenePrompt.trim()}. A complete immersive cinematic SCENE with a real environment and layered depth (NOT a plain solid backdrop). ` +
       `Ultra-cinematic widescreen film still, shot on ARRI Alexa with an anamorphic lens, photorealistic, breathtaking dramatic ` +
       `composition that draws the eye deep into the scene, with a slightly calmer focal area where large overlay text can stay legible. ` +
@@ -951,7 +955,7 @@ async function generateScrollFrames(
     : layout === "action"
     ? `the debris, shards, sparks, dust or particles already visible in the frame must keep physically moving and evolving throughout the whole clip — drifting, spinning, falling, colliding or scattering further in slow motion (the scene action must be the main event, not just the camera), combined with a bold Hollywood-blockbuster camera move — a dramatic slow-motion orbit/arc that flies AROUND the subject (bullet-time feel) or an explosive dynamic push-in, sweeping anamorphic lens flares, motion-blur streaks and deep dramatic contrast — epic, powerful and fluid, never shaky, camera movement alone is NOT enough`
     : layout === "immersion"
-    ? `with a bold immersive cinematic forward flight through a rich branded world — smooth dolly into the scene, deep parallax layers, volumetric haze and evolving light, graceful and steady, never shaky — the clip must clearly progress from start to finish so scroll-scrub feels alive`
+    ? `IMMERSION fly-through: the FIRST frames must establish a clear THRESHOLD / PORTAL the viewer is looking through or into (airplane window, doorway, arch, glass facade, tunnel mouth, elevator doors, shop window, cave mouth, balcony frame — choose what fits the niche). Then the camera CONTINUOUSLY flies FORWARD THROUGH that threshold into the expanding world beyond (clouds, interiors, landscapes, brand spaces), with deep parallax, evolving light and a sense of falling into the scene — never a static orbit, never a product-on-black still life. The journey must clearly progress start→finish for scroll-scrub`
     : layout === "site3d"
     ? `hero product centered on a pure black void, photorealistic commercial, bold camera orbit or push-in around the product, second half MUST deliver a clear scroll payoff (ice crack / layers separate / product rotate / material reveal / light sweep transforming the hero), deep shadows, studio rim light, no environment set dressing that fills the frame, graceful and steady, never shaky`
     : `with bold immersive cinematic camera movement that pulls the viewer INTO the scene — a smooth forward dolly / push-in that glides deeper and naturally reveals depth and detail (e.g. gliding toward a doorway or through the space) — graceful and steady, never shaky`;
@@ -959,6 +963,8 @@ async function generateScrollFrames(
     ? `Render as an epic Hollywood blockbuster action sequence in dramatic slow motion (bullet-time): powerful, clearly visible motion that builds across the whole clip, IMAX-grade cinematic spectacle`
     : layout === "site3d"
     ? `Render as a premium product-hero commercial on pure black: the product is the only subject, clearly evolving motion with a second-half payoff designed for scroll-scrub`
+    : layout === "immersion"
+    ? `Render as a continuous POV immersion flight: start behind/at a threshold, then pass through into the world — one unbroken cinematic camera move designed for scroll-scrub`
     : `Render as a high-end Hollywood-grade cinematic shot: smooth, graceful but clearly visible motion (the scene must noticeably evolve and feel alive from start to finish)`;
   let animPrompt =
     `${safeVideoPrompt}. ${styleLead}, ${cameraGuidance}, premium dramatic lighting ` +
@@ -1435,18 +1441,51 @@ function safeReplaceScrollAnimPending(html: string, replacement: string): string
 /**
  * Extract finished scroll-anim blocks including the trailing <style>/<script>
  * siblings that carry height CSS and the canvas/WebGL engine.
- * Immersion keeps engine inside the section; site3d/motion/parallax place
- * style+script immediately after </section> — dropping those siblings left
- * a zero-height hollow hero after BG merge.
+ * Immersion/site3d also emit a fixed video layer BEFORE the section — wrapped in
+ * <!--craft-scrollanim-full-->…<!--/craft-scrollanim-full--> so merge keeps the video.
+ * Fallback: pull preceding #craft-immersion-bg / #craft-site3d-bg (+ giant) if comments missing.
  */
 function extractCraftScrollAnimBlocks(html: string): string[] {
   const blocks: string[] = [];
+
+  // Prefer explicit full-block markers (immersion / site3d video layers + hero + engine).
+  const FULL_OPEN = "<!--craft-scrollanim-full-->";
+  const FULL_CLOSE = "<!--/craft-scrollanim-full-->";
+  let fullSearchFrom = 0;
+  while (fullSearchFrom < html.length) {
+    const a = html.indexOf(FULL_OPEN, fullSearchFrom);
+    if (a === -1) break;
+    const b = html.indexOf(FULL_CLOSE, a + FULL_OPEN.length);
+    if (b === -1) break;
+    blocks.push(html.slice(a + FULL_OPEN.length, b).trim());
+    fullSearchFrom = b + FULL_CLOSE.length;
+  }
+  if (blocks.length) return blocks;
+
   const openRe = /<section\b[^>]*data-craft-scrollanim[^>]*>/gi;
   let m: RegExpExecArray | null;
   while ((m = openRe.exec(html)) !== null) {
-    const start = m.index;
+    let start = m.index;
+    // Include fixed bg layers that sit immediately before the section (legacy immersion/site3d).
+    const before = html.slice(0, start);
+    const bgOpen =
+      before.lastIndexOf('id="craft-immersion-bg"') >= 0
+        ? before.lastIndexOf('id="craft-immersion-bg"')
+        : before.lastIndexOf("id='craft-immersion-bg'") >= 0
+        ? before.lastIndexOf("id='craft-immersion-bg'")
+        : before.lastIndexOf('id="craft-site3d-bg"') >= 0
+        ? before.lastIndexOf('id="craft-site3d-bg"')
+        : before.lastIndexOf("id='craft-site3d-bg'");
+    if (bgOpen !== -1) {
+      const divStart = before.lastIndexOf("<div", bgOpen);
+      if (divStart !== -1 && start - divStart < 12000) {
+        start = divStart;
+        // If a giant-type div sits between bg and section, start already covers from bg;
+        // giant is after bg closing — ensure we don't skip it: start is bg, section is later, giant is in between.
+      }
+    }
     let depth = 0;
-    let pos = start;
+    let pos = m.index;
     let end = -1;
     while (pos < html.length) {
       const nextOpen = html.indexOf("<section", pos + 1);
@@ -3760,31 +3799,44 @@ VIDEO_PROMPT (английский) — ОДИН product-hero клип на PURE
 ═══ КОНЕЦ РЕЖИМА МОУШН ═══\n`;
         } else if (interactiveStyle === "immersion") {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
-═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — ПОГРУЖЕНИЕ» (cinematic video background + glassmorphism site) ═══
+═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — ПОГРУЖЕНИЕ» (threshold fly-through + glass site) ═══
 Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
 
 РАЗДЕЛЕНИЕ РОЛЕЙ:
-→ ПАЙПЛАЙН заменяет маркер на ОДНО кинематографичное Kling-видео (12 сек), которое становится ФИКСИРОВАННЫМ ФОНОМ ВСЕГО сайта и прокручивается (scrub) по скроллу страницы. Не режется на кадры.
-→ ТЫ пишешь полноценный сайт клиента ПОВЕРХ этого видео: шапка бренда, секции, карточки, футер. Все карточки и панели — GLASSMORPHISM (полупрозрачный фон + backdrop-filter:blur + тонкая светлая обводка).
+→ ПАЙПЛАЙН заменяет маркер на ОДНО кинематографичное Kling-видео (12 сек) с эффектом ПОГРУЖЕНИЯ: фиксированный фон всего сайта, scrub по скроллу.
+→ ТЫ пишешь полноценный сайт клиента ПОВЕРХ: шапка бренда, glass-секции, футер.
+
+ОБЯЗАТЕЛЬНАЯ СТРУКТУРА ВИДЕО (придумай под ЛЮБУЮ нишу пользователя):
+1) СТАРТОВЫЙ КАДР — порог / портал / рама, сквозь которую смотрит зритель:
+   окно самолёта, дверь, арка, витрина, тоннель, балкон, лифт, пещера, иллюминатор, рамка ворот — выбери то, что логично для ниши.
+2) ДАЛЬШЕ камера НЕПРЕРЫВНО летит ВПЕРЁД СКВОЗЬ этот порог в расширяющийся мир бренда
+   (облака, интерьер, природа, цех, зал, город — по смыслу ниши), с parallax и сменой света.
+3) Это НЕ орбита вокруг продукта на чёрном фоне и НЕ статичная студия. Это POV-погружение «сквозь → внутрь».
 
 СТРУКТУРА HTML:
-1) #site-preloader, затем <header> с логотипом БРЕНДА КЛИЕНТА (не Craft AI), меню по якорям, CTA. Шапка: glass / прозрачная поверх видео (см. правила шапки ниже; для Погружения цветное состояние тоже держи glassmorphism, не глухую заливку).
+1) #site-preloader, затем <header> с логотипом БРЕНДА КЛИЕНТА (не Craft AI), меню по якорям, CTA. Шапка: glass / прозрачная поверх видео.
 2) СРАЗУ после </header> на отдельной строке:
 {{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|HeroЗаголовок::HeroПодзаголовок}}
-3) ПОСЛЕ маркера — полный контент сайта: преимущества, услуги, отзывы, CTA, форма (если разрешена), футер. Секции с ПРОЗРАЧНЫМ фоном (видео должно просвечивать). Карточки/блоки — обязательно glass:
-   background: rgba(255,255,255,0.08–0.16); backdrop-filter: blur(16–24px); border: 1px solid rgba(255,255,255,0.18); border-radius: 20–28px; цвет текста светлый с лёгкой text-shadow.
+3) ПОСЛЕ маркера — полный контент: преимущества, услуги, отзывы, CTA, форма (если разрешена), футер. Секции с ПРОЗРАЧНЫМ фоном. Карточки — glass:
+   background: rgba(255,255,255,0.08–0.16); backdrop-filter: blur(16–24px); border: 1px solid rgba(255,255,255,0.18); border-radius: 20–28px; светлый текст.
 
-VIDEO_PROMPT (английский) — ОДНА связная кинематографичная сцена-путешествие под нишу (12 сек полёта): camera dolly forward, evolving light, deep parallax, photorealistic commercial. ТОЛЬКО запятые, без | :: {}. Примеры:
-- Кофейня: "cinematic forward flight through a sunlit artisan coffee roastery into a lush origin farm and modern tasting bar, warm golden volumetric light, steam and bean texture, photorealistic commercial"
-- Недвижимость: "smooth cinematic approach through a luxury villa at golden hour into grand living room and panoramic terrace, glass reflections, soft dust motes, photorealistic real-estate film"
-- Косметика: "elegant cinematic push through botanical greenhouse into pristine spa laboratory and marble product hero, soft spa lighting, dewdrops, photorealistic beauty commercial"
+VIDEO_PROMPT (английский) — ОДИН continuous fly-through: START at threshold → fly THROUGH into the world. ТОЛЬКО запятые, без | :: {}. Примеры (адаптируй под нишу пользователя, не копируй слепо):
+- Путешествия/авиа: "looking out an airplane oval window at layered clouds at golden hour, the camera glides forward through the window frame into open sky and soft cloud canyons, continuous POV immersion flight, volumetric sunbeams, photorealistic cinematic"
+- Кофейня: "looking through a rain-speckled cafe window into a warm artisan roastery, the camera pushes through the glass into steaming cups and wooden counters then deeper toward glowing roasting drums, continuous immersion dolly, photorealistic"
+- Недвижимость: "standing before tall glass villa doors at golden hour, the camera flies through the opening doors into a luminous living room and out toward a panoramic terrace sea view, continuous immersion flight, photorealistic"
+- Спа/косметика: "looking through frosted spa doorway framed by botanicals, the camera drifts through into marble halls, soft steam and a serene treatment suite, continuous immersion push, photorealistic beauty film"
+- Фитнес: "looking through gym entrance glass at blue-hour neon, the camera flies through into a vast training floor with dynamic lights and motion blur athletes in depth, continuous immersion flight, photorealistic"
+- IT/SaaS: "looking through a dark server-hall threshold with cool LED glow, the camera flies through corridors of light into a luminous glass office overlooking a night city, continuous immersion dolly, photorealistic"
+- Ресторан: "looking through a candlelit restaurant doorway, the camera glides through into an open kitchen with rising steam and a chef plating, then toward a warm dining room, continuous immersion flight, photorealistic"
+- Общее под любую нишу: "looking through a symbolic threshold that fits the brand niche, the camera continuously flies forward through it into the expanding brand world with deep parallax and evolving light, POV immersion, photorealistic cinematic"
 
-Тексты в маркере — 1–2 пары на РУССКОМ (Hero заголовок::подзаголовок). Основной контент — секции ПОСЛЕ маркера.
+Тексты в маркере — 1–2 пары на РУССКОМ (Hero::подзаголовок). Основной контент — секции ПОСЛЕ маркера.
 
 ⚠️ НЕ пиши Hero <section> ДО маркера. Маркер даёт видео-фон + hero-glass.
 ⚠️ НЕ создавай video/canvas код вручную.
+⚠️ НЕ пиши product-on-black / orbit around product — это режим 3D, не Погружение.
 ⚠️ ЗАПРЕЩЕНО плотные непрозрачные фоны секций, которые полностью закрывают видео.
-🚨 ПРОВЕРЬ: маркер {{SCROLLANIM:...}} есть; после него — glass-секции сайта; в шапке — бренд клиента.
+🚨 ПРОВЕРЬ: маркер {{SCROLLANIM:...}} есть; промпт начинается с порога и пролёта сквозь; после маркера — glass-секции; в шапке — бренд клиента.
 ═══ КОНЕЦ РЕЖИМА ПОГРУЖЕНИЕ ═══\n`;
         } else {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
@@ -4770,7 +4822,7 @@ ${designAnalysis}
             : "epic cinematic bullet-time shot orbiting the themed subject as particles, debris and light streaks are already bursting outward mid-air and keep drifting, spinning and scattering further in slow motion, the camera flying around in a dramatic arc, IMAX-grade blockbuster lighting, photorealistic";
           textsAuto = "Почувствуй мощь::Эффект, который впечатляет||Каждая деталь::Снято как в кино||Начни прямо сейчас::Сделай первый шаг";
         } else if (isImmersionAuto) {
-          videoPromptAuto = "cinematic forward flight through a cohesive premium brand world, photorealistic commercial photography, evolving golden light, deep parallax layers, volumetric haze, hero product finale, editorial film quality";
+          videoPromptAuto = "looking through a symbolic brand threshold doorway framed by soft volumetric light, the camera continuously flies forward through the opening into an expanding premium brand world with deep parallax layers, evolving golden haze and cinematic depth, POV immersion flight, photorealistic";
           textsAuto = "Погрузитесь::Мир бренда на весь экран";
         } else if (interactiveStyle === "site3d") {
           videoPromptAuto = absoluteProductImageUrl
