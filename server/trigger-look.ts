@@ -1,8 +1,7 @@
 /**
- * «Тригер» — Hero with a character (animal / robot / creature) on the RIGHT,
- * styled background on the LEFT. A short (≈4s) Kling clip turns the head
- * continuously LEFT → RIGHT; mouse X maps 1:1 across the frame strip so gaze
- * follows the cursor (left→look left, right→look right). No side zones.
+ * «Тригер» — Hero with a character on the RIGHT, background on the LEFT.
+ * ~3s Kling clip: start CENTER, exactly ONE turn left then ONE sweep right
+ * (no oscillation). Mouse X scrubs the left→right portion so gaze follows.
  */
 
 import { gemini } from "./gemini";
@@ -29,8 +28,8 @@ async function downloadFrameBase64(
 
 /**
  * Kling sometimes emits the head-turn clip backwards (looking RIGHT at start,
- * LEFT at end). Mouse scrub assumes frame[0]=look left, frame[n]=look right.
- * Detect order via Gemini on first/last frames and reverse when needed.
+ * LEFT at end). After a center→left→right clip, last frame should look more
+ * RIGHT than the first. Reverse when the opposite is detected.
  */
 export async function normalizeTriggerLookFrames(frames: string[]): Promise<string[]> {
   if (!frames || frames.length < 4) return frames || [];
@@ -187,19 +186,23 @@ export function buildTriggerLookHtml(
       if(img){ fitDraw(img); lastDraw=i; }
     }
 
-    // Absolute mouse X → gaze. Left of hero = look left (frame 0),
-    // right = look right (last frame). No side zones / screen splits.
+    // Absolute mouse X → gaze. Left of hero = look left, right = look right.
+    // Clip timeline is center→left→right; scrub the left→right portion so
+    // mouse-left hits the left peak (~1/3 into the clip), not the center start.
     function lookFromPointer(clientX){
       var rect=root.getBoundingClientRect();
       var nx=(clientX - rect.left) / Math.max(1, rect.width);
       return Math.max(0, Math.min(1, nx));
     }
 
+    var leftPeak=Math.max(1, Math.round((frames.length-1)*0.33));
+    var lastIdx=frames.length-1;
+
     function onPointer(clientX, clientY){
       if(!ready || reduce) return;
       lastPtrX=clientX; lastPtrY=clientY;
       var look=lookFromPointer(clientX);
-      target = look * (frames.length - 1);
+      target = leftPeak + look * (lastIdx - leftPeak);
       if(hint) hint.style.opacity='0';
     }
 
@@ -220,8 +223,8 @@ export function buildTriggerLookHtml(
     }
     window.addEventListener('pointermove', onMove, {passive:true});
     window.addEventListener('touchmove', onTouch, {passive:true});
-    // Start centered; cursor then drives left↔right across the full frame strip.
-    target = (frames.length - 1) * 0.5;
+    // Rest on the mid of the left→right scrub range (≈ center gaze after left peak).
+    target = leftPeak + 0.5 * (lastIdx - leftPeak);
     current = target;
 
     window.addEventListener('resize', function(){
