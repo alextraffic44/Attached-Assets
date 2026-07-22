@@ -1,14 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import {
-  SCROLL_IMMERSION_COST,
-  SW_SCENE_COUNT,
-  generateScrollWorld,
-  buildImmersionPendingHtml,
-  type GenerateScrollWorldDeps,
-} from "./scroll-world";
 import { buildSite3dAnimHtml } from "./site3d-anim";
+import {
+  buildImmersionGlassHtml,
+  buildImmersionGlassPendingHtml,
+} from "./immersion-glass";
 import {
   SCROLL_MOTION_COST,
   generateMotionRevealPair,
@@ -924,8 +921,8 @@ async function generateScrollFrames(
     ? `with an elegant slow cinematic camera push-in only — no pan, no tilt, no pull-back, no frame-edge reveal — keeping the product perfectly intact and the left side calm for text`
     : layout === "action"
     ? `the debris, shards, sparks, dust or particles already visible in the frame must keep physically moving and evolving throughout the whole clip — drifting, spinning, falling, colliding or scattering further in slow motion (the scene action must be the main event, not just the camera), combined with a bold Hollywood-blockbuster camera move — a dramatic slow-motion orbit/arc that flies AROUND the subject (bullet-time feel) or an explosive dynamic push-in, sweeping anamorphic lens flares, motion-blur streaks and deep dramatic contrast — epic, powerful and fluid, never shaky, camera movement alone is NOT enough`
-    : layout === "site3d"
-    ? `with a bold immersive cinematic forward flight that reveals deep layered space behind glass-like UI cards — smooth dolly into the scene, rich parallax depth, volumetric haze, graceful and steady, never shaky`
+    : layout === "site3d" || layout === "immersion"
+    ? `with a bold immersive cinematic forward flight through a rich branded world — smooth dolly into the scene, deep parallax layers, volumetric haze and evolving light, graceful and steady, never shaky — the clip must clearly progress from start to finish so scroll-scrub feels alive`
     : `with bold immersive cinematic camera movement that pulls the viewer INTO the scene — a smooth forward dolly / push-in that glides deeper and naturally reveals depth and detail (e.g. gliding toward a doorway or through the space) — graceful and steady, never shaky`;
   const styleLead = layout === "action"
     ? `Render as an epic Hollywood blockbuster action sequence in dramatic slow motion (bullet-time): powerful, clearly visible motion that builds across the whole clip, IMAX-grade cinematic spectacle`
@@ -936,25 +933,27 @@ async function generateScrollFrames(
     `no text, no captions, no watermark, no camera shake, no flicker, no jump cuts.`;
 
   // Per-mode clip length + sliced-frame budget.
-  // site3d: cinematic 6s / 1080p — quality first; speed win is MP4 scrub (no ffmpeg).
+  // immersion/site3d: MP4 scrub (no ffmpeg). Immersion uses a longer 12s world fly-through.
   const videoDuration = layout === "action"
     ? SCROLL_ACTION_VIDEO_DURATION
+    : layout === "immersion"
+    ? 12
     : layout === "site3d"
     ? 6
     : SCROLL_VIDEO_DURATION;
   const targetFrameCount = layout === "action"
     ? SCROLL_ACTION_FRAME_COUNT
-    : layout === "site3d"
+    : layout === "site3d" || layout === "immersion"
     ? 90
     : SCROLL_FRAME_COUNT;
   const videoResolution = "1080p";
-  const useVideoScrub = layout === "site3d"; // skip ffmpeg + 90 uploads
+  const useVideoScrub = layout === "site3d" || layout === "immersion"; // skip ffmpeg + 90 uploads
 
   // Overall deadline shared across all retry attempts (still image time already consumed).
   // site3d/parallax: keep a generous Kling budget, but fewer create retries so we fail fast
   // and let the BG soft-retry / task-id resume finish the job instead of stacking 4×35min.
-  const deadline = Date.now() + (layout === "site3d" ? 1800000 : 2400000); // site3d 30m, others 40m
-  const MAX_VIDEO_ATTEMPTS = layout === "site3d" || layout === "parallax" || layout === "split" ? 2 : 4;
+  const deadline = Date.now() + (layout === "site3d" || layout === "immersion" ? 1800000 : 2400000);
+  const MAX_VIDEO_ATTEMPTS = layout === "site3d" || layout === "immersion" || layout === "parallax" || layout === "split" ? 2 : 4;
   let mp4Url: string | null = null;
 
   // Detects Kling content-moderation failures (error 400 "community guidelines")
@@ -1531,7 +1530,7 @@ function replaceHollowCraftScrollAnim(html: string, fullBlocks: string[]): strin
 
 function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, videoPrompt?: string, style?: string): string {
   if (style === "immersion") {
-    return buildImmersionPendingHtml(videoPrompt || "", texts);
+    return buildImmersionGlassPendingHtml(videoPrompt || "", texts);
   }
   if (style === "animational") {
     const brandHint = texts[0]?.title || undefined;
@@ -1634,6 +1633,9 @@ function buildScrollAnimHtml(
   //    and a header-height-aware threshold instead of a magic number.
   const navCtl = `\n<style>header{transition:background .45s ease,background-color .45s ease,backdrop-filter .45s ease,-webkit-backdrop-filter .45s ease,border-color .45s ease,box-shadow .45s ease;}body:not(.craft-anim-passed) header{background:transparent!important;background-color:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-color:transparent!important;box-shadow:none!important;}</style>\n<script>(function(){if(window.__craftNavCtl)return;window.__craftNavCtl=true;function fixSticky(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;for(var i=0;i<s.length;i++){var el=s[i];while(el&&el.nodeType===1&&el!==document.documentElement){var cs=getComputedStyle(el);if(cs.overflowX==='hidden')el.style.overflowX='clip';if(cs.overflowY==='hidden')el.style.overflowY='clip';el=el.parentElement;}}var de=document.documentElement,b=document.body;[de,b].forEach(function(n){if(!n)return;var c=getComputedStyle(n);if(c.overflowX==='hidden')n.style.overflowX='clip';if(c.overflowY==='hidden')n.style.overflowY='clip';});}function u(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;var h=document.querySelector('header');var th=h?h.offsetHeight:64;var passed=true;for(var i=0;i<s.length;i++){if(s[i].getBoundingClientRect().bottom>th){passed=false;break;}}document.body.classList.toggle('craft-anim-passed',passed);}window.addEventListener('scroll',u,{passive:true});window.addEventListener('resize',u);if(document.readyState!=='loading'){fixSticky();u();}else{document.addEventListener('DOMContentLoaded',function(){fixSticky();u();});}fixSticky();u();})();</script>`;
 
+  if (layout === "immersion") {
+    return buildImmersionGlassHtml(videoUrl || "", texts, navCtl, csaEsc);
+  }
   if (layout === "site3d") {
     return buildSite3dAnimHtml(frames, texts, navCtl, csaEsc, videoUrl);
   }
@@ -1776,24 +1778,6 @@ ${layers}
 
 // Scan files for {{SCROLLANIM:...}} markers, generate the animation, and bake the result in.
 // No marker ever survives — failures degrade to a static text section.
-
-function buildScrollWorldDeps(opts: {
-  shouldStop: () => boolean;
-  onStatus?: (msg: string) => void;
-  appBaseUrl?: string;
-}): GenerateScrollWorldDeps {
-  return {
-    kieApiKey: KIE_API_KEY || "",
-    createUrl: NANO_BANANA_CREATE_URL,
-    statusUrl: NANO_BANANA_STATUS_URL,
-    kieRequestJson,
-    uploadToObjectStorage,
-    getFfmpegBin: () => getFfmpegBinary(),
-    appBaseUrl: opts.appBaseUrl || process.env.APP_BASE_URL || "https://craft-ai.ru",
-    shouldStop: opts.shouldStop,
-    onStatus: opts.onStatus,
-  };
-}
 
 function buildMotionRevealDeps(opts: {
   shouldStop: () => boolean;
@@ -1973,9 +1957,8 @@ async function resolveScrollAnimMarkers(
 
   const layout = resolveScrollAnimLayout(interactiveStyle);
   const planned = entries.slice(0, layout === "immersion" ? 1 : 2); // immersion: one world; others: at most 2
-  // Immersion runs 2N−1 Kling jobs (dives + connectors); allow a longer wall-clock budget.
-  // Motion is image-only (2 stills) — shorter budget is enough.
-  const phaseDeadline = Date.now() + (layout === "immersion" ? 5400000 : layout === "motion" ? 240000 : 2520000);
+  // Immersion glass = one Kling MP4 scrub (~35m). Motion is image-only (2 stills).
+  const phaseDeadline = Date.now() + (layout === "immersion" ? 2100000 : layout === "motion" ? 240000 : 2520000);
 
   // Product still is regenerated lazily (ONCE) AFTER the first successful credit
   // deduction inside the loop, so we never spend external API budget on a user who
@@ -1991,11 +1974,12 @@ async function resolveScrollAnimMarkers(
     if (isAborted() || Date.now() >= phaseDeadline) break;
     const isImmersion = layout === "immersion";
     const isMotion = layout === "motion";
-    const blockCost = isImmersion ? SCROLL_IMMERSION_COST : isMotion ? SCROLL_MOTION_COST : SCROLL_ANIM_COST;
-    const blockReason = isImmersion ? "scroll-world" : isMotion ? "motion-reveal" : "scroll-anim";
+    // Immersion glass = one Kling clip (same token cost as standard scroll-anim).
+    const blockCost = isMotion ? SCROLL_MOTION_COST : SCROLL_ANIM_COST;
+    const blockReason = isImmersion ? "immersion-glass" : isMotion ? "motion-reveal" : "scroll-anim";
     try {
       res.write(`data: ${JSON.stringify({ status: isImmersion
-        ? `Собираем мир погружения (${SW_SCENE_COUNT} сцен, ${2 * SW_SCENE_COUNT - 1} роликов Kling 3.0)…`
+        ? "Погружение: рендерим кинематографичный видео-фон Kling (12 сек)…"
         : isMotion
         ? "Моушн: генерирую 2 цветных кадра параллельно (обычно <2 мин)…"
         : "Рендерю видео для анимации прокрутки (до 35 минут, зависит от очереди KIE)..." })}\n\n`);
@@ -2009,38 +1993,6 @@ async function resolveScrollAnimMarkers(
       const ded = await storage.deductCredits(userId, blockCost, blockReason, ikey);
       if (!ded.success) break; // out of credits → leave for static fallback (finalize() still runs)
       billed = !ded.alreadyProcessed;
-    }
-
-    // Immersion (scroll-world): N stills + N dive clips + N−1 connectors via Kling 3.0.
-    // Skip product-still path — the world paints its own clay diorama stills.
-    if (isImmersion) {
-      const keepAliveInterval = setInterval(() => {
-        try { res.write(`data: ${JSON.stringify({ status: "Собираем мир погружения (ожидаю Kling 3.0 / nano-banana)…" })}\n\n`); } catch {}
-      }, 20000);
-      let world: Awaited<ReturnType<typeof generateScrollWorld>> = null;
-      try {
-        world = await generateScrollWorld({
-          videoPrompt: parsed.videoPrompt,
-          texts: parsed.texts,
-          deps: buildScrollWorldDeps({
-            shouldStop: () => isAborted() || Date.now() >= phaseDeadline,
-            onStatus: (msg) => {
-              try { res.write(`data: ${JSON.stringify({ status: msg })}\n\n`); } catch {}
-            },
-          }),
-        });
-      } finally {
-        clearInterval(keepAliveInterval);
-      }
-      if (world?.html) {
-        replaceMap.set(raw, world.html);
-        generated++;
-        if (billed) creditsUsed += blockCost;
-        try { res.write(`data: ${JSON.stringify({ status: `Мир готов (${world.mp4Urls.length} роликов, ${world.stillUrls.length} сцен)` })}\n\n`); } catch {}
-      } else if (billed && userId) {
-        try { await storage.refundCredits(userId, blockCost); } catch {}
-      }
-      continue;
     }
 
     // Motion: dual-image WebGL hover reveal (no Kling video).
@@ -2078,9 +2030,9 @@ async function resolveScrollAnimMarkers(
 
     // User is confirmed billable → safe to spend external API. Regenerate the uploaded
     // product photo ONCE onto a clean SOLID background (product positioned per layout)
-    // and feed THAT still to Kling. site3d uses cinematic environment flight — skip the
+    // and feed THAT still to Kling. site3d/immersion use cinematic environment flight — skip the
     // product/vision detour (saves 20–60s of Gemini + product-still before Kling even starts).
-    if (productImageUrl && !productStillResolved && layout !== "site3d") {
+    if (productImageUrl && !productStillResolved && layout !== "site3d" && layout !== "immersion") {
       productStillResolved = true;
       // Analyze the product ONCE and invent a creative, product-aware concept.
       if (!creativeConceptResolved) {
@@ -2154,15 +2106,17 @@ async function resolveScrollAnimMarkers(
       clearInterval(keepAliveInterval);
     }
 
-    const site3dReady = layout === "site3d" && !!videoUrl;
-    const framesReady = frames.length >= (layout === "site3d" ? 30 : 60);
-    if (site3dReady || framesReady) {
+    const videoScrubReady = (layout === "site3d" || layout === "immersion") && !!videoUrl;
+    const framesReady = frames.length >= ((layout === "site3d" || layout === "immersion") ? 30 : 60);
+    if (videoScrubReady || framesReady) {
       replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts, layout, videoUrl));
       generated++;
       if (billed) creditsUsed += blockCost;
       try {
         res.write(`data: ${JSON.stringify({
-          status: site3dReady
+          status: layout === "immersion"
+            ? "Погружение готово (видео-фон + glass)"
+            : videoScrubReady
             ? "3D сайт готов (видео-скролл)"
             : `Анимация готова (${frames.length} кадров)`,
         })}\n\n`);
@@ -3757,26 +3711,31 @@ VIDEO_PROMPT (на английском) — кинематографичный 
 ═══ КОНЕЦ РЕЖИМА МОУШН ═══\n`;
         } else if (interactiveStyle === "immersion") {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
-═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — ПОГРУЖЕНИЕ» (scroll-world / cinematic brand journey) ═══
+═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — ПОГРУЖЕНИЕ» (cinematic video background + glassmorphism site) ═══
 Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
 
-ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
-→ СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
-{{SCROLLANIM:WORLD_PROMPT_IN_ENGLISH|Сцена1::Описание1||Сцена2::Описание2||Сцена3::Описание3||Сцена4::Описание4||Финал::ОписаниеФинала}}
+РАЗДЕЛЕНИЕ РОЛЕЙ:
+→ ПАЙПЛАЙН заменяет маркер на ОДНО кинематографичное Kling-видео (12 сек), которое становится ФИКСИРОВАННЫМ ФОНОМ ВСЕГО сайта и прокручивается (scrub) по скроллу страницы. Не режется на кадры.
+→ ТЫ пишешь полноценный сайт клиента ПОВЕРХ этого видео: шапка бренда, секции, карточки, футер. Все карточки и панели — GLASSMORPHISM (полупрозрачный фон + backdrop-filter:blur + тонкая светлая обводка).
 
-WORLD_PROMPT (на английском) — опиши СВЯЗНЫЙ ПРЕМИАЛЬНЫЙ кинематографичный МИР бренда (одна эстетика на все сцены): photorealistic cinematic commercial photography, shallow depth of field, premium luxury lighting, editorial film still quality. Это НЕ миниатюрный город, НЕ clay-diorama, НЕ isometric 3D и НЕ cartoon — это ПРОФЕССИОНАЛЬНЫЕ кадры как в рекламе люксовых брендов (Pearl & Co, Belvedere). Путешествие сквозь 5 связанных реальных локаций/сцен бренда. Пиши развёрнуто, ТОЛЬКО запятые (без | :: и фигурных скобок), например:
-- Кофейня: "cohesive premium cinematic coffee brand world, photorealistic, warm golden hour lighting, artisan roastery with copper equipment, lush origin farm, modern tasting bar, hero latte art finale"
-- Косметика: "cohesive luxury skincare brand world, photorealistic, soft spa lighting, botanical greenhouse, pristine laboratory, elegant boutique counter, hero product on marble"
-- Еда/ресторан: "cohesive fine dining brand world, photorealistic, warm candlelit kitchen, farm-to-table garden, open kitchen with chefs plating, elegant dining room, hero dish finale"
-- Напитки/вода: "cohesive premium mineral water brand world, photorealistic, alpine spring source, historic thermal baths, modern bottling facility, crystal glass bottle hero shot"
-- Недвижимость: "cohesive luxury villa brand world, photorealistic, golden hour arrival, grand living room, spa wellness pool, panoramic terrace view, hero property finale"
+СТРУКТУРА HTML:
+1) #site-preloader, затем <header> с логотипом БРЕНДА КЛИЕНТА (не Craft AI), меню по якорям, CTA. Шапка: glass / прозрачная поверх видео (см. правила шапки ниже; для Погружения цветное состояние тоже держи glassmorphism, не глухую заливку).
+2) СРАЗУ после </header> на отдельной строке:
+{{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|HeroЗаголовок::HeroПодзаголовок}}
+3) ПОСЛЕ маркера — полный контент сайта: преимущества, услуги, отзывы, CTA, форма (если разрешена), футер. Секции с ПРОЗРАЧНЫМ фоном (видео должно просвечивать). Карточки/блоки — обязательно glass:
+   background: rgba(255,255,255,0.08–0.16); backdrop-filter: blur(16–24px); border: 1px solid rgba(255,255,255,0.18); border-radius: 20–28px; цвет текста светлый с лёгкой text-shadow.
 
-Тексты — РОВНО 5 пар на РУССКОМ (Заголовок::Подзаголовок): 4 этапа путешествия + финальный герой/CTA. Короткие, продающие, как остановки маршрута.
+VIDEO_PROMPT (английский) — ОДНА связная кинематографичная сцена-путешествие под нишу (12 сек полёта): camera dolly forward, evolving light, deep parallax, photorealistic commercial. ТОЛЬКО запятые, без | :: {}. Примеры:
+- Кофейня: "cinematic forward flight through a sunlit artisan coffee roastery into a lush origin farm and modern tasting bar, warm golden volumetric light, steam and bean texture, photorealistic commercial"
+- Недвижимость: "smooth cinematic approach through a luxury villa at golden hour into grand living room and panoramic terrace, glass reflections, soft dust motes, photorealistic real-estate film"
+- Косметика: "elegant cinematic push through botanical greenhouse into pristine spa laboratory and marble product hero, soft spa lighting, dewdrops, photorealistic beauty commercial"
 
-⚠️ ШАПКА для режима Погружение: НЕ добавляй пункты меню в <header> — навигация по сценам создаётся автоматически движком scroll-world. В <header> размести ТОЛЬКО логотип «Craft AI» по центру (НЕ название проекта/бренда клиента). Без навигационных ссылок, без CTA-кнопок в шапке.
-⚠️ НЕ пиши <section> или Hero-раздел ДО этого маркера. Маркер И ЕСТЬ Hero.
-⚠️ НЕ создавай canvas/видео-код вручную. Маркер заменяется автоматически системой (5 сцен × 10с dive + 4 перелёта × 5с).
-🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
+Тексты в маркере — 1–2 пары на РУССКОМ (Hero заголовок::подзаголовок). Основной контент — секции ПОСЛЕ маркера.
+
+⚠️ НЕ пиши Hero <section> ДО маркера. Маркер даёт видео-фон + hero-glass.
+⚠️ НЕ создавай video/canvas код вручную.
+⚠️ ЗАПРЕЩЕНО плотные непрозрачные фоны секций, которые полностью закрывают видео.
+🚨 ПРОВЕРЬ: маркер {{SCROLLANIM:...}} есть; после него — glass-секции сайта; в шапке — бренд клиента.
 ═══ КОНЕЦ РЕЖИМА ПОГРУЖЕНИЕ ═══\n`;
         } else {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
@@ -4762,8 +4721,8 @@ ${designAnalysis}
             : "epic cinematic bullet-time shot orbiting the themed subject as particles, debris and light streaks are already bursting outward mid-air and keep drifting, spinning and scattering further in slow motion, the camera flying around in a dramatic arc, IMAX-grade blockbuster lighting, photorealistic";
           textsAuto = "Почувствуй мощь::Эффект, который впечатляет||Каждая деталь::Снято как в кино||Начни прямо сейчас::Сделай первый шаг";
         } else if (isImmersionAuto) {
-          videoPromptAuto = "cohesive premium cinematic brand world, photorealistic commercial photography, shallow depth of field, luxury lighting, connected real locations from origin to hero product finale, editorial film still quality";
-          textsAuto = "Точка старта::История бренда начинается||Источник::Откуда всё началось||Мастерство::Где рождается качество||Результат::Готовый продукт||Ваш момент::Попробуйте сами";
+          videoPromptAuto = "cinematic forward flight through a cohesive premium brand world, photorealistic commercial photography, evolving golden light, deep parallax layers, volumetric haze, hero product finale, editorial film quality";
+          textsAuto = "Погрузитесь::Мир бренда на весь экран";
         } else if (interactiveStyle === "site3d") {
           videoPromptAuto = "breathtaking cinematic forward flight into a premium brand environment, volumetric god rays, atmospheric depth and elegant bokeh, the camera gliding deeper through the space, epic film-still lighting, photorealistic";
           textsAuto = "Новый уровень::Почувствуйте атмосферу бренда||Суть предложения::То, что меняет опыт||Как это работает::Простой и ясный путь||Почему мы::Доказанное качество||Ваш ход::Начните прямо сейчас";
@@ -5214,8 +5173,8 @@ ${designAnalysis}
       (async () => {
         let succeeded = false;
 
-        // Fast path: resume completed Kling task (site3d / parallax / etc.)
-        if (existingTaskId && layout !== "immersion" && layout !== "motion" && layout !== "animational") {
+        // Fast path: resume completed Kling task (site3d / immersion / parallax / etc.)
+        if (existingTaskId && layout !== "motion" && layout !== "animational") {
           console.log(`[REGEN ANIM] resuming from existing task ${existingTaskId} for project ${projectId}`);
           try {
             const scrollOutcome = await generateScrollFrames(
@@ -5223,7 +5182,7 @@ ${designAnalysis}
             );
             const frames = scrollOutcome.frames;
             const videoUrl = scrollOutcome.videoUrl;
-            const ready = (layout === "site3d" && !!videoUrl) || frames.length >= (layout === "site3d" ? 30 : 60);
+            const ready = ((layout === "site3d" || layout === "immersion") && !!videoUrl) || frames.length >= ((layout === "site3d" || layout === "immersion") ? 30 : 60);
             if (ready) {
               const canvasHtml = buildScrollAnimHtml(frames, animTexts, layout, videoUrl);
               let finalCode = safeReplaceScrollAnimPending(pendingHtml, canvasHtml);
@@ -7405,12 +7364,16 @@ ${fullHtml}`;
 
           // Background: try to fetch the already-created Kling video and build the animation,
           // so the user gets the real animation without paying again or losing the video.
-          if (savedTaskId && KIE_API_KEY && savedStyle !== "immersion" && savedStyle !== "motion" && savedStyle !== "animational") {
+          if (savedTaskId && KIE_API_KEY && savedStyle !== "motion" && savedStyle !== "animational") {
             const _projId  = proj.id;
             const _layout: ScrollAnimLayout =
-              savedStyle === "split" ? "split" : savedStyle === "action" ? "action" : savedStyle === "site3d" ? "site3d" : "parallax";
-            const _vidDur  = _layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
-            const _frCnt   = _layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : SCROLL_FRAME_COUNT;
+              savedStyle === "split" ? "split"
+              : savedStyle === "action" ? "action"
+              : savedStyle === "site3d" ? "site3d"
+              : savedStyle === "immersion" ? "immersion"
+              : "parallax";
+            const _vidDur  = _layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : _layout === "immersion" ? 12 : SCROLL_VIDEO_DURATION;
+            const _frCnt   = _layout === "action" ? SCROLL_ACTION_FRAME_COUNT : 90;
             const _texts   = savedTexts;
             (async () => {
               try {
@@ -7451,7 +7414,24 @@ ${fullHtml}`;
                 try {
                   const vr = await fetch(mp4UrlResume);
                   if (!vr.ok) throw new Error(`mp4 HTTP ${vr.status}`);
-                  fs.writeFileSync(videoPath, Buffer.from(await vr.arrayBuffer()));
+                  const mp4Buf = Buffer.from(await vr.arrayBuffer());
+                  fs.writeFileSync(videoPath, mp4Buf);
+
+                  // site3d / immersion: scrub the MP4 directly (no frame slice).
+                  if (_layout === "site3d" || _layout === "immersion") {
+                    const videoUrl = await uploadToObjectStorage(mp4Buf, "video/mp4", "mp4");
+                    const cur = await storage.getProject(_projId);
+                    if (!cur || !(cur.generatedCode || "").includes('data-scroll-anim-fallback="1"')) return;
+                    let finalCode = (cur.generatedCode || "").replace(
+                      /<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/,
+                      buildScrollAnimHtml([], _texts, _layout, videoUrl),
+                    );
+                    finalCode = injectLoadingOverlay(finalCode);
+                    await storage.updateProject(_projId, { generatedCode: finalCode });
+                    console.log(`[CLEANUP-RESUME] project ${_projId}: ${_layout} video scrub restored`);
+                    return;
+                  }
+
                   fs.mkdirSync(framesDir, { recursive: true });
                   const fps = Math.max(8, Math.round(_frCnt / _vidDur));
                   await extractFramesWithFfmpeg(videoPath, framesDir, fps, () => false);
@@ -7561,15 +7541,20 @@ ${fullHtml}`;
               || "";
             const textsEnc   = sectionTag.match(/data-scroll-anim-texts="([^"]*)"/)?.[1] || "";
             const animStyle: string = styleEnc ? decodeURIComponent(styleEnc) : "parallax";
-            // Immersion uses multi-clip scroll-world pipeline — single-task frame resume does not apply.
             // Motion uses dual stills (no Kling video) — skip frame resume.
-            if (animStyle === "immersion" || animStyle === "motion" || animStyle === "animational") {
+            // Animational has its own pipeline.
+            if (animStyle === "motion" || animStyle === "animational") {
               console.log(`[KLINGTASK] project ${proj.id}: ${animStyle} style — skip single-clip frame resume`);
               continue;
             }
-            const layout: ScrollAnimLayout = animStyle === "split" ? "split" : animStyle === "action" ? "action" : animStyle === "site3d" ? "site3d" : "parallax";
-            const vidDur  = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
-            const frCnt   = layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : SCROLL_FRAME_COUNT;
+            const layout: ScrollAnimLayout =
+              animStyle === "split" ? "split"
+              : animStyle === "action" ? "action"
+              : animStyle === "site3d" ? "site3d"
+              : animStyle === "immersion" ? "immersion"
+              : "parallax";
+            const vidDur  = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : layout === "immersion" ? 12 : SCROLL_VIDEO_DURATION;
+            const frCnt   = layout === "action" ? SCROLL_ACTION_FRAME_COUNT : 90;
             const texts: Array<{title:string;sub:string}> = textsEnc
               ? decodeURIComponent(textsEnc).split("||").map(seg => { const [t,s] = seg.split("::"); return {title:(t||"").trim(),sub:(s||"").trim()}; })
               : [{ title: "", sub: "" }];
@@ -7595,6 +7580,44 @@ ${fullHtml}`;
             const framesDir = path.join(tmpDir, "frames");
             try {
               fs.writeFileSync(videoPath, mp4Buf);
+
+              // site3d / immersion: upload MP4 and scrub — skip ffmpeg frame loop.
+              if (layout === "site3d" || layout === "immersion") {
+                const videoUrl = await uploadToObjectStorage(mp4Buf, "video/mp4", "mp4");
+                const latest = await storage.getProject(proj.id);
+                if (!latest) continue;
+                const latestHtml: string = latest.generatedCode || "";
+                const stillPending  = latestHtml.includes('data-scroll-anim-pending="1"');
+                const stillFallback = latestHtml.includes('data-scroll-anim-fallback="1"');
+                const stillHollow   = isHollowCraftScrollAnim(latestHtml);
+                const stillMissing  = !latestHtml.includes("data-craft-scrollanim") && !stillPending && !stillFallback;
+                if (!stillPending && !stillFallback && !stillHollow && !stillMissing) {
+                  console.log(`[KLINGTASK] project ${proj.id}: resolved by another path while we were processing`);
+                  continue;
+                }
+                const canvasHtml = buildScrollAnimHtml([], texts, layout, videoUrl);
+                let finalCode = latestHtml;
+                if (stillPending) {
+                  finalCode = safeReplaceScrollAnimPending(finalCode, canvasHtml);
+                } else if (stillFallback) {
+                  finalCode = finalCode.replace(/<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/, canvasHtml);
+                } else if (stillHollow) {
+                  finalCode = replaceHollowCraftScrollAnim(finalCode, [canvasHtml]);
+                } else if (stillMissing) {
+                  if (finalCode.includes("</header>")) {
+                    finalCode = finalCode.replace("</header>", `</header>\n${canvasHtml}`);
+                  } else if (/<body[^>]*>/i.test(finalCode)) {
+                    finalCode = finalCode.replace(/<body[^>]*>/i, (m) => `${m}\n${canvasHtml}`);
+                  } else {
+                    finalCode = canvasHtml + finalCode;
+                  }
+                }
+                finalCode = injectLoadingOverlay(finalCode);
+                await storage.updateProject(proj.id, { generatedCode: finalCode });
+                console.log(`[KLINGTASK] project ${proj.id}: ✓ ${layout} video scrub injected`);
+                continue;
+              }
+
               fs.mkdirSync(framesDir, { recursive: true });
               const fps = Math.max(8, Math.round(frCnt / vidDur));
               await extractFramesWithFfmpeg(videoPath, framesDir, fps, () => false);
