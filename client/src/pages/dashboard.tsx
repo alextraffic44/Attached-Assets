@@ -1184,7 +1184,7 @@ export default function DashboardPage() {
                               {
                                 id: "trigger" as const,
                                 label: "Тригер",
-                                desc: "Персонаж смотрит за мышкой",
+                                desc: "Маскот ниши смотрит за мышкой",
                                 icon: (
                                   <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
                                     <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
