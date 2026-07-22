@@ -2057,7 +2057,13 @@ async function resolveScrollAnimMarkers(
 
     // Keep the SSE connection alive with periodic status pings while video renders
     const keepAliveInterval = setInterval(() => {
-      try { res.write(`data: ${JSON.stringify({ status: "Рендерю видео для анимации прокрутки (ожидаю результат от KIE)..." })}\n\n`); } catch {}
+      try {
+        res.write(`data: ${JSON.stringify({
+          status: layout === "trigger"
+            ? "Тригер: жду Kling 4с (поворот головы)…"
+            : "Рендерю видео для анимации прокрутки (ожидаю результат от KIE)...",
+        })}\n\n`);
+      } catch {}
     }, 20000);
 
     // For product-photo sites, drive Kling with the vision-derived creative motion
