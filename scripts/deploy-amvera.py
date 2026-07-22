@@ -22,9 +22,8 @@ DEFAULT_FILES = [
     "server/routes.ts",
     "server/auth.ts",
     "server/storage.ts",
-    "server/scroll-world.ts",
-    "server/site3d-anim.ts",
     "server/motion-reveal.ts",
+    "server/trigger-look.ts",
     "server/animational.ts",
     "server/kie-errors.ts",
     "server/agent-runtime.ts",
@@ -39,7 +38,6 @@ DEFAULT_FILES = [
     "client/src/pages/landing.tsx",
     "client/src/pages/admin.tsx",
     "client/src/pages/profile.tsx",
-    "client/public/scroll-world-engine.js",
     "client/public/yandex-suggest-token.html",
     "AGENTS.md",
 ]
