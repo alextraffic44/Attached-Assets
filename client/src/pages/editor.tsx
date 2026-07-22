@@ -1879,17 +1879,67 @@ export default function EditorPage() {
         method: "POST",
         credentials: "include",
       });
-      if (!resp.ok) throw new Error("Ошибка восстановления");
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        throw new Error(err?.message || "Ошибка восстановления");
+      }
       const updated = await resp.json();
-      setStreamedCode(updated.generatedCode || "");
+      const code = updated.generatedCode || "";
+      applyFinalSiteHtml(code);
+      setActiveFile("index.html");
+      latestEditHtmlRef.current = null;
+      setEditMode(false);
+      setSelectorMode(false);
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "versions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
-      toast({ title: "Версия восстановлена" });
+      toast({ title: "Версия восстановлена", description: "Сайт откатан к выбранному чекпоинту." });
+      if (isMobile) {
+        setMobileView("preview");
+        setSidebarOpen(false);
+      }
     } catch (err: any) {
       toast({ title: "Ошибка", description: err.message, variant: "destructive" });
     }
-  }, [projectId, toast]);
+  }, [projectId, toast, applyFinalSiteHtml, isMobile]);
+
+  /** Map chat badge vN → a stored checkpoint (result `vN:` or legacy `До:`). */
+  const findVersionForChatBadge = useCallback((vNum: number) => {
+    const byLabel = versions.find((v) => {
+      const m = (v.label || "").match(/^v(\d+)\b/);
+      return m && parseInt(m[1], 10) === vNum;
+    });
+    if (byLabel) return { version: byLabel, kind: "result" as const };
+
+    // Legacy: "До:" = code before the NEXT edit = result of previous generation.
+    const preEditAsc = versions
+      .filter((v) => (v.label || "").startsWith("До: "))
+      .slice()
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    if (preEditAsc[vNum - 1]) return { version: preEditAsc[vNum - 1], kind: "legacy" as const };
+
+    const modelCount = messages.filter((m) => m.role === "model" || m.role === "assistant").length;
+    if (vNum === modelCount && (streamedCode || project?.generatedCode)) {
+      return { version: null, kind: "current" as const };
+    }
+    return { version: null, kind: "missing" as const };
+  }, [versions, messages, streamedCode, project?.generatedCode]);
+
+  const handleRestoreChatBadge = useCallback(async (vNum: number) => {
+    const found = findVersionForChatBadge(vNum);
+    if (found.kind === "current") {
+      toast({ title: "Уже текущая", description: `Версия v${vNum} сейчас открыта.` });
+      return;
+    }
+    if (!found.version) {
+      toast({
+        title: "Чекпоинт не найден",
+        description: "Для этой версии нет сохранённого снимка. Новые правки сохраняют v1, v2… автоматически.",
+      });
+      return;
+    }
+    await handleRestoreVersion(found.version.id);
+  }, [findVersionForChatBadge, handleRestoreVersion, toast]);
 
   const injectProjectId = useCallback((code: string) => {
     if (!code) return code;
@@ -2853,7 +2903,22 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                 <p className="text-[11px] text-slate-400 truncate">{project?.title}</p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
+              {versions.length > 0 && (
+                <button
+                  onClick={() => setShowVersions((v) => !v)}
+                  className={`h-8 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold transition-colors ${
+                    showVersions
+                      ? "bg-primary/10 text-primary"
+                      : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                  }`}
+                  data-testid="button-toggle-versions"
+                  title="История версий сайта"
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Версии</span>
+                </button>
+              )}
               {isMobile && (
                 <button
                   onClick={() => { setMobileView("preview"); setSidebarOpen(false); }}
@@ -2870,9 +2935,9 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
           {showVersions && versions.length > 0 && (
             <div className="border-b border-slate-100 bg-slate-50/50 max-h-[240px] overflow-y-auto">
               <div className="px-4 py-3">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Чекпоинты</p>
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Чекпоинты — нажмите «Откат»</p>
                 <div className="space-y-1">
-                  {versions.slice().reverse().map((v) => (
+                  {versions.map((v) => (
                     <div key={v.id} className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 hover:bg-slate-100 transition-colors" data-testid={`version-item-${v.id}`}>
                       <div className="flex-1 min-w-0">
                         <p className="text-[12px] font-semibold text-slate-700 dark:text-slate-300 truncate">{v.label}</p>
@@ -2902,13 +2967,26 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
               {(() => {
                 const currentCodeStr = streamedCode || project?.generatedCode || "";
                 let activeModelIdx = -1;
+                // Prefer matching an explicit vN result checkpoint to the current HTML.
                 if (currentCodeStr && versions.length > 0) {
-                  let mIdx = 0;
-                  for (let i = 0; i < messages.length; i++) {
-                    if (messages[i].role === "model" || messages[i].role === "assistant") {
-                      const v = versions[mIdx];
-                      if (v && v.code === currentCodeStr) activeModelIdx = i;
-                      mIdx++;
+                  let matchedVNum = -1;
+                  for (const v of versions) {
+                    const m = (v.label || "").match(/^v(\d+)\b/);
+                    if (m && v.code === currentCodeStr) {
+                      matchedVNum = parseInt(m[1], 10);
+                      break;
+                    }
+                  }
+                  if (matchedVNum > 0) {
+                    let modelOrdinal = 0;
+                    for (let i = 0; i < messages.length; i++) {
+                      if (messages[i].role === "model" || messages[i].role === "assistant") {
+                        modelOrdinal++;
+                        if (modelOrdinal === matchedVNum) {
+                          activeModelIdx = i;
+                          break;
+                        }
+                      }
                     }
                   }
                 }
@@ -2990,14 +3068,11 @@ img:hover,.image-placeholder:hover,[data-image-hint]:hover,[class*="placeholder"
                             <button 
                               onClick={() => {
                                 const vNum = messages.filter((m, i) => (m.role === "assistant" || m.role === "model") && i <= idx).length;
-                                // versions is DESC (newest first); filter to only generation checkpoints (exclude "До отката" etc)
-                                const genVersions = versions.filter(v => v.label?.startsWith("До: "));
-                                // vNum=1 → oldest gen version = genVersions[genVersions.length - 1]
-                                const v = genVersions[genVersions.length - vNum];
-                                if (v) handleRestoreVersion(v.id);
-                                else toast({ title: "Инфо", description: "Чекпоинт для этой версии не найден" });
+                                void handleRestoreChatBadge(vNum);
                               }}
                               className="hover:opacity-70 transition-opacity"
+                              title="Восстановить сайт на эту версию"
+                              data-testid={`button-restore-chat-v${messages.filter((m, i) => (m.role === "assistant" || m.role === "model") && i <= idx).length}`}
                             >
                               <Badge variant="secondary" className="bg-primary/10 text-primary border-none text-[10px] h-5 px-1.5 flex items-center gap-1 cursor-pointer">
                                 <History className="w-3 h-3" />

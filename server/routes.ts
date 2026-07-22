@@ -246,6 +246,44 @@ function resolveScrollAnimLayout(style?: string | null): ScrollAnimLayout {
   // legacy immersion / site3d removed — treat as parallax
   return "parallax";
 }
+
+/** Save/update a chat-restorable result checkpoint labeled `vN: "prompt"`. */
+async function saveChatResultVersion(
+  projectId: number,
+  code: string,
+  prompt: string,
+  versionNum?: number,
+): Promise<void> {
+  if (!code?.trim()) return;
+  try {
+    const msgs = await storage.getProjectMessages(projectId);
+    const n =
+      versionNum ??
+      msgs.filter((m) => m.role === "model" || m.role === "assistant").length;
+    if (n < 1) return;
+    const currentFiles = await storage.getProjectFiles(projectId);
+    const filesSnapshot = currentFiles.map((f) => ({ filename: f.filename, code: f.code }));
+    const label = `v${n}: "${prompt.substring(0, 48)}${prompt.length > 48 ? "..." : ""}"`;
+    const versions = await storage.getProjectVersions(projectId);
+    const existing = versions.find((v) => new RegExp(`^v${n}\\b`).test(v.label || ""));
+    if (existing) {
+      await storage.updateProjectVersion(existing.id, {
+        code,
+        files: filesSnapshot.length > 0 ? filesSnapshot : null,
+        label,
+      });
+    } else {
+      await storage.createProjectVersion({
+        projectId,
+        code,
+        label,
+        files: filesSnapshot.length > 0 ? filesSnapshot : null,
+      });
+    }
+  } catch (e: any) {
+    console.warn("[VERSION] saveChatResultVersion failed:", e?.message || e);
+  }
+}
 const KLING_IMG2VID_MODEL = "kling/v3-turbo-image-to-video";
 
 function csaEsc(s: string): string {
@@ -4850,6 +4888,10 @@ ${designAnalysis}
         content: (aiTextReply || "Сайт обновлён") + spendNote,
       });
 
+      // Chat-restorable checkpoint for this assistant turn (v1, v2, …).
+      // Updated again below when video bake finishes so restore gets the final hero.
+      await saveChatResultVersion(project.id, immediateHtml, prompt);
+
       // craft.md — Replit-style agent memory for this site
       try {
         const pagesNow: SitePage[] = [
@@ -4991,6 +5033,7 @@ ${designAnalysis}
                 mergedHtml = curHtml;
               }
               await storage.updateProject(project.id, { generatedCode: mergedHtml });
+              await saveChatResultVersion(project.id, mergedHtml, prompt);
               for (const [filename, code] of Array.from(bgFilesMap.entries())) {
                 if (filename === "index.html" || !isHtmlPage(filename)) continue;
                 await storage.upsertProjectFile({ projectId: project.id, filename, code });
@@ -5018,6 +5061,7 @@ ${designAnalysis}
                     scrollAnimFallbackHtml(_animTexts, _animVideoPrompt, _animStyle, savedTaskId),
                   );
               await storage.updateProject(project.id, { generatedCode: fallbackCode });
+              await saveChatResultVersion(project.id, fallbackCode, prompt);
               console.warn(`[BG ANIM] All attempts failed for project ${project.id} — fallback saved${savedTaskId ? ` (task ${savedTaskId.slice(0,12)}… preserved)` : ""}`);
             } catch {}
           }
