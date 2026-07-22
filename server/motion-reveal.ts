@@ -1,3 +1,9 @@
+import {
+  withKieCallback,
+  waitForKieJob,
+  kieResultUrl,
+} from "./kie-jobs";
+
 /**
  * «Моушн» — WebGL mouse-trail image reveal (Lando Norris / Unicorn Studio style).
  *
@@ -80,38 +86,32 @@ async function pollImageTask(
   taskId: string,
   label: string,
 ): Promise<string | null> {
-  const deadline = Date.now() + STILL_DEADLINE_MS;
-  // First poll quickly — nano-banana-2 often finishes in <15s at 1K
-  let wait = POLL_MS;
-  while (Date.now() < deadline) {
-    if (deps.shouldStop()) return null;
-    await new Promise((r) => setTimeout(r, wait));
-    wait = POLL_MS;
-    const body: any = await deps.kieRequestJson(
-      `${deps.statusUrl}?taskId=${taskId}`,
-      { headers: { Authorization: `Bearer ${deps.kieApiKey}` } },
-      { label: `${label}-poll`, retries: 1, shouldStop: () => deps.shouldStop() || Date.now() >= deadline },
-    );
-    if (!body || body.code !== 200 || !body.data) continue;
-    const state = body.data.state;
-    if (state === "success") {
-      let result: any = {};
-      try {
-        result = typeof body.data.resultJson === "string"
-          ? JSON.parse(body.data.resultJson)
-          : (body.data.resultJson || {});
-      } catch {}
-      const cdnUrl = (result.resultUrls || [])[0] || null;
-      if (!cdnUrl) return null;
-      return reuploadStable(deps, cdnUrl);
+  const terminal = await waitForKieJob(taskId, {
+    deadlineMs: STILL_DEADLINE_MS,
+    shouldStop: deps.shouldStop,
+    pollIntervalMs: POLL_MS,
+    label: `MOTION ${label}`,
+    pollOnce: async () => {
+      const body: any = await deps.kieRequestJson(
+        `${deps.statusUrl}?taskId=${taskId}`,
+        { headers: { Authorization: `Bearer ${deps.kieApiKey}` } },
+        { label: `${label}-poll`, retries: 1, shouldStop: () => deps.shouldStop() || false },
+      );
+      if (!body || body.code !== 200 || !body.data) return null;
+      return body.data;
+    },
+  });
+  if (!terminal.ok) {
+    if (terminal.reason === "fail") {
+      console.warn(`[MOTION] ${label} failed:`, terminal.data?.failMsg);
+    } else {
+      console.warn(`[MOTION] ${label} timed out after ${STILL_DEADLINE_MS / 1000}s`);
     }
-    if (state === "fail" || state === "failed" || state === "error") {
-      console.warn(`[MOTION] ${label} failed:`, body.data?.failMsg);
-      return null;
-    }
+    return null;
   }
-  console.warn(`[MOTION] ${label} timed out after ${STILL_DEADLINE_MS / 1000}s`);
-  return null;
+  const cdnUrl = kieResultUrl(terminal.data);
+  if (!cdnUrl) return null;
+  return reuploadStable(deps, cdnUrl);
 }
 
 async function createStill(
@@ -148,7 +148,7 @@ async function createStill(
           "Content-Type": "application/json",
           Authorization: `Bearer ${deps.kieApiKey}`,
         },
-        body: JSON.stringify({ model: STILL_MODEL, input }),
+        body: JSON.stringify(withKieCallback({ model: STILL_MODEL, input })),
       },
       { label: `${label}-create`, retries: 2, shouldStop: deps.shouldStop },
     );
