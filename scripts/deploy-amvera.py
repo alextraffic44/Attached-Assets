@@ -23,6 +23,7 @@ DEFAULT_FILES = [
     "server/auth.ts",
     "server/storage.ts",
     "server/motion-reveal.ts",
+    "server/trigger-look.ts",
     "server/animational.ts",
     "server/kie-errors.ts",
     "server/agent-runtime.ts",

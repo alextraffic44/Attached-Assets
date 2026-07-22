@@ -265,7 +265,7 @@ export default function DashboardPage() {
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImages, setPhotoImages] = useState<Array<{ base64: string; mimeType: string; preview: string }>>([]);
-  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split" | "action" | "motion">("parallax");
+  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split" | "action" | "motion" | "trigger">("parallax");
   const [interactiveProductImage, setInteractiveProductImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const [tourStep, setTourStep] = useState(-1);
   const [activeTour, setActiveTour] = useState<TourStep[] | null>(null);
@@ -1126,7 +1126,7 @@ export default function DashboardPage() {
                         <div className="flex flex-col gap-3 flex-1">
                           {/* Style picker */}
                           <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Стиль анимации</div>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                             {[
                               {
                                 id: "parallax" as const,
@@ -1178,6 +1178,21 @@ export default function DashboardPage() {
                                     <path d="M22 7 C28 10, 30 18, 24 22" stroke="currentColor" strokeWidth="1.6" fill="none" opacity="0.45"/>
                                     <circle cx="26" cy="14" r="5.5" fill="currentColor" opacity="0.45"/>
                                     <circle cx="27.5" cy="12.5" r="1.2" fill="currentColor" opacity="0.7"/>
+                                  </svg>
+                                ),
+                              },
+                              {
+                                id: "trigger" as const,
+                                label: "Тригер",
+                                desc: "Персонаж смотрит за мышкой",
+                                icon: (
+                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
+                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
+                                    <rect x="3" y="5" width="16" height="18" rx="2" fill="currentColor" opacity="0.12"/>
+                                    <circle cx="28" cy="13" r="6" fill="currentColor" opacity="0.35"/>
+                                    <circle cx="26.2" cy="12.2" r="1.4" fill="currentColor" opacity="0.75"/>
+                                    <path d="M22 20 C25 17, 31 17, 34 20" stroke="currentColor" strokeWidth="1.3" fill="none" opacity="0.45"/>
+                                    <path d="M8 12 H16 M8 16 H14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.35"/>
                                   </svg>
                                 ),
                               },

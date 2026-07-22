@@ -7,6 +7,7 @@ import {
   buildMotionRevealHtml,
   type GenerateMotionRevealDeps,
 } from "./motion-reveal";
+import { buildTriggerLookHtml } from "./trigger-look";
 import {
   SCROLL_ANIMATIONAL_COST,
   ANIMATIONAL_SYSTEM_PROMPT,
@@ -219,13 +220,17 @@ const SCROLL_VIDEO_DURATION = 5;   // seconds
 // richer, smoother slow-motion / bullet-time scrub.
 const SCROLL_ACTION_VIDEO_DURATION = 6;  // seconds (blockbuster shot length)
 const SCROLL_ACTION_FRAME_COUNT = 96;    // sliced frames for the clip (matches ~16fps density used at 10s)
-type ScrollAnimLayout = "parallax" | "split" | "action" | "motion" | "animational";
+// «Тригер»: short head-turn clip scrubbed by mouse X
+const SCROLL_TRIGGER_VIDEO_DURATION = 4;
+const SCROLL_TRIGGER_FRAME_COUNT = 60;
+type ScrollAnimLayout = "parallax" | "split" | "action" | "motion" | "animational" | "trigger";
 
 function resolveScrollAnimLayout(style?: string | null): ScrollAnimLayout {
   if (style === "split") return "split";
   if (style === "action") return "action";
   if (style === "motion") return "motion";
   if (style === "animational") return "animational";
+  if (style === "trigger") return "trigger";
   // legacy immersion / site3d removed — treat as parallax
   return "parallax";
 }
@@ -404,6 +409,11 @@ async function generateStillForVideo(
       `Bold directional key light with soft volumetric god rays, rich filmic color grading, deep elegant shadows and luminous ` +
       `highlights, gentle atmospheric haze for depth, immersive premium Hollywood blockbuster mood, IMAX-grade spectacle. ` +
       `No text, no watermark, no logos, ultra-high detail, 8K, 16:9 aspect ratio.`
+    : layout === "trigger"
+    ? `${scenePrompt.trim()}. Wide cinematic hero still for mouse-look animation: a charismatic character (animal, robot, stylized creature or mascot matching the niche) ` +
+      `clearly placed on the RIGHT third of the frame, looking slightly toward the LEFT (toward the empty side). The LEFT half is a beautiful branded atmospheric ` +
+      `background that matches the site mood — soft depth, elegant light, calm negative space for large overlay text. Character is sharp and readable, ` +
+      `photorealistic or high-end stylized 3D, premium commercial lighting, 8K, 16:9. No text, no watermark, no logos.`
     : `${scenePrompt.trim()}. A complete immersive cinematic SCENE with a real environment and layered depth (NOT a plain solid backdrop). ` +
       `Ultra-cinematic widescreen film still, shot on ARRI Alexa with an anamorphic lens, photorealistic, breathtaking dramatic ` +
       `composition that draws the eye deep into the scene, with a slightly calmer focal area where large overlay text can stay legible. ` +
@@ -915,9 +925,13 @@ async function generateScrollFrames(
     ? `with an elegant slow cinematic camera push-in only — no pan, no tilt, no pull-back, no frame-edge reveal — keeping the product perfectly intact and the left side calm for text`
     : layout === "action"
     ? `the debris, shards, sparks, dust or particles already visible in the frame must keep physically moving and evolving throughout the whole clip — drifting, spinning, falling, colliding or scattering further in slow motion (the scene action must be the main event, not just the camera), combined with a bold Hollywood-blockbuster camera move — a dramatic slow-motion orbit/arc that flies AROUND the subject (bullet-time feel) or an explosive dynamic push-in, sweeping anamorphic lens flares, motion-blur streaks and deep dramatic contrast — epic, powerful and fluid, never shaky, camera movement alone is NOT enough`
+    : layout === "trigger"
+    ? `CAMERA LOCKED / STATIC — do not dolly, pan or orbit. The ONLY motion is the character's HEAD and EYES smoothly turning from looking LEFT (toward the text side) to looking RIGHT across ~4 seconds, as if following a cursor. Body and background stay almost still. Continuous even head-turn for scrubbing, no jump cuts`
     : `with bold immersive cinematic camera movement that pulls the viewer INTO the scene — a smooth forward dolly / push-in that glides deeper and naturally reveals depth and detail (e.g. gliding toward a doorway or through the space) — graceful and steady, never shaky`;
   const styleLead = layout === "action"
     ? `Render as an epic Hollywood blockbuster action sequence in dramatic slow motion (bullet-time): powerful, clearly visible motion that builds across the whole clip, IMAX-grade cinematic spectacle`
+    : layout === "trigger"
+    ? `Render as a premium interactive mascot hero clip: locked camera, character on the right, continuous smooth head-turn left-to-right designed for mouse-scrub gaze tracking`
     : `Render as a high-end Hollywood-grade cinematic shot: smooth, graceful but clearly visible motion (the scene must noticeably evolve and feel alive from start to finish)`;
   let animPrompt =
     `${safeVideoPrompt}. ${styleLead}, ${cameraGuidance}, premium dramatic lighting ` +
@@ -927,9 +941,13 @@ async function generateScrollFrames(
   // Per-mode clip length + sliced-frame budget.
   const videoDuration = layout === "action"
     ? SCROLL_ACTION_VIDEO_DURATION
+    : layout === "trigger"
+    ? SCROLL_TRIGGER_VIDEO_DURATION
     : SCROLL_VIDEO_DURATION;
   const targetFrameCount = layout === "action"
     ? SCROLL_ACTION_FRAME_COUNT
+    : layout === "trigger"
+    ? SCROLL_TRIGGER_FRAME_COUNT
     : SCROLL_FRAME_COUNT;
   const videoResolution = "1080p";
 
@@ -1500,14 +1518,17 @@ function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, vid
     return buildAnimationalPendingHtml(brandHint, videoPrompt);
   }
   const isMotion = style === "motion";
+  const isTrigger = style === "trigger";
   const first = texts[0] || { title: "", sub: "" };
   const tid = "pnd" + Math.random().toString(36).slice(2, 8);
   const _pa = videoPrompt ? ` data-scroll-anim-prompt="${encodeURIComponent(videoPrompt)}"` : "";
   const _sa = style ? ` data-scroll-anim-style="${encodeURIComponent(style)}"` : "";
   const _ta = texts.length ? ` data-scroll-anim-texts="${encodeURIComponent(texts.map(t => `${t.title}::${t.sub}`).join("||"))}"` : "";
-  const pendingTitle = isMotion ? "Генерация моушн-эффекта" : "Генерация видеоанимации";
+  const pendingTitle = isMotion ? "Генерация моушн-эффекта" : isTrigger ? "Генерация Тригер-Hero" : "Генерация видеоанимации";
   const pendingSub = isMotion
     ? "Обычно 30–90 секунд (2 кадра параллельно)"
+    : isTrigger
+    ? "Kling 4с · поворот головы · обычно 3–12 минут"
     : "Обычно 3–12 минут (видео Kling)";
   const barSecs = isMotion ? 45 : 180;
   return `<section data-scroll-anim-pending="1"${_pa}${_sa}${_ta} style="position:relative;height:100vh;min-height:600px;background:linear-gradient(135deg,#0a0a0a 0%,#16213e 50%,#0a0a0a 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;">
@@ -1593,6 +1614,10 @@ function buildScrollAnimHtml(
   //    Uses a dedicated attribute (not the generic data-frames) to avoid clashes,
   //    and a header-height-aware threshold instead of a magic number.
   const navCtl = `\n<style>header{transition:background .45s ease,background-color .45s ease,backdrop-filter .45s ease,-webkit-backdrop-filter .45s ease,border-color .45s ease,box-shadow .45s ease;}body:not(.craft-anim-passed) header{background:transparent!important;background-color:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-color:transparent!important;box-shadow:none!important;}</style>\n<script>(function(){if(window.__craftNavCtl)return;window.__craftNavCtl=true;function fixSticky(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;for(var i=0;i<s.length;i++){var el=s[i];while(el&&el.nodeType===1&&el!==document.documentElement){var cs=getComputedStyle(el);if(cs.overflowX==='hidden')el.style.overflowX='clip';if(cs.overflowY==='hidden')el.style.overflowY='clip';el=el.parentElement;}}var de=document.documentElement,b=document.body;[de,b].forEach(function(n){if(!n)return;var c=getComputedStyle(n);if(c.overflowX==='hidden')n.style.overflowX='clip';if(c.overflowY==='hidden')n.style.overflowY='clip';});}function u(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;var h=document.querySelector('header');var th=h?h.offsetHeight:64;var passed=true;for(var i=0;i<s.length;i++){if(s[i].getBoundingClientRect().bottom>th){passed=false;break;}}document.body.classList.toggle('craft-anim-passed',passed);}window.addEventListener('scroll',u,{passive:true});window.addEventListener('resize',u);if(document.readyState!=='loading'){fixSticky();u();}else{document.addEventListener('DOMContentLoaded',function(){fixSticky();u();});}fixSticky();u();})();</script>`;
+
+  if (layout === "trigger") {
+    return buildTriggerLookHtml(frames, texts, navCtl, csaEsc);
+  }
 
   // motion layout is built via buildMotionRevealHtml (image pair), not video frames.
 
@@ -1949,6 +1974,8 @@ async function resolveScrollAnimMarkers(
     try {
       res.write(`data: ${JSON.stringify({ status: isMotion
         ? "Моушн: генерирую 2 цветных кадра параллельно (обычно <2 мин)…"
+        : layout === "trigger"
+        ? "Тригер: рендерим 4с поворот головы (Kling)…"
         : "Рендерю видео для анимации прокрутки (до 35 минут, зависит от очереди KIE)..." })}\n\n`);
     } catch {}
 
@@ -1997,8 +2024,8 @@ async function resolveScrollAnimMarkers(
 
     // User is confirmed billable → safe to spend external API. Regenerate the uploaded
     // product photo ONCE onto a clean SOLID background (product positioned per layout)
-    // and feed THAT still to Kling.
-    if (productImageUrl && !productStillResolved) {
+    // and feed THAT still to Kling. Trigger uses a mascot/character still — skip product path.
+    if (productImageUrl && !productStillResolved && layout !== "trigger") {
       productStillResolved = true;
       // Analyze the product ONCE and invent a creative, product-aware concept.
       if (!creativeConceptResolved) {
@@ -2070,7 +2097,10 @@ async function resolveScrollAnimMarkers(
       clearInterval(keepAliveInterval);
     }
 
-    const framesReady = frames.length >= 60;
+    // Trigger targets ~60 frames from a 4s clip; accept a lower bar so partial
+    // ffmpeg extracts still bake a usable mouse-look hero.
+    const minFrames = layout === "trigger" ? 24 : 60;
+    const framesReady = frames.length >= minFrames;
     if (framesReady) {
       replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts, layout, videoUrl));
       generated++;
@@ -3604,6 +3634,33 @@ VIDEO_PROMPT (на английском) — ты РЕЖИССЁР голлив�
 ⚠️ НЕ создавай canvas-код вручную. Маркер заменяется автоматически системой.
 🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
 ═══ КОНЕЦ ЭКШН-РЕЖИМА ═══\n`;
+        } else if (interactiveStyle === "trigger") {
+          systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
+═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — ТРИГЕР» (персонаж смотрит за мышкой) ═══
+Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
+
+РАЗДЕЛЕНИЕ РОЛЕЙ:
+→ ПАЙПЛАЙН заменяет маркер на Hero: персонаж СПРАВА + красивый фон СЛЕВА, ролик ~4 сек с поворотом головы, scrub по позиции мыши.
+→ ТЫ пишешь маркер + обычные секции сайта после него.
+
+ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
+→ СРАЗУ после </header> (или после <body>) на отдельной строке:
+{{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|HeroЗаголовок::HeroПодзаголовок||Фишка1::Текст1||Фишка2::Текст2}}
+
+VIDEO_PROMPT (английский, ТОЛЬКО запятые, без | :: {}): опиши ХАРИЗМАТИЧНОГО персонажа ниши (животное, робот, стилизованный маскот, мифическое существо — выбери то, что продаёт бренд) СТОЯЩЕГО СПРАВА. Слева — красивый атмосферный фон под стиль сайта (спокойная зона под текст). Движение в ролике — ТОЛЬКО плавный поворот головы и взгляда СЛЕВА → НАПРАВО (как будто следит за курсором). Камера статична. Примеры (адаптируй под нишу):
+- IT/SaaS: "friendly matte-black desk robot mascot on the right third looking slightly left, luminous soft UI glow background on the left with calm negative space, locked camera, smooth continuous head turn from left to right following an invisible cursor, photorealistic cinematic"
+- Кофейня: "charming cartoon-realistic coffee fox mascot on the right third, warm artisan cafe interior bokeh on the left, locked camera, slow smooth head turn left-to-right tracking gaze, photorealistic stylized"
+- Фитнес: "energetic athletic panther mascot on the right, dramatic gym neon atmosphere on the left with empty space for text, locked camera, continuous head turn left toward right, photorealistic"
+- Детский/edu: "cute friendly robot owl on the right third, soft pastel classroom glow on the left, locked camera, gentle head turn following gaze left-to-right, premium stylized 3D"
+- Общее: "charismatic niche-fit character or animal mascot on the right third of frame, beautiful branded atmospheric background on the left with calm text space, locked camera, smooth head and eye turn from looking left to looking right, photorealistic cinematic"
+
+Тексты — 2–3 пары на РУССКОМ (Hero + 1–2 коротких фишки). После маркера — обычные секции сайта.
+
+⚠️ НЕ пиши Hero <section> ДО маркера.
+⚠️ НЕ создавай canvas/video код вручную.
+⚠️ Персонаж ОБЯЗАН быть справа; слева — фон/пространство под текст.
+🚨 ПРОВЕРЬ: маркер {{SCROLLANIM:...}} есть; промпт описывает character on the right + head turn left-to-right.
+═══ КОНЕЦ РЕЖИМА ТРИГЕР ═══\n`;
         } else if (interactiveStyle === "motion") {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
 ═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — МОУШН» (WebGL hover-reveal под ЛЮБУЮ нишу) ═══
@@ -4625,6 +4682,9 @@ ${designAnalysis}
             ? "epic slow-motion bullet-time orbit around the product as a splash of liquid and sparks are already exploding outward, frozen mid-air and still drifting further apart while the camera arcs around it, luminous beams and suspended particles continuing to scatter, dramatic premium lighting, cinematic macro"
             : "epic cinematic bullet-time shot orbiting the themed subject as particles, debris and light streaks are already bursting outward mid-air and keep drifting, spinning and scattering further in slow motion, the camera flying around in a dramatic arc, IMAX-grade blockbuster lighting, photorealistic";
           textsAuto = "Почувствуй мощь::Эффект, который впечатляет||Каждая деталь::Снято как в кино||Начни прямо сейчас::Сделай первый шаг";
+        } else if (interactiveStyle === "trigger") {
+          videoPromptAuto = "charismatic friendly niche mascot character on the right third of frame looking slightly left, beautiful branded atmospheric background with calm negative space on the left, locked camera, smooth continuous head and eye turn from left to right as if following a cursor, photorealistic cinematic";
+          textsAuto = "Взгляд, который цепляет::Персонаж следит за вами||Живой Hero::Атмосфера бренда справа и слева||Ваш ход::Начните диалог";
         } else if (interactiveStyle === "motion") {
           videoPromptAuto = "premium niche brand scene in full vivid color, iconic commercial subject, cinematic lighting /// same subject and framing in richer alternate color mood, brighter premium commercial lighting, day-to-night or calm-to-energy metamorphosis reveal";
           textsAuto = "Прикоснись::Открой другую сторону бренда||Характер::Сила в деталях||Преображение::Когда результат виден сразу||Твой ход::Начни прямо сейчас";
@@ -5080,7 +5140,7 @@ ${designAnalysis}
             );
             const frames = scrollOutcome.frames;
             const videoUrl = scrollOutcome.videoUrl;
-            const ready = frames.length >= 60;
+            const ready = frames.length >= (layout === "trigger" ? 24 : 60);
             if (ready) {
               const canvasHtml = buildScrollAnimHtml(frames, animTexts, layout, videoUrl);
               let finalCode = safeReplaceScrollAnimPending(pendingHtml, canvasHtml);
@@ -7264,10 +7324,9 @@ ${fullHtml}`;
           // so the user gets the real animation without paying again or losing the video.
           if (savedTaskId && KIE_API_KEY && savedStyle !== "immersion" && savedStyle !== "site3d" && savedStyle !== "motion" && savedStyle !== "animational") {
             const _projId  = proj.id;
-            const _layout: ScrollAnimLayout =
-              savedStyle === "split" ? "split" : savedStyle === "action" ? "action" : "parallax";
-            const _vidDur  = _layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
-            const _frCnt   = _layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : SCROLL_FRAME_COUNT;
+            const _layout: ScrollAnimLayout = resolveScrollAnimLayout(savedStyle);
+            const _vidDur  = _layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : _layout === "trigger" ? SCROLL_TRIGGER_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
+            const _frCnt   = _layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : _layout === "trigger" ? SCROLL_TRIGGER_FRAME_COUNT    : SCROLL_FRAME_COUNT;
             const _texts   = savedTexts;
             (async () => {
               try {
@@ -7424,9 +7483,9 @@ ${fullHtml}`;
               console.log(`[KLINGTASK] project ${proj.id}: ${animStyle} style — skip single-clip frame resume`);
               continue;
             }
-            const layout: ScrollAnimLayout = animStyle === "split" ? "split" : animStyle === "action" ? "action" : "parallax";
-            const vidDur  = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
-            const frCnt   = layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : SCROLL_FRAME_COUNT;
+            const layout: ScrollAnimLayout = resolveScrollAnimLayout(animStyle);
+            const vidDur  = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : layout === "trigger" ? SCROLL_TRIGGER_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
+            const frCnt   = layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : layout === "trigger" ? SCROLL_TRIGGER_FRAME_COUNT    : SCROLL_FRAME_COUNT;
             const texts: Array<{title:string;sub:string}> = textsEnc
               ? decodeURIComponent(textsEnc).split("||").map(seg => { const [t,s] = seg.split("::"); return {title:(t||"").trim(),sub:(s||"").trim()}; })
               : [{ title: "", sub: "" }];
