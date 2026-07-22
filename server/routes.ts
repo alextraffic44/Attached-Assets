@@ -2024,7 +2024,7 @@ async function resolveScrollAnimMarkers(
   const planned = entries.slice(0, 2);
   // Immersion runs 2N−1 Kling jobs (dives + connectors); allow a longer wall-clock budget.
   // Motion is image-only (2 stills) — shorter budget is enough.
-  const phaseDeadline = Date.now() + (layout === "motion" ? 240000 : 2520000);
+  const phaseDeadline = Date.now() + (layout === "motion" ? 360000 : 2520000);
 
   // Product still is regenerated lazily (ONCE) AFTER the first successful credit
   // deduction inside the loop, so we never spend external API budget on a user who
@@ -3767,36 +3767,41 @@ VIDEO_PROMPT (английский, ТОЛЬКО запятые, без | :: {})
 
 Ты — креативный арт-директор. Сначала ПОЙМИ нишу сайта из запроса пользователя (ресторан, стройка, клиника, недвижимость, авто, юристы, кофейня, спортзал, школа, салон, IT и т.д.). Затем придумай ПАРУ ЯРКИХ ЦВЕТНЫХ кадров «состояние A → состояние B», которая именно для ЭТОЙ ниши выглядит вау при наведении курсора. ОБА кадра в ПОЛНОМ ЦВЕТЕ (НЕ чёрно-белые). Это НЕ обязательно портрет человека и НЕ шлем/маска — субъект может быть блюдом, интерьером, зданием, инструментом, улыбкой, машиной, упаковкой, рабочим местом — чем угодно, что продаёт нишу.
 
+РАЗДЕЛЕНИЕ РОЛЕЙ:
+→ ПАЙПЛАЙН: сначала генерирует базовый кадр, затем IMAGE-TO-IMAGE поверх него (объекты НЕ смещаются) + текст оверлея СЛЕВА.
+→ ТЫ пишешь маркер с парой сцен и короткими текстами.
+
 ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
 → СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
 {{SCROLLANIM:BASE_SCENE_IN_ENGLISH /// REVEAL_SCENE_IN_ENGLISH|Блок1::Текст1||Блок2::Текст2||Блок3::Текст3||Блок4::Текст4}}
 
 Формат ENGLISH-части ОБЯЗАТЕЛЬНО с разделителем " /// " (пробел-три-слэша-пробел):
-- СЛЕВА от /// — базовый ЦВЕТНОЙ кадр: конкретная сцена ниши, композиция, субъект, свет, атмосфера (full color)
-- СПРАВА от /// — reveal ЦВЕТНОЙ кадр: ТА ЖЕ композиция/ракурс/субъект, но другое настроение/состояние — день↔ночь, спокойствие↔энергия, до↔после услуги, холодный↔тёплый свет, raw↔premium finish
-Пиши развёрнуто, ТОЛЬКО запятые внутри каждой половины (без | :: и фигурных скобок). Обе половины — про ОДНУ и ту же сцену, ОБЕ в цвете. ЗАПРЕЩЕНО писать black and white / monochrome / grayscale.
+- СЛЕВА от /// — базовый ЦВЕТНОЙ кадр: конкретная сцена ниши, субъект справа/по центру-справа, спокойное пространство СЛЕВА под текст, свет, атмосфера (full color)
+- СПРАВА от /// — ТОЛЬКО описание морфинга (свет/настроение/материалы/день↔ночь). ТА ЖЕ композиция, тот же ракурс, те же позиции объектов — без сдвига. Пайплайн сам сделает image-to-image.
+Пиши развёрнуто, ТОЛЬКО запятые внутри каждой половины (без | :: и фигурных скобок). Обе половины — про ОДНУ и ту же сцену, ОБЕ в цвете. ЗАПРЕЩЕНО писать black and white / monochrome / grayscale. В reveal-половине ВСЕГДА добавляй: "same subject position camera angle framing locked, only lighting materials atmosphere morph".
 
 Примеры под разные ниши (адаптируй под КОНКРЕТНЫЙ бренд пользователя, не копируй слепо):
-- Ресторан: "gourmet plated signature dish on dark slate, rising steam, warm candlelight, rich food colors, tight cinematic framing /// same dish and camera angle at brighter golden hour, golden oil sheen, vibrant herbs, festive fine-dining commercial glow"
-- Кофейня: "artisan latte in ceramic cup on wooden bar at dawn, soft cool window light, muted morning tones, cafe editorial /// same cup and framing in rich warm afternoon color, crema glow, sunlit espresso machine bokeh, premium coffee brand campaign"
-- Стройка/ремонт: "modern construction site with crane at blue hour, cool concrete tones, industrial cinematic color /// same site and angle in golden hour, sparks and warm concrete, vivid contractor commercial energy"
-- Недвижимость: "grand modern villa facade at blue hour twilight, cool glass reflections, luxury architecture photo in color /// same villa and camera angle at golden hour, warm interior lights glowing through glass, sunset real-estate campaign"
-- Клиника/стоматология: "confident close-up smile in soft cool clinic light, clean medical beauty color editorial /// same smile and framing with warmer luminous healthy glow, soft spa ambience, premium healthcare brand"
-- Автосервис/авто: "luxury car three-quarter view in moody garage, deep teal ambient light, glossy paint already in color /// same car and angle with brighter rim light streaks, richer paint pop, premium auto commercial energy"
-- Салон красоты: "elegant hairstyle portrait in salon chair, soft glam color, muted rose lighting /// same pose and framing with richer hair color shine, brighter glam lighting, beauty brand metamorphosis"
-- Фитнес: "athlete mid-pose in gym, cool stadium light, vivid sports color photography /// same pose and framing with warmer sweat glow, energetic neon accents, fitness brand campaign"
-- Юристы/услуги: "premium office desk with leather folder and city skyline dusk bokeh, refined cool color /// same desk and framing at golden hour, warm brass accents, trustworthy luxury firm campaign"
-- IT/SaaS: "minimal workspace with laptop and soft interface glow, cool blue color tech editorial /// same desk and framing with luminous richer UI reflections, brighter accent lights, modern software brand"
-- Цветы/подарки: "bouquet of roses on marble in soft daylight, natural petal colors /// same bouquet and angle under romantic evening light, deeper petal saturation, dewdrops, luxury floral campaign"
+- Ресторан: "gourmet plated signature dish on dark slate right of center, rising steam, warm candlelight, calm left negative space for text, rich food colors, tight cinematic framing /// same dish position camera angle framing locked, only lighting materials atmosphere morph to brighter golden hour, golden oil sheen, vibrant herbs, festive fine-dining commercial glow"
+- Кофейня: "artisan latte in ceramic cup on wooden bar right of center at dawn, soft cool window light, calm left text space, cafe editorial /// same cup position camera angle framing locked, only lighting materials atmosphere morph to rich warm afternoon color, crema glow, sunlit espresso machine bokeh"
+- Стройка/ремонт: "modern construction site with crane right of frame at blue hour, cool concrete tones, left calm text space, industrial cinematic color /// same site position camera angle framing locked, only lighting materials atmosphere morph to golden hour, sparks and warm concrete"
+- Недвижимость: "grand modern villa facade right-weighted at blue hour twilight, cool glass reflections, left negative space for copy /// same villa position camera angle framing locked, only lighting materials atmosphere morph to golden hour, warm interior lights glowing through glass"
+- Клиника/стоматология: "confident close-up smile right of center in soft cool clinic light, left calm text space, clean medical beauty color editorial /// same smile position camera angle framing locked, only lighting materials atmosphere morph to warmer luminous healthy glow"
+- Автосервис/авто: "luxury car three-quarter view right-weighted in moody garage, deep teal ambient light, left text space /// same car position camera angle framing locked, only lighting materials atmosphere morph with brighter rim light streaks, richer paint pop"
+- Салон красоты: "elegant hairstyle portrait right of center in salon chair, soft glam color, left text space /// same pose position camera angle framing locked, only lighting materials atmosphere morph with richer hair color shine, brighter glam lighting"
+- Фитнес: "athlete mid-pose right of center in gym, cool stadium light, left text space, vivid sports color /// same pose position camera angle framing locked, only lighting materials atmosphere morph with warmer sweat glow, energetic neon accents"
+- Юристы/услуги: "premium office desk right-weighted with leather folder and city skyline dusk bokeh, left calm copy space /// same desk position camera angle framing locked, only lighting materials atmosphere morph to golden hour, warm brass accents"
+- IT/SaaS: "minimal workspace with laptop right of center and soft interface glow, left text space, cool blue color tech editorial /// same desk position camera angle framing locked, only lighting materials atmosphere morph with luminous richer UI reflections"
+- Цветы/подарки: "bouquet of roses on marble right of center in soft daylight, left calm text space, natural petal colors /// same bouquet position camera angle framing locked, only lighting materials atmosphere morph under romantic evening light, deeper petal saturation, dewdrops"
 
-Тексты — РОВНО 4 пары на РУССКОМ (Заголовок::Подзаголовок): короткие мощные фразы под нишу (оффер → характер → выгода → CTA).
+Тексты — РОВНО 4 пары на РУССКОМ (Заголовок::Подзаголовок): короткие мощные фразы под нишу. Они будут показаны СЛЕВА поверх hero.
 
 После маркера — обычные секции сайта под эту нишу (преимущества, отзывы, CTA, форма, футер).
 
 ⚠️ НЕ пиши <section> или Hero-раздел ДО этого маркера. Маркер И ЕСТЬ Hero.
-⚠️ НЕ создавай canvas/WebGL-код вручную. Маркер заменяется автоматически системой (пара цветных кадров под нишу + fluid mouse reveal).
+⚠️ НЕ создавай canvas/WebGL-код вручную. Маркер заменяется автоматически системой.
 ⚠️ НЕ своди всё к портрету со шлемом — думай как арт-директор бренда ЭТОЙ ниши.
 ⚠️ НЕ делай базовый кадр чёрно-белым — оба кадра цветные и яркие.
+⚠️ Reveal-половина НЕ должна описывать другой ракурс или сдвиг объекта — только морфинг вида.
 🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML и содержать " /// ".
 ═══ КОНЕЦ РЕЖИМА МОУШН ═══\n`;
         } else {
