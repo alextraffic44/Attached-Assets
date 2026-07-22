@@ -1,7 +1,7 @@
 /**
  * «Тригер» — Hero with a character (animal / robot / creature) on the RIGHT,
- * styled background on the LEFT. A short (≈4s) Kling clip turns the head L→R;
- * mouse X smoothly scrubs frames so the character looks toward the cursor.
+ * styled background on the LEFT. A short (≈4s) Kling clip turns the head FULLY
+ * left → center → right; mouse X smoothly scrubs frames so gaze follows the cursor.
  */
 
 export function buildTriggerLookHtml(
@@ -133,8 +133,8 @@ export function buildTriggerLookHtml(
     }
     window.addEventListener('pointermove', onMove, {passive:true});
     window.addEventListener('touchmove', onTouch, {passive:true});
-    // Seed from last known pointer if available, else slight left-of-center (toward copy).
-    target = (frames.length - 1) * 0.35;
+    // Seed center gaze so left/right scrub has room both ways when frames are full L→R.
+    target = (frames.length - 1) * 0.5;
     current = target;
 
     window.addEventListener('resize', function(){
