@@ -4,6 +4,95 @@
  * left → center → right; mouse X smoothly scrubs frames so gaze follows the cursor.
  */
 
+import { gemini } from "./gemini";
+
+async function downloadFrameBase64(
+  url: string,
+): Promise<{ base64: string; mimeType: string } | null> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 20000);
+    const resp = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!resp.ok) return null;
+    const ct = (resp.headers.get("content-type") || "image/webp").split(";")[0].trim();
+    if (!ct.startsWith("image/")) return null;
+    const buf = Buffer.from(await resp.arrayBuffer());
+    if (!buf.length || buf.length > 12 * 1024 * 1024) return null;
+    return { base64: buf.toString("base64"), mimeType: ct };
+  } catch (e: any) {
+    console.warn("[TRIGGER] frame download failed:", e?.message || e);
+    return null;
+  }
+}
+
+/**
+ * Kling sometimes emits the head-turn clip backwards (looking RIGHT at start,
+ * LEFT at end). Mouse scrub assumes frame[0]=look left, frame[n]=look right.
+ * Detect order via Gemini on first/last frames and reverse when needed.
+ */
+export async function normalizeTriggerLookFrames(frames: string[]): Promise<string[]> {
+  if (!frames || frames.length < 4) return frames || [];
+  const first = frames[0];
+  const last = frames[frames.length - 1];
+  if (!first || !last || first === last) return frames;
+
+  try {
+    const [a, b] = await Promise.all([downloadFrameBase64(first), downloadFrameBase64(last)]);
+    if (!a || !b) return frames;
+
+    const instruction =
+      `You compare TWO frames of the SAME front-facing character/mascot (robot, animal, or stylized hero).\n` +
+      `IMAGE 1 = the FIRST frame of a short head-turn clip.\n` +
+      `IMAGE 2 = the LAST frame of the same clip.\n` +
+      `For each image, judge where the character's HEAD/EYES look from the VIEWER's perspective: LEFT, CENTER, or RIGHT.\n` +
+      `Then choose the clip direction:\n` +
+      `- LEFT_TO_RIGHT — IMAGE 1 looks more LEFT (or equal) and IMAGE 2 looks more RIGHT\n` +
+      `- RIGHT_TO_LEFT — IMAGE 1 looks more RIGHT and IMAGE 2 looks more LEFT\n` +
+      `If unsure but IMAGE 1 is clearly more right-facing than IMAGE 2, answer RIGHT_TO_LEFT.\n` +
+      `Reply with ONLY one token: LEFT_TO_RIGHT or RIGHT_TO_LEFT`;
+
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const callP = gemini.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [{
+        role: "user",
+        parts: [
+          { text: "IMAGE 1 (first frame):" },
+          { inlineData: { data: a.base64, mimeType: a.mimeType } },
+          { text: "IMAGE 2 (last frame):" },
+          { inlineData: { data: b.base64, mimeType: b.mimeType } },
+          { text: instruction },
+        ],
+      }],
+      config: { abortSignal: controller.signal },
+    });
+    const timeoutP = new Promise<null>((resolve) => {
+      timer = setTimeout(() => { controller.abort(); resolve(null); }, 20000);
+    });
+    const result: any = await Promise.race([callP, timeoutP]);
+    if (timer) clearTimeout(timer);
+    if (!result) {
+      console.warn("[TRIGGER] look-order detect timed out — keeping original frame order");
+      return frames;
+    }
+    const text: string =
+      result?.text ??
+      result?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).filter(Boolean).join("") ??
+      "";
+    const normalized = String(text).replace(/\s+/g, " ").trim().toUpperCase();
+    if (normalized.includes("RIGHT_TO_LEFT")) {
+      console.log(`[TRIGGER] reversing ${frames.length} frames (detected RIGHT→LEFT gaze)`);
+      return frames.slice().reverse();
+    }
+    console.log(`[TRIGGER] frame order OK (LEFT→RIGHT), reply="${normalized.slice(0, 40)}"`);
+  } catch (e: any) {
+    console.warn("[TRIGGER] look-order detect failed:", e?.message || e);
+  }
+  return frames;
+}
+
 export function buildTriggerLookHtml(
   frames: string[],
   texts: Array<{ title: string; sub: string }>,

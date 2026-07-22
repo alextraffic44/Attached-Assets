@@ -7,7 +7,7 @@ import {
   buildMotionRevealHtml,
   type GenerateMotionRevealDeps,
 } from "./motion-reveal";
-import { buildTriggerLookHtml } from "./trigger-look";
+import { buildTriggerLookHtml, normalizeTriggerLookFrames } from "./trigger-look";
 import {
   SCROLL_ANIMATIONAL_COST,
   ANIMATIONAL_SYSTEM_PROMPT,
@@ -1580,6 +1580,19 @@ function scrollAnimFallbackHtml(
 
 // Build a self-contained scroll-bound Canvas animation block (section + style + script).
 // layout: "parallax" — full-screen text; "split" — text left; "action" — blockbuster scrub.
+async function prepareScrollAnimFrames(
+  frames: string[],
+  layout: ScrollAnimLayout,
+): Promise<string[]> {
+  if (layout !== "trigger" || !frames?.length) return frames;
+  try {
+    return await normalizeTriggerLookFrames(frames);
+  } catch (e: any) {
+    console.warn("[TRIGGER] normalize failed:", e?.message || e);
+    return frames;
+  }
+}
+
 function buildScrollAnimHtml(
   frames: string[],
   texts: Array<{ title: string; sub: string }>,
@@ -2110,12 +2123,13 @@ async function resolveScrollAnimMarkers(
     const minFrames = layout === "trigger" ? 24 : 60;
     const framesReady = frames.length >= minFrames;
     if (framesReady) {
-      replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts, layout, videoUrl));
+      const bakeFrames = await prepareScrollAnimFrames(frames, layout);
+      replaceMap.set(raw, buildScrollAnimHtml(bakeFrames, parsed.texts, layout, videoUrl));
       generated++;
       if (billed) creditsUsed += blockCost;
       try {
         res.write(`data: ${JSON.stringify({
-          status: `Анимация готова (${frames.length} кадров)`,
+          status: `Анимация готова (${bakeFrames.length} кадров)`,
         })}\n\n`);
       } catch {}
     } else if (billed && userId && scrollKieFailed) {
@@ -5182,7 +5196,8 @@ ${designAnalysis}
             const videoUrl = scrollOutcome.videoUrl;
             const ready = frames.length >= (layout === "trigger" ? 24 : 60);
             if (ready) {
-              const canvasHtml = buildScrollAnimHtml(frames, animTexts, layout, videoUrl);
+              const bakeFrames = await prepareScrollAnimFrames(frames, layout);
+              const canvasHtml = buildScrollAnimHtml(bakeFrames, animTexts, layout, videoUrl);
               let finalCode = safeReplaceScrollAnimPending(pendingHtml, canvasHtml);
               if (isHollowCraftScrollAnim(finalCode)) {
                 finalCode = replaceHollowCraftScrollAnim(finalCode, [canvasHtml]);
@@ -7420,11 +7435,12 @@ ${fullHtml}`;
                     // Read current project code — only replace if it still has the fallback section
                     const cur = await storage.getProject(_projId);
                     if (!cur || !(cur.generatedCode || "").includes('data-scroll-anim-fallback="1"')) return;
+                    const bakeFrames = await prepareScrollAnimFrames(frameUrls, _layout);
                     let finalCode = (cur.generatedCode || "").replace(
-                      /<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/, buildScrollAnimHtml(frameUrls, _texts, _layout));
+                      /<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/, buildScrollAnimHtml(bakeFrames, _texts, _layout));
                     finalCode = injectLoadingOverlay(finalCode);
                     await storage.updateProject(_projId, { generatedCode: finalCode });
-                    console.log(`[CLEANUP-RESUME] project ${_projId}: animation restored (${frameUrls.length} frames)`);
+                    console.log(`[CLEANUP-RESUME] project ${_projId}: animation restored (${bakeFrames.length} frames)`);
                   } else {
                     console.warn(`[CLEANUP-RESUME] project ${_projId}: too few frames (${frameUrls.length})`);
                   }
@@ -7576,7 +7592,8 @@ ${fullHtml}`;
                   continue;
                 }
 
-                const canvasHtml = buildScrollAnimHtml(frameUrls, texts, layout);
+                const bakeFrames = await prepareScrollAnimFrames(frameUrls, layout);
+                const canvasHtml = buildScrollAnimHtml(bakeFrames, texts, layout);
                 let finalCode = latestHtml;
                 if (stillPending) {
                   finalCode = safeReplaceScrollAnimPending(finalCode, canvasHtml);
