@@ -6,7 +6,8 @@
  * 2) IMAGE-TO-IMAGE from that exact base → REVEAL still (same camera/placement,
  *    but the subject/object metamorphoses — e.g. diamond→ring, red dress→blue —
  *    plus lighting/materials) so frames register for hover morph
- * 3) Self-contained HTML: fluid cursor reveal, copy on the LEFT, chromatic edges
+ * 3) Self-contained HTML: fluid cursor reveal on desktop; on mobile scroll drives
+ *    the morph and vertical pan is never captured (touch-action: pan-y)
  */
 export const SCROLL_MOTION_COST = 120;
 
@@ -297,7 +298,7 @@ export function buildMotionRevealHtml(
     <div class="${cid}-overlays">
 ${layers}
     </div>
-    <div class="${cid}-hint"><span>ведите курсором</span><i></i></div>
+    <div class="${cid}-hint"><span class="${cid}-hint-desk">ведите курсором</span><span class="${cid}-hint-mob">листайте вниз</span><i></i></div>
   </div>
 </section>
 <style>
@@ -313,14 +314,24 @@ ${layers}
 .${cid}-text h2{margin:0;font-family:'Syne',system-ui,sans-serif;font-weight:800;font-size:clamp(1.85rem,4.6vw,3.6rem);line-height:1.02;letter-spacing:-0.03em;text-shadow:0 10px 48px rgba(0,0,0,0.55);}
 .${cid}-text p{margin:1rem 0 0;max-width:34ch;font-family:'Manrope',system-ui,sans-serif;font-size:clamp(.95rem,1.5vw,1.15rem);line-height:1.55;color:rgba(255,255,255,0.86);text-shadow:0 4px 24px rgba(0,0,0,0.45);}
 .${cid}-hint{position:absolute;left:50%;bottom:max(22px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:3;display:flex;flex-direction:column;align-items:center;gap:8px;font-family:'Manrope',system-ui,sans-serif;font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);transition:opacity .4s;pointer-events:none;}
+.${cid}-hint-mob{display:none;}
 .${cid}-hint i{width:28px;height:28px;border:1.5px solid rgba(255,255,255,.35);border-radius:50%;position:relative;}
 .${cid}-hint i::after{content:"";position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:#fff;animation:${cid}-pulse 1.4s ease-in-out infinite;}
 @keyframes ${cid}-pulse{0%,100%{transform:scale(.7);opacity:.35}50%{transform:scale(1.15);opacity:1}}
 @media (max-width:700px){
-  .${cid}-sticky{cursor:auto;}
+  .${cid}-sticky{cursor:auto;touch-action:pan-y;}
+  .${cid}-canvas{touch-action:pan-y;pointer-events:none;}
+  .${cid}-hint-desk{display:none;}
+  .${cid}-hint-mob{display:inline;}
   .${cid}-text{left:clamp(16px,4vw,28px);width:min(88vw,420px);top:auto;bottom:clamp(72px,14vh,120px);transform:none;}
   .${cid}-veil{background:
     linear-gradient(180deg,rgba(0,0,0,.15) 0%,rgba(0,0,0,.2) 45%,rgba(0,0,0,.72) 100%);}
+}
+@media (hover:none), (pointer:coarse){
+  .${cid}-sticky{cursor:auto;touch-action:pan-y;}
+  .${cid}-canvas{touch-action:pan-y;pointer-events:none;}
+  .${cid}-hint-desk{display:none;}
+  .${cid}-hint-mob{display:inline;}
 }
 @media (prefers-reduced-motion:reduce){
   .${cid}-hint i::after{animation:none;}
@@ -336,6 +347,10 @@ ${layers}
     var hint=root.querySelector('.${cid}-hint');
     var texts=[].slice.call(root.querySelectorAll('.${cid}-text'));
     var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Phones/tablets: never capture touch for morph — vertical scroll must work.
+    // Morph is driven by scroll progress instead of finger painting.
+    var touchUI=window.matchMedia('(hover: none), (pointer: coarse), (max-width: 700px)').matches;
+    var scrollP=0;
     var gl=canvas.getContext('webgl',{alpha:false,antialias:true,preserveDrawingBuffer:false})
       ||canvas.getContext('experimental-webgl',{alpha:false,antialias:true});
     if(!gl){var bu0=root.getAttribute('data-base')||'';if(bu0)root.style.background='center/cover no-repeat url("'+bu0.replace(/"/g,'')+'")';return;}
@@ -428,7 +443,9 @@ ${layers}
     }
 
     var mouse={x:0.5,y:0.5},drawing=0,hasMoved=0,start=performance.now();
+    function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
     function setPtr(e){
+      if(touchUI) return; // mobile: scroll owns the gesture
       var r=canvas.getBoundingClientRect();
       var cx=(e.clientX!==undefined?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:r.left+r.width/2));
       var cy=(e.clientY!==undefined?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:r.top+r.height/2));
@@ -437,12 +454,12 @@ ${layers}
       drawing=1;hasMoved=1;
       if(hint)hint.style.opacity='0';
     }
-    canvas.addEventListener('pointermove',setPtr,{passive:true});
-    canvas.addEventListener('pointerdown',setPtr,{passive:true});
-    canvas.addEventListener('touchmove',function(e){if(e.touches&&e.touches[0])setPtr(e.touches[0]);},{passive:true});
-    canvas.addEventListener('touchstart',function(e){if(e.touches&&e.touches[0])setPtr(e.touches[0]);},{passive:true});
-    window.addEventListener('pointerup',function(){drawing=0;});
-    // Idle auto-reveal pulse so the effect is discoverable without hover
+    if(!touchUI){
+      canvas.addEventListener('pointermove',setPtr,{passive:true});
+      canvas.addEventListener('pointerdown',setPtr,{passive:true});
+      window.addEventListener('pointerup',function(){drawing=0;});
+    }
+    // Idle auto-reveal pulse so the effect is discoverable without hover (desktop only)
     var autoT=0;
 
     function bindAttr(p){
@@ -458,21 +475,40 @@ ${layers}
       gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,write,0);
       gl.viewport(0,0,tw,th);
       gl.useProgram(trailP);bindAttr(trailP);
-      gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,read);
-      gl.uniform1i(gl.getUniformLocation(trailP,'uPrev'),0);
-      var mx=mouse.x,my=mouse.y;
-      if(!hasMoved&&!reduce){
-        autoT+=dt;
-        mx=0.5+Math.sin(autoT*0.55)*0.22;
-        my=0.48+Math.cos(autoT*0.4)*0.16;
+
+      var mx=mouse.x,my=mouse.y,drawAmt,rad,fade,hard;
+
+      if(touchUI){
+        // Scroll-linked morph: fresh expanding reveal each frame — no touch capture.
+        gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,read);
+        gl.uniform1i(gl.getUniformLocation(trailP,'uPrev'),0);
+        mx=0.62; my=0.42;
+        drawAmt = scrollP > 0.01 ? 1 : 0;
+        rad = 0.1 + clamp(scrollP,0,1) * 0.78;
+        fade = 0;
+        hard = 0.35;
+        if(hint) hint.style.opacity = String(clamp(1 - scrollP * 2.2, 0, 1));
+      } else {
+        gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,read);
+        gl.uniform1i(gl.getUniformLocation(trailP,'uPrev'),0);
+        if(!hasMoved&&!reduce){
+          autoT+=dt;
+          mx=0.5+Math.sin(autoT*0.55)*0.22;
+          my=0.48+Math.cos(autoT*0.4)*0.16;
+        }
+        drawAmt=(drawing||!hasMoved)?1:0;
+        if(reduce)drawAmt=hasMoved?1:0.35;
+        rad=hasMoved?0.12:0.16;
+        fade=0.965;
+        hard=0.55;
       }
+
       gl.uniform2f(gl.getUniformLocation(trailP,'uMouse'),mx,my);
-      var drawAmt=(drawing||!hasMoved)?1:0;
-      if(reduce)drawAmt=hasMoved?1:0.35;
       gl.uniform1f(gl.getUniformLocation(trailP,'uDraw'),drawAmt);
-      gl.uniform1f(gl.getUniformLocation(trailP,'uRadius'),hasMoved?0.12:0.16);
-      gl.uniform1f(gl.getUniformLocation(trailP,'uHard'),0.55);
-      gl.uniform1f(gl.getUniformLocation(trailP,'uFade'),0.965);
+      gl.uniform1f(gl.getUniformLocation(trailP,'uRadius'),rad);
+      gl.uniform1f(gl.getUniformLocation(trailP,'uHard'),hard);
+      gl.uniform1f(gl.getUniformLocation(trailP,'uFade'),fade);
       gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       flip=!flip;
       gl.bindFramebuffer(gl.FRAMEBUFFER,null);
@@ -510,11 +546,11 @@ ${layers}
     }
     window.addEventListener('resize',resize);
 
-    function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
     function setP(p){
       p=clamp(p,0,1);
-      if(hint&&hasMoved)hint.style.opacity=String(clamp(1-p*3.5,0,1));
-      var mobile=window.matchMedia('(max-width:700px)').matches;
+      scrollP=p;
+      if(hint&&hasMoved&&!touchUI)hint.style.opacity=String(clamp(1-p*3.5,0,1));
+      var mobile=touchUI||window.matchMedia('(max-width:700px)').matches;
       texts.forEach(function(el){
         var fi=parseFloat(el.getAttribute('data-fi')),fis=parseFloat(el.getAttribute('data-fis'));
         var fos=parseFloat(el.getAttribute('data-fos')),fo=parseFloat(el.getAttribute('data-fo'));
