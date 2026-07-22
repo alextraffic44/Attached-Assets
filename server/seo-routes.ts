@@ -13,6 +13,7 @@ const KIE_JOBS_CREATE = "https://api.kie.ai/api/v1/jobs/createTask";
 const KIE_JOBS_STATUS = "https://api.kie.ai/api/v1/jobs/recordInfo";
 
 const SEO_ARTICLE_COST = 70;
+const DAILY_PUBLISH_COST = 35;
 
 function slugify(text: string): string {
   return text
@@ -1340,7 +1341,7 @@ Respond with ONLY valid JSON, no explanation:
     res.end();
   });
 
-  // POST /api/seo/:id/publish — deploy to Yandex Cloud Object Storage
+  // POST /api/seo/:id/publish — deploy to Yandex Cloud Object Storage (+ domain mirror)
   app.post("/api/seo/:id/publish", async (req, res) => {
     const userId = requireAuth(req, res);
     if (!userId) return;
@@ -1350,15 +1351,46 @@ Respond with ONLY valid JSON, no explanation:
     const files = await storage.getProjectFiles(proj.id);
     if (files.length === 0) return res.status(400).json({ message: "No pages generated yet" });
 
-    const cfg = proj.seoConfig as SeoConfig;
-    const baseUrl = `https://craft-ai-p${proj.id}.website.yandexcloud.net`;
-
-    // Generate final sitemap before deploy
-    const sitemapContent = buildSitemap(cfg, baseUrl);
-    const sitemapFile = files.find(f => f.filename === "sitemap.xml");
-    if (!sitemapFile) {
-      await storage.upsertProjectFile({ projectId: proj.id, filename: "sitemap.xml", code: sitemapContent });
+    const user = await storage.getUser(userId);
+    if (!user) return res.status(401).json({ message: "Пользователь не найден" });
+    if (user.credits < DAILY_PUBLISH_COST) {
+      return res.status(403).json({
+        message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 35 токенов/сайт в день.",
+      });
     }
+
+    const alreadyLive =
+      proj.publishStatus === "published" ||
+      proj.publishStatus === "publishing" ||
+      proj.publishStatus === "suspended";
+
+    if (!alreadyLive) {
+      const today = new Date().toISOString().slice(0, 10);
+      const publishCharge = await storage.deductCredits(
+        userId,
+        DAILY_PUBLISH_COST,
+        "daily_publish",
+        `publish-start-${proj.id}-${today}`,
+      );
+      if (!publishCharge.success) {
+        return res.status(403).json({
+          message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 35 токенов/сайт в день.",
+          newBalance: publishCharge.newBalance,
+        });
+      }
+    }
+
+    await storage.updateProject(proj.id, { publishStatus: "publishing" } as any);
+
+    const cfg = proj.seoConfig as SeoConfig;
+    const customDomain = ((proj as any).customDomain || "").replace(/^www\./, "").trim();
+    const baseUrl = customDomain
+      ? `https://${customDomain}`
+      : `https://craft-ai-p${proj.id}.website.yandexcloud.net`;
+
+    // Generate final sitemap before deploy (always refresh so custom domain URLs stay current)
+    const sitemapContent = buildSitemap(cfg, baseUrl);
+    await storage.upsertProjectFile({ projectId: proj.id, filename: "sitemap.xml", code: sitemapContent });
 
     const allFiles = await storage.getProjectFiles(proj.id);
     const deployFiles = allFiles
@@ -1387,6 +1419,11 @@ Respond with ONLY valid JSON, no explanation:
 
       res.json({ url: finalUrl });
     } catch (e: any) {
+      // Roll status back so the user can retry; first-day charge already taken
+      // (same semantics as regular site publish).
+      await storage.updateProject(proj.id, {
+        publishStatus: alreadyLive ? "published" : "draft",
+      } as any).catch(() => {});
       res.status(500).json({ message: e?.message || "Publish failed" });
     }
   });
