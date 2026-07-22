@@ -223,6 +223,18 @@ const SCROLL_ACTION_FRAME_COUNT = 96;    // sliced frames for the clip (matches 
 // «Тригер»: short head-turn clip scrubbed by mouse X
 const SCROLL_TRIGGER_VIDEO_DURATION = 4;
 const SCROLL_TRIGGER_FRAME_COUNT = 60;
+/**
+ * Canonical Kling motion for Тригер. Mouse scrub assumes frame[0]=look LEFT,
+ * last frame=look RIGHT. Always append this block so every clip has the same
+ * left→right path regardless of what the agent wrote in VIDEO_PROMPT.
+ */
+const TRIGGER_LOOK_MOTION_CANONICAL =
+  `STRICT MOTION TIMELINE — follow exactly for the entire ~4 second clip, no other head motion allowed: ` +
+  `(0.0–1.0s) head and eyes HOLD looking clearly LEFT about 35 degrees yaw from camera center; ` +
+  `(1.0–2.5s) ONE smooth continuous turn from LEFT through CENTER toward RIGHT; ` +
+  `(2.5–4.0s) head and eyes HOLD looking clearly RIGHT about 35 degrees yaw. ` +
+  `Direction is ALWAYS left-then-right only — never reverse mid-clip, never turn only to the left, ` +
+  `never stay centered, never a tiny glance or nod-only. Body stays front-facing en face, both eyes visible, locked static camera.`;
 type ScrollAnimLayout = "parallax" | "split" | "action" | "motion" | "animational" | "trigger";
 
 function resolveScrollAnimLayout(style?: string | null): ScrollAnimLayout {
@@ -410,10 +422,10 @@ async function generateStillForVideo(
       `highlights, gentle atmospheric haze for depth, immersive premium Hollywood blockbuster mood, IMAX-grade spectacle. ` +
       `No text, no watermark, no logos, ultra-high detail, 8K, 16:9 aspect ratio.`
     : layout === "trigger"
-    ? `${scenePrompt.trim()}. Wide cinematic hero still for mouse-look animation: KEEP the exact niche-specific character and themed environment described above — ` +
+    ? `${scenePrompt.trim()}. Wide cinematic hero still — START FRAME for mouse-look video: KEEP the exact niche-specific character and themed environment described above — ` +
       `do not replace with a generic mascot. Charismatic niche mascot (animal, robot, stylized creature) clearly on the RIGHT third, ` +
       `FRONT-FACING / EN FACE toward the camera (both eyes/face features clearly visible, body facing viewer — NOT side profile, NOT three-quarter back, NOT silhouette from the side). ` +
-      `Neutral center gaze straight at the camera (do NOT lock the head turned only to the left). ` +
+      `START POSE: head and eyes already looking clearly LEFT (~35° yaw toward the text side) — this is frame 0 of a left-then-right turn; do NOT look center, do NOT look right. ` +
       `LEFT half = beautiful atmospheric background matching THAT niche/brand mood with calm negative space for overlay text. Character sharp and readable, ` +
       `photorealistic or high-end stylized 3D, premium commercial lighting, 8K, 16:9. No text, no watermark, no logos.`
     : `${scenePrompt.trim()}. A complete immersive cinematic SCENE with a real environment and layered depth (NOT a plain solid backdrop). ` +
@@ -928,17 +940,22 @@ async function generateScrollFrames(
     : layout === "action"
     ? `the debris, shards, sparks, dust or particles already visible in the frame must keep physically moving and evolving throughout the whole clip — drifting, spinning, falling, colliding or scattering further in slow motion (the scene action must be the main event, not just the camera), combined with a bold Hollywood-blockbuster camera move — a dramatic slow-motion orbit/arc that flies AROUND the subject (bullet-time feel) or an explosive dynamic push-in, sweeping anamorphic lens flares, motion-blur streaks and deep dramatic contrast — epic, powerful and fluid, never shaky, camera movement alone is NOT enough`
     : layout === "trigger"
-    ? `CAMERA LOCKED / STATIC — do not dolly, pan or orbit. Preserve the SAME niche-specific FRONT-FACING character and themed background from the prompt (do not swap identity or setting). Character stays EN FACE / facing the camera the whole clip (both eyes visible, NOT side profile). MANDATORY FULL BIDIRECTIONAL LOOK: at the START the head/eyes clearly look LEFT (~30-40° yaw toward the text side); in the MIDDLE look CENTER at the camera; at the END clearly look RIGHT (~30-40° yaw). The turn must be large, even and continuous across the whole ~4s so BOTH left and right extremes are obvious — NEVER only-left, NEVER a tiny glance, NEVER staying centered. Shoulders/torso stay front-facing; body and background almost still; no jump cuts`
+    ? `CAMERA LOCKED / STATIC — do not dolly, pan or orbit. Preserve the SAME niche-specific FRONT-FACING character and themed background from the start frame (do not swap identity or setting). Character stays EN FACE / facing the camera the whole clip (both eyes visible, NOT side profile). The start frame already looks LEFT — continue ONLY in one direction: LEFT → CENTER → RIGHT. ${TRIGGER_LOOK_MOTION_CANONICAL} Shoulders/torso stay front-facing; body and background almost still; no jump cuts`
     : `with bold immersive cinematic camera movement that pulls the viewer INTO the scene — a smooth forward dolly / push-in that glides deeper and naturally reveals depth and detail (e.g. gliding toward a doorway or through the space) — graceful and steady, never shaky`;
   const styleLead = layout === "action"
     ? `Render as an epic Hollywood blockbuster action sequence in dramatic slow motion (bullet-time): powerful, clearly visible motion that builds across the whole clip, IMAX-grade cinematic spectacle`
     : layout === "trigger"
-    ? `Render as a premium interactive niche-mascot hero clip: front-facing (en face) character matching the client's niche, locked camera, character on the right, FULL clearly-visible head and eye yaw that looks LEFT then RIGHT (both sides mandatory) for mouse-scrub gaze tracking — never a side-profile pose, never one-sided turn`
+    ? `Render as a premium interactive niche-mascot hero clip: front-facing (en face) character matching the client's niche, locked camera, character on the right, identical left-then-right head turn every time for mouse-scrub gaze tracking — never a side-profile pose, never one-sided turn`
     : `Render as a high-end Hollywood-grade cinematic shot: smooth, graceful but clearly visible motion (the scene must noticeably evolve and feel alive from start to finish)`;
   let animPrompt =
     `${safeVideoPrompt}. ${styleLead}, ${cameraGuidance}, premium dramatic lighting ` +
     `and rich filmic color grading. Do not warp, melt or distort the main subject or any architecture, ` +
     `no text, no captions, no watermark, no camera shake, no flicker, no jump cuts.`;
+  // Тригер: always re-assert the canonical left→right timeline at the END so Kling
+  // cannot ignore it when the agent VIDEO_PROMPT is vague or one-sided.
+  if (layout === "trigger") {
+    animPrompt += ` IMPORTANT: ignore any conflicting head-turn direction earlier in this prompt. ${TRIGGER_LOOK_MOTION_CANONICAL}`;
+  }
 
   // Per-mode clip length + sliced-frame budget.
   const videoDuration = layout === "action"
@@ -3672,28 +3689,28 @@ VIDEO_PROMPT (на английском) — ты РЕЖИССЁР голлив�
 4) ЗАПРЕЩЕНО: случайный персонаж не по теме (волк для стоматологии, космонавт для пекарни, generic robot для флористики и т.п.), если он не продаёт именно эту нишу.
 5) В VIDEO_PROMPT явно назови нишу + конкретный тип персонажа + атрибуты тематики (форма, цвет, реквизит, окружение).
 
-🚨 ОРИЕНТАЦИЯ — ТОЛЬКО АНФАС (FRONT-FACING) + ПОЛНЫЙ ПОВОРОТ ВЛЕВО И ВПРАВО:
+🚨 ОРИЕНТАЦИЯ — ТОЛЬКО АНФАС + ЖЁСТКИЙ ТАЙМЛАЙН ВЗГЛЯДА (СНАЧАЛА ВЛЕВО, ПОТОМ ВПРАВО):
 6) Персонаж ОБЯЗАН смотреть в КАМЕРУ / на зрителя: лицо анфас, оба глаза/визор видны, корпус развёрнут к камере.
 7) ЗАПРЕЩЕНО: профиль, боковой силуэт, три четверти спины, «смотрит мимо камеры в сторону» как основная поза.
-8) ОБЯЗАТЕЛЬНОЕ ДВИЖЕНИЕ ВЗГЛЯДА (без этого ответ неверен): голова/глаза явно смотрят ВЛЕВО в начале ролика, затем через ЦЕНТР, затем явно ВПРАВО в конце (~30–40° yaw в каждую сторону). Оба крайних положения должны быть ЗАМЕТНЫ. ЗАПРЕЩЕНО: поворот только влево, крошечный кивок, взгляд только в центр.
-9) Тело остаётся анфас. В VIDEO_PROMPT ВСЕГДА пиши дословно: "front-facing en face toward camera, both eyes visible, not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw, both left and right extremes clearly visible".
+8) ОБЯЗАТЕЛЬНЫЙ ТАЙМЛАЙН (~4с, без этого ответ неверен): 0–1с — голова/глаза ДЕРЖАТ взгляд ВЛЕВО (~35°); 1–2.5с — ОДИН плавный поворот ВЛЕВО→ЦЕНТР→ВПРАВО; 2.5–4с — ДЕРЖАТ взгляд ВПРАВО (~35°). Всегда одинаковый путь: сначала влево, потом вправо. ЗАПРЕЩЕНО: поворот только влево, реверс, крошечный кивок, взгляд только в центр.
+9) Тело остаётся анфас. В VIDEO_PROMPT ВСЕГДА пиши дословно: "front-facing en face toward camera, both eyes visible, not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left".
 
 ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
 → СРАЗУ после </header> (или после <body>) на отдельной строке:
 {{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|HeroЗаголовок::HeroПодзаголовок||Фишка1::Текст1||Фишка2::Текст2}}
 
-VIDEO_PROMPT (английский, ТОЛЬКО запятые, без | :: {}): харизматичный персонаж ниши СПРАВА в АНФАС + атмосферный фон ниши СЛЕВА + locked camera + полный yaw ВЛЕВО→ЦЕНТР→ВПРАВО. Примеры (НЕ копируй слепо — адаптируй под КОНКРЕТНЫЙ бренд клиента; в каждом есть front-facing + bidirectional look):
-- IT/SaaS: "friendly matte-black desk robot mascot for a SaaS analytics brand on the right third, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both extremes clearly visible, luminous soft UI glow dashboard atmosphere on the left with calm negative space, locked camera, photorealistic cinematic"
-- Кофейня: "charming cartoon-realistic coffee fox barista mascot wearing a tiny apron on the right third, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both extremes clearly visible, warm artisan cafe interior bokeh and espresso steam on the left, locked camera, photorealistic stylized"
-- Стоматология: "friendly soft-white tooth fairy fox mascot in clean clinic whites on the right third, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both extremes clearly visible, bright modern dental clinic glow on the left with calm text space, locked camera, premium stylized 3D"
-- Автосервис: "charismatic mechanic wolf mascot in work overalls on the right third, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both extremes clearly visible, moody garage rim light and polished car bokeh on the left, locked camera, photorealistic"
-- Фитнес: "energetic athletic panther mascot for a premium gym on the right, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both extremes clearly visible, dramatic gym neon atmosphere on the left with empty space for text, locked camera, photorealistic"
-- Цветы/подарки: "elegant blossom rabbit mascot with soft petal accents on the right third, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both extremes clearly visible, romantic florist atelier light on the left, locked camera, premium stylized"
-- Юристы: "refined owl counsel mascot in subtle tailored vest on the right third, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both extremes clearly visible, calm premium law-office wood and brass atmosphere on the left, locked camera, photorealistic cinematic"
-- Детский/edu: "cute friendly robot owl tutor on the right third, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both extremes clearly visible, soft pastel classroom glow on the left, locked camera, premium stylized 3D"
-- Стройка/ремонт: "sturdy beaver builder mascot in a safety vest on the right third, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both extremes clearly visible, sunlit modern construction site depth on the left, locked camera, photorealistic"
-- Ресторан: "charming sous-chef raccoon mascot on the right third, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both extremes clearly visible, warm fine-dining kitchen bokeh on the left, locked camera, photorealistic stylized"
-- Гаджеты/Apple: "sleek friendly white product robot mascot for a premium smartphone brand on the right third, front-facing en face toward camera glowing visor eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both extremes clearly visible, bright modern showroom atmosphere on the left with calm text space, locked camera, photorealistic cinematic"
+VIDEO_PROMPT (английский, ТОЛЬКО запятые, без | :: {}): харизматичный персонаж ниши СПРАВА в АНФАС + атмосферный фон ниши СЛЕВА + locked camera + жёсткий таймлайн СНАЧАЛА ВЛЕВО, ПОТОМ ВПРАВО. Примеры (НЕ копируй слепо — адаптируй под КОНКРЕТНЫЙ бренд; в каждом один и тот же путь взгляда):
+- IT/SaaS: "friendly matte-black desk robot mascot for a SaaS analytics brand on the right third, front-facing en face toward camera both eyes visible not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left, luminous soft UI glow dashboard atmosphere on the left with calm negative space, locked camera, photorealistic cinematic"
+- Кофейня: "charming cartoon-realistic coffee fox barista mascot wearing a tiny apron on the right third, front-facing en face toward camera both eyes visible not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left, warm artisan cafe interior bokeh and espresso steam on the left, locked camera, photorealistic stylized"
+- Стоматология: "friendly soft-white tooth fairy fox mascot in clean clinic whites on the right third, front-facing en face toward camera both eyes visible not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left, bright modern dental clinic glow on the left with calm text space, locked camera, premium stylized 3D"
+- Автосервис: "charismatic mechanic wolf mascot in work overalls on the right third, front-facing en face toward camera both eyes visible not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left, moody garage rim light and polished car bokeh on the left, locked camera, photorealistic"
+- Фитнес: "energetic athletic panther mascot for a premium gym on the right, front-facing en face toward camera both eyes visible not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left, dramatic gym neon atmosphere on the left with empty space for text, locked camera, photorealistic"
+- Цветы/подарки: "elegant blossom rabbit mascot with soft petal accents on the right third, front-facing en face toward camera both eyes visible not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left, romantic florist atelier light on the left, locked camera, premium stylized"
+- Юристы: "refined owl counsel mascot in subtle tailored vest on the right third, front-facing en face toward camera both eyes visible not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left, calm premium law-office wood and brass atmosphere on the left, locked camera, photorealistic cinematic"
+- Детский/edu: "cute friendly robot owl tutor on the right third, front-facing en face toward camera both eyes visible not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left, soft pastel classroom glow on the left, locked camera, premium stylized 3D"
+- Стройка/ремонт: "sturdy beaver builder mascot in a safety vest on the right third, front-facing en face toward camera both eyes visible not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left, sunlit modern construction site depth on the left, locked camera, photorealistic"
+- Ресторан: "charming sous-chef raccoon mascot on the right third, front-facing en face toward camera both eyes visible not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left, warm fine-dining kitchen bokeh on the left, locked camera, photorealistic stylized"
+- Гаджеты/Apple: "sleek friendly white product robot mascot for a premium smartphone brand on the right third, front-facing en face toward camera glowing visor eyes visible not side profile, START looking clearly LEFT then ONE continuous turn through center to looking clearly RIGHT and HOLD, left-then-right only never reverse never only-left, bright modern showroom atmosphere on the left with calm text space, locked camera, photorealistic cinematic"
 
 Тексты — 2–3 пары на РУССКОМ под нишу клиента (Hero + 1–2 коротких фишки). После маркера — обычные секции сайта ЭТОЙ ниши.
 
@@ -3702,8 +3719,8 @@ VIDEO_PROMPT (английский, ТОЛЬКО запятые, без | :: {})
 ⚠️ Персонаж ОБЯЗАН быть справа; слева — фон/пространство под текст.
 ⚠️ Персонаж и фон ОБЯЗАНЫ совпадать с нишей клиента — иначе ответ неверен.
 ⚠️ Персонаж ОБЯЗАН быть в АНФАС (front-facing) — профиль запрещён.
-⚠️ Взгляд ОБЯЗАН заметно поворачиваться И ВЛЕВО, И ВПРАВО — только влево запрещено.
-🚨 ПРОВЕРЬ: маркер {{SCROLLANIM:...}} есть; промпт явно содержит front-facing en face + starts looking clearly LEFT then ... RIGHT + full bidirectional head and eye yaw.
+⚠️ Взгляд ВСЕГДА: сначала ВЛЕВО, потом ВПРАВО (один путь) — только влево / реверс запрещены.
+🚨 ПРОВЕРЬ: маркер {{SCROLLANIM:...}} есть; промпт явно содержит front-facing en face + START looking clearly LEFT then ONE continuous turn ... RIGHT and HOLD + left-then-right only.
 ═══ КОНЕЦ РЕЖИМА ТРИГЕР ═══\n`;
         } else if (interactiveStyle === "motion") {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨

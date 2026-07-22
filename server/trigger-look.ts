@@ -1,7 +1,8 @@
 /**
  * «Тригер» — Hero with a character (animal / robot / creature) on the RIGHT,
- * styled background on the LEFT. A short (≈4s) Kling clip turns the head FULLY
- * left → center → right; mouse X smoothly scrubs frames so gaze follows the cursor.
+ * styled background on the LEFT. A short (≈4s) Kling clip ALWAYS turns the head
+ * LEFT → CENTER → RIGHT on a fixed timeline; mouse X smoothly scrubs frames so
+ * gaze follows the cursor (frame[0]=left, last=right).
  */
 
 import { gemini } from "./gemini";
