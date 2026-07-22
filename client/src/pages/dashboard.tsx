@@ -865,16 +865,15 @@ export default function DashboardPage() {
                     {
                       m: "animational",
                       t: "Анимационный",
-                      d: "Awwwards-вау: morph, marquee, scroll",
+                      d: "3D canvas-scrub · GSAP + Lenis",
                       badge: "NEW" as string | null,
                       icon: (
                         <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
                           <g className="transition-transform duration-500 origin-center group-hover:scale-110">
-                            <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" className="text-amber-500" />
-                            <path d="M8 14c1.5-3 6.5-3 8 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                            <circle cx="9.5" cy="10" r="1.2" fill="currentColor" className="text-amber-500" />
-                            <circle cx="14.5" cy="10" r="1.2" fill="currentColor" className="text-amber-500" />
-                            <path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="text-amber-400 opacity-70" />
+                            <rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="2" className="text-amber-500" />
+                            <path d="M8 15c2-4 6-4 8 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="text-amber-600" />
+                            <circle cx="12" cy="10" r="2.2" fill="currentColor" className="text-amber-500 opacity-80 group-hover:opacity-100 transition-opacity" />
+                            <path d="M7 8h2M15 8h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-amber-400 opacity-60" />
                           </g>
                         </svg>
                       ),
@@ -1043,17 +1042,85 @@ export default function DashboardPage() {
                     <div className="flex flex-col gap-3">
                       {selectedMode === "animational" ? (
                         <div className="flex flex-col gap-3 flex-1">
-                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Что внутри</div>
-                          <div className="rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>
-                            <p style={{ fontSize: '0.85rem', color: '#1D1D1F', fontWeight: 600, margin: '0 0 8px', letterSpacing: '-0.02em' }}>Awwwards-уровень из коробки</p>
-                            <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.78rem', color: '#86868B', lineHeight: 1.55 }}>
-                              <li>Loader-счётчик и dual-hero morph (KIE)</li>
-                              <li>Бесконечный image marquee</li>
-                              <li>Sticky-главы + горизонтальная галерея</li>
-                              <li>Magnetic CTA и custom cursor</li>
-                            </ul>
-                            <p style={{ fontSize: '0.72rem', color: '#aaa', margin: '12px 0 0' }}>Опишите нишу и бренд — движок сам соберёт вау-сайт. −180 ток. на кадры.</p>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Стиль</div>
+                          <div className="grid grid-cols-1 gap-2">
+                            <div
+                              className="flex flex-col items-start gap-1.5 p-3 rounded-xl"
+                              style={{
+                                border: '1.5px solid rgba(245,158,11,0.45)',
+                                background: 'rgba(245,158,11,0.07)',
+                                color: '#b45309',
+                              }}
+                            >
+                              <div className="flex items-center gap-2 w-full">
+                                <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7 shrink-0">
+                                  <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
+                                  <rect x="8" y="6" width="24" height="16" rx="2" fill="currentColor" opacity="0.2"/>
+                                  <ellipse cx="20" cy="14" rx="7" ry="5" fill="currentColor" opacity="0.45"/>
+                                  <path d="M12 20 C16 12, 24 12, 28 20" stroke="currentColor" strokeWidth="1.3" fill="none" opacity="0.5"/>
+                                </svg>
+                                <div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1D1D1F' }}>3D</div>
+                                  <div style={{ fontSize: '0.72rem', color: '#86868B', lineHeight: 1.35 }}>Canvas scrub · GSAP ScrollTrigger · Lenis · Tailwind</div>
+                                </div>
+                              </div>
+                            </div>
                           </div>
+                          <div className="rounded-xl p-3" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>
+                            <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.75rem', color: '#86868B', lineHeight: 1.55 }}>
+                              <li>Hero 350vh · sticky canvas · scrub по кадрам</li>
+                              <li>Типографика поверх сцены (3 бита)</li>
+                              <li>Bento + kinetic line + CTA после unpin</li>
+                            </ul>
+                            <p style={{ fontSize: '0.7rem', color: '#aaa', margin: '10px 0 0' }}>Свой промпт с нуля (без мастер-шаблонов). −{120} ток. на Kling-кадры.</p>
+                          </div>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4, marginTop: 4 }}>
+                            Фото продукта <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#aaa' }}>(рекомендуется для 3D)</span>
+                          </div>
+                          <input
+                            ref={interactiveProductImgRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 10 * 1024 * 1024) {
+                                toast({ title: "Файл слишком большой", description: "Максимум 10 МБ", variant: "destructive" });
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const dataUrl = reader.result as string;
+                                const base64 = dataUrl.split(",")[1];
+                                setInteractiveProductImage({ base64, mimeType: file.type || "image/jpeg", preview: dataUrl });
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                          {interactiveProductImage ? (
+                            <div className="relative rounded-xl overflow-hidden" style={{ border: '1px solid rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.04)', minHeight: 72 }}>
+                              <img src={interactiveProductImage.preview} alt="Продукт" className="w-full object-contain" style={{ maxHeight: 100 }} />
+                              <button
+                                type="button"
+                                onClick={() => { setInteractiveProductImage(null); if (interactiveProductImgRef.current) interactiveProductImgRef.current.value = ''; }}
+                                className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full"
+                                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer' }}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => interactiveProductImgRef.current?.click()}
+                              className="flex flex-col items-center justify-center gap-1.5 rounded-xl transition-all"
+                              style={{ border: '2px dashed rgba(245,158,11,0.35)', background: 'rgba(245,158,11,0.03)', minHeight: 72, cursor: 'pointer' }}
+                            >
+                              <Upload className="w-4 h-4" style={{ color: '#b45309' }} />
+                              <p className="text-xs font-semibold" style={{ color: '#b45309' }}>Загрузить фото продукта</p>
+                            </button>
+                          )}
                         </div>
                       ) : selectedMode === "interactive" ? (
                         <div className="flex flex-col gap-3 flex-1">

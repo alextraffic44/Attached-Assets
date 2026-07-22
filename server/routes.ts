@@ -1755,6 +1755,7 @@ function buildAnimationalDeps(opts: {
   shouldStop: () => boolean;
   onStatus?: (msg: string) => void;
   appBaseUrl?: string;
+  productImageUrl?: string;
 }): GenerateAnimationalDeps {
   return {
     kieApiKey: KIE_API_KEY || "",
@@ -1765,6 +1766,17 @@ function buildAnimationalDeps(opts: {
     appBaseUrl: opts.appBaseUrl || process.env.APP_BASE_URL || "https://craft-ai.ru",
     shouldStop: opts.shouldStop,
     onStatus: opts.onStatus,
+    productImageUrl: opts.productImageUrl,
+    generateFrames: async (videoPrompt, shouldStop, referenceStillUrl) => {
+      // action layout → longer clip + denser frames for smooth 3D scrub
+      const out = await generateScrollFrames(
+        videoPrompt,
+        shouldStop,
+        referenceStillUrl,
+        "action",
+      );
+      return { frames: out.frames, confirmedKieFailure: out.confirmedKieFailure };
+    },
   };
 }
 
@@ -1775,6 +1787,7 @@ async function resolveAnimationalMarkers(
   runKey: string,
   res: any,
   isAborted: () => boolean = () => false,
+  productImageUrl?: string,
 ): Promise<{ generated: number; creditsUsed: number }> {
   const RE = /\{\{ANIMATIONAL:([\s\S]+?)\}\}/g;
   const markers = new Map<string, string>();
@@ -1791,12 +1804,13 @@ async function resolveAnimationalMarkers(
   const replaceMap = new Map<string, string>();
   let generated = 0;
   let creditsUsed = 0;
-  const phaseDeadline = Date.now() + 900000; // 15 min — image-only pipeline
+  // Kling video + frame extract — same budget class as scroll-anim
+  const phaseDeadline = Date.now() + 2520000;
 
   for (const [raw] of Array.from(markers.entries()).slice(0, 1)) {
     if (isAborted() || Date.now() >= phaseDeadline) break;
     try {
-      res.write(`data: ${JSON.stringify({ status: "Анимационный: генерирую кадры через KIE…" })}\n\n`);
+      res.write(`data: ${JSON.stringify({ status: "Анимационный · 3D: рендерим Kling для canvas-scrub…" })}\n\n`);
     } catch {}
 
     let billed = false;
@@ -1811,9 +1825,9 @@ async function resolveAnimationalMarkers(
 
       const keepAliveInterval = setInterval(() => {
         try {
-          res.write(`data: ${JSON.stringify({ status: "Анимационный: жду кадры от KIE…" })}\n\n`);
+          res.write(`data: ${JSON.stringify({ status: "Анимационный · 3D: жду Kling / кадры…" })}\n\n`);
         } catch {}
-      }, 15000);
+      }, 20000);
 
       let site: Awaited<ReturnType<typeof generateAnimationalSite>> = null;
       try {
@@ -1826,6 +1840,7 @@ async function resolveAnimationalMarkers(
                 res.write(`data: ${JSON.stringify({ status: msg })}\n\n`);
               } catch {}
             },
+            productImageUrl,
           }),
         });
       } finally {
@@ -1837,7 +1852,7 @@ async function resolveAnimationalMarkers(
         generated++;
         if (billed) creditsUsed += SCROLL_ANIMATIONAL_COST;
         try {
-          res.write(`data: ${JSON.stringify({ status: "Анимационный сайт готов" })}\n\n`);
+          res.write(`data: ${JSON.stringify({ status: `Анимационный · 3D готов (${site.frameCount} кадров)` })}\n\n`);
         } catch {}
       } else if (billed && userId) {
         try {
@@ -1845,7 +1860,7 @@ async function resolveAnimationalMarkers(
         } catch {}
       }
     } catch (e: any) {
-      console.error("[ANI] resolve failed:", e?.message || e);
+      console.error("[ANI3D] resolve failed:", e?.message || e);
       if (billed && userId) {
         try {
           await storage.refundCredits(userId, SCROLL_ANIMATIONAL_COST);
@@ -4583,7 +4598,7 @@ ${designAnalysis}
       // ── Auto-inject ANIMATIONAL if mode but AI missed the marker ──
       if (interactiveMode && isNewSite && interactiveStyle === "animational" && !mainHtmlCode.includes("{{ANIMATIONAL:")) {
         const brandGuess = (project.title || "Studio").replace(/[|{}]/g, "").slice(0, 40);
-        const markerAuto = `\n{{ANIMATIONAL:${brandGuess}|Создаём впечатления|#E8FF47|#0B0B0C|#F5F2EC|cinematic premium brand hero scene, dramatic monochrome editorial /// same composition vivid color metamorphosis reveal|atmospheric brand still one,atmospheric brand still two,atmospheric brand still three,atmospheric brand still four,atmospheric brand still five,atmospheric brand still six|Атмосфера::Почувствуйте характер бренда::cinematic brand atmosphere chapter||Детали::Сила в каждой детали::editorial detail close-up||Результат::Когда вау становится нормой::hero result scene||Ваш ход::Начните прямо сейчас::premium call to action scene|Обсудить проект}}\n`;
+        const markerAuto = `\n{{ANIMATIONAL:3d|${brandGuess}|Ощутите объём в движении|dark|premium hero product centered on pure black void, slow cinematic orbit and push-in revealing material and light, studio rim light, photorealistic commercial, no text no watermark|Форма::Каждый градус раскрывает характер||Деталь::Свет и материал в движении||Момент::Ваш следующий шаг|Связаться|Характер::Силуэт, который запоминают||Качество::Детали премиум-уровня||Опыт::Плавный scroll-scrub||Старт::Начните сейчас|Когда движение становится брендом}}\n`;
         if (mainHtmlCode.includes("</header>")) {
           mainHtmlCode = mainHtmlCode.replace("</header>", `</header>${markerAuto}`);
         } else if (/<body[^>]*>/i.test(mainHtmlCode)) {
@@ -4591,7 +4606,7 @@ ${designAnalysis}
         } else {
           mainHtmlCode = markerAuto + mainHtmlCode;
         }
-        console.log(`[ANIMATIONAL] Auto-injected marker (AI missed it)`);
+        console.log(`[ANIMATIONAL] Auto-injected 3d marker (AI missed it)`);
       }
 
       // ── Auto-inject SCROLLANIM if interactive mode but AI missed the marker ──
@@ -4771,11 +4786,10 @@ ${designAnalysis}
         const _animStyle = interactiveStyle || (hasAniMarkers ? "animational" : "parallax");
         (async () => {
           const MAX_ANIM_ATTEMPTS = 2;
-          // Motion is image-only — retry quickly. Animational is lighter than Kling video.
-          // Other video modes keep a longer pause for Kling recovery.
+          // Motion is image-only — retry quickly. Animational 3D uses Kling like scroll-anim.
           const RETRY_DELAY_MS =
             _animStyle === "motion" ? 45 * 1000
-            : hasAniMarkers || _animStyle === "animational" ? 60 * 1000
+            : hasAniMarkers || _animStyle === "animational" ? 3 * 60 * 1000
             : 3 * 60 * 1000;
           let animSucceeded = false;
           for (let animAttempt = 0; animAttempt < MAX_ANIM_ATTEMPTS; animAttempt++) {
@@ -4787,7 +4801,7 @@ ${designAnalysis}
             try {
               console.log(`[BG ANIM] Starting attempt ${animAttempt + 1}/${MAX_ANIM_ATTEMPTS} for project ${project.id} (style=${_animStyle})`);
               const scrollResult = hasAniMarkers
-                ? await resolveAnimationalMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false)
+                ? await resolveAnimationalMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl)
                 : await resolveScrollAnimMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl, _animStyle);
               // Soft-fail (0 generated) still puts fallback HTML into bgFilesMap via finalize().
               // Do NOT treat that as success — leave pending so Kling task ID / retry can finish.
@@ -5008,7 +5022,7 @@ ${designAnalysis}
       const textsStr = animTexts.map(t => `${t.title}::${t.sub}`).join("||");
       const isAniRegen = animStyle === "animational" || html.includes('data-animational') || html.includes('data-animational-pending');
       const marker = isAniRegen
-        ? `\n{{ANIMATIONAL:${videoPrompt.includes("|") ? videoPrompt : `${animTexts[0]?.title || "Studio"}|${animTexts[0]?.sub || "Создаём впечатления"}|#E8FF47|#0B0B0C|#F5F2EC|${videoPrompt}|atmospheric one,atmospheric two,atmospheric three,atmospheric four,atmospheric five,atmospheric six|${textsStr}|Обсудить проект`}}}\n`
+        ? `\n{{ANIMATIONAL:${videoPrompt.includes("|") ? videoPrompt : `3d|${animTexts[0]?.title || "Studio"}|${animTexts[0]?.sub || "Ощутите объём"}|dark|${videoPrompt}|${animTexts[0]?.title || "Форма"}::${animTexts[0]?.sub || "Характер в движении"}||${animTexts[1]?.title || "Деталь"}::${animTexts[1]?.sub || "Свет и материал"}||${animTexts[2]?.title || "Момент"}::${animTexts[2]?.sub || "Ваш шаг"}|Связаться|Характер::Силуэт||Качество::Детали||Опыт::Scroll-scrub||Старт::Начните|Когда движение становится брендом`}}}\n`
         : `\n{{SCROLLANIM:${videoPrompt}|${textsStr}}}\n`;
       const pendingBlock = scrollAnimPendingHtml(animTexts, isAniRegen ? (videoPrompt.includes("|") ? videoPrompt : undefined) : videoPrompt, isAniRegen ? "animational" : animStyle)
         .replace(
