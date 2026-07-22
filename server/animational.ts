@@ -1,3 +1,9 @@
+import {
+  withKieCallback,
+  waitForKieJob,
+  kieResultUrl,
+} from "./kie-jobs";
+
 /**
  * «Анимационный» mode — award-style motion sites (Viktor Oddy / Awwwards DNA).
  *
@@ -199,14 +205,14 @@ async function createStill(
           "Content-Type": "application/json",
           Authorization: `Bearer ${deps.kieApiKey}`,
         },
-        body: JSON.stringify({
+        body: JSON.stringify(withKieCallback({
           model: STILL_MODEL,
           input: {
             prompt: `${prompt}. Ultra premium commercial photography, photorealistic, no text, no watermark, no logos, 8K, 16:9`,
             aspect_ratio: "16:9",
             resolution: "2K",
           },
-        }),
+        })),
       },
       { label: `${label}-create`, retries: 3, shouldStop: deps.shouldStop },
     );
@@ -215,33 +221,28 @@ async function createStill(
       continue;
     }
     const taskId = createBody.data.taskId;
-    const deadline = Date.now() + STILL_DEADLINE_MS;
-    while (Date.now() < deadline) {
-      if (deps.shouldStop()) return null;
-      await new Promise((r) => setTimeout(r, 4000));
-      const body: any = await deps.kieRequestJson(
-        `${deps.statusUrl}?taskId=${taskId}`,
-        { headers: { Authorization: `Bearer ${deps.kieApiKey}` } },
-        { label: `${label}-poll`, retries: 2, shouldStop: () => deps.shouldStop() || Date.now() >= deadline },
-      );
-      if (!body || body.code !== 200 || !body.data) continue;
-      const state = body.data.state;
-      if (state === "success") {
-        let result: any = {};
-        try {
-          result = typeof body.data.resultJson === "string"
-            ? JSON.parse(body.data.resultJson)
-            : (body.data.resultJson || {});
-        } catch {}
-        const cdnUrl = (result.resultUrls || [])[0] || null;
-        if (!cdnUrl) return null;
-        return reuploadStable(deps, cdnUrl);
-      }
-      if (state === "fail" || state === "failed" || state === "error") {
-        console.warn(`[ANI] ${label} failed:`, body.data?.failMsg);
-        break;
-      }
+    const terminal = await waitForKieJob(taskId, {
+      deadlineMs: STILL_DEADLINE_MS,
+      shouldStop: deps.shouldStop,
+      pollIntervalMs: 4000,
+      label: `ANI ${label}`,
+      pollOnce: async () => {
+        const body: any = await deps.kieRequestJson(
+          `${deps.statusUrl}?taskId=${taskId}`,
+          { headers: { Authorization: `Bearer ${deps.kieApiKey}` } },
+          { label: `${label}-poll`, retries: 2, shouldStop: () => deps.shouldStop() || false },
+        );
+        if (!body || body.code !== 200 || !body.data) return null;
+        return body.data;
+      },
+    });
+    if (terminal.ok) {
+      const cdnUrl = kieResultUrl(terminal.data);
+      if (cdnUrl) return reuploadStable(deps, cdnUrl);
+    } else if (terminal.reason === "fail") {
+      console.warn(`[ANI] ${label} failed:`, terminal.data?.failMsg);
     }
+    // timeout / fail → retry create
   }
   return null;
 }

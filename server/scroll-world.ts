@@ -11,6 +11,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { spawn } from "child_process";
+import { withKieCallback, waitForKieJob, kieResultUrl } from "./kie-jobs";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -423,14 +424,14 @@ async function generateStill(
           "Content-Type": "application/json",
           Authorization: `Bearer ${kieApiKey}`,
         },
-        body: JSON.stringify({
+        body: JSON.stringify(withKieCallback({
           model: STILL_MODEL,
           input: {
             prompt: prompt.slice(0, PROMPT_MAX),
             aspect_ratio: "16:9",
             resolution: "2K",
           },
-        }),
+        })),
       },
       { label: `SCROLLWORLD ${label}-create`, retries: 4, shouldStop },
     );
@@ -442,49 +443,39 @@ async function generateStill(
     }
     log(`${label} still task ${taskId}`);
 
-    const deadline = Date.now() + STILL_DEADLINE_MS;
-    while (Date.now() < deadline) {
-      if (shouldStop()) return null;
-      await sleep(4000);
-      const body = await kieRequestJson(
-        `${statusUrl}?taskId=${taskId}`,
-        { headers: { Authorization: `Bearer ${kieApiKey}` } },
-        {
-          label: `SCROLLWORLD ${label}-poll`,
-          retries: 2,
-          shouldStop: () => shouldStop() || Date.now() >= deadline,
-        },
-      );
-      if (!body || body.code !== 200 || !body.data) continue;
-      const state: string = body.data.state;
-      if (state === "success") {
-        let result: { resultUrls?: string[] } = {};
-        try {
-          const rj = body.data.resultJson;
-          result = typeof rj === "string" ? JSON.parse(rj) : rj || {};
-        } catch {
-          /* ignore */
+    const terminal = await waitForKieJob(taskId, {
+      deadlineMs: STILL_DEADLINE_MS,
+      shouldStop,
+      pollIntervalMs: 4000,
+      label: `SCROLLWORLD ${label}`,
+      pollOnce: async () => {
+        const body = await kieRequestJson(
+          `${statusUrl}?taskId=${taskId}`,
+          { headers: { Authorization: `Bearer ${kieApiKey}` } },
+          { label: `SCROLLWORLD ${label}-poll`, retries: 2, shouldStop },
+        );
+        if (!body || body.code !== 200 || !body.data) return null;
+        return body.data;
+      },
+    });
+    if (terminal.ok) {
+      const cdnUrl = kieResultUrl(terminal.data);
+      if (!cdnUrl) continue;
+      try {
+        const imgResp = await fetch(cdnUrl, { signal: AbortSignal.timeout(25000) });
+        if (imgResp.ok) {
+          const imgBuf = Buffer.from(await imgResp.arrayBuffer());
+          const stable = await uploadBuffer(deps, imgBuf, "image/jpeg", "jpg");
+          log(`${label} still re-uploaded → ${stable}`);
+          return stable;
         }
-        const cdnUrl = (result.resultUrls || [])[0] || null;
-        if (!cdnUrl) break;
-        try {
-          const imgResp = await fetch(cdnUrl, { signal: AbortSignal.timeout(25000) });
-          if (imgResp.ok) {
-            const imgBuf = Buffer.from(await imgResp.arrayBuffer());
-            const stable = await uploadBuffer(deps, imgBuf, "image/jpeg", "jpg");
-            log(`${label} still re-uploaded → ${stable}`);
-            return stable;
-          }
-        } catch (upErr: unknown) {
-          const msg = upErr instanceof Error ? upErr.message : String(upErr);
-          warn(`${label} still re-upload failed, using CDN: ${msg}`);
-        }
-        return absUrl(deps.appBaseUrl, cdnUrl);
+      } catch (upErr: unknown) {
+        const msg = upErr instanceof Error ? upErr.message : String(upErr);
+        warn(`${label} still re-upload failed, using CDN: ${msg}`);
       }
-      if (state === "fail" || state === "failed" || state === "error") {
-        warn(`${label} still failed (attempt ${attempt + 1}):`, body.data?.failMsg);
-        break;
-      }
+      return absUrl(deps.appBaseUrl, cdnUrl);
+    } else if (terminal.reason === "fail") {
+      warn(`${label} still failed (attempt ${attempt + 1}):`, terminal.data?.failMsg);
     }
   }
   warn(`${label} still generation exhausted`);
@@ -511,7 +502,7 @@ async function createAndPollKling(opts: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${kieApiKey}`,
       },
-      body: JSON.stringify({
+      body: JSON.stringify(withKieCallback({
         model: KLING_MODEL,
         input: {
           prompt: prompt.slice(0, PROMPT_MAX),
@@ -522,7 +513,7 @@ async function createAndPollKling(opts: {
           mode: "std",
           multi_shots: false,
         },
-      }),
+      })),
     },
     {
       label: `SCROLLWORLD ${label}-create`,
@@ -538,54 +529,42 @@ async function createAndPollKling(opts: {
   }
   log(`${label} task created: ${taskId} (dur=${duration}, frames=${imageUrls.length})`);
 
-  const deadline = Date.now() + CLIP_DEADLINE_MS;
-  let pollCount = 0;
-  while (Date.now() < deadline) {
-    if (shouldStop()) return null;
-    await sleep(POLL_INTERVAL_MS);
-    pollCount++;
-    const body = await kieRequestJson(
-      `${statusUrl}?taskId=${taskId}`,
-      { headers: { Authorization: `Bearer ${kieApiKey}` } },
-      {
-        label: `SCROLLWORLD ${label}-poll`,
-        retries: 2,
-        shouldStop: () => shouldStop() || Date.now() >= deadline,
-      },
-    );
-    if (!body || body.code !== 200 || !body.data) {
-      if (pollCount <= 3 || pollCount % 10 === 0) log(`${label} poll #${pollCount}: no data`);
-      continue;
-    }
-    const state: string = body.data.state;
-    if (pollCount <= 3 || pollCount % 10 === 0) log(`${label} poll #${pollCount} state=${state}`);
+  const terminal = await waitForKieJob(taskId, {
+    deadlineMs: CLIP_DEADLINE_MS,
+    shouldStop,
+    pollIntervalMs: POLL_INTERVAL_MS,
+    label: `SCROLLWORLD ${label}`,
+    pollOnce: async () => {
+      const body = await kieRequestJson(
+        `${statusUrl}?taskId=${taskId}`,
+        { headers: { Authorization: `Bearer ${kieApiKey}` } },
+        {
+          label: `SCROLLWORLD ${label}-poll`,
+          retries: 2,
+          shouldStop,
+        },
+      );
+      if (!body || body.code !== 200 || !body.data) return null;
+      return body.data;
+    },
+  });
 
-    if (state === "success") {
-      let result: { resultUrls?: string[] } = {};
-      try {
-        const rj = body.data.resultJson;
-        result = typeof rj === "string" ? JSON.parse(rj) : rj || {};
-      } catch (parseErr: unknown) {
-        const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-        warn(`${label} resultJson parse error: ${msg}`);
-      }
-      const mp4Url = (result.resultUrls || [])[0] || null;
-      log(`${label} success mp4=${mp4Url}`);
-      return { taskId, mp4Url };
-    }
-
-    if (state === "fail" || state === "failed" || state === "error") {
-      const failMsg: string = body.data.failMsg || "";
-      const failCode: string = String(body.data.failCode || "");
-      warn(`${label} failed: failMsg="${failMsg}" failCode="${failCode}"`);
-      return {
-        taskId,
-        mp4Url: null,
-        failMsg,
-        failCode,
-        moderation: isModerationError(failMsg, failCode),
-      };
-    }
+  if (terminal.ok) {
+    const mp4Url = kieResultUrl(terminal.data);
+    log(`${label} success mp4=${mp4Url}`);
+    return { taskId, mp4Url };
+  }
+  if (terminal.reason === "fail") {
+    const failMsg: string = String(terminal.data?.failMsg || "");
+    const failCode: string = String(terminal.data?.failCode || "");
+    warn(`${label} failed: failMsg="${failMsg}" failCode="${failCode}"`);
+    return {
+      taskId,
+      mp4Url: null,
+      failMsg,
+      failCode,
+      moderation: isModerationError(failMsg, failCode),
+    };
   }
   warn(`${label} timed out after ~${CLIP_DEADLINE_MS / 60000} min`);
   return { taskId, mp4Url: null };
