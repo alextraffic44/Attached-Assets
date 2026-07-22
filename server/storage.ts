@@ -33,6 +33,7 @@ export interface IStorage {
 
   getProjectVersions(projectId: number): Promise<ProjectVersion[]>;
   createProjectVersion(version: InsertProjectVersion): Promise<ProjectVersion>;
+  updateProjectVersion(id: number, data: { code?: string; files?: { filename: string; code: string }[] | null; label?: string }): Promise<ProjectVersion | undefined>;
 
   getProjectFiles(projectId: number): Promise<ProjectFile[]>;
   getProjectFile(projectId: number, filename: string): Promise<ProjectFile | undefined>;
@@ -351,6 +352,22 @@ export class DatabaseStorage implements IStorage {
 
   async createProjectVersion(version: InsertProjectVersion): Promise<ProjectVersion> {
     const [v] = await db.insert(projectVersions).values(version).returning();
+    return v;
+  }
+
+  async updateProjectVersion(
+    id: number,
+    data: { code?: string; files?: { filename: string; code: string }[] | null; label?: string },
+  ): Promise<ProjectVersion | undefined> {
+    const patch: Partial<typeof projectVersions.$inferInsert> = {};
+    if (data.code !== undefined) patch.code = data.code;
+    if (data.files !== undefined) patch.files = data.files;
+    if (data.label !== undefined) patch.label = data.label;
+    if (!Object.keys(patch).length) {
+      const [cur] = await db.select().from(projectVersions).where(eq(projectVersions.id, id));
+      return cur;
+    }
+    const [v] = await db.update(projectVersions).set(patch).where(eq(projectVersions.id, id)).returning();
     return v;
   }
 
