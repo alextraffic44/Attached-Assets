@@ -2,7 +2,9 @@
  * «Тригер» — Hero with a character (animal / robot / creature) on the RIGHT,
  * styled background on the LEFT. A short (≈4s) Kling clip ALWAYS turns the head
  * LEFT → CENTER → RIGHT on a fixed timeline; mouse X smoothly scrubs frames so
- * gaze follows the cursor (frame[0]=left, last=right).
+ * gaze follows the cursor (frame[0]=left, last=right). Left/right pointer zones
+ * hard-lock the extreme frames so the head does not wobble while the cursor stays
+ * on one side.
  */
 
 import { gemini } from "./gemini";
@@ -187,31 +189,51 @@ export function buildTriggerLookHtml(
       if(img){ fitDraw(img); lastDraw=i; }
     }
 
-    function lookFromPointer(clientX, clientY){
+    // Map pointer X → gaze 0..1. Wide side locks keep the head STABLE when the
+    // cursor stays on the left or right (no scrub through Kling hold-wobble frames).
+    function lookFromPointer(clientX){
       var rect=root.getBoundingClientRect();
-      // Full-viewport X: left (copy) → look left / frame 0; right (character) → look right / last frame.
       var nx=(clientX - rect.left) / Math.max(1, rect.width);
-      var ny=(clientY - rect.top) / Math.max(1, rect.height);
       nx=Math.max(0, Math.min(1, nx));
-      ny=Math.max(0, Math.min(1, ny));
-      // Slight vertical bias for natural gaze; keep horizontal dominant.
-      var look = nx * 0.94 + (ny - 0.5) * 0.06;
-      return Math.max(0, Math.min(1, look));
+      var LEFT_LOCK=0.28;
+      var RIGHT_LOCK=0.72;
+      if(nx <= LEFT_LOCK) return 0;
+      if(nx >= RIGHT_LOCK) return 1;
+      return (nx - LEFT_LOCK) / (RIGHT_LOCK - LEFT_LOCK);
+    }
+
+    // Prefer the clean turning segment for intermediate looks; extremes always
+    // pin to first/last frame so left cursor ⇒ look left only.
+    var turnStart=Math.max(1, Math.round((frames.length-1)*0.18));
+    var turnEnd=Math.min(frames.length-2, Math.round((frames.length-1)*0.82));
+    if(turnEnd <= turnStart){ turnStart=0; turnEnd=frames.length-1; }
+
+    function targetFrameForLook(look){
+      if(look <= 0) return 0;
+      if(look >= 1) return frames.length-1;
+      return turnStart + look * (turnEnd - turnStart);
     }
 
     function onPointer(clientX, clientY){
       if(!ready || reduce) return;
       lastPtrX=clientX; lastPtrY=clientY;
-      var look=lookFromPointer(clientX, clientY);
-      target = look * (frames.length - 1);
+      var look=lookFromPointer(clientX);
+      target = targetFrameForLook(look);
+      // Instant pin at extremes — never ease through neighboring frames while locked.
+      if(look <= 0){ current=0; }
+      else if(look >= 1){ current=frames.length-1; }
       if(hint) hint.style.opacity='0';
     }
 
     function tick(){
       if(ready){
-        var ease = reduce ? 1 : 0.16;
-        current += (target - current) * ease;
-        if(Math.abs(target - current) < 0.015) current = target;
+        if(target <= 0){ current=0; }
+        else if(target >= frames.length-1){ current=frames.length-1; }
+        else {
+          var ease = reduce ? 1 : 0.2;
+          current += (target - current) * ease;
+          if(Math.abs(target - current) < 0.05) current = target;
+        }
         render();
       }
       requestAnimationFrame(tick);
@@ -224,7 +246,7 @@ export function buildTriggerLookHtml(
     window.addEventListener('pointermove', onMove, {passive:true});
     window.addEventListener('touchmove', onTouch, {passive:true});
     // Seed center gaze so left/right scrub has room both ways when frames are full L→R.
-    target = (frames.length - 1) * 0.5;
+    target = targetFrameForLook(0.5);
     current = target;
 
     window.addEventListener('resize', function(){
