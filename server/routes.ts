@@ -3764,32 +3764,34 @@ VIDEO_PROMPT (английский, ТОЛЬКО запятые, без | :: {})
 ═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — МОУШН» (WebGL hover-reveal под ЛЮБУЮ нишу) ═══
 Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
 
-Ты — креативный арт-директор. Сначала ПОЙМИ нишу сайта из запроса пользователя (ресторан, стройка, клиника, недвижимость, авто, юристы, кофейня, спортзал, школа, салон, IT и т.д.). Затем придумай ПАРУ ЯРКИХ ЦВЕТНЫХ кадров «состояние A → состояние B», которая именно для ЭТОЙ ниши выглядит вау при наведении курсора. ОБА кадра в ПОЛНОМ ЦВЕТЕ (НЕ чёрно-белые). Это НЕ обязательно портрет человека и НЕ шлем/маска — субъект может быть блюдом, интерьером, зданием, инструментом, улыбкой, машиной, упаковкой, рабочим местом — чем угодно, что продаёт нишу.
+Ты — креативный арт-директор. Сначала ПОЙМИ нишу сайта из запроса пользователя (ресторан, стройка, клиника, недвижимость, авто, юристы, кофейня, спортзал, школа, салон, IT, ювелирка, мода и т.д.). Затем придумай ПАРУ ЯРКИХ ЦВЕТНЫХ кадров «объект A → объект B / до → после», где при наведении курсора ВИДНО, что сам предмет или результат услуги изменился (не только свет). ОБА кадра в ПОЛНОМ ЦВЕТЕ. Субъект может быть блюдом, платьем, кольцом, интерьером, машиной, улыбкой, букетом — чем угодно под нишу.
 
 РАЗДЕЛЕНИЕ РОЛЕЙ:
-→ ПАЙПЛАЙН: сначала генерирует базовый кадр, затем IMAGE-TO-IMAGE поверх него (объекты НЕ смещаются) + текст оверлея СЛЕВА.
-→ ТЫ пишешь маркер с парой сцен и короткими текстами.
+→ ПАЙПЛАЙН: сначала базовый кадр, затем IMAGE-TO-IMAGE (тот же ракурс/место в кадре, но объект МОРФИТСЯ) + текст СЛЕВА.
+→ ТЫ пишешь маркер: состояние A /// состояние B (что именно превращается во что).
 
 ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
 → СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
 {{SCROLLANIM:BASE_SCENE_IN_ENGLISH /// REVEAL_SCENE_IN_ENGLISH|Блок1::Текст1||Блок2::Текст2||Блок3::Текст3||Блок4::Текст4}}
 
 Формат ENGLISH-части ОБЯЗАТЕЛЬНО с разделителем " /// " (пробел-три-слэша-пробел):
-- СЛЕВА от /// — базовый ЦВЕТНОЙ кадр: конкретная сцена ниши, субъект справа/по центру-справа, спокойное пространство СЛЕВА под текст, свет, атмосфера (full color)
-- СПРАВА от /// — СИЛЬНО другое состояние (морфинг должен быть заметен с первого взгляда): день↔ночь, холодный↔тёплый, matte↔glossy, dim↔glowing. ТА ЖЕ композиция/ракурс/позиции объектов. Пайплайн сделает image-to-image. ВСЕГДА добавляй: "same subject position camera angle framing locked, dramatic lighting color atmosphere morph, obviously different look not a copy".
+- СЛЕВА от /// — базовый ЦВЕТНОЙ кадр: конкретный объект/сцена ниши справа/по центру-справа, спокойное пространство СЛЕВА под текст
+- СПРАВА от /// — МОРФИНГ САМОГО ОБЪЕКТА (главное!) + свет/материалы: алмаз→кольцо с бриллиантом, красное платье→синее, сырое блюдо→готовое, пустая комната→с ремонтом, тусклое авто→полированное. Тот же ракурс и место в кадре. ВСЕГДА добавляй: "same camera framing subject placement locked, metamorphose the main object into …, obviously different subject not just lighting"
+Пиши развёрнуто, ТОЛЬКО запятые внутри каждой половины (без | :: и фигурных скобок). Обе половины в цвете. ЗАПРЕЩЕНО: black and white / monochrome / grayscale. ЗАПРЕЩЕНО: reveal только про свет без смены объекта.
 
-Примеры под разные ниши (адаптируй под КОНКРЕТНЫЙ бренд пользователя, не копируй слепо):
-- Ресторан: "gourmet plated signature dish on dark slate right of center, rising steam, warm candlelight, calm left negative space for text, rich food colors, tight cinematic framing /// same dish position camera angle framing locked, only lighting materials atmosphere morph to brighter golden hour, golden oil sheen, vibrant herbs, festive fine-dining commercial glow"
-- Кофейня: "artisan latte in ceramic cup on wooden bar right of center at dawn, soft cool window light, calm left text space, cafe editorial /// same cup position camera angle framing locked, only lighting materials atmosphere morph to rich warm afternoon color, crema glow, sunlit espresso machine bokeh"
-- Стройка/ремонт: "modern construction site with crane right of frame at blue hour, cool concrete tones, left calm text space, industrial cinematic color /// same site position camera angle framing locked, only lighting materials atmosphere morph to golden hour, sparks and warm concrete"
-- Недвижимость: "grand modern villa facade right-weighted at blue hour twilight, cool glass reflections, left negative space for copy /// same villa position camera angle framing locked, only lighting materials atmosphere morph to golden hour, warm interior lights glowing through glass"
-- Клиника/стоматология: "confident close-up smile right of center in soft cool clinic light, left calm text space, clean medical beauty color editorial /// same smile position camera angle framing locked, only lighting materials atmosphere morph to warmer luminous healthy glow"
-- Автосервис/авто: "luxury car three-quarter view right-weighted in moody garage, deep teal ambient light, left text space /// same car position camera angle framing locked, only lighting materials atmosphere morph with brighter rim light streaks, richer paint pop"
-- Салон красоты: "elegant hairstyle portrait right of center in salon chair, soft glam color, left text space /// same pose position camera angle framing locked, only lighting materials atmosphere morph with richer hair color shine, brighter glam lighting"
-- Фитнес: "athlete mid-pose right of center in gym, cool stadium light, left text space, vivid sports color /// same pose position camera angle framing locked, only lighting materials atmosphere morph with warmer sweat glow, energetic neon accents"
-- Юристы/услуги: "premium office desk right-weighted with leather folder and city skyline dusk bokeh, left calm copy space /// same desk position camera angle framing locked, only lighting materials atmosphere morph to golden hour, warm brass accents"
-- IT/SaaS: "minimal workspace with laptop right of center and soft interface glow, left text space, cool blue color tech editorial /// same desk position camera angle framing locked, only lighting materials atmosphere morph with luminous richer UI reflections"
-- Цветы/подарки: "bouquet of roses on marble right of center in soft daylight, left calm text space, natural petal colors /// same bouquet position camera angle framing locked, only lighting materials atmosphere morph under romantic evening light, deeper petal saturation, dewdrops"
+Примеры под разные ниши (адаптируй под КОНКРЕТНЫЙ бренд; в каждом объект РЕАЛЬНО меняется):
+- Ювелирка: "raw uncut diamond crystal on dark velvet right of center, cool spotlight, calm left text space, luxury macro /// same camera framing subject placement locked, metamorphose the diamond into a finished platinum diamond engagement ring with brilliant sparkle, obviously different subject not just lighting"
+- Мода/платья: "elegant woman in a vivid red evening dress right of center, soft studio light, calm left text space /// same camera framing subject placement locked, metamorphose the dress into a deep sapphire blue evening gown same silhouette, obviously different subject not just lighting"
+- Ресторан: "raw plated ingredients arranged on dark slate right of center, cool prep light, left text space /// same camera framing subject placement locked, metamorphose into the finished gourmet signature dish with glaze and garnish, obviously different subject not just lighting"
+- Кофейня: "plain empty ceramic cup on wooden bar right of center at dawn, calm left text space /// same camera framing subject placement locked, metamorphose into a rich latte with crema art and rising steam, obviously different subject not just lighting"
+- Недвижимость: "empty unfinished modern villa room right-weighted, cool daylight, left copy space /// same camera framing subject placement locked, metamorphose into a fully furnished luxury interior with warm evening lamps, obviously different subject not just lighting"
+- Стройка/ремонт: "bare concrete apartment shell right of frame, cool industrial light, left text space /// same camera framing subject placement locked, metamorphose into a finished renovated living room with flooring furniture and warm lights, obviously different subject not just lighting"
+- Авто: "dusty dull luxury car three-quarter view right-weighted in garage, left text space /// same camera framing subject placement locked, metamorphose into a showroom-polished gleaming car with mirror paint and rim light, obviously different subject not just lighting"
+- Салон/красота: "client with dull flat hair in salon chair right of center, soft light, left text space /// same camera framing subject placement locked, metamorphose into glamorous colored styled hair with rich shine, obviously different subject not just lighting"
+- Фитнес: "soft untrained physique athlete stance right of center in gym, cool light, left text space /// same camera framing subject placement locked, metamorphose into a defined athletic after-transform physique same pose, obviously different subject not just lighting"
+- Стоматология: "close-up smile with imperfect teeth right of center, clinical light, left text space /// same camera framing subject placement locked, metamorphose into a perfect bright white healthy smile, obviously different subject not just lighting"
+- Цветы: "simple closed flower buds bouquet on marble right of center, soft daylight, left text space /// same camera framing subject placement locked, metamorphose into a full blooming luxury rose bouquet with dewdrops, obviously different subject not just lighting"
+- IT/SaaS: "blank dark laptop screen on desk right of center, cool tech light, left text space /// same camera framing subject placement locked, metamorphose into a glowing rich analytics dashboard UI on the same laptop, obviously different subject not just lighting"
 
 Тексты — РОВНО 4 пары на РУССКОМ (Заголовок::Подзаголовок): короткие мощные фразы под нишу. Они будут показаны СЛЕВА поверх hero.
 
@@ -3799,7 +3801,7 @@ VIDEO_PROMPT (английский, ТОЛЬКО запятые, без | :: {})
 ⚠️ НЕ создавай canvas/WebGL-код вручную. Маркер заменяется автоматически системой.
 ⚠️ НЕ своди всё к портрету со шлемом — думай как арт-директор бренда ЭТОЙ ниши.
 ⚠️ НЕ делай базовый кадр чёрно-белым — оба кадра цветные и яркие.
-⚠️ Reveal-половина НЕ должна описывать другой ракурс или сдвиг объекта — только морфинг вида.
+⚠️ Reveal ОБЯЗАН менять сам объект/результат (не только свет). Ракурс и место в кадре — те же.
 🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML и содержать " /// ".
 ═══ КОНЕЦ РЕЖИМА МОУШН ═══\n`;
         } else {

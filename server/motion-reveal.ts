@@ -3,8 +3,9 @@
  *
  * Pipeline:
  * 1) Generate BASE still (T2I / product ref)
- * 2) IMAGE-TO-IMAGE from that exact base → REVEAL still (same subject position,
- *    only mood/materials/light morph) so the two frames register perfectly
+ * 2) IMAGE-TO-IMAGE from that exact base → REVEAL still (same camera/placement,
+ *    but the subject/object metamorphoses — e.g. diamond→ring, red dress→blue —
+ *    plus lighting/materials) so frames register for hover morph
  * 3) Self-contained HTML: fluid cursor reveal, copy on the LEFT, chromatic edges
  */
 export const SCROLL_MOTION_COST = 120;
@@ -187,17 +188,20 @@ function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
   );
 }
 
-/** I2I reveal: same composition/pose, but a DRAMATIC visible morph (not a near-copy). */
+/** I2I reveal: same camera/placement, but SUBJECT/OBJECT can metamorphose (plus look). */
 function buildRevealPrompt(revealScene: string): string {
   return (
-    `Image-to-image edit of the reference photograph for a hover morph overlay. ` +
-    `KEEP camera angle, framing, subject placement, scale and pose identical — do not shift objects in the frame. ` +
-    `But CHANGE THE LOOK DRAMATICALLY so the result is OBVIOUSLY a different moment, not a duplicate. ` +
-    `Strong visible metamorphosis to apply: ${revealScene}. ` +
-    `Push a bold before→after: clearly different lighting direction/color temperature, richer or opposite color grade, ` +
-    `changed atmosphere (day↔night, cool↔warm, calm↔festive, matte↔glossy, dry↔wet sheen, dim↔glowing accents). ` +
-    `The difference must be unmistakable at a glance — if it looks almost the same as the reference, push contrast, hue and light MUCH harder. ` +
-    `FULL VIVID COLOR, premium commercial photography. No text, no watermark, no logos. Same 16:9 framing.`
+    `Image-to-image metamorphosis of the reference photograph for a hover morph overlay. ` +
+    `KEEP the same camera angle, framing, scale and the subject's place in the frame (perfect registration). ` +
+    `DO transform the SUBJECT / OBJECT itself into the reveal state — not only light. ` +
+    `Examples of the intended change class: raw diamond → finished diamond ring, red dress → blue dress, ` +
+    `plain cake → decorated celebration cake, unfinished room → finished interior, dull car → polished showroom car. ` +
+    `Apply this metamorphosis: ${revealScene}. ` +
+    `The reveal must be OBVIOUSLY a different object or clearly transformed product/outfit/scene element at a glance, ` +
+    `while staying in the same spot and silhouette footprint so the morph overlay lines up. ` +
+    `Also upgrade lighting, materials and atmosphere to sell the new state. FULL VIVID COLOR. ` +
+    `If the result still looks like the same unchanged object, the edit FAILED — push the object change harder. ` +
+    `No text, no watermark, no logos. Same 16:9 framing.`
   );
 }
 
@@ -224,14 +228,16 @@ export async function generateMotionRevealPair(opts: {
     return null;
   }
 
-  // 2) Reveal = image-to-image from the finished base (same pose, strong morph)
+  // 2) Reveal = image-to-image from the finished base (same placement, object+look morph)
   const morphBrief =
     !revealScene ||
     revealScene === baseScene ||
     revealScene.length < 20
-      ? `${baseScene}, dramatic opposite lighting and color grade — cool muted dawn becomes warm saturated golden hour with glowing accents, richer materials, much higher contrast`
+      ? `${baseScene}, metamorphose the main subject/object into its premium finished counterpart in the same place ` +
+        `(e.g. raw material → finished product, one product color → another, before → after result), ` +
+        `dramatically different look, richer materials and lighting, obviously not a copy`
       : revealScene;
-  deps.onStatus?.("Моушн: image-to-image morph поверх первого кадра…");
+  deps.onStatus?.("Моушн: image-to-image morph объекта поверх первого кадра…");
   const revealUrl = await createStill(
     deps,
     buildRevealPrompt(morphBrief),
