@@ -21,6 +21,15 @@ import {
   parseAnimationalMarker,
   type GenerateAnimationalDeps,
 } from "./animational";
+import {
+  withKieCallback,
+  kieResultUrl,
+  getCachedKieResult,
+  registerKieCallbackRoute,
+  setKieTerminalHandler,
+  waitForKieJob,
+  type KieTaskData,
+} from "./kie-jobs";
 import { setupAuth } from "./auth";
 import { gemini } from "./gemini";
 import { deployToYandex, addCustomDomain, removeCustomDomain, checkDomainStatus, unpublishFromYandex, deleteProjectFromYandex, getDomainProxyIp } from "./yandex-deploy";
@@ -392,6 +401,37 @@ async function kieRequestJson(
   return last;
 }
 
+/** Poll KIE recordInfo with callBackUrl race (webhook settles waiters early). */
+async function waitKieTaskViaCallback(
+  taskId: string,
+  opts: {
+    deadlineMs: number;
+    shouldStop?: () => boolean;
+    pollIntervalMs?: number;
+    label?: string;
+  },
+) {
+  return waitForKieJob(taskId, {
+    deadlineMs: opts.deadlineMs,
+    shouldStop: opts.shouldStop,
+    pollIntervalMs: opts.pollIntervalMs ?? 2500,
+    label: opts.label || "KIE",
+    pollOnce: async () => {
+      const body: any = await kieRequestJson(
+        `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
+        { headers: { Authorization: `Bearer ${KIE_API_KEY}` } },
+        {
+          label: `${opts.label || "KIE"}-poll`,
+          retries: 1,
+          shouldStop: () => !!(opts.shouldStop && opts.shouldStop()),
+        },
+      );
+      if (!body || body.code !== 200 || !body.data) return null;
+      return body.data as KieTaskData;
+    },
+  });
+}
+
 // Step 0 helper: generate a cinematic still image for use as the video source frame.
 // Returns the raw public CDN URL from KIE (NOT re-uploaded) so Kling can fetch it.
 async function generateStillForVideo(
@@ -432,7 +472,7 @@ async function generateStillForVideo(
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({
+        body: JSON.stringify(withKieCallback({
           model: "nano-banana-2",
           input: {
             prompt: imagePrompt,
@@ -440,29 +480,21 @@ async function generateStillForVideo(
             resolution: "1K",
             output_format: "jpg",
           },
-        }),
+        })),
       },
       { label: "SCROLLANIM still-create", retries: 2, shouldStop },
     );
     if (createBody?.code === 200 && createBody?.data?.taskId) taskId = createBody.data.taskId;
     else { console.warn("[SCROLLANIM] still-image create failed:", createBody?.msg); continue; }
-    const imgDeadline = Date.now() + 90000; // 90s per attempt — nano-banana 1K is usually <20s
-    let pollWait = 1500;
-    while (Date.now() < imgDeadline) {
-      if (shouldStop()) return null;
-      await new Promise(r => setTimeout(r, pollWait));
-      pollWait = 1500;
-      const body: any = await kieRequestJson(
-        `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
-        { headers: { "Authorization": `Bearer ${KIE_API_KEY}` } },
-        { label: "SCROLLANIM still-poll", retries: 1, shouldStop: () => shouldStop() || Date.now() >= imgDeadline },
-      );
-      if (!body || body.code !== 200 || !body.data) continue;
-      const state = body.data.state;
-      if (state === "success") {
-        const result = JSON.parse(body.data.resultJson || "{}");
-        const cdnUrl = (result.resultUrls || [])[0] || null;
-        if (cdnUrl) {
+    const terminal = await waitKieTaskViaCallback(taskId, {
+      deadlineMs: 90000,
+      shouldStop,
+      pollIntervalMs: 1500,
+      label: "SCROLLANIM still",
+    });
+    if (terminal.ok) {
+      const cdnUrl = kieResultUrl(terminal.data);
+      if (cdnUrl) {
           // Re-upload to Object Storage → stable permanent URL Kling can always fetch
           // (KIE CDN URLs may expire before Kling dequeues the task, causing video-create to fail)
           try {
@@ -480,13 +512,9 @@ async function generateStillForVideo(
           }
           console.log(`[SCROLLANIM] still image ready (CDN fallback): ${cdnUrl}`);
           return cdnUrl;
-        }
-        break;
       }
-      if (state === "fail" || state === "failed" || state === "error") {
-        console.warn(`[SCROLLANIM] still-image task failed (attempt ${attempt + 1}):`, body.data?.failMsg);
-        break;
-      }
+    } else if (terminal.reason === "fail") {
+      console.warn(`[SCROLLANIM] still-image task failed (attempt ${attempt + 1}):`, terminal.data?.failMsg);
     }
   }
   console.warn("[SCROLLANIM] still-image generation failed after all attempts");
@@ -836,7 +864,7 @@ async function generateProductStill(
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({
+        body: JSON.stringify(withKieCallback({
           model: "nano-banana-2",
           input: {
             prompt,
@@ -845,30 +873,21 @@ async function generateProductStill(
             resolution: "1K",
             output_format: "jpg",
           },
-        }),
+        })),
       },
       { label: "SCROLLANIM product-create", retries: 2, shouldStop },
     );
     if (createBody?.code === 200 && createBody?.data?.taskId) taskId = createBody.data.taskId;
     else { console.warn("[SCROLLANIM] product-still create failed:", createBody?.msg); continue; }
-    const imgDeadline = Date.now() + 90000;
-    let pollWait = 1500;
-    while (Date.now() < imgDeadline) {
-      if (shouldStop()) return null;
-      await new Promise(r => setTimeout(r, pollWait));
-      pollWait = 1500;
-      const body: any = await kieRequestJson(
-        `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
-        { headers: { "Authorization": `Bearer ${KIE_API_KEY}` } },
-        { label: "SCROLLANIM product-poll", retries: 1, shouldStop: () => shouldStop() || Date.now() >= imgDeadline },
-      );
-      if (!body || body.code !== 200 || !body.data) continue;
-      const state = body.data.state;
-      if (state === "success") {
-        const result = JSON.parse(body.data.resultJson || "{}");
-        const cdnUrl = (result.resultUrls || [])[0] || null;
-        if (cdnUrl) {
-          // Re-upload to Object Storage for a stable non-expiring URL
+    const terminal = await waitKieTaskViaCallback(taskId, {
+      deadlineMs: 90000,
+      shouldStop,
+      pollIntervalMs: 1500,
+      label: "SCROLLANIM product",
+    });
+    if (terminal.ok) {
+      const cdnUrl = kieResultUrl(terminal.data);
+      if (cdnUrl) {
           try {
             const imgResp = await fetch(cdnUrl, { signal: AbortSignal.timeout(25000) });
             if (imgResp.ok) {
@@ -884,13 +903,9 @@ async function generateProductStill(
           }
           console.log(`[SCROLLANIM] product still ready (CDN fallback): ${cdnUrl}`);
           return cdnUrl;
-        }
-        break;
       }
-      if (state === "fail" || state === "failed" || state === "error") {
-        console.warn(`[SCROLLANIM] product-still task failed (attempt ${attempt + 1}):`, body.data?.failMsg);
-        break;
-      }
+    } else if (terminal.reason === "fail") {
+      console.warn(`[SCROLLANIM] product-still task failed (attempt ${attempt + 1}):`, terminal.data?.failMsg);
     }
   }
   console.warn("[SCROLLANIM] product-still generation failed after all attempts");
@@ -1017,41 +1032,22 @@ async function generateScrollFrames(
     console.log(`[SCROLLANIM] resuming from existing task ID: ${existingTaskId}`);
     if (onTaskCreated) { try { onTaskCreated(existingTaskId); } catch {} }
     let taskFailed = false;
-    let pollCount = 0;
-    while (Date.now() < deadline) {
-      if (shouldStop()) return { frames: [], confirmedKieFailure: false };
-      await new Promise(r => setTimeout(r, 5000));
-      pollCount++;
-      try {
-        const body: any = await kieRequestJson(
-          `${NANO_BANANA_STATUS_URL}?taskId=${existingTaskId}`,
-          { headers: { "Authorization": `Bearer ${KIE_API_KEY}` } },
-          { label: "SCROLLANIM resume-poll", retries: 2, shouldStop: () => shouldStop() || Date.now() >= deadline },
-        );
-        if (!body || body.code !== 200 || !body.data) { console.log(`[SCROLLANIM] resume poll #${pollCount}: no data`); continue; }
-        const state = body.data.state;
-        if (pollCount <= 3 || pollCount % 10 === 0) console.log(`[SCROLLANIM] resume poll #${pollCount} state=${state}`);
-        if (state === "success") {
-          let result: any = {};
-          try { result = typeof body.data.resultJson === "string" ? JSON.parse(body.data.resultJson) : (body.data.resultJson || {}); } catch {}
-          mp4Url = (result.resultUrls || [])[0] || null;
-          console.log(`[SCROLLANIM] resume success, mp4Url=${mp4Url}`);
-          break;
-        }
-        if (state === "fail" || state === "failed" || state === "error") {
-          console.warn(`[SCROLLANIM] resumed task ${existingTaskId} reported failure:`, body.data.failMsg || body.data.failCode);
-          taskFailed = true;
-          if (isKieTaskInfraFailure(body.data.failMsg, body.data.failCode)) markKieFail();
-          break;
-        }
-      } catch (e: any) {
-        console.warn("[SCROLLANIM] resume poll error:", e?.message);
-      }
+    const resumeTerminal = await waitKieTaskViaCallback(existingTaskId, {
+      deadlineMs: Math.max(5000, deadline - Date.now()),
+      shouldStop,
+      pollIntervalMs: 5000,
+      label: "SCROLLANIM resume",
+    });
+    if (resumeTerminal.ok) {
+      mp4Url = kieResultUrl(resumeTerminal.data);
+      console.log(`[SCROLLANIM] resume success, mp4Url=${mp4Url}`);
+    } else if (resumeTerminal.reason === "fail") {
+      console.warn(`[SCROLLANIM] resumed task ${existingTaskId} reported failure:`, resumeTerminal.data?.failMsg || resumeTerminal.data?.failCode);
+      taskFailed = true;
+      if (isKieTaskInfraFailure(resumeTerminal.data?.failMsg as any, resumeTerminal.data?.failCode as any)) markKieFail();
     }
     if (!mp4Url) {
       console.warn(`[SCROLLANIM] resume failed or timed out for task ${existingTaskId}`);
-      // Timeout without explicit fail → KIE didn't deliver. Explicit fail already
-      // set confirmedKieFailure only for infra (not moderation).
       if (!taskFailed) markKieFail();
       return { frames: [], confirmedKieFailure };
     }
@@ -1072,7 +1068,7 @@ async function generateScrollFrames(
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-        body: JSON.stringify({
+        body: JSON.stringify(withKieCallback({
           model: KLING_IMG2VID_MODEL,
           input: {
             prompt: animPrompt.slice(0, 2500),
@@ -1080,7 +1076,7 @@ async function generateScrollFrames(
             duration: String(videoDuration),
             resolution: videoResolution,
           },
-        }),
+        })),
       },
       { label: "SCROLLANIM video-create", retries: 4, shouldStop: () => shouldStop() || Date.now() >= deadline },
     );
@@ -1094,52 +1090,31 @@ async function generateScrollFrames(
     console.log(`[SCROLLANIM] video task created (attempt ${videoAttempt + 1}): ${taskId}`);
     if (onTaskCreated) { try { onTaskCreated(taskId); } catch {} }
 
-    // Step 2 — poll for completion (Kling video can take up to 35 min in queue)
+    // Step 2 — wait for completion via callBackUrl (poll fallback). Kling can take up to ~35 min.
     let taskFailed = false;
     let moderationFailed = false;
-    let pollCount = 0;
-    while (Date.now() < deadline) {
-      if (shouldStop()) return { frames: [], confirmedKieFailure: false };
-      await new Promise(r => setTimeout(r, layout === "site3d" ? 3000 : 5000));
-      pollCount++;
-      try {
-        const body: any = await kieRequestJson(
-          `${NANO_BANANA_STATUS_URL}?taskId=${taskId}`,
-          { headers: { "Authorization": `Bearer ${KIE_API_KEY}` } },
-          { label: "SCROLLANIM video-poll", retries: 1, shouldStop: () => shouldStop() || Date.now() >= deadline },
-        );
-        if (!body || body.code !== 200 || !body.data) { console.log(`[SCROLLANIM] poll #${pollCount}: no data`); continue; }
-        const state = body.data.state;
-        if (pollCount <= 3 || pollCount % 10 === 0) console.log(`[SCROLLANIM] poll #${pollCount} state=${state}`);
-        if (state === "success") {
-          console.log(`[SCROLLANIM] task success, resultJson=${JSON.stringify(body.data.resultJson)?.slice(0, 200)}`);
-          let result: any = {};
-          const rj = body.data.resultJson;
-          try { result = typeof rj === "string" ? JSON.parse(rj) : (rj || {}); } catch (parseErr: any) {
-            console.warn("[SCROLLANIM] resultJson parse error:", parseErr?.message, "raw:", String(rj).slice(0, 200));
-          }
-          mp4Url = (result.resultUrls || [])[0] || null;
-          console.log(`[SCROLLANIM] mp4Url=${mp4Url}`);
-          break;
-        }
-        if (state === "fail" || state === "failed" || state === "error") {
-          const failMsg: string = body.data.failMsg || "";
-          const failCode: string = String(body.data.failCode || "");
-          console.warn(`[SCROLLANIM] video task failed (attempt ${videoAttempt + 1}): failMsg="${failMsg}" failCode="${failCode}"`);
-          taskFailed = true;
-          if (isModerationError(failMsg, failCode)) {
-            moderationFailed = true;
-            console.warn("[SCROLLANIM] content moderation failure detected — will sanitize prompt and regenerate still for next attempt");
-          } else if (isKieTaskInfraFailure(failMsg, failCode)) {
-            markKieFail();
-          } else {
-            // Unknown fail reason — do NOT mark as confirmed KIE (not 100% sure)
-            console.warn("[SCROLLANIM] task fail with unclassified reason — no auto-refund flag");
-          }
-          break; // break poll loop → outer loop will retry
-        }
-      } catch (e: any) {
-        console.warn("[SCROLLANIM] poll error:", e?.message);
+    const videoTerminal = await waitKieTaskViaCallback(taskId, {
+      deadlineMs: Math.max(5000, deadline - Date.now()),
+      shouldStop,
+      pollIntervalMs: layout === "site3d" ? 3000 : 5000,
+      label: "SCROLLANIM video",
+    });
+    if (videoTerminal.ok) {
+      console.log(`[SCROLLANIM] task success via ${videoTerminal.data?.state}`);
+      mp4Url = kieResultUrl(videoTerminal.data);
+      console.log(`[SCROLLANIM] mp4Url=${mp4Url}`);
+    } else if (videoTerminal.reason === "fail") {
+      const failMsg: string = String(videoTerminal.data?.failMsg || "");
+      const failCode: string = String(videoTerminal.data?.failCode || "");
+      console.warn(`[SCROLLANIM] video task failed (attempt ${videoAttempt + 1}): failMsg="${failMsg}" failCode="${failCode}"`);
+      taskFailed = true;
+      if (isModerationError(failMsg, failCode)) {
+        moderationFailed = true;
+        console.warn("[SCROLLANIM] content moderation failure detected — will sanitize prompt and regenerate still for next attempt");
+      } else if (isKieTaskInfraFailure(failMsg, failCode)) {
+        markKieFail();
+      } else {
+        console.warn("[SCROLLANIM] task fail with unclassified reason — no auto-refund flag");
       }
     }
     if (mp4Url) break;           // success — exit retry loop
@@ -2274,12 +2249,12 @@ async function generateGptImage(
           const createResp = await fetch(NANO_BANANA_CREATE_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": `Bearer ${KIE_API_KEY}` },
-            body: JSON.stringify({
+            body: JSON.stringify(withKieCallback({
               model: useRefs ? "gpt-image-2-image-to-image" : "gpt-image-2-text-to-image",
               input: useRefs
                 ? { prompt, input_urls: refUrls, aspect_ratio: aspectRatio, resolution: "1K" }
                 : { prompt, aspect_ratio: aspectRatio, resolution: "1K" },
-            }),
+            })),
           });
           if (createResp.status === 429 || createResp.status >= 500) {
             createHttpInfra = true;
@@ -2305,61 +2280,36 @@ async function generateGptImage(
         continue;
       }
 
-      // --- Step 2: poll until done or 3-min per-task deadline ---
+      // --- Step 2: wait via callBackUrl (poll fallback), 3-min per-task deadline ---
       const taskId = createBody.data.taskId;
-      const deadline = Date.now() + 180000;
-      let taskFailed = false;
-      while (Date.now() < deadline) {
-        if (shouldStop()) return { url: null, confirmedKieFailure: false };
-        await new Promise((r) => setTimeout(r, 3000));
-        let statusBody: any = null;
-        try {
-          const statusResp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
-            headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
-          });
-          if (statusResp.status === 429 || statusResp.status >= 500) {
-            sawConfirmedKieFailure = true;
-            continue;
-          }
-          statusBody = await statusResp.json().catch(() => null);
-        } catch (pollErr: any) {
-          console.warn("[GENIMG] poll network error:", pollErr?.message);
-          sawConfirmedKieFailure = true;
-          continue;
-        }
-        if (!statusBody || statusBody.code !== 200) {
-          if (isConfirmedKieJobBodyFailure(statusBody)) sawConfirmedKieFailure = true;
-          continue;
-        }
-        const state = statusBody.data?.state;
-        if (state === "success") {
-          const result = JSON.parse(statusBody.data.resultJson);
-          const urls = result.resultUrls || [];
-          if (!urls[0]) { taskFailed = true; lastFailedExplicitly = true; sawConfirmedKieFailure = true; break; }
-          const imgResp = await fetch(urls[0]);
-          if (!imgResp.ok) { taskFailed = true; lastFailedExplicitly = true; sawConfirmedKieFailure = true; break; }
-          const buf = Buffer.from(await imgResp.arrayBuffer());
-          return { url: await uploadToObjectStorage(buf, "image/jpeg", "jpg"), confirmedKieFailure: false };
-        }
-        if (state === "fail" || state === "failed" || state === "error") {
-          const failMsg = statusBody.data?.failMsg;
-          const failCode = statusBody.data?.failCode;
-          console.warn(`[GENIMG] task failed (attempt ${attempt + 1}):`, failMsg);
-          taskFailed = true;
-          lastFailedExplicitly = true;
-          if (isKieModerationFailure(failMsg, failCode)) {
-            // Content policy — do not mark as KIE infra failure
-          } else if (isKieTaskInfraFailure(failMsg, failCode)) {
-            sawConfirmedKieFailure = true;
-          }
-          break;
-        }
+      const terminal = await waitKieTaskViaCallback(taskId, {
+        deadlineMs: 180000,
+        shouldStop,
+        pollIntervalMs: 3000,
+        label: "GENIMG",
+      });
+      if (terminal.ok) {
+        const urls0 = kieResultUrl(terminal.data);
+        if (!urls0) { lastFailedExplicitly = true; sawConfirmedKieFailure = true; continue; }
+        const imgResp = await fetch(urls0);
+        if (!imgResp.ok) { lastFailedExplicitly = true; sawConfirmedKieFailure = true; continue; }
+        const buf = Buffer.from(await imgResp.arrayBuffer());
+        return { url: await uploadToObjectStorage(buf, "image/jpeg", "jpg"), confirmedKieFailure: false };
       }
-      if (!taskFailed) {
+      if (terminal.reason === "fail") {
+        const failMsg = terminal.data?.failMsg;
+        const failCode = terminal.data?.failCode;
+        console.warn(`[GENIMG] task failed (attempt ${attempt + 1}):`, failMsg);
+        lastFailedExplicitly = true;
+        if (isKieModerationFailure(failMsg as any, failCode as any)) {
+          // Content policy — do not mark as KIE infra failure
+        } else if (isKieTaskInfraFailure(failMsg as any, failCode as any)) {
+          sawConfirmedKieFailure = true;
+        }
+      } else {
         // Deadline exceeded without a fail/success signal — API is slow, back off
         console.warn(`[GENIMG] task timed out (attempt ${attempt + 1})`);
         sawConfirmedKieFailure = true;
-        // lastFailedExplicitly stays false → TIMEOUT_RETRY_DELAYS applied next iteration
       }
       // fall through to next attempt
     } catch (e: any) {
@@ -3138,6 +3088,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   setupAuth(app);
+  registerKieCallbackRoute(app);
 
   try {
     // Deduplicate any legacy rows before creating the unique index
@@ -5486,10 +5437,10 @@ ${designAnalysis}
               "Content-Type": "application/json",
               "Authorization": `Bearer ${KIE_API_KEY}`,
             },
-            body: JSON.stringify({
+            body: JSON.stringify(withKieCallback({
               model: "gpt-image-2-text-to-image",
               input: gptInput,
-            }),
+            })),
           });
           const gptBody = await gptResp.json();
           console.log("GPT Image-2 create response:", JSON.stringify(gptBody));
@@ -5520,10 +5471,10 @@ ${designAnalysis}
             "Content-Type": "application/json",
             "Authorization": `Bearer ${KIE_API_KEY}`,
           },
-          body: JSON.stringify({
+          body: JSON.stringify(withKieCallback({
             model: "nano-banana-2",
             input: nbInput,
-          }),
+          })),
         });
         createBody = await nbResp.json();
         usedModel = "nano-banana-2";
@@ -5578,10 +5529,19 @@ ${designAnalysis}
   app.get("/api/images/status/:taskId", requireAuth, async (req, res) => {
     try {
       const { taskId } = req.params;
-      const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
-        headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
-      });
-      const body = await resp.json();
+      // Prefer callback-cached terminal result when KIE already POSTed to /api/kie/callback.
+      const cached = getCachedKieResult(taskId);
+      let body: any;
+      if (cached?.ok) {
+        body = { code: 200, data: cached.data };
+      } else if (cached && !cached.ok && cached.reason === "fail") {
+        body = { code: 200, data: cached.data || { state: "fail", failMsg: "Generation failed" } };
+      } else {
+        const resp = await fetch(`${NANO_BANANA_STATUS_URL}?taskId=${taskId}`, {
+          headers: { "Authorization": `Bearer ${KIE_API_KEY}` },
+        });
+        body = await resp.json();
+      }
       console.log("Nano Banana status:", JSON.stringify(body).substring(0, 500));
 
       if (body.code !== 200) {
@@ -7799,6 +7759,17 @@ ${fullHtml}`;
   // Fast task-ID scanner: runs every 5 min; guarantees video→animation pipeline completion
   setTimeout(() => resumeCompletedKlingTasks(), 30000); // first run 30s after boot
   setInterval(() => resumeCompletedKlingTasks(), 5 * 60 * 1000);
+  // When KIE POSTs callBackUrl, wake Kling bake immediately (don't wait for 5-min scanner).
+  setKieTerminalHandler(async (taskId, data) => {
+    const state = String(data?.state || "").toLowerCase();
+    if (state !== "success" && state !== "fail" && state !== "failed" && state !== "error") return;
+    console.log(`[KIE-CB→KLING] task=${taskId.slice(0, 14)}… state=${state} — scheduling resume scan`);
+    setTimeout(() => {
+      resumeCompletedKlingTasks().catch((e: any) =>
+        console.warn("[KIE-CB→KLING] resume error:", e?.message || e),
+      );
+    }, 250);
+  });
   // Fallback: heavy stuck-placeholder cleanup still runs every 30 min (handles edge cases)
   setInterval(() => cleanupStuckPendingAnims("Periodic"), 30 * 60 * 1000);
 

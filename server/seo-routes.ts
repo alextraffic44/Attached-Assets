@@ -4,6 +4,7 @@ import { deployToYandex } from "./yandex-deploy";
 import { isInternalAgentFile } from "@shared/project-files";
 import type { SeoConfig, SeoCluster, SeoKeyword, SeoTheme } from "@shared/schema";
 import crypto from "crypto";
+import { withKieCallback, waitForKieJob, kieResultUrl } from "./kie-jobs";
 
 const KIE_API_KEY = process.env.KIE_API_KEY || "";
 const KIE_GEMINI_MODEL = "gemini-3-5-flash";
@@ -76,32 +77,30 @@ async function generateImage(prompt: string, timeout = 120000): Promise<string |
     const createRes = await fetch(KIE_JOBS_CREATE, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${KIE_API_KEY}` },
-      body: JSON.stringify({
+      body: JSON.stringify(withKieCallback({
         model: "gpt-image-2-text-to-image",
         input: { prompt, aspect_ratio: "16:9", resolution: "1K" },
-      }),
+      })),
     });
     const createData = await createRes.json() as any;
     if (createData?.code !== 200 || !createData?.data?.taskId) return null;
     const taskId = createData.data.taskId;
 
-    const deadline = Date.now() + timeout;
-    while (Date.now() < deadline) {
-      await new Promise(r => setTimeout(r, 5000));
-      const pollRes = await fetch(`${KIE_JOBS_STATUS}?taskId=${taskId}`, {
-        headers: { Authorization: `Bearer ${KIE_API_KEY}` },
-      });
-      const pollData = await pollRes.json() as any;
-      if (pollData?.code !== 200) continue;
-      const state = pollData.data?.state;
-      if (state === "success") {
-        let result: any = {};
-        try { result = typeof pollData.data.resultJson === "string" ? JSON.parse(pollData.data.resultJson) : (pollData.data.resultJson || {}); } catch {}
-        return (result.resultUrls || [])[0] || null;
-      }
-      if (state === "fail" || state === "failed" || state === "error") return null;
-    }
-    return null;
+    const terminal = await waitForKieJob(taskId, {
+      deadlineMs: timeout,
+      pollIntervalMs: 5000,
+      label: "SEO-IMG",
+      pollOnce: async () => {
+        const pollRes = await fetch(`${KIE_JOBS_STATUS}?taskId=${taskId}`, {
+          headers: { Authorization: `Bearer ${KIE_API_KEY}` },
+        });
+        const pollData = await pollRes.json() as any;
+        if (pollData?.code !== 200) return null;
+        return pollData.data || null;
+      },
+    });
+    if (!terminal.ok) return null;
+    return kieResultUrl(terminal.data);
   } catch {
     return null;
   }

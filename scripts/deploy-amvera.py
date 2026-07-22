@@ -28,6 +28,7 @@ DEFAULT_FILES = [
     "server/motion-reveal.ts",
     "server/animational.ts",
     "server/kie-errors.ts",
+    "server/kie-jobs.ts",
     "server/agent-runtime.ts",
     "server/seo-routes.ts",
     "server/telegram-bot-auth.ts",
