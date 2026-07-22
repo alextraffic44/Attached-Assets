@@ -1,12 +1,12 @@
 /**
  * «Моушн» — WebGL mouse-trail image reveal (Lando Norris / Unicorn Studio style).
  *
- * Pipeline: 2 paired FULL-COLOR stills in PARALLEL via KIE nano-banana-2 (1K, fast poll)
- * → self-contained HTML with fluid cursor reveal, chromatic edges, soft pixelation.
- *
- * Speed notes: previously base→reveal ran sequentially with I2I + 4×3min retries
- * (worst case ~24 min). Now both frames fire together; target wall-clock ~30–90s.
- * Look: vivid color↔color morph (day/night, mood shift) — not forced B&W→color.
+ * Pipeline:
+ * 1) Generate BASE still (T2I / product ref)
+ * 2) IMAGE-TO-IMAGE from that exact base → REVEAL still (same camera/placement,
+ *    but the subject/object metamorphoses — e.g. diamond→ring, red dress→blue —
+ *    plus lighting/materials) so frames register for hover morph
+ * 3) Self-contained HTML: fluid cursor reveal, copy on the LEFT, chromatic edges
  */
 export const SCROLL_MOTION_COST = 120;
 
@@ -125,7 +125,7 @@ async function createStill(
     if (deps.shouldStop()) return null;
     if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
     // Prefer nano-banana-2 for both T2I and reference-image edits (fast).
-    // image_input keeps product identity without the slower gpt-image-2 i2i queue.
+    // image_input = image-to-image so reveal keeps the base composition locked.
     const input: any = inputUrl
       ? {
           prompt,
@@ -163,10 +163,14 @@ async function createStill(
 }
 
 function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
+  const leftTextSpace =
+    `Leave calm darker negative space on the LEFT third for website overlay text; ` +
+    `keep the hero subject clearly on the center-right so left copy stays readable. `;
   if (hasProduct) {
     return (
       `Take the exact product from the reference image and keep it perfectly identical ` +
       `(same shape, label, text, colors and proportions). Place it as the clear hero inside this niche scene: ${baseScene}. ` +
+      leftTextSpace +
       `FULL VIVID COLOR photorealistic commercial photography — rich brand colors, dramatic directional light, ` +
       `soft volumetric haze, premium campaign still. Match the niche environment and props from the description. ` +
       `Do NOT invent an unrelated portrait. No text, no watermark, no logos added. Ultra-high detail, 16:9.`
@@ -174,6 +178,7 @@ function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
   }
   return (
     `${baseScene}. ` +
+    leftTextSpace +
     `Create a photorealistic FULL-COLOR commercial HERO still tailored to this exact business niche and subject. ` +
     `Follow the described scene, environment, props and composition closely — it may be a person, product, ` +
     `interior, workspace, dish, building, vehicle, tool, or any niche-specific subject (NOT forced to be a fashion portrait). ` +
@@ -183,26 +188,20 @@ function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
   );
 }
 
-function buildRevealPrompt(revealScene: string, hasProduct: boolean): string {
-  if (hasProduct) {
-    return (
-      `Keep the EXACT same product identity, pose, framing and composition as the reference image. ` +
-      `Transform into the ALTERNATE COLOR state for this niche: ${revealScene}. ` +
-      `FULL VIVID COLOR, richer premium commercial lighting, stronger accents, subtle chromatic edges, liquid iridescence where it fits. ` +
-      `Same camera angle — only mood, materials, light and atmosphere change (day↔night, calm↔energy, before↔after). ` +
-      `The metamorphosis must feel native to the niche. Product identity stays identical. ` +
-      `No black-and-white. No text, no watermark. Ultra-high detail, 16:9.`
-    );
-  }
+/** I2I reveal: same camera/placement, but SUBJECT/OBJECT can metamorphose (plus look). */
+function buildRevealPrompt(revealScene: string): string {
   return (
-    `Keep the EXACT same subject identity, camera angle, pose and composition as the reference image. ` +
-    `Reveal the ALTERNATE COLOR metamorphosis described here: ${revealScene}. ` +
-    `Same silhouette and framing — only the look, materials, lighting and atmosphere transform. ` +
-    `FULL VIVID COLOR, niche-authentic before→after that makes sense for THIS business ` +
-    `(warm→cool, dusk→dawn, raw→finished, quiet→festive — always in color), ` +
-    `premium commercial photography, subtle chromatic aberration on reveal edges, cinematic gloss. ` +
-    `Do NOT force black-and-white, fashion helmets or unrelated sci-fi props unless the niche asks for them. ` +
-    `No text, no watermark. Ultra-high detail, 16:9.`
+    `Image-to-image metamorphosis of the reference photograph for a hover morph overlay. ` +
+    `KEEP the same camera angle, framing, scale and the subject's place in the frame (perfect registration). ` +
+    `DO transform the SUBJECT / OBJECT itself into the reveal state — not only light. ` +
+    `Examples of the intended change class: raw diamond → finished diamond ring, red dress → blue dress, ` +
+    `plain cake → decorated celebration cake, unfinished room → finished interior, dull car → polished showroom car. ` +
+    `Apply this metamorphosis: ${revealScene}. ` +
+    `The reveal must be OBVIOUSLY a different object or clearly transformed product/outfit/scene element at a glance, ` +
+    `while staying in the same spot and silhouette footprint so the morph overlay lines up. ` +
+    `Also upgrade lighting, materials and atmosphere to sell the new state. FULL VIVID COLOR. ` +
+    `If the result still looks like the same unchanged object, the edit FAILED — push the object change harder. ` +
+    `No text, no watermark, no logos. Same 16:9 framing.`
   );
 }
 
@@ -216,32 +215,41 @@ export async function generateMotionRevealPair(opts: {
   const hasProduct = !!opts.productImageUrl;
   const t0 = Date.now();
 
-  // Fire BOTH stills in parallel — the old sequential base→i2i-reveal path
-  // could burn 10–25 minutes when KIE was slow or retried.
-  deps.onStatus?.("Моушн: генерирую пару цветных кадров параллельно…");
-  const [baseUrl, revealUrl] = await Promise.all([
-    createStill(
-      deps,
-      buildBasePrompt(baseScene, hasProduct),
-      "MOTION base",
-      opts.productImageUrl,
-    ),
-    createStill(
-      deps,
-      buildRevealPrompt(revealScene, hasProduct),
-      "MOTION reveal",
-      opts.productImageUrl,
-    ),
-  ]);
-
-  if (!baseUrl || !revealUrl) {
-    console.warn(
-      `[MOTION] pair incomplete base=${!!baseUrl} reveal=${!!revealUrl} after ${Date.now() - t0}ms`,
-    );
+  // 1) Base still first
+  deps.onStatus?.("Моушн: создаю первый кадр…");
+  const baseUrl = await createStill(
+    deps,
+    buildBasePrompt(baseScene, hasProduct),
+    "MOTION base",
+    opts.productImageUrl,
+  );
+  if (!baseUrl) {
+    console.warn(`[MOTION] base failed after ${Date.now() - t0}ms`);
     return null;
   }
 
-  console.log(`[MOTION] pair ready in ${Date.now() - t0}ms`);
+  // 2) Reveal = image-to-image from the finished base (same placement, object+look morph)
+  const morphBrief =
+    !revealScene ||
+    revealScene === baseScene ||
+    revealScene.length < 20
+      ? `${baseScene}, metamorphose the main subject/object into its premium finished counterpart in the same place ` +
+        `(e.g. raw material → finished product, one product color → another, before → after result), ` +
+        `dramatically different look, richer materials and lighting, obviously not a copy`
+      : revealScene;
+  deps.onStatus?.("Моушн: image-to-image morph объекта поверх первого кадра…");
+  const revealUrl = await createStill(
+    deps,
+    buildRevealPrompt(morphBrief),
+    "MOTION reveal i2i",
+    baseUrl,
+  );
+  if (!revealUrl) {
+    console.warn(`[MOTION] reveal i2i failed after ${Date.now() - t0}ms`);
+    return null;
+  }
+
+  console.log(`[MOTION] pair ready (sequential i2i) in ${Date.now() - t0}ms`);
   deps.onStatus?.(`Моушн готов за ${Math.round((Date.now() - t0) / 1000)} с`);
   return { baseUrl, revealUrl };
 }
@@ -298,19 +306,21 @@ ${layers}
 .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#050505;cursor:none;}
 .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0;touch-action:none;}
 .${cid}-veil{position:absolute;inset:0;z-index:1;pointer-events:none;background:
-  radial-gradient(ellipse 65% 55% at 50% 42%,rgba(0,0,0,0.08) 0%,rgba(0,0,0,0.45) 72%,rgba(0,0,0,0.72) 100%),
-  linear-gradient(180deg,rgba(0,0,0,0.28) 0%,rgba(0,0,0,0.05) 40%,rgba(0,0,0,0.55) 100%);}
+  linear-gradient(90deg,rgba(0,0,0,.62) 0%,rgba(0,0,0,.28) 38%,rgba(0,0,0,.08) 62%,rgba(0,0,0,.22) 100%),
+  radial-gradient(ellipse 55% 60% at 22% 48%,rgba(0,0,0,.25) 0%,transparent 70%);}
 .${cid}-overlays{position:absolute;inset:0;z-index:2;pointer-events:none;}
-.${cid}-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(92vw,720px);text-align:center;opacity:0;color:#fff;will-change:opacity,transform;}
-.${cid}-text h2{margin:0;font-family:'Syne',system-ui,sans-serif;font-weight:800;font-size:clamp(2rem,5.2vw,4rem);line-height:1.02;letter-spacing:-0.03em;text-shadow:0 10px 48px rgba(0,0,0,0.55);}
-.${cid}-text p{margin:1rem auto 0;max-width:38ch;font-family:'Manrope',system-ui,sans-serif;font-size:clamp(1rem,1.6vw,1.22rem);line-height:1.55;color:rgba(255,255,255,0.82);text-shadow:0 4px 24px rgba(0,0,0,0.45);}
+.${cid}-text{position:absolute;left:clamp(18px,5vw,64px);right:auto;top:50%;transform:translateY(-50%);width:min(42vw,520px);max-width:calc(100% - 36px);text-align:left;opacity:0;color:#fff;will-change:opacity,transform;}
+.${cid}-text h2{margin:0;font-family:'Syne',system-ui,sans-serif;font-weight:800;font-size:clamp(1.85rem,4.6vw,3.6rem);line-height:1.02;letter-spacing:-0.03em;text-shadow:0 10px 48px rgba(0,0,0,0.55);}
+.${cid}-text p{margin:1rem 0 0;max-width:34ch;font-family:'Manrope',system-ui,sans-serif;font-size:clamp(.95rem,1.5vw,1.15rem);line-height:1.55;color:rgba(255,255,255,0.86);text-shadow:0 4px 24px rgba(0,0,0,0.45);}
 .${cid}-hint{position:absolute;left:50%;bottom:max(22px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:3;display:flex;flex-direction:column;align-items:center;gap:8px;font-family:'Manrope',system-ui,sans-serif;font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);transition:opacity .4s;pointer-events:none;}
 .${cid}-hint i{width:28px;height:28px;border:1.5px solid rgba(255,255,255,.35);border-radius:50%;position:relative;}
 .${cid}-hint i::after{content:"";position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:#fff;animation:${cid}-pulse 1.4s ease-in-out infinite;}
 @keyframes ${cid}-pulse{0%,100%{transform:scale(.7);opacity:.35}50%{transform:scale(1.15);opacity:1}}
 @media (max-width:700px){
   .${cid}-sticky{cursor:auto;}
-  .${cid}-text{width:min(94vw,420px);}
+  .${cid}-text{left:clamp(16px,4vw,28px);width:min(88vw,420px);top:auto;bottom:clamp(72px,14vh,120px);transform:none;}
+  .${cid}-veil{background:
+    linear-gradient(180deg,rgba(0,0,0,.15) 0%,rgba(0,0,0,.2) 45%,rgba(0,0,0,.72) 100%);}
 }
 @media (prefers-reduced-motion:reduce){
   .${cid}-hint i::after{animation:none;}
@@ -346,20 +356,20 @@ ${layers}
       'precision mediump float;varying vec2 v;uniform sampler2D uPrev;uniform vec2 uMouse;uniform float uDraw;uniform float uRadius;uniform float uHard;uniform float uFade;'+
       'void main(){vec4 p=texture2D(uPrev,v);float d=distance(v,uMouse);float m=smoothstep(uRadius,uRadius*(1.-uHard),d);'+
       'float a=max(p.r*uFade,uDraw*m);gl_FragColor=vec4(a,a,a,1.);}';
+    // Same cover UV for base + reveal so I2I-aligned frames stay perfectly registered.
     var mainFs=
       'precision mediump float;varying vec2 v;uniform sampler2D uBase;uniform sampler2D uRev;uniform sampler2D uMask;'+
-      'uniform vec2 uRes;uniform vec2 uBaseSize;uniform vec2 uRevSize;uniform float uTime;uniform float uPix;'+
+      'uniform vec2 uRes;uniform vec2 uBaseSize;uniform float uTime;uniform float uPix;'+
       'vec2 coverUV(vec2 uv,vec2 res,vec2 tex){float ar=res.x/max(res.y,.001);float tr=tex.x/max(tex.y,.001);vec2 s=ar>tr?vec2(tr/ar,1.):vec2(1.,ar/tr);return clamp((uv-.5)/s+.5,0.,1.);}'+
       'void main(){'+
       'float mask=texture2D(uMask,v).r;'+
       'float edge=smoothstep(0.05,0.55,mask)*smoothstep(0.95,0.45,mask);'+
       'float pix=mix(1.,uPix,edge*0.85);'+
       'vec2 grid=floor(v*uRes/pix)*pix/uRes;'+
-      'vec2 buP=coverUV(mix(v,grid,edge*0.65),uRes,uBaseSize);'+
-      'vec2 ruP=coverUV(mix(v,grid,edge*0.65),uRes,uRevSize);'+
+      'vec2 uvP=coverUV(mix(v,grid,edge*0.65),uRes,uBaseSize);'+
       'float ca=edge*0.0045;'+
-      'vec3 base=texture2D(uBase,buP).rgb;'+
-      'vec3 rev=vec3(texture2D(uRev,ruP+vec2(ca,0.)).r,texture2D(uRev,ruP).g,texture2D(uRev,ruP-vec2(ca,0.)).b);'+
+      'vec3 base=texture2D(uBase,uvP).rgb;'+
+      'vec3 rev=vec3(texture2D(uRev,uvP+vec2(ca,0.)).r,texture2D(uRev,uvP).g,texture2D(uRev,uvP-vec2(ca,0.)).b);'+
       'vec3 col=mix(base,rev,smoothstep(0.08,0.72,mask));'+
       'col+=edge*vec3(0.08,0.03,0.12)*sin(uTime*2.+mask*6.283);'+
       'gl_FragColor=vec4(col,1.);}';
@@ -387,7 +397,7 @@ ${layers}
       im.onerror=function(){cb(null,0,0);};im.src=url;
     }
 
-    var baseTex=null,revTex=null,baseSize=[1,1],revSize=[1,1],loaded=0;
+    var baseTex=null,revTex=null,baseSize=[1,1],loaded=0;
     function onReady(){
       loaded++;
       if(loaded>=2){
@@ -398,7 +408,7 @@ ${layers}
     var baseUrl=root.getAttribute('data-base')||'${baseJs}';
     var revUrl=root.getAttribute('data-reveal')||'${revJs}';
     loadTex(baseUrl,function(t,w,h){baseTex=t;baseSize=[w||1,h||1];onReady();});
-    loadTex(revUrl,function(t,w,h){revTex=t;revSize=[w||1,h||1];onReady();});
+    loadTex(revUrl,function(t,w,h){revTex=t;onReady();});
 
     var trailA=makeTex(gl.LINEAR),trailB=makeTex(gl.LINEAR),fbo=gl.createFramebuffer();
     var tw=1,th=1,flip=false;
@@ -480,7 +490,6 @@ ${layers}
       gl.uniform1i(gl.getUniformLocation(mainP,'uMask'),2);
       gl.uniform2f(gl.getUniformLocation(mainP,'uRes'),canvas.width,canvas.height);
       gl.uniform2f(gl.getUniformLocation(mainP,'uBaseSize'),baseSize[0],baseSize[1]);
-      gl.uniform2f(gl.getUniformLocation(mainP,'uRevSize'),revSize[0],revSize[1]);
       gl.uniform1f(gl.getUniformLocation(mainP,'uTime'),(performance.now()-start)/1000);
       gl.uniform1f(gl.getUniformLocation(mainP,'uPix'),Math.max(6,Math.min(18,canvas.width/70)));
       gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
@@ -505,6 +514,7 @@ ${layers}
     function setP(p){
       p=clamp(p,0,1);
       if(hint&&hasMoved)hint.style.opacity=String(clamp(1-p*3.5,0,1));
+      var mobile=window.matchMedia('(max-width:700px)').matches;
       texts.forEach(function(el){
         var fi=parseFloat(el.getAttribute('data-fi')),fis=parseFloat(el.getAttribute('data-fis'));
         var fos=parseFloat(el.getAttribute('data-fos')),fo=parseFloat(el.getAttribute('data-fo'));
@@ -514,7 +524,12 @@ ${layers}
         }
         op=clamp(op,0,1);
         el.style.opacity=op.toFixed(3);
-        el.style.transform='translate(-50%,calc(-50% + '+((1-op)*18)+'px))';
+        // Left-aligned copy — do not re-center with translateX(-50%).
+        if(mobile){
+          el.style.transform='translateY('+((1-op)*14)+'px)';
+        } else {
+          el.style.transform='translateY(calc(-50% + '+((1-op)*18)+'px))';
+        }
       });
     }
     function secTop(){return root.getBoundingClientRect().top+(window.pageYOffset||document.documentElement.scrollTop);}
