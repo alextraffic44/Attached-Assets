@@ -23,6 +23,7 @@ DEFAULT_FILES = [
     "server/auth.ts",
     "server/storage.ts",
     "server/scroll-world.ts",
+    "server/immersion-glass.ts",
     "server/site3d-anim.ts",
     "server/motion-reveal.ts",
     "server/animational.ts",

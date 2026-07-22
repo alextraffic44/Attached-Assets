@@ -241,7 +241,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createStep, setCreateStep] = useState<"choose" | "templates" | "details">("choose");
-  const [selectedMode, setSelectedMode] = useState<"prompt" | "interactive" | "photo" | "animational">("prompt");
+  const [selectedMode, setSelectedMode] = useState<"prompt" | "interactive" | "photo">("prompt");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -265,7 +265,7 @@ export default function DashboardPage() {
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImages, setPhotoImages] = useState<Array<{ base64: string; mimeType: string; preview: string }>>([]);
-  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split" | "action" | "immersion" | "site3d" | "motion">("parallax");
+  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split" | "action" | "immersion" | "motion">("parallax");
   const [interactiveProductImage, setInteractiveProductImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const [tourStep, setTourStep] = useState(-1);
   const [activeTour, setActiveTour] = useState<TourStep[] | null>(null);
@@ -361,7 +361,7 @@ export default function DashboardPage() {
         }
       }
       let productUrl = "";
-      if ((selectedMode === "interactive" || selectedMode === "animational") && interactiveProductImage) {
+      if (selectedMode === "interactive" && interactiveProductImage) {
         const uploadResp = await fetch("/api/upload-image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -387,8 +387,6 @@ export default function DashboardPage() {
         : description || title;
       const interactiveParam = selectedMode === "interactive"
         ? `&interactive=1&istyle=${interactiveStyle}`
-        : selectedMode === "animational"
-        ? `&interactive=1&istyle=animational`
         : "";
       const enhancedParam = isEnhanced ? "&enhanced=1" : "";
       const researchParam = researchData ? `&research=${encodeURIComponent(researchData)}` : "";
@@ -828,7 +826,7 @@ export default function DashboardPage() {
 
             <AnimatePresence mode="wait">
               {createStep === "choose" ? (
-                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 flex-1 items-stretch sm:items-center" style={{ marginTop: isMobile ? 20 : 32 }}>
+                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 flex-1 items-stretch sm:items-center" style={{ marginTop: isMobile ? 20 : 32 }}>
                   {[
                     {
                       m: "prompt",
@@ -858,23 +856,6 @@ export default function DashboardPage() {
                             <path d="M10 8.5L15.5 12L10 15.5V8.5Z" fill="currentColor" className="text-teal-600 transition-transform duration-500 group-hover:translate-x-[2px]" />
                             <path d="M3 9H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75" />
                             <path d="M3 15H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-150" />
-                          </g>
-                        </svg>
-                      ),
-                    },
-                    {
-                      m: "animational",
-                      t: "Анимационный",
-                      d: "Awwwards-вау: morph, marquee, scroll",
-                      badge: "NEW" as string | null,
-                      icon: (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
-                          <g className="transition-transform duration-500 origin-center group-hover:scale-110">
-                            <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" className="text-amber-500" />
-                            <path d="M8 14c1.5-3 6.5-3 8 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                            <circle cx="9.5" cy="10" r="1.2" fill="currentColor" className="text-amber-500" />
-                            <circle cx="14.5" cy="10" r="1.2" fill="currentColor" className="text-amber-500" />
-                            <path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="text-amber-400 opacity-70" />
                           </g>
                         </svg>
                       ),
@@ -1029,8 +1010,6 @@ export default function DashboardPage() {
                           placeholder={
                             selectedMode === "photo"
                               ? "Сделай сайт как у референса, но с моим товаром"
-                              : selectedMode === "animational"
-                              ? "Премиальная кофейня в центре — тёмный вау-сайт с morph-hero и горизонтальной галереей"
                               : "Сайт SPA студии, в бежевых тонах, с картинкой в Hero секции, и плавной анимацией"
                           }
                           value={description}
@@ -1041,25 +1020,11 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex flex-col gap-3">
-                      {selectedMode === "animational" ? (
-                        <div className="flex flex-col gap-3 flex-1">
-                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Что внутри</div>
-                          <div className="rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>
-                            <p style={{ fontSize: '0.85rem', color: '#1D1D1F', fontWeight: 600, margin: '0 0 8px', letterSpacing: '-0.02em' }}>Awwwards-уровень из коробки</p>
-                            <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.78rem', color: '#86868B', lineHeight: 1.55 }}>
-                              <li>Loader-счётчик и dual-hero morph (KIE)</li>
-                              <li>Бесконечный image marquee</li>
-                              <li>Sticky-главы + горизонтальная галерея</li>
-                              <li>Magnetic CTA и custom cursor</li>
-                            </ul>
-                            <p style={{ fontSize: '0.72rem', color: '#aaa', margin: '12px 0 0' }}>Опишите нишу и бренд — движок сам соберёт вау-сайт. −180 ток. на кадры.</p>
-                          </div>
-                        </div>
-                      ) : selectedMode === "interactive" ? (
+                      {selectedMode === "interactive" ? (
                         <div className="flex flex-col gap-3 flex-1">
                           {/* Style picker */}
                           <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Стиль анимации</div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                             {[
                               {
                                 id: "parallax" as const,
@@ -1103,7 +1068,7 @@ export default function DashboardPage() {
                               {
                                 id: "immersion" as const,
                                 label: "Погружение",
-                                desc: "Кинематографичный полёт по сценам",
+                                desc: "Видео-фон на весь сайт + glass",
                                 icon: (
                                   <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
                                     <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
@@ -1113,21 +1078,6 @@ export default function DashboardPage() {
                                     <circle cx="20" cy="11" r="2" fill="currentColor" opacity="0.65"/>
                                     <circle cx="26" cy="14" r="1.6" fill="currentColor" opacity="0.55"/>
                                     <path d="M20 4 L20 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.4"/>
-                                  </svg>
-                                ),
-                              },
-                              {
-                                id: "site3d" as const,
-                                label: "3D сайт",
-                                desc: "Видео-фон + 3D-карточки (Kling)",
-                                icon: (
-                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
-                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
-                                    <rect x="10" y="6" width="20" height="14" rx="3" fill="currentColor" opacity="0.12" transform="translate(0 2) scale(0.86)" style={{ transformOrigin: "20px 14px" }}/>
-                                    <rect x="9" y="5" width="22" height="15" rx="3.5" fill="currentColor" opacity="0.2"/>
-                                    <rect x="8" y="4" width="24" height="16" rx="4" fill="currentColor" opacity="0.35"/>
-                                    <rect x="12" y="9" width="16" height="2.2" rx="1" fill="currentColor" opacity="0.55"/>
-                                    <rect x="14" y="13" width="12" height="1.6" rx="0.8" fill="currentColor" opacity="0.35"/>
                                   </svg>
                                 ),
                               },
