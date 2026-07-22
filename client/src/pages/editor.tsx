@@ -337,6 +337,17 @@ export default function EditorPage() {
 
   const currentCode = activeFileCode;
 
+  /** Push final baked HTML into every preview source so pending spinner cannot stick. */
+  const applyFinalSiteHtml = useCallback((code: string) => {
+    if (!code) return;
+    setStreamedCode(code);
+    setStreamedFile("index.html");
+    setOptimisticFiles(prev => ({ ...prev, "index.html": code }));
+    queryClient.setQueryData(["/api/projects", projectId], (old: any) =>
+      old ? { ...old, generatedCode: code } : old
+    );
+  }, [projectId]);
+
   useEffect(() => {
     if (!isMobile) return;
     setPreviewDevice("mobile");
@@ -452,7 +463,7 @@ export default function EditorPage() {
       setGenerationStatus(null);
       // Do not strip pending — keep spinner until real hero lands.
       if (rawCode && !isCraftGeneratingHtml(rawCode)) {
-        setStreamedCode(rawCode);
+        applyFinalSiteHtml(rawCode);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
@@ -472,7 +483,7 @@ export default function EditorPage() {
         }
       } catch {}
     }, 8000);
-  }, [project, projectId]);
+  }, [project, projectId, applyFinalSiteHtml]);
 
   const handleAddPage = useCallback(async () => {
     let name = newPageName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
@@ -797,14 +808,13 @@ export default function EditorPage() {
                   });
                 }
                 if (code) {
-                  setStreamedCode(code);
-                  if (iframeRef.current) {
-                    const blob = new Blob([getEditableCode(code)], { type: "text/html" });
-                    iframeRef.current.src = URL.createObjectURL(blob);
-                  }
+                  // Must sync optimisticFiles — otherwise previewSrcDoc keeps the pending
+                  // «Генерация Тригер-Hero» HTML and overrides streamedCode until refresh.
+                  applyFinalSiteHtml(code);
                 }
                 setIsGenerating(false);
                 queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+                queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
               };
               animPollRef.current = setInterval(async () => {
                 if (Date.now() - pollStart > POLL_TIMEOUT) {
@@ -887,7 +897,7 @@ export default function EditorPage() {
                 const cleaned = stillAnim
                   ? c
                   : c.replace(/<section[^>]*data-scroll-anim-pending="1"[\s\S]*?<\/section>/g, "");
-                setStreamedCode(cleaned || c);
+                applyFinalSiteHtml(cleaned || c);
               } else if (!c || isCraftGeneratingHtml(c)) {
                 toast({
                   title: "Генерация не завершилась",
@@ -1139,7 +1149,7 @@ export default function EditorPage() {
         // Reload the project HTML (now has pending spinner) and start polling
         const projResp = await fetch(`/api/projects/${project.id}`, { credentials: "include" });
         const proj = await projResp.json();
-        if (proj.generatedCode) setStreamedCode(proj.generatedCode);
+        if (proj.generatedCode) applyFinalSiteHtml(proj.generatedCode);
         setGenerationStatus("Создаём видеоанимацию... (2–10 мин)");
         if (animPollRef.current) clearInterval(animPollRef.current);
         const pollStart = Date.now();
@@ -1154,8 +1164,9 @@ export default function EditorPage() {
               clearInterval(animPollRef.current!);
               animPollRef.current = null;
               setGenerationStatus(null);
-              setStreamedCode(c);
+              if (c) applyFinalSiteHtml(c);
               queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+              queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "files"] });
             }
           } catch {}
         }, 12000);
