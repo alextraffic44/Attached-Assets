@@ -187,18 +187,17 @@ function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
   );
 }
 
-/** I2I reveal: lock every object position, only morph look / light / materials. */
+/** I2I reveal: same composition/pose, but a DRAMATIC visible morph (not a near-copy). */
 function buildRevealPrompt(revealScene: string): string {
   return (
-    `IMAGE-TO-IMAGE edit of the provided reference photograph. ` +
-    `CRITICAL LOCK — do NOT move, rescale, reframe, rotate or reposition ANY subject or object in the frame. ` +
-    `Every object must stay in the EXACT same place, same size, same pose and same camera angle as the reference ` +
-    `(perfect pixel registration for a hover morph overlay). ` +
-    `ONLY change appearance for this morphing effect: ${revealScene}. ` +
-    `Allowed changes: colors, materials, lighting, atmosphere, time-of-day, finish quality, accents. ` +
-    `Forbidden: new camera angle, cropped differently, subject shifted left/right/up/down, different pose, extra props that change silhouette. ` +
-    `FULL VIVID COLOR, premium commercial photography, subtle chromatic richness. ` +
-    `No text, no watermark, no logos. Ultra-high detail, identical 16:9 framing.`
+    `Image-to-image edit of the reference photograph for a hover morph overlay. ` +
+    `KEEP camera angle, framing, subject placement, scale and pose identical — do not shift objects in the frame. ` +
+    `But CHANGE THE LOOK DRAMATICALLY so the result is OBVIOUSLY a different moment, not a duplicate. ` +
+    `Strong visible metamorphosis to apply: ${revealScene}. ` +
+    `Push a bold before→after: clearly different lighting direction/color temperature, richer or opposite color grade, ` +
+    `changed atmosphere (day↔night, cool↔warm, calm↔festive, matte↔glossy, dry↔wet sheen, dim↔glowing accents). ` +
+    `The difference must be unmistakable at a glance — if it looks almost the same as the reference, push contrast, hue and light MUCH harder. ` +
+    `FULL VIVID COLOR, premium commercial photography. No text, no watermark, no logos. Same 16:9 framing.`
   );
 }
 
@@ -225,11 +224,17 @@ export async function generateMotionRevealPair(opts: {
     return null;
   }
 
-  // 2) Reveal = image-to-image from the finished base (keeps subject position locked)
+  // 2) Reveal = image-to-image from the finished base (same pose, strong morph)
+  const morphBrief =
+    !revealScene ||
+    revealScene === baseScene ||
+    revealScene.length < 20
+      ? `${baseScene}, dramatic opposite lighting and color grade — cool muted dawn becomes warm saturated golden hour with glowing accents, richer materials, much higher contrast`
+      : revealScene;
   deps.onStatus?.("Моушн: image-to-image morph поверх первого кадра…");
   const revealUrl = await createStill(
     deps,
-    buildRevealPrompt(revealScene),
+    buildRevealPrompt(morphBrief),
     "MOTION reveal i2i",
     baseUrl,
   );
