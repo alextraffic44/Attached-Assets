@@ -33,6 +33,7 @@ export interface IStorage {
 
   getProjectVersions(projectId: number): Promise<ProjectVersion[]>;
   createProjectVersion(version: InsertProjectVersion): Promise<ProjectVersion>;
+  updateProjectVersion(id: number, data: { code?: string; files?: { filename: string; code: string }[] | null; label?: string }): Promise<ProjectVersion | undefined>;
 
   getProjectFiles(projectId: number): Promise<ProjectFile[]>;
   getProjectFile(projectId: number, filename: string): Promise<ProjectFile | undefined>;
@@ -56,9 +57,12 @@ export interface IStorage {
 
   adminGetAllUsers(): Promise<User[]>;
   adminGetUserTransactions(userId: number): Promise<import("@shared/schema").CreditTransaction[]>;
+  getUserTransactionsPage(userId: number, page: number, limit: number): Promise<{ items: CreditTransaction[]; total: number; page: number; limit: number; totalPages: number }>;
   adminAdjustCredits(userId: number, amount: number, type: "credit" | "debit", operation: string, note: string): Promise<User | undefined>;
   adminGetUserProjects(userId: number): Promise<Project[]>;
   adminGetStats(): Promise<{ totalUsers: number; totalProjects: number; totalTokensSpent: number; totalTokensAdded: number }>;
+  /** Wipe all user-owned DB rows (projects/files/images/messages/versions/leads/txns/orders) then the user. */
+  deleteUserAccountData(userId: number): Promise<{ projectIds: number[]; objectPaths: string[]; published: Array<{ id: number; customDomain: string | null; ycStoragePoolId: number | null }> }>;
 
   createPaymentOrder(data: { userId: number; amount: number; tokens: number; orderId?: string; paymentUrl?: string }): Promise<PaymentOrder>;
   getPaymentOrderById(id: number): Promise<PaymentOrder | undefined>;
@@ -354,6 +358,22 @@ export class DatabaseStorage implements IStorage {
     return v;
   }
 
+  async updateProjectVersion(
+    id: number,
+    data: { code?: string; files?: { filename: string; code: string }[] | null; label?: string },
+  ): Promise<ProjectVersion | undefined> {
+    const patch: Partial<typeof projectVersions.$inferInsert> = {};
+    if (data.code !== undefined) patch.code = data.code;
+    if (data.files !== undefined) patch.files = data.files;
+    if (data.label !== undefined) patch.label = data.label;
+    if (!Object.keys(patch).length) {
+      const [cur] = await db.select().from(projectVersions).where(eq(projectVersions.id, id));
+      return cur;
+    }
+    const [v] = await db.update(projectVersions).set(patch).where(eq(projectVersions.id, id)).returning();
+    return v;
+  }
+
   async getProjectFiles(projectId: number): Promise<ProjectFile[]> {
     return db.select().from(projectFiles).where(eq(projectFiles.projectId, projectId)).orderBy(projectFiles.filename);
   }
@@ -494,6 +514,66 @@ export class DatabaseStorage implements IStorage {
 
   async adminGetUserTransactions(userId: number): Promise<CreditTransaction[]> {
     return db.select().from(creditTransactions).where(eq(creditTransactions.userId, userId)).orderBy(desc(creditTransactions.createdAt));
+  }
+
+  async getUserTransactionsPage(userId: number, page: number, limit: number): Promise<{ items: CreditTransaction[]; total: number; page: number; limit: number; totalPages: number }> {
+    const safeLimit = Math.min(50, Math.max(1, Math.floor(limit) || 20));
+    const safePage = Math.max(1, Math.floor(page) || 1);
+    const offset = (safePage - 1) * safeLimit;
+    const countResult = await db.execute(sql`SELECT COUNT(*)::int AS count FROM credit_transactions WHERE user_id = ${userId}`);
+    const total = Number((countResult.rows as Array<{ count: number }>)[0]?.count || 0);
+    const items = await db
+      .select()
+      .from(creditTransactions)
+      .where(eq(creditTransactions.userId, userId))
+      .orderBy(desc(creditTransactions.createdAt))
+      .limit(safeLimit)
+      .offset(offset);
+    const totalPages = Math.max(1, Math.ceil(total / safeLimit));
+    return { items, total, page: safePage, limit: safeLimit, totalPages };
+  }
+
+  async deleteUserAccountData(userId: number): Promise<{ projectIds: number[]; objectPaths: string[]; published: Array<{ id: number; customDomain: string | null; ycStoragePoolId: number | null }> }> {
+    const userProjects = await db.select().from(projects).where(eq(projects.userId, userId));
+    const projectIds = userProjects.map((p) => p.id);
+    const objectPaths = new Set<string>();
+
+    const collectObjectPaths = (text: string | null | undefined) => {
+      if (!text) return;
+      const re = /(?:https?:\/\/[^"'\\\s]+)?(\/objects\/[A-Za-z0-9._\-\/]+)/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) !== null) {
+        const p = m[1].split("?")[0];
+        if (p.startsWith("/objects/")) objectPaths.add(p);
+      }
+    };
+
+    const userImages = await db.select().from(projectImages).where(eq(projectImages.userId, userId));
+    for (const img of userImages) collectObjectPaths(img.url);
+
+    for (const p of userProjects) {
+      collectObjectPaths(p.generatedCode);
+      const files = await db.select().from(projectFiles).where(eq(projectFiles.projectId, p.id));
+      for (const f of files) collectObjectPaths(f.code);
+      const imgs = await db.select().from(projectImages).where(eq(projectImages.projectId, p.id));
+      for (const img of imgs) collectObjectPaths(img.url);
+    }
+
+    const published = userProjects
+      .filter((p) => p.publishStatus && p.publishStatus !== "draft")
+      .map((p) => ({ id: p.id, customDomain: p.customDomain ?? null, ycStoragePoolId: p.ycStoragePoolId ?? null }));
+
+    for (const id of projectIds) {
+      await this.deleteProject(id);
+    }
+
+    // Orphan images tied to user but not cleaned via project delete
+    await db.delete(projectImages).where(eq(projectImages.userId, userId));
+    await db.delete(creditTransactions).where(eq(creditTransactions.userId, userId));
+    await db.delete(paymentOrders).where(eq(paymentOrders.userId, userId));
+    await db.delete(users).where(eq(users.id, userId));
+
+    return { projectIds, objectPaths: Array.from(objectPaths), published };
   }
 
   async adminAdjustCredits(userId: number, amount: number, type: "credit" | "debit", operation: string, note: string): Promise<User | undefined> {
