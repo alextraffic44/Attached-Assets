@@ -3,13 +3,24 @@ import { useParams, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import type { SeoConfig, SeoKeyword } from "@shared/schema";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { DnsInstructions } from "@/components/dns-instructions";
 import {
   ChevronRight, ChevronDown, Globe, Zap, RefreshCw,
   CheckCircle2, XCircle, Clock, Loader2, ArrowLeft,
   BarChart2, FileText, Layers, PlusCircle, Settings2, X,
+  ExternalLink, Send, MessageSquare,
 } from "lucide-react";
 
 type Phase = "setup" | "structure" | "generating" | "done";
+
+type ChatMessage = {
+  id: number;
+  role: string;
+  content: string;
+  createdAt?: string;
+};
 
 /* ─── tiny helpers ─── */
 function StatusIcon({ status }: { status: SeoKeyword["status"] | "pending" }) {
@@ -47,6 +58,19 @@ export default function SeoEditorPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAnalyzing, setIsAnalyzing]   = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishResult, setPublishResult] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [customDomain, setCustomDomain] = useState("");
+  const [domainAdding, setDomainAdding] = useState(false);
+  const [domainError, setDomainError] = useState<string | null>(null);
+  const [domainResult, setDomainResult] = useState<{ added: boolean; instructions: boolean } | null>(null);
+  const [domainVerified, setDomainVerified] = useState<boolean | null>(null);
+  const [domainDnsReady, setDomainDnsReady] = useState(false);
+  const [domainStatusMessage, setDomainStatusMessage] = useState("");
+  const [domainChecking, setDomainChecking] = useState(false);
+  const [domainIp, setDomainIp] = useState("");
   const [analyzeElapsed, setAnalyzeElapsed] = useState(0);
   const analyzeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -60,6 +84,13 @@ export default function SeoEditorPage() {
   const [adHeadCode, setAdHeadCode]   = useState("");
   const [adUnitCode, setAdUnitCode]   = useState("");
 
+  const [chatPrompt, setChatPrompt]   = useState("");
+  const [isChatGenerating, setIsChatGenerating] = useState(false);
+  const [chatStatus, setChatStatus]   = useState("");
+  const [streamingReply, setStreamingReply] = useState("");
+  const [leftTab, setLeftTab]         = useState<"site" | "agent">("site");
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
   /* ── single query, no polling — SSE provides live updates ── */
   const { data, isLoading, refetch } = useQuery<{
     project: any;
@@ -70,6 +101,17 @@ export default function SeoEditorPage() {
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
+
+  const { data: chatMessages = [], refetch: refetchMessages } = useQuery<ChatMessage[]>({
+    queryKey: ["/api/projects", id, "messages"],
+    queryFn: () => fetch(`/api/projects/${id}/messages`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!id && phase === "done",
+    staleTime: 10_000,
+  });
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages.length, streamingReply, isChatGenerating]);
 
   const project = data?.project;
   const files   = data?.files || [];
@@ -180,6 +222,7 @@ export default function SeoEditorPage() {
   /* ── publish ── */
   async function handlePublish() {
     setIsPublishing(true);
+    setPublishError(null);
     try {
       const res = await fetch(`/api/seo/${id}/publish`, {
         method: "POST", credentials: "include",
@@ -187,14 +230,102 @@ export default function SeoEditorPage() {
         body: JSON.stringify({}),
       });
       const d = await res.json();
-      if (!res.ok) throw new Error(d.message);
+      if (!res.ok) throw new Error(d.message || "Ошибка публикации");
+      setPublishResult(d.url);
       toast({ title: "Сайт опубликован!", description: d.url });
       refetch();
     } catch (e: any) {
+      setPublishError(e.message);
       toast({ title: "Ошибка публикации", description: e.message, variant: "destructive" });
     } finally {
       setIsPublishing(false);
     }
+  }
+
+  function handleCopyUrl(url: string) {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleAddDomain() {
+    if (!id || !customDomain.trim()) return;
+    setDomainAdding(true);
+    setDomainError(null);
+    setDomainResult(null);
+    setDomainVerified(null);
+    try {
+      const res = await fetch(`/api/projects/${id}/domain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ domain: customDomain.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Ошибка привязки домена");
+      setDomainResult({ added: true, instructions: true });
+      setDomainVerified(data.verified || false);
+      if (data.aRecordIp) setDomainIp(data.aRecordIp);
+      refetch();
+    } catch (e: any) {
+      setDomainError(e.message);
+    } finally {
+      setDomainAdding(false);
+    }
+  }
+
+  function handleChangeDomain() {
+    setDomainResult(null);
+    setCustomDomain("");
+    setDomainVerified(null);
+    setDomainDnsReady(false);
+    setDomainStatusMessage("");
+    setDomainError(null);
+  }
+
+  async function handleCheckDomain() {
+    if (!id || !customDomain.trim()) return;
+    setDomainChecking(true);
+    try {
+      const res = await fetch(`/api/projects/${id}/domain/status?domain=${encodeURIComponent(customDomain.trim())}`, { credentials: "include" });
+      const data = await res.json();
+      setDomainVerified(data.verified || false);
+      setDomainDnsReady(data.dnsReady || false);
+      setDomainStatusMessage(data.message || "");
+      if (data.aRecordIp) setDomainIp(data.aRecordIp);
+    } catch {
+      setDomainVerified(false);
+      setDomainDnsReady(false);
+      setDomainStatusMessage("");
+    } finally {
+      setDomainChecking(false);
+    }
+  }
+
+  function openPublishModal() {
+    setPublishError(null);
+    setPublishResult(null);
+    if (project?.customDomain) {
+      setCustomDomain(project.customDomain);
+      setDomainResult({ added: true, instructions: true });
+      fetch(`/api/projects/${id}/domain/status?domain=${encodeURIComponent(project.customDomain)}`, { credentials: "include" })
+        .then(r => r.json())
+        .then(data => {
+          setDomainVerified(data.verified || false);
+          setDomainDnsReady(data.dnsReady || false);
+          setDomainStatusMessage(data.message || "");
+          if (data.aRecordIp) setDomainIp(data.aRecordIp);
+        })
+        .catch(() => {});
+    } else {
+      setDomainResult(null);
+      setCustomDomain("");
+      setDomainVerified(null);
+      setDomainDnsReady(false);
+      setDomainStatusMessage("");
+      setDomainError(null);
+    }
+    setShowPublishModal(true);
   }
 
   /* ── add keywords ── */
@@ -293,6 +424,86 @@ export default function SeoEditorPage() {
     } catch {}
   }
 
+  async function handleChatEdit() {
+    const text = chatPrompt.trim();
+    if (!text || isChatGenerating || !id) return;
+    setIsChatGenerating(true);
+    setChatStatus("Агент думает…");
+    setStreamingReply("");
+    setChatPrompt("");
+    setLeftTab("agent");
+
+    const optimisticId = Date.now();
+    qc.setQueryData<ChatMessage[]>(["/api/projects", id, "messages"], (old) => [
+      ...(old || []),
+      { id: optimisticId, role: "user", content: text, createdAt: new Date().toISOString() },
+    ]);
+
+    try {
+      const res = await fetch(`/api/seo/${id}/chat-edit`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: text,
+          activeFile: selectedFile || "index.html",
+          agentVersion: "v2",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Ошибка запроса");
+      }
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("Нет потока ответа");
+      const decoder = new TextDecoder();
+      let buf = "";
+      let full = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() || "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          try {
+            const evt = JSON.parse(line.slice(5).trim());
+            if (evt.status) setChatStatus(evt.status);
+            if (evt.content) {
+              full += evt.content;
+              setStreamingReply(full);
+            }
+            if (evt.error) throw new Error(evt.error);
+            if (evt.done) {
+              setChatStatus("");
+              setStreamingReply("");
+              await refetchMessages();
+              await refetch();
+              const reload = selectedFile || "index.html";
+              await loadPreview(reload);
+              toast({
+                title: "Сайт обновлён",
+                description: evt.summary || (evt.changedFiles?.length ? `Изменено: ${evt.changedFiles.join(", ")}` : undefined),
+              });
+              qc.invalidateQueries({ queryKey: ["/api/auth/user"] });
+            }
+          } catch (parseErr: any) {
+            if (parseErr?.message && !parseErr.message.includes("JSON")) throw parseErr;
+          }
+        }
+      }
+    } catch (e: any) {
+      toast({ title: "Ошибка агента", description: e.message, variant: "destructive" });
+      await refetchMessages();
+    } finally {
+      setIsChatGenerating(false);
+      setChatStatus("");
+      setStreamingReply("");
+    }
+  }
+
   // Handle navigation messages from preview iframe
   useEffect(() => {
     function onMessage(e: MessageEvent) {
@@ -374,30 +585,22 @@ export default function SeoEditorPage() {
 
         {/* publish button — only after structure built */}
         {phase !== "setup" && (
-          publishUrl ? (
-            <a
-              href={publishUrl} target="_blank" rel="noopener"
-              style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#34d399", textDecoration: "none", padding: "5px 12px", background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: 8, fontWeight: 600 }}
-            >
-              <Globe className="w-3.5 h-3.5" />
-              {publishUrl.replace("https://", "").split("/")[0]}
-            </a>
-          ) : (
-            <button
-              onClick={handlePublish}
-              disabled={isPublishing || files.length < 2}
-              style={{
-                display: "flex", alignItems: "center", gap: 6, padding: "6px 14px",
-                background: isPublishing || files.length < 2 ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #2563eb, #4f46e5)",
-                border: "none", borderRadius: 8, color: isPublishing || files.length < 2 ? "#555" : "#fff",
-                fontSize: 13, fontWeight: 600, cursor: isPublishing || files.length < 2 ? "not-allowed" : "pointer",
-                boxShadow: files.length >= 2 && !isPublishing ? "0 2px 12px rgba(79,70,229,0.35)" : "none",
-                transition: "all 0.2s",
-              }}
-            >
-              {isPublishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Публикация...</> : <><Globe className="w-3.5 h-3.5" /> Опубликовать</>}
-            </button>
-          )
+          <button
+            onClick={openPublishModal}
+            disabled={files.length < 2 && !publishUrl}
+            data-testid="button-seo-publish"
+            style={{
+              display: "flex", alignItems: "center", gap: 6, padding: "6px 14px",
+              background: files.length < 2 && !publishUrl ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #2563eb, #4f46e5)",
+              border: "none", borderRadius: 8, color: files.length < 2 && !publishUrl ? "#555" : "#fff",
+              fontSize: 13, fontWeight: 600, cursor: files.length < 2 && !publishUrl ? "not-allowed" : "pointer",
+              boxShadow: (files.length >= 2 || publishUrl) ? "0 2px 12px rgba(79,70,229,0.35)" : "none",
+              transition: "all 0.2s",
+            }}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            {publishUrl ? "Опубликовано" : "Опубликовать"}
+          </button>
         )}
       </header>
 
@@ -560,7 +763,41 @@ export default function SeoEditorPage() {
                 </div>
               )}
 
-              {/* Action buttons */}
+              {/* Tabs: site tree vs agent chat (when ready) */}
+              {phase === "done" && (
+                <div style={{ display: "flex", gap: 4, padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <button
+                    type="button"
+                    onClick={() => setLeftTab("site")}
+                    style={{
+                      flex: 1, padding: "7px 8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      border: leftTab === "site" ? "1px solid rgba(99,102,241,0.45)" : "1px solid transparent",
+                      background: leftTab === "site" ? "rgba(99,102,241,0.15)" : "transparent",
+                      color: leftTab === "site" ? "#c7d2fe" : "#666",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    }}
+                  >
+                    <Layers className="w-3.5 h-3.5" /> Сайт
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLeftTab("agent")}
+                    style={{
+                      flex: 1, padding: "7px 8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      border: leftTab === "agent" ? "1px solid rgba(99,102,241,0.45)" : "1px solid transparent",
+                      background: leftTab === "agent" ? "rgba(99,102,241,0.15)" : "transparent",
+                      color: leftTab === "agent" ? "#c7d2fe" : "#666",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    }}
+                    data-testid="button-seo-agent-tab"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" /> Агент
+                  </button>
+                </div>
+              )}
+
+              {/* Action buttons — site tab / generating */}
+              {(phase !== "done" || leftTab === "site") && (
               <div style={{ padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8 }}>
                 {phase === "generating" ? (
                   <div style={{ flex: 1, padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, color: "#555", fontSize: 12.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
@@ -598,8 +835,10 @@ export default function SeoEditorPage() {
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
               </div>
+              )}
 
               {/* Site tree */}
+              {(phase !== "done" || leftTab === "site") && (
               <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
                 {/* Home */}
                 <TreeRow
@@ -643,6 +882,91 @@ export default function SeoEditorPage() {
                   );
                 })}
               </div>
+              )}
+
+              {/* Agent chat */}
+              {phase === "done" && leftTab === "agent" && (
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+                  <div style={{ padding: "10px 14px 6px", fontSize: 11, color: "#666", lineHeight: 1.45, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    Попросите сменить дизайн, цвета, шапку, структуру или текст на любой странице. Стоимость правки — 30 токенов.
+                  </div>
+                  <div style={{ flex: 1, overflowY: "auto", padding: "12px 12px 8px", display: "flex", flexDirection: "column", gap: 10 }}>
+                    {chatMessages.length === 0 && !isChatGenerating && (
+                      <div style={{ fontSize: 12.5, color: "#555", lineHeight: 1.55, padding: "8px 4px" }}>
+                        Примеры: «сделай тёмную тему», «увеличь логотип», «поменяй цвет кнопок на зелёный», «добавь блок отзывов на главную».
+                      </div>
+                    )}
+                    {chatMessages.map((msg) => {
+                      const isUser = msg.role === "user";
+                      return (
+                        <div
+                          key={msg.id}
+                          style={{
+                            alignSelf: isUser ? "flex-end" : "flex-start",
+                            maxWidth: "92%",
+                            padding: "8px 11px",
+                            borderRadius: 12,
+                            fontSize: 12.5,
+                            lineHeight: 1.5,
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                            background: isUser ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.05)",
+                            border: isUser ? "1px solid rgba(99,102,241,0.35)" : "1px solid rgba(255,255,255,0.06)",
+                            color: isUser ? "#e0e7ff" : "#c8c8d0",
+                          }}
+                        >
+                          {msg.content}
+                        </div>
+                      );
+                    })}
+                    {isChatGenerating && (
+                      <div style={{ alignSelf: "flex-start", maxWidth: "92%", padding: "8px 11px", borderRadius: 12, fontSize: 12.5, lineHeight: 1.5, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)", color: "#a5b4fc" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: streamingReply ? 6 : 0 }}>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>{chatStatus || "Работаю…"}</span>
+                        </div>
+                        {streamingReply ? <div style={{ color: "#c8c8d0", whiteSpace: "pre-wrap" }}>{streamingReply}</div> : null}
+                      </div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
+                  <div style={{ padding: "10px 12px 12px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8 }}>
+                    <textarea
+                      value={chatPrompt}
+                      onChange={(e) => setChatPrompt(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void handleChatEdit();
+                        }
+                      }}
+                      disabled={isChatGenerating}
+                      placeholder="Напишите правку агенту…"
+                      rows={2}
+                      data-testid="input-seo-agent-chat"
+                      style={{
+                        flex: 1, resize: "none", borderRadius: 10, padding: "8px 10px",
+                        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                        color: "#e2e8f0", fontSize: 13, outline: "none", fontFamily: "inherit",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleChatEdit()}
+                      disabled={isChatGenerating || !chatPrompt.trim()}
+                      data-testid="button-seo-agent-send"
+                      style={{
+                        width: 42, height: 42, alignSelf: "flex-end", borderRadius: 10, border: "none",
+                        background: isChatGenerating || !chatPrompt.trim() ? "rgba(99,102,241,0.25)" : "linear-gradient(135deg,#4f46e5,#7c3aed)",
+                        color: "#fff", cursor: isChatGenerating || !chatPrompt.trim() ? "default" : "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                    >
+                      {isChatGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Gen log */}
               {phase === "generating" && genLog.length > 0 && (
@@ -766,6 +1090,217 @@ export default function SeoEditorPage() {
           </div>
         </div>
       )}
+
+      {/* Publish + domain / SSL modal (same flow as regular editor) */}
+      <Dialog open={showPublishModal} onOpenChange={setShowPublishModal}>
+        <DialogContent className="w-[min(480px,calc(100vw-1rem))] p-0 flex flex-col" style={{ borderRadius: 0, maxHeight: "calc(100dvh - 2rem)", overflow: "hidden" }}>
+          <div style={{ background: "linear-gradient(135deg,#0f0c29,#302b63,#24243e)", padding: "1rem 1.25rem", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <ExternalLink className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <div style={{ fontSize: "1rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}>Публикация SEO-сайта</div>
+                <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.5)" }}>Хостинг сайта · 35 токенов/день · свой домен + SSL</div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ overflowY: "auto", flex: 1, padding: "1rem 1.25rem 1.25rem" }}>
+            {!publishResult && !isPublishing && !publishError && publishUrl && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#16a34a" }}>
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>Сайт опубликован</span>
+                </div>
+                <div style={{ background: "#f8f8f8", borderRadius: 12, padding: "0.75rem 1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <a href={publishUrl} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: "0.82rem", color: "#007AFF", wordBreak: "break-all" }}>{publishUrl}</a>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyUrl(publishUrl)}
+                    style={{ flexShrink: 0, padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid #e5e7eb", background: copied ? "#f0fdf4" : "#fff", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, color: copied ? "#16a34a" : "#555" }}
+                  >
+                    {copied ? "Скопировано!" : "Копировать"}
+                  </button>
+                </div>
+
+                <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "1rem" }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#333", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                    Свой домен
+                    {domainResult && domainVerified === true && (
+                      <span style={{ fontSize: "0.72rem", color: "#16a34a", fontWeight: 600 }}>Подключён</span>
+                    )}
+                    {domainResult && domainVerified !== true && (
+                      <span style={{ fontSize: "0.72rem", color: "#f59e0b", fontWeight: 600 }}>Добавлен</span>
+                    )}
+                    {domainResult && (
+                      <button type="button" onClick={handleChangeDomain} style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#6b7280", background: "none", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 500 }}>
+                        Сменить домен
+                      </button>
+                    )}
+                  </div>
+                  {!domainResult ? (
+                    <>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <input
+                          type="text"
+                          placeholder="example.ru"
+                          value={customDomain}
+                          onChange={(e) => setCustomDomain(e.target.value)}
+                          style={{ flex: 1, padding: "0.5rem 0.75rem", borderRadius: 10, border: "1px solid #e5e7eb", fontSize: "0.85rem", outline: "none" }}
+                          data-testid="input-seo-custom-domain"
+                        />
+                        <Button size="sm" onClick={handleAddDomain} disabled={domainAdding || !customDomain.trim()} style={{ borderRadius: 10, fontSize: "0.8rem" }} data-testid="button-seo-add-domain">
+                          {domainAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Привязать"}
+                        </Button>
+                      </div>
+                      <div style={{ marginTop: 7, fontSize: "0.8rem", color: "#6b7280" }}>
+                        Нет домена?{" "}
+                        <a href="https://www.reg.ru/domain/new/?rlink=reflink-32024207" target="_blank" rel="noopener noreferrer" style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "underline" }}>
+                          Купить
+                        </a>
+                      </div>
+                      {domainError && <div style={{ marginTop: 8, fontSize: "0.78rem", color: "#dc2626" }}>{domainError}</div>}
+                    </>
+                  ) : (
+                    <DnsInstructions
+                      customDomain={customDomain}
+                      aRecordIp={domainIp}
+                      domainChecking={domainChecking}
+                      domainVerified={domainVerified}
+                      domainDnsReady={domainDnsReady}
+                      domainStatusMessage={domainStatusMessage}
+                      onCheck={handleCheckDomain}
+                      testId="button-seo-check-domain"
+                    />
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <Button variant="outline" onClick={() => window.open(publishUrl, "_blank")} style={{ flex: 1 }}>
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Открыть сайт
+                  </Button>
+                  <Button onClick={handlePublish} disabled={isPublishing || files.length < 2} style={{ flex: 1, background: "linear-gradient(135deg,#667eea,#764ba2)", border: "none" }} data-testid="button-seo-republish">
+                    Обновить сайт
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {!publishResult && !isPublishing && !publishError && !publishUrl && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ fontSize: "0.85rem", color: "#555", lineHeight: 1.55 }}>
+                  Сайт будет размещён на хостинге Craft AI. После публикации можно привязать свой домен — SSL выпустится автоматически.
+                </div>
+                <div style={{ fontSize: "0.78rem", color: "#86868B" }}>Стоимость хостинга: 35 токенов/день с первого дня публикации.</div>
+                <Button
+                  onClick={handlePublish}
+                  disabled={isPublishing || files.length < 2}
+                  style={{ background: "linear-gradient(135deg,#667eea,#764ba2)", border: "none" }}
+                  data-testid="button-seo-confirm-publish"
+                >
+                  <Globe className="w-4 h-4 mr-2" />
+                  Опубликовать
+                </Button>
+              </div>
+            )}
+
+            {isPublishing && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem", padding: "1rem 0" }}>
+                <Loader2 className="w-10 h-10 animate-spin" style={{ color: "#764ba2" }} />
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontWeight: 700, color: "#1D1D1F", marginBottom: 4 }}>Публикуем сайт…</div>
+                  <div style={{ fontSize: "0.82rem", color: "#86868B" }}>Загружаем файлы в Yandex Cloud</div>
+                </div>
+              </div>
+            )}
+
+            {publishResult && !isPublishing && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#16a34a" }}>
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>Сайт опубликован!</span>
+                </div>
+                <div style={{ background: "#f8f8f8", borderRadius: 12, padding: "0.75rem 1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <a href={publishResult} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: "0.82rem", color: "#007AFF", wordBreak: "break-all" }}>{publishResult}</a>
+                  <button type="button" onClick={() => handleCopyUrl(publishResult)} style={{ flexShrink: 0, padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid #e5e7eb", background: copied ? "#f0fdf4" : "#fff", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, color: copied ? "#16a34a" : "#555" }}>
+                    {copied ? "Скопировано!" : "Копировать"}
+                  </button>
+                </div>
+
+                <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "1rem" }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#333", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                    Свой домен
+                    {domainResult && (
+                      <button type="button" onClick={handleChangeDomain} style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#6b7280", background: "none", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 500 }}>
+                        Сменить домен
+                      </button>
+                    )}
+                  </div>
+                  {!domainResult ? (
+                    <>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <input
+                          type="text"
+                          placeholder="example.ru"
+                          value={customDomain}
+                          onChange={(e) => setCustomDomain(e.target.value)}
+                          style={{ flex: 1, padding: "0.5rem 0.75rem", borderRadius: 10, border: "1px solid #e5e7eb", fontSize: "0.85rem", outline: "none" }}
+                          data-testid="input-seo-custom-domain-result"
+                        />
+                        <Button size="sm" onClick={handleAddDomain} disabled={domainAdding || !customDomain.trim()} style={{ borderRadius: 10, fontSize: "0.8rem" }}>
+                          {domainAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Привязать"}
+                        </Button>
+                      </div>
+                      <div style={{ marginTop: 7, fontSize: "0.8rem", color: "#6b7280" }}>
+                        Нет домена?{" "}
+                        <a href="https://www.reg.ru/domain/new/?rlink=reflink-32024207" target="_blank" rel="noopener noreferrer" style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "underline" }}>
+                          Купить
+                        </a>
+                      </div>
+                      {domainError && <div style={{ marginTop: 8, fontSize: "0.78rem", color: "#dc2626" }}>{domainError}</div>}
+                    </>
+                  ) : (
+                    <DnsInstructions
+                      customDomain={customDomain}
+                      aRecordIp={domainIp}
+                      domainChecking={domainChecking}
+                      domainVerified={domainVerified}
+                      domainDnsReady={domainDnsReady}
+                      domainStatusMessage={domainStatusMessage}
+                      onCheck={handleCheckDomain}
+                      testId="button-seo-check-domain-2"
+                    />
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <Button variant="outline" onClick={() => setShowPublishModal(false)} style={{ flex: 1 }}>Закрыть</Button>
+                  <Button onClick={() => window.open(publishResult, "_blank")} style={{ flex: 1, background: "linear-gradient(135deg,#667eea,#764ba2)", border: "none" }}>
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Открыть сайт
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {publishError && !isPublishing && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#dc2626" }}>
+                  <XCircle className="w-5 h-5" />
+                  <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>Ошибка публикации</span>
+                </div>
+                <div style={{ background: "#fef2f2", borderRadius: 12, padding: "0.75rem 1rem", fontSize: "0.82rem", color: "#dc2626" }}>{publishError}</div>
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <Button variant="outline" onClick={() => setShowPublishModal(false)} style={{ flex: 1 }}>Закрыть</Button>
+                  <Button onClick={handlePublish} style={{ flex: 1 }}>Повторить</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -871,7 +1406,7 @@ function EmptyScreen({ phase }: { phase: Phase }) {
           {[
             ["⚡", "70 токенов / статья (вкл. 3 фото)"],
             ["📊", "До 1000 ключевых слов"],
-            ["🌐", "Публикация на Netlify одной кнопкой"],
+            ["🌐", "Публикация + свой домен и SSL"],
           ].map(([icon, text]) => (
             <div key={text} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, color: "#444" }}>
               <span>{icon}</span><span>{text}</span>

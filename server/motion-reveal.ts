@@ -1,12 +1,13 @@
 /**
  * «Моушн» — WebGL mouse-trail image reveal (Lando Norris / Unicorn Studio style).
  *
- * Pipeline: 2 paired FULL-COLOR stills in PARALLEL via KIE nano-banana-2 (1K, fast poll)
- * → self-contained HTML with fluid cursor reveal, chromatic edges, soft pixelation.
- *
- * Speed notes: previously base→reveal ran sequentially with I2I + 4×3min retries
- * (worst case ~24 min). Now both frames fire together; target wall-clock ~30–90s.
- * Look: vivid color↔color morph (day/night, mood shift) — not forced B&W→color.
+ * Pipeline:
+ * 1) Generate BASE still (T2I / product ref)
+ * 2) IMAGE-TO-IMAGE from that exact base → REVEAL still (same camera/placement,
+ *    but the subject/object metamorphoses — e.g. diamond→ring, red dress→blue —
+ *    plus lighting/materials) so frames register for hover morph
+ * 3) Self-contained HTML: fluid cursor reveal on desktop; on mobile scroll drives
+ *    the morph and vertical pan is never captured (touch-action: pan-y)
  */
 export const SCROLL_MOTION_COST = 120;
 
@@ -125,10 +126,11 @@ async function createStill(
     if (deps.shouldStop()) return null;
     if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
     // Prefer nano-banana-2 for both T2I and reference-image edits (fast).
-    // image_input keeps product identity without the slower gpt-image-2 i2i queue.
+    // image_input = image-to-image so reveal keeps the base composition locked.
     const input: any = inputUrl
       ? {
           prompt,
+          // Strict I2I: single reference = the finished previous frame (composition lock).
           image_input: [inputUrl],
           aspect_ratio: "16:9",
           resolution: STILL_RESOLUTION,
@@ -140,6 +142,9 @@ async function createStill(
           resolution: STILL_RESOLUTION,
           output_format: "jpg",
         };
+    if (inputUrl) {
+      console.log(`[MOTION] ${label}: I2I from prior frame ${inputUrl.slice(0, 96)}`);
+    }
     const createBody: any = await deps.kieRequestJson(
       deps.createUrl,
       {
@@ -163,10 +168,16 @@ async function createStill(
 }
 
 function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
+  const leftTextSpace =
+    `Leave calm darker negative space on the LEFT third for website overlay text; ` +
+    `keep the hero subject clearly on the center-right so left copy stays readable. `;
   if (hasProduct) {
     return (
       `Take the exact product from the reference image and keep it perfectly identical ` +
       `(same shape, label, text, colors and proportions). Place it as the clear hero inside this niche scene: ${baseScene}. ` +
+      leftTextSpace +
+      `This is STATE A of a two-frame hover morph — compose a vivid, photorealistic commercial scene ` +
+      `(season, weather, props and lighting must match the description exactly). ` +
       `FULL VIVID COLOR photorealistic commercial photography — rich brand colors, dramatic directional light, ` +
       `soft volumetric haze, premium campaign still. Match the niche environment and props from the description. ` +
       `Do NOT invent an unrelated portrait. No text, no watermark, no logos added. Ultra-high detail, 16:9.`
@@ -174,6 +185,7 @@ function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
   }
   return (
     `${baseScene}. ` +
+    leftTextSpace +
     `Create a photorealistic FULL-COLOR commercial HERO still tailored to this exact business niche and subject. ` +
     `Follow the described scene, environment, props and composition closely — it may be a person, product, ` +
     `interior, workspace, dish, building, vehicle, tool, or any niche-specific subject (NOT forced to be a fashion portrait). ` +
@@ -183,27 +195,62 @@ function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
   );
 }
 
+/**
+ * I2I reveal: EDIT the finished base frame — never recompose from scratch.
+ * With a product photo — keep the exact product locked in place; morph environment only.
+ * Without product — subject/object may metamorphose (diamond→ring etc.).
+ */
 function buildRevealPrompt(revealScene: string, hasProduct: boolean): string {
+  const atmosphere = sanitizeRevealAtmosphere(revealScene);
   if (hasProduct) {
     return (
-      `Keep the EXACT same product identity, pose, framing and composition as the reference image. ` +
-      `Transform into the ALTERNATE COLOR state for this niche: ${revealScene}. ` +
-      `FULL VIVID COLOR, richer premium commercial lighting, stronger accents, subtle chromatic edges, liquid iridescence where it fits. ` +
-      `Same camera angle — only mood, materials, light and atmosphere change (day↔night, calm↔energy, before↔after). ` +
-      `The metamorphosis must feel native to the niche. Product identity stays identical. ` +
-      `No black-and-white. No text, no watermark. Ultra-high detail, 16:9.`
+      `CRITICAL: This is an IMAGE-TO-IMAGE EDIT of the provided reference photograph (frame 1 already generated). ` +
+      `Do NOT generate a new composition. Do NOT re-place, re-frame, re-scale or re-center the product. ` +
+      `PIXEL-LOCK registration: the product must occupy the EXACT same pixels / silhouette / position / size / angle as in the reference image. ` +
+      `KEEP the exact product identity — same shape, label, logo, text, colors and proportions. ` +
+      `CHANGE ONLY the surrounding atmosphere, season, weather, lighting and background props around that locked product. ` +
+      `Target atmosphere: ${atmosphere}. ` +
+      `Classic success: summer condensation → winter ice/frost while the can/bottle stays glued in place. ` +
+      `FULL VIVID COLOR. If the product moved even slightly, the edit FAILED — keep position identical. ` +
+      `No text, no watermark, no logos added. Same 16:9 framing as the reference.`
     );
   }
   return (
-    `Keep the EXACT same subject identity, camera angle, pose and composition as the reference image. ` +
-    `Reveal the ALTERNATE COLOR metamorphosis described here: ${revealScene}. ` +
-    `Same silhouette and framing — only the look, materials, lighting and atmosphere transform. ` +
-    `FULL VIVID COLOR, niche-authentic before→after that makes sense for THIS business ` +
-    `(warm→cool, dusk→dawn, raw→finished, quiet→festive — always in color), ` +
-    `premium commercial photography, subtle chromatic aberration on reveal edges, cinematic gloss. ` +
-    `Do NOT force black-and-white, fashion helmets or unrelated sci-fi props unless the niche asks for them. ` +
-    `No text, no watermark. Ultra-high detail, 16:9.`
+    `CRITICAL: This is an IMAGE-TO-IMAGE EDIT of the provided reference photograph (frame 1 already generated). ` +
+    `Do NOT generate a new composition from scratch. ` +
+    `KEEP the same camera angle, framing, scale and the subject's place in the frame (perfect pixel registration). ` +
+    `DO transform the SUBJECT / OBJECT itself into the reveal state — not only light. ` +
+    `Examples: raw diamond → finished diamond ring, red dress → blue dress, ` +
+    `plain cake → decorated celebration cake, unfinished room → finished interior, dull car → polished showroom car. ` +
+    `Apply this metamorphosis: ${atmosphere}. ` +
+    `The reveal must be OBVIOUSLY a different object or clearly transformed product/outfit/scene element at a glance, ` +
+    `while staying in the same spot and silhouette footprint so the morph overlay lines up. ` +
+    `Also upgrade lighting, materials and atmosphere to sell the new state. FULL VIVID COLOR. ` +
+    `If the subject moved or was reframed, the edit FAILED. No text, no watermark, no logos. Same 16:9 framing.`
   );
+}
+
+/** Strip placement/composition chatter so I2I only receives the atmosphere change. */
+function sanitizeRevealAtmosphere(revealScene: string): string {
+  let s = (revealScene || "").trim();
+  // Drop common framing boilerplate that causes the model to recompose.
+  s = s
+    .replace(/\bsame camera framing[^,]*/gi, "")
+    .replace(/\bsubject placement locked[^,]*/gi, "")
+    .replace(/\bsame exact product identity and label[^,]*/gi, "")
+    .replace(/\bmetamorphose (the )?environment to\b/gi, "")
+    .replace(/\bobviously different[^,]*/gi, "")
+    .replace(/\bright of center[^,]*/gi, "")
+    .replace(/\bcenter-right[^,]*/gi, "")
+    .replace(/\bcalm left text space[^,]*/gi, "")
+    .replace(/\bleft text space[^,]*/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,;:]+|[\s,;:]+$/g, "")
+    .trim();
+  if (s.length < 12) {
+    return "winter ice frost snow crystalline cold atmosphere around the same locked product";
+  }
+  return s.slice(0, 400);
 }
 
 export async function generateMotionRevealPair(opts: {
@@ -216,32 +263,49 @@ export async function generateMotionRevealPair(opts: {
   const hasProduct = !!opts.productImageUrl;
   const t0 = Date.now();
 
-  // Fire BOTH stills in parallel — the old sequential base→i2i-reveal path
-  // could burn 10–25 minutes when KIE was slow or retried.
-  deps.onStatus?.("Моушн: генерирую пару цветных кадров параллельно…");
-  const [baseUrl, revealUrl] = await Promise.all([
-    createStill(
-      deps,
-      buildBasePrompt(baseScene, hasProduct),
-      "MOTION base",
-      opts.productImageUrl,
-    ),
-    createStill(
-      deps,
-      buildRevealPrompt(revealScene, hasProduct),
-      "MOTION reveal",
-      opts.productImageUrl,
-    ),
-  ]);
+  // 1) Wait for BASE to fully finish (including re-upload) before starting reveal.
+  //    Never launch both stills in parallel — registration depends on editing frame 1.
+  deps.onStatus?.("Моушн: генерирую первый кадр…");
+  console.log("[MOTION] step1: waiting for base still before any I2I…");
+  const baseUrl = await createStill(
+    deps,
+    buildBasePrompt(baseScene, hasProduct),
+    "MOTION base",
+    opts.productImageUrl,
+  );
+  if (!baseUrl) {
+    console.warn(`[MOTION] base failed after ${Date.now() - t0}ms`);
+    return null;
+  }
+  console.log(`[MOTION] step1 done: base ready ${baseUrl.slice(0, 80)}… — starting sequential I2I`);
 
-  if (!baseUrl || !revealUrl) {
-    console.warn(
-      `[MOTION] pair incomplete base=${!!baseUrl} reveal=${!!revealUrl} after ${Date.now() - t0}ms`,
-    );
+  // 2) ONLY AFTER base is ready: I2I from that exact frame (locks product position).
+  const morphBrief =
+    !revealScene ||
+    revealScene === baseScene ||
+    revealScene.length < 20
+      ? (hasProduct
+          ? "winter ice frost snow cracked clear ice crystals and cold rim light around the product"
+          : "metamorphose the main subject into its premium finished counterpart, richer materials and lighting")
+      : revealScene;
+
+  deps.onStatus?.(
+    hasProduct
+      ? "Моушн: первый кадр готов — image-to-image второго (тот же объект на месте)…"
+      : "Моушн: первый кадр готов — image-to-image morph поверх него…",
+  );
+  const revealUrl = await createStill(
+    deps,
+    buildRevealPrompt(morphBrief, hasProduct),
+    "MOTION reveal i2i",
+    baseUrl, // MUST be the finished base, never the raw product photo
+  );
+  if (!revealUrl) {
+    console.warn(`[MOTION] reveal i2i failed after ${Date.now() - t0}ms`);
     return null;
   }
 
-  console.log(`[MOTION] pair ready in ${Date.now() - t0}ms`);
+  console.log(`[MOTION] pair ready (strict sequential i2i from base) in ${Date.now() - t0}ms`);
   deps.onStatus?.(`Моушн готов за ${Math.round((Date.now() - t0) / 1000)} с`);
   return { baseUrl, revealUrl };
 }
@@ -289,7 +353,7 @@ export function buildMotionRevealHtml(
     <div class="${cid}-overlays">
 ${layers}
     </div>
-    <div class="${cid}-hint"><span>ведите курсором</span><i></i></div>
+    <div class="${cid}-hint"><span class="${cid}-hint-desk">ведите курсором</span><span class="${cid}-hint-mob">листайте вниз</span><i></i></div>
   </div>
 </section>
 <style>
@@ -298,19 +362,31 @@ ${layers}
 .${cid}-sticky{position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:#050505;cursor:none;}
 .${cid}-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0;touch-action:none;}
 .${cid}-veil{position:absolute;inset:0;z-index:1;pointer-events:none;background:
-  radial-gradient(ellipse 65% 55% at 50% 42%,rgba(0,0,0,0.08) 0%,rgba(0,0,0,0.45) 72%,rgba(0,0,0,0.72) 100%),
-  linear-gradient(180deg,rgba(0,0,0,0.28) 0%,rgba(0,0,0,0.05) 40%,rgba(0,0,0,0.55) 100%);}
+  linear-gradient(90deg,rgba(0,0,0,.62) 0%,rgba(0,0,0,.28) 38%,rgba(0,0,0,.08) 62%,rgba(0,0,0,.22) 100%),
+  radial-gradient(ellipse 55% 60% at 22% 48%,rgba(0,0,0,.25) 0%,transparent 70%);}
 .${cid}-overlays{position:absolute;inset:0;z-index:2;pointer-events:none;}
-.${cid}-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(92vw,720px);text-align:center;opacity:0;color:#fff;will-change:opacity,transform;}
-.${cid}-text h2{margin:0;font-family:'Syne',system-ui,sans-serif;font-weight:800;font-size:clamp(2rem,5.2vw,4rem);line-height:1.02;letter-spacing:-0.03em;text-shadow:0 10px 48px rgba(0,0,0,0.55);}
-.${cid}-text p{margin:1rem auto 0;max-width:38ch;font-family:'Manrope',system-ui,sans-serif;font-size:clamp(1rem,1.6vw,1.22rem);line-height:1.55;color:rgba(255,255,255,0.82);text-shadow:0 4px 24px rgba(0,0,0,0.45);}
+.${cid}-text{position:absolute;left:clamp(18px,5vw,64px);right:auto;top:50%;transform:translateY(-50%);width:min(42vw,520px);max-width:calc(100% - 36px);text-align:left;opacity:0;color:#fff;will-change:opacity,transform;}
+.${cid}-text h2{margin:0;font-family:'Syne',system-ui,sans-serif;font-weight:800;font-size:clamp(1.85rem,4.6vw,3.6rem);line-height:1.02;letter-spacing:-0.03em;text-shadow:0 10px 48px rgba(0,0,0,0.55);}
+.${cid}-text p{margin:1rem 0 0;max-width:34ch;font-family:'Manrope',system-ui,sans-serif;font-size:clamp(.95rem,1.5vw,1.15rem);line-height:1.55;color:rgba(255,255,255,0.86);text-shadow:0 4px 24px rgba(0,0,0,0.45);}
 .${cid}-hint{position:absolute;left:50%;bottom:max(22px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:3;display:flex;flex-direction:column;align-items:center;gap:8px;font-family:'Manrope',system-ui,sans-serif;font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);transition:opacity .4s;pointer-events:none;}
+.${cid}-hint-mob{display:none;}
 .${cid}-hint i{width:28px;height:28px;border:1.5px solid rgba(255,255,255,.35);border-radius:50%;position:relative;}
 .${cid}-hint i::after{content:"";position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:#fff;animation:${cid}-pulse 1.4s ease-in-out infinite;}
 @keyframes ${cid}-pulse{0%,100%{transform:scale(.7);opacity:.35}50%{transform:scale(1.15);opacity:1}}
 @media (max-width:700px){
-  .${cid}-sticky{cursor:auto;}
-  .${cid}-text{width:min(94vw,420px);}
+  .${cid}-sticky{cursor:auto;touch-action:pan-y;}
+  .${cid}-canvas{touch-action:pan-y;pointer-events:none;}
+  .${cid}-hint-desk{display:none;}
+  .${cid}-hint-mob{display:inline;}
+  .${cid}-text{left:clamp(16px,4vw,28px);width:min(88vw,420px);top:auto;bottom:clamp(72px,14vh,120px);transform:none;}
+  .${cid}-veil{background:
+    linear-gradient(180deg,rgba(0,0,0,.15) 0%,rgba(0,0,0,.2) 45%,rgba(0,0,0,.72) 100%);}
+}
+@media (hover:none), (pointer:coarse){
+  .${cid}-sticky{cursor:auto;touch-action:pan-y;}
+  .${cid}-canvas{touch-action:pan-y;pointer-events:none;}
+  .${cid}-hint-desk{display:none;}
+  .${cid}-hint-mob{display:inline;}
 }
 @media (prefers-reduced-motion:reduce){
   .${cid}-hint i::after{animation:none;}
@@ -326,6 +402,10 @@ ${layers}
     var hint=root.querySelector('.${cid}-hint');
     var texts=[].slice.call(root.querySelectorAll('.${cid}-text'));
     var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Phones/tablets: never capture touch for morph — vertical scroll must work.
+    // Morph is driven by scroll progress instead of finger painting.
+    var touchUI=window.matchMedia('(hover: none), (pointer: coarse), (max-width: 700px)').matches;
+    var scrollP=0;
     var gl=canvas.getContext('webgl',{alpha:false,antialias:true,preserveDrawingBuffer:false})
       ||canvas.getContext('experimental-webgl',{alpha:false,antialias:true});
     if(!gl){var bu0=root.getAttribute('data-base')||'';if(bu0)root.style.background='center/cover no-repeat url("'+bu0.replace(/"/g,'')+'")';return;}
@@ -346,20 +426,20 @@ ${layers}
       'precision mediump float;varying vec2 v;uniform sampler2D uPrev;uniform vec2 uMouse;uniform float uDraw;uniform float uRadius;uniform float uHard;uniform float uFade;'+
       'void main(){vec4 p=texture2D(uPrev,v);float d=distance(v,uMouse);float m=smoothstep(uRadius,uRadius*(1.-uHard),d);'+
       'float a=max(p.r*uFade,uDraw*m);gl_FragColor=vec4(a,a,a,1.);}';
+    // Same cover UV for base + reveal so I2I-aligned frames stay perfectly registered.
     var mainFs=
       'precision mediump float;varying vec2 v;uniform sampler2D uBase;uniform sampler2D uRev;uniform sampler2D uMask;'+
-      'uniform vec2 uRes;uniform vec2 uBaseSize;uniform vec2 uRevSize;uniform float uTime;uniform float uPix;'+
+      'uniform vec2 uRes;uniform vec2 uBaseSize;uniform float uTime;uniform float uPix;'+
       'vec2 coverUV(vec2 uv,vec2 res,vec2 tex){float ar=res.x/max(res.y,.001);float tr=tex.x/max(tex.y,.001);vec2 s=ar>tr?vec2(tr/ar,1.):vec2(1.,ar/tr);return clamp((uv-.5)/s+.5,0.,1.);}'+
       'void main(){'+
       'float mask=texture2D(uMask,v).r;'+
       'float edge=smoothstep(0.05,0.55,mask)*smoothstep(0.95,0.45,mask);'+
       'float pix=mix(1.,uPix,edge*0.85);'+
       'vec2 grid=floor(v*uRes/pix)*pix/uRes;'+
-      'vec2 buP=coverUV(mix(v,grid,edge*0.65),uRes,uBaseSize);'+
-      'vec2 ruP=coverUV(mix(v,grid,edge*0.65),uRes,uRevSize);'+
+      'vec2 uvP=coverUV(mix(v,grid,edge*0.65),uRes,uBaseSize);'+
       'float ca=edge*0.0045;'+
-      'vec3 base=texture2D(uBase,buP).rgb;'+
-      'vec3 rev=vec3(texture2D(uRev,ruP+vec2(ca,0.)).r,texture2D(uRev,ruP).g,texture2D(uRev,ruP-vec2(ca,0.)).b);'+
+      'vec3 base=texture2D(uBase,uvP).rgb;'+
+      'vec3 rev=vec3(texture2D(uRev,uvP+vec2(ca,0.)).r,texture2D(uRev,uvP).g,texture2D(uRev,uvP-vec2(ca,0.)).b);'+
       'vec3 col=mix(base,rev,smoothstep(0.08,0.72,mask));'+
       'col+=edge*vec3(0.08,0.03,0.12)*sin(uTime*2.+mask*6.283);'+
       'gl_FragColor=vec4(col,1.);}';
@@ -387,7 +467,7 @@ ${layers}
       im.onerror=function(){cb(null,0,0);};im.src=url;
     }
 
-    var baseTex=null,revTex=null,baseSize=[1,1],revSize=[1,1],loaded=0;
+    var baseTex=null,revTex=null,baseSize=[1,1],loaded=0;
     function onReady(){
       loaded++;
       if(loaded>=2){
@@ -398,7 +478,7 @@ ${layers}
     var baseUrl=root.getAttribute('data-base')||'${baseJs}';
     var revUrl=root.getAttribute('data-reveal')||'${revJs}';
     loadTex(baseUrl,function(t,w,h){baseTex=t;baseSize=[w||1,h||1];onReady();});
-    loadTex(revUrl,function(t,w,h){revTex=t;revSize=[w||1,h||1];onReady();});
+    loadTex(revUrl,function(t,w,h){revTex=t;onReady();});
 
     var trailA=makeTex(gl.LINEAR),trailB=makeTex(gl.LINEAR),fbo=gl.createFramebuffer();
     var tw=1,th=1,flip=false;
@@ -418,7 +498,9 @@ ${layers}
     }
 
     var mouse={x:0.5,y:0.5},drawing=0,hasMoved=0,start=performance.now();
+    function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
     function setPtr(e){
+      if(touchUI) return; // mobile: scroll owns the gesture
       var r=canvas.getBoundingClientRect();
       var cx=(e.clientX!==undefined?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:r.left+r.width/2));
       var cy=(e.clientY!==undefined?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:r.top+r.height/2));
@@ -427,12 +509,12 @@ ${layers}
       drawing=1;hasMoved=1;
       if(hint)hint.style.opacity='0';
     }
-    canvas.addEventListener('pointermove',setPtr,{passive:true});
-    canvas.addEventListener('pointerdown',setPtr,{passive:true});
-    canvas.addEventListener('touchmove',function(e){if(e.touches&&e.touches[0])setPtr(e.touches[0]);},{passive:true});
-    canvas.addEventListener('touchstart',function(e){if(e.touches&&e.touches[0])setPtr(e.touches[0]);},{passive:true});
-    window.addEventListener('pointerup',function(){drawing=0;});
-    // Idle auto-reveal pulse so the effect is discoverable without hover
+    if(!touchUI){
+      canvas.addEventListener('pointermove',setPtr,{passive:true});
+      canvas.addEventListener('pointerdown',setPtr,{passive:true});
+      window.addEventListener('pointerup',function(){drawing=0;});
+    }
+    // Idle auto-reveal pulse so the effect is discoverable without hover (desktop only)
     var autoT=0;
 
     function bindAttr(p){
@@ -448,21 +530,40 @@ ${layers}
       gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,write,0);
       gl.viewport(0,0,tw,th);
       gl.useProgram(trailP);bindAttr(trailP);
-      gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,read);
-      gl.uniform1i(gl.getUniformLocation(trailP,'uPrev'),0);
-      var mx=mouse.x,my=mouse.y;
-      if(!hasMoved&&!reduce){
-        autoT+=dt;
-        mx=0.5+Math.sin(autoT*0.55)*0.22;
-        my=0.48+Math.cos(autoT*0.4)*0.16;
+
+      var mx=mouse.x,my=mouse.y,drawAmt,rad,fade,hard;
+
+      if(touchUI){
+        // Scroll-linked morph: fresh expanding reveal each frame — no touch capture.
+        gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,read);
+        gl.uniform1i(gl.getUniformLocation(trailP,'uPrev'),0);
+        mx=0.62; my=0.42;
+        drawAmt = scrollP > 0.01 ? 1 : 0;
+        rad = 0.1 + clamp(scrollP,0,1) * 0.78;
+        fade = 0;
+        hard = 0.35;
+        if(hint) hint.style.opacity = String(clamp(1 - scrollP * 2.2, 0, 1));
+      } else {
+        gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,read);
+        gl.uniform1i(gl.getUniformLocation(trailP,'uPrev'),0);
+        if(!hasMoved&&!reduce){
+          autoT+=dt;
+          mx=0.5+Math.sin(autoT*0.55)*0.22;
+          my=0.48+Math.cos(autoT*0.4)*0.16;
+        }
+        drawAmt=(drawing||!hasMoved)?1:0;
+        if(reduce)drawAmt=hasMoved?1:0.35;
+        rad=hasMoved?0.12:0.16;
+        fade=0.965;
+        hard=0.55;
       }
+
       gl.uniform2f(gl.getUniformLocation(trailP,'uMouse'),mx,my);
-      var drawAmt=(drawing||!hasMoved)?1:0;
-      if(reduce)drawAmt=hasMoved?1:0.35;
       gl.uniform1f(gl.getUniformLocation(trailP,'uDraw'),drawAmt);
-      gl.uniform1f(gl.getUniformLocation(trailP,'uRadius'),hasMoved?0.12:0.16);
-      gl.uniform1f(gl.getUniformLocation(trailP,'uHard'),0.55);
-      gl.uniform1f(gl.getUniformLocation(trailP,'uFade'),0.965);
+      gl.uniform1f(gl.getUniformLocation(trailP,'uRadius'),rad);
+      gl.uniform1f(gl.getUniformLocation(trailP,'uHard'),hard);
+      gl.uniform1f(gl.getUniformLocation(trailP,'uFade'),fade);
       gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       flip=!flip;
       gl.bindFramebuffer(gl.FRAMEBUFFER,null);
@@ -480,7 +581,6 @@ ${layers}
       gl.uniform1i(gl.getUniformLocation(mainP,'uMask'),2);
       gl.uniform2f(gl.getUniformLocation(mainP,'uRes'),canvas.width,canvas.height);
       gl.uniform2f(gl.getUniformLocation(mainP,'uBaseSize'),baseSize[0],baseSize[1]);
-      gl.uniform2f(gl.getUniformLocation(mainP,'uRevSize'),revSize[0],revSize[1]);
       gl.uniform1f(gl.getUniformLocation(mainP,'uTime'),(performance.now()-start)/1000);
       gl.uniform1f(gl.getUniformLocation(mainP,'uPix'),Math.max(6,Math.min(18,canvas.width/70)));
       gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
@@ -501,10 +601,11 @@ ${layers}
     }
     window.addEventListener('resize',resize);
 
-    function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
     function setP(p){
       p=clamp(p,0,1);
-      if(hint&&hasMoved)hint.style.opacity=String(clamp(1-p*3.5,0,1));
+      scrollP=p;
+      if(hint&&hasMoved&&!touchUI)hint.style.opacity=String(clamp(1-p*3.5,0,1));
+      var mobile=touchUI||window.matchMedia('(max-width:700px)').matches;
       texts.forEach(function(el){
         var fi=parseFloat(el.getAttribute('data-fi')),fis=parseFloat(el.getAttribute('data-fis'));
         var fos=parseFloat(el.getAttribute('data-fos')),fo=parseFloat(el.getAttribute('data-fo'));
@@ -514,7 +615,12 @@ ${layers}
         }
         op=clamp(op,0,1);
         el.style.opacity=op.toFixed(3);
-        el.style.transform='translate(-50%,calc(-50% + '+((1-op)*18)+'px))';
+        // Left-aligned copy — do not re-center with translateX(-50%).
+        if(mobile){
+          el.style.transform='translateY('+((1-op)*14)+'px)';
+        } else {
+          el.style.transform='translateY(calc(-50% + '+((1-op)*18)+'px))';
+        }
       });
     }
     function secTop(){return root.getBoundingClientRect().top+(window.pageYOffset||document.documentElement.scrollTop);}
