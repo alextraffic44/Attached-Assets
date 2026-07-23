@@ -3437,7 +3437,14 @@ export async function registerRoutes(
 
       for (const p of objectPaths) {
         try {
-          await objectStorage.deleteObjectEntity(p);
+          const file = await objectStorage.getObjectEntityFile(p);
+          const absPath = (file as { absolutePath?: string }).absolutePath;
+          if (absPath) {
+            await fs.promises.unlink(absPath).catch(() => {});
+            await fs.promises.unlink(`${absPath}.meta.json`).catch(() => {});
+          } else if (typeof (objectStorage as any).deleteObjectEntity === "function") {
+            await (objectStorage as any).deleteObjectEntity(p);
+          }
         } catch (e: any) {
           console.warn(`[account-delete] object cleanup ${p}:`, e?.message || e);
         }
