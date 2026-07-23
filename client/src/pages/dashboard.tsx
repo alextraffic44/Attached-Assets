@@ -1742,10 +1742,10 @@ export default function DashboardPage() {
             <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)', marginTop: '0.4rem', marginBottom: isMobile ? '1.25rem' : '2rem' }}>Выберите подходящий тариф для пополнения токенов</p>
             <div className="db-topup-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
               {[
-                { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["1 сайт", "10 итераций редактирования"] },
-                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["2 сайта", "19 итераций редактирования"] },
-                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["3 сайта", "45 итераций редактирования", "Премиум шаблоны"] },
-                { price: 9990, tokens: 10000, label: "Ультра",  popular: true,  desc: ["5 сайтов", "100 итераций редактирования", "Премиум шаблоны"] },
+                { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
+                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
+                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
+                { price: 9990, tokens: 10000, label: "Ультра",  popular: true,  desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
               ].map((plan) => (
                 <div key={plan.price} style={{ position: 'relative', height: '100%' }}>
                   {plan.popular && (
