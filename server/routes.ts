@@ -2,19 +2,12 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import {
-  SCROLL_IMMERSION_COST,
-  SW_SCENE_COUNT,
-  generateScrollWorld,
-  buildImmersionPendingHtml,
-  type GenerateScrollWorldDeps,
-} from "./scroll-world";
-import { buildSite3dAnimHtml } from "./site3d-anim";
-import {
   SCROLL_MOTION_COST,
   generateMotionRevealPair,
   buildMotionRevealHtml,
   type GenerateMotionRevealDeps,
 } from "./motion-reveal";
+import { buildTriggerLookHtml, normalizeTriggerLookFrames } from "./trigger-look";
 import {
   SCROLL_ANIMATIONAL_COST,
   ANIMATIONAL_SYSTEM_PROMPT,
@@ -227,16 +220,70 @@ const SCROLL_VIDEO_DURATION = 5;   // seconds
 // richer, smoother slow-motion / bullet-time scrub.
 const SCROLL_ACTION_VIDEO_DURATION = 6;  // seconds (blockbuster shot length)
 const SCROLL_ACTION_FRAME_COUNT = 96;    // sliced frames for the clip (matches ~16fps density used at 10s)
-type ScrollAnimLayout = "parallax" | "split" | "action" | "immersion" | "site3d" | "motion" | "animational";
+// «Тригер»: short head-turn clip scrubbed by mouse X
+const SCROLL_TRIGGER_VIDEO_DURATION = 3;
+const SCROLL_TRIGGER_FRAME_COUNT = 45;
+/**
+ * Canonical Kling motion for Тригер (~3s).
+ * Still starts CENTER; clip does EXACTLY one left-then-right turn (no oscillation).
+ * Mouse scrub uses the left→right portion of the clip.
+ */
+const TRIGGER_LOOK_MOTION_CANONICAL =
+  `STRICT SINGLE HEAD-TURN CYCLE across the entire ~3 second clip — do this path EXACTLY ONCE: ` +
+  `(0.0s) head and eyes look CENTER straight at the camera; ` +
+  `(0.0–1.0s) ONE turn from CENTER to clearly looking LEFT (~35° yaw); ` +
+  `(1.0–3.0s) ONE continuous turn from that LEFT pose through CENTER to clearly looking RIGHT (~35° yaw). ` +
+  `FORBIDDEN: oscillating, shaking, nodding left-right repeatedly, multiple turns, reversing back and forth, ` +
+  `looping, idle wobble, only-left, only-right, or staying centered. One left swing, then one rightward sweep — stop at the right. ` +
+  `Body stays front-facing en face, both eyes visible, locked static camera, background almost still.`;
+type ScrollAnimLayout = "parallax" | "split" | "action" | "motion" | "animational" | "trigger";
 
 function resolveScrollAnimLayout(style?: string | null): ScrollAnimLayout {
   if (style === "split") return "split";
   if (style === "action") return "action";
-  if (style === "immersion") return "immersion";
-  if (style === "site3d") return "site3d";
   if (style === "motion") return "motion";
   if (style === "animational") return "animational";
+  if (style === "trigger") return "trigger";
+  // legacy immersion / site3d removed — treat as parallax
   return "parallax";
+}
+
+/** Save/update a chat-restorable result checkpoint labeled `vN: "prompt"`. */
+async function saveChatResultVersion(
+  projectId: number,
+  code: string,
+  prompt: string,
+  versionNum?: number,
+): Promise<void> {
+  if (!code?.trim()) return;
+  try {
+    const msgs = await storage.getProjectMessages(projectId);
+    const n =
+      versionNum ??
+      msgs.filter((m) => m.role === "model" || m.role === "assistant").length;
+    if (n < 1) return;
+    const currentFiles = await storage.getProjectFiles(projectId);
+    const filesSnapshot = currentFiles.map((f) => ({ filename: f.filename, code: f.code }));
+    const label = `v${n}: "${prompt.substring(0, 48)}${prompt.length > 48 ? "..." : ""}"`;
+    const versions = await storage.getProjectVersions(projectId);
+    const existing = versions.find((v) => new RegExp(`^v${n}\\b`).test(v.label || ""));
+    if (existing) {
+      await storage.updateProjectVersion(existing.id, {
+        code,
+        files: filesSnapshot.length > 0 ? filesSnapshot : null,
+        label,
+      });
+    } else {
+      await storage.createProjectVersion({
+        projectId,
+        code,
+        label,
+        files: filesSnapshot.length > 0 ? filesSnapshot : null,
+      });
+    }
+  } catch (e: any) {
+    console.warn("[VERSION] saveChatResultVersion failed:", e?.message || e);
+  }
 }
 const KLING_IMG2VID_MODEL = "kling/v3-turbo-image-to-video";
 
@@ -413,6 +460,13 @@ async function generateStillForVideo(
       `Bold directional key light with soft volumetric god rays, rich filmic color grading, deep elegant shadows and luminous ` +
       `highlights, gentle atmospheric haze for depth, immersive premium Hollywood blockbuster mood, IMAX-grade spectacle. ` +
       `No text, no watermark, no logos, ultra-high detail, 8K, 16:9 aspect ratio.`
+    : layout === "trigger"
+    ? `${scenePrompt.trim()}. Wide cinematic hero still — START FRAME for mouse-look video: KEEP the exact niche-specific character and themed environment described above — ` +
+      `do not replace with a generic mascot. Charismatic niche mascot (animal, robot, stylized creature) clearly on the RIGHT third, ` +
+      `FRONT-FACING / EN FACE toward the camera (both eyes/face features clearly visible, body facing viewer — NOT side profile, NOT three-quarter back, NOT silhouette from the side). ` +
+      `START POSE: head and eyes look CENTER / straight at the camera (neutral en face gaze) — do NOT already look left or right. ` +
+      `LEFT half = beautiful atmospheric background matching THAT niche/brand mood with calm negative space for overlay text. Character sharp and readable, ` +
+      `photorealistic or high-end stylized 3D, premium commercial lighting, 8K, 16:9. No text, no watermark, no logos.`
     : `${scenePrompt.trim()}. A complete immersive cinematic SCENE with a real environment and layered depth (NOT a plain solid backdrop). ` +
       `Ultra-cinematic widescreen film still, shot on ARRI Alexa with an anamorphic lens, photorealistic, breathtaking dramatic ` +
       `composition that draws the eye deep into the scene, with a slightly calmer focal area where large overlay text can stay legible. ` +
@@ -924,37 +978,40 @@ async function generateScrollFrames(
     ? `with an elegant slow cinematic camera push-in only — no pan, no tilt, no pull-back, no frame-edge reveal — keeping the product perfectly intact and the left side calm for text`
     : layout === "action"
     ? `the debris, shards, sparks, dust or particles already visible in the frame must keep physically moving and evolving throughout the whole clip — drifting, spinning, falling, colliding or scattering further in slow motion (the scene action must be the main event, not just the camera), combined with a bold Hollywood-blockbuster camera move — a dramatic slow-motion orbit/arc that flies AROUND the subject (bullet-time feel) or an explosive dynamic push-in, sweeping anamorphic lens flares, motion-blur streaks and deep dramatic contrast — epic, powerful and fluid, never shaky, camera movement alone is NOT enough`
-    : layout === "site3d"
-    ? `with a bold immersive cinematic forward flight that reveals deep layered space behind glass-like UI cards — smooth dolly into the scene, rich parallax depth, volumetric haze, graceful and steady, never shaky`
+    : layout === "trigger"
+    ? `CAMERA LOCKED / STATIC — do not dolly, pan or orbit. Preserve the SAME niche-specific FRONT-FACING character and themed background from the center-facing start frame. Character stays EN FACE (both eyes visible, NOT side profile). From CENTER, do EXACTLY ONE turn left then ONE sweep to the right — never oscillate. ${TRIGGER_LOOK_MOTION_CANONICAL} Shoulders/torso stay front-facing; body and background almost still; no jump cuts`
     : `with bold immersive cinematic camera movement that pulls the viewer INTO the scene — a smooth forward dolly / push-in that glides deeper and naturally reveals depth and detail (e.g. gliding toward a doorway or through the space) — graceful and steady, never shaky`;
   const styleLead = layout === "action"
     ? `Render as an epic Hollywood blockbuster action sequence in dramatic slow motion (bullet-time): powerful, clearly visible motion that builds across the whole clip, IMAX-grade cinematic spectacle`
+    : layout === "trigger"
+    ? `Render as a premium interactive niche-mascot hero clip: front-facing (en face) character matching the client's niche, locked camera, character on the right, starts looking CENTER, then exactly ONE left turn followed by ONE rightward turn for mouse-follow gaze — never oscillate, never a side-profile pose`
     : `Render as a high-end Hollywood-grade cinematic shot: smooth, graceful but clearly visible motion (the scene must noticeably evolve and feel alive from start to finish)`;
   let animPrompt =
     `${safeVideoPrompt}. ${styleLead}, ${cameraGuidance}, premium dramatic lighting ` +
     `and rich filmic color grading. Do not warp, melt or distort the main subject or any architecture, ` +
     `no text, no captions, no watermark, no camera shake, no flicker, no jump cuts.`;
+  // Тригер: always re-assert the canonical left→right timeline at the END so Kling
+  // cannot ignore it when the agent VIDEO_PROMPT is vague or one-sided.
+  if (layout === "trigger") {
+    animPrompt += ` IMPORTANT: ignore any conflicting head-turn direction earlier in this prompt. ${TRIGGER_LOOK_MOTION_CANONICAL}`;
+  }
 
   // Per-mode clip length + sliced-frame budget.
-  // site3d: cinematic 6s / 1080p — quality first; speed win is MP4 scrub (no ffmpeg).
   const videoDuration = layout === "action"
     ? SCROLL_ACTION_VIDEO_DURATION
-    : layout === "site3d"
-    ? 6
+    : layout === "trigger"
+    ? SCROLL_TRIGGER_VIDEO_DURATION
     : SCROLL_VIDEO_DURATION;
   const targetFrameCount = layout === "action"
     ? SCROLL_ACTION_FRAME_COUNT
-    : layout === "site3d"
-    ? 90
+    : layout === "trigger"
+    ? SCROLL_TRIGGER_FRAME_COUNT
     : SCROLL_FRAME_COUNT;
   const videoResolution = "1080p";
-  const useVideoScrub = layout === "site3d"; // skip ffmpeg + 90 uploads
 
   // Overall deadline shared across all retry attempts (still image time already consumed).
-  // site3d/parallax: keep a generous Kling budget, but fewer create retries so we fail fast
-  // and let the BG soft-retry / task-id resume finish the job instead of stacking 4×35min.
-  const deadline = Date.now() + (layout === "site3d" ? 1800000 : 2400000); // site3d 30m, others 40m
-  const MAX_VIDEO_ATTEMPTS = layout === "site3d" || layout === "parallax" || layout === "split" ? 2 : 4;
+  const deadline = Date.now() + 2400000;
+  const MAX_VIDEO_ATTEMPTS = layout === "parallax" || layout === "split" ? 2 : 4;
   let mp4Url: string | null = null;
 
   // Detects Kling content-moderation failures (error 400 "community guidelines")
@@ -1064,7 +1121,7 @@ async function generateScrollFrames(
     let pollCount = 0;
     while (Date.now() < deadline) {
       if (shouldStop()) return { frames: [], confirmedKieFailure: false };
-      await new Promise(r => setTimeout(r, layout === "site3d" ? 3000 : 5000));
+      await new Promise(r => setTimeout(r, 5000));
       pollCount++;
       try {
         const body: any = await kieRequestJson(
@@ -1173,21 +1230,6 @@ async function generateScrollFrames(
     console.warn("[SCROLLANIM] all mp4 download attempts failed — giving up");
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
     return { frames: [], confirmedKieFailure: true };
-  }
-
-  // site3d fast path: upload ONE mp4 and scrub it in the browser — skip ffmpeg + N uploads.
-  if (useVideoScrub) {
-    try {
-      const relUrl = await uploadToObjectStorage(mp4Buf, "video/mp4", "mp4");
-      const appBase = process.env.APP_BASE_URL || "https://craft-ai.ru";
-      const stableVideo = `${appBase}${relUrl}`;
-      console.log(`[SCROLLANIM] site3d video scrub ready: ${stableVideo} (${mp4Buf.length} bytes)`);
-      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-      return { frames: [], videoUrl: stableVideo, confirmedKieFailure: false };
-    } catch (upErr: any) {
-      console.warn("[SCROLLANIM] site3d mp4 upload failed, falling back to frame extract:", upErr?.message);
-      // fall through to ffmpeg path
-    }
   }
 
   // Step 4 — extract frames with ffmpeg (direct spawn + retry; see extractFramesWithFfmpeg)
@@ -1405,9 +1447,8 @@ function safeReplaceScrollAnimPending(html: string, replacement: string): string
 /**
  * Extract finished scroll-anim blocks including the trailing <style>/<script>
  * siblings that carry height CSS and the canvas/WebGL engine.
- * Immersion keeps engine inside the section; site3d/motion/parallax place
- * style+script immediately after </section> — dropping those siblings left
- * a zero-height hollow hero after BG merge.
+ * motion/parallax/split place style+script immediately after </section> —
+ * dropping those siblings left a zero-height hollow hero after BG merge.
  */
 function extractCraftScrollAnimBlocks(html: string): string[] {
   const blocks: string[] = [];
@@ -1530,24 +1571,22 @@ function replaceHollowCraftScrollAnim(html: string, fullBlocks: string[]): strin
 }
 
 function scrollAnimPendingHtml(texts: Array<{ title: string; sub: string }>, videoPrompt?: string, style?: string): string {
-  if (style === "immersion") {
-    return buildImmersionPendingHtml(videoPrompt || "", texts);
-  }
   if (style === "animational") {
     const brandHint = texts[0]?.title || undefined;
     return buildAnimationalPendingHtml(brandHint, videoPrompt);
   }
   const isMotion = style === "motion";
+  const isTrigger = style === "trigger";
   const first = texts[0] || { title: "", sub: "" };
   const tid = "pnd" + Math.random().toString(36).slice(2, 8);
   const _pa = videoPrompt ? ` data-scroll-anim-prompt="${encodeURIComponent(videoPrompt)}"` : "";
   const _sa = style ? ` data-scroll-anim-style="${encodeURIComponent(style)}"` : "";
   const _ta = texts.length ? ` data-scroll-anim-texts="${encodeURIComponent(texts.map(t => `${t.title}::${t.sub}`).join("||"))}"` : "";
-  const pendingTitle = isMotion ? "Генерация моушн-эффекта" : "Генерация видеоанимации";
+  const pendingTitle = isMotion ? "Генерация моушн-эффекта" : isTrigger ? "Генерация Тригер-Hero" : "Генерация видеоанимации";
   const pendingSub = isMotion
     ? "Обычно 30–90 секунд (2 кадра параллельно)"
-    : style === "site3d"
-    ? "Видео Kling 6с / 1080p: обычно 3–12 минут"
+    : isTrigger
+    ? "Kling 3с · один поворот головы · обычно 3–12 минут"
     : "Обычно 3–12 минут (видео Kling)";
   const barSecs = isMotion ? 45 : 180;
   return `<section data-scroll-anim-pending="1"${_pa}${_sa}${_ta} style="position:relative;height:100vh;min-height:600px;background:linear-gradient(135deg,#0a0a0a 0%,#16213e 50%,#0a0a0a 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;">
@@ -1596,7 +1635,20 @@ function scrollAnimFallbackHtml(
 }
 
 // Build a self-contained scroll-bound Canvas animation block (section + style + script).
-// layout: "parallax" — full-screen text; "split" — text left; "site3d" — stacked 3D cards over video.
+// layout: "parallax" — full-screen text; "split" — text left; "action" — blockbuster scrub.
+async function prepareScrollAnimFrames(
+  frames: string[],
+  layout: ScrollAnimLayout,
+): Promise<string[]> {
+  if (layout !== "trigger" || !frames?.length) return frames;
+  try {
+    return await normalizeTriggerLookFrames(frames);
+  } catch (e: any) {
+    console.warn("[TRIGGER] normalize failed:", e?.message || e);
+    return frames;
+  }
+}
+
 function buildScrollAnimHtml(
   frames: string[],
   texts: Array<{ title: string; sub: string }>,
@@ -1634,9 +1686,10 @@ function buildScrollAnimHtml(
   //    and a header-height-aware threshold instead of a magic number.
   const navCtl = `\n<style>header{transition:background .45s ease,background-color .45s ease,backdrop-filter .45s ease,-webkit-backdrop-filter .45s ease,border-color .45s ease,box-shadow .45s ease;}body:not(.craft-anim-passed) header{background:transparent!important;background-color:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-color:transparent!important;box-shadow:none!important;}</style>\n<script>(function(){if(window.__craftNavCtl)return;window.__craftNavCtl=true;function fixSticky(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;for(var i=0;i<s.length;i++){var el=s[i];while(el&&el.nodeType===1&&el!==document.documentElement){var cs=getComputedStyle(el);if(cs.overflowX==='hidden')el.style.overflowX='clip';if(cs.overflowY==='hidden')el.style.overflowY='clip';el=el.parentElement;}}var de=document.documentElement,b=document.body;[de,b].forEach(function(n){if(!n)return;var c=getComputedStyle(n);if(c.overflowX==='hidden')n.style.overflowX='clip';if(c.overflowY==='hidden')n.style.overflowY='clip';});}function u(){var s=document.querySelectorAll('[data-craft-scrollanim]');if(!s.length)return;var h=document.querySelector('header');var th=h?h.offsetHeight:64;var passed=true;for(var i=0;i<s.length;i++){if(s[i].getBoundingClientRect().bottom>th){passed=false;break;}}document.body.classList.toggle('craft-anim-passed',passed);}window.addEventListener('scroll',u,{passive:true});window.addEventListener('resize',u);if(document.readyState!=='loading'){fixSticky();u();}else{document.addEventListener('DOMContentLoaded',function(){fixSticky();u();});}fixSticky();u();})();</script>`;
 
-  if (layout === "site3d") {
-    return buildSite3dAnimHtml(frames, texts, navCtl, csaEsc, videoUrl);
+  if (layout === "trigger") {
+    return buildTriggerLookHtml(frames, texts, navCtl, csaEsc);
   }
+
   // motion layout is built via buildMotionRevealHtml (image pair), not video frames.
 
   // ── Parallax (full-screen) layout ──────────────────────────────────────────
@@ -1777,24 +1830,6 @@ ${layers}
 // Scan files for {{SCROLLANIM:...}} markers, generate the animation, and bake the result in.
 // No marker ever survives — failures degrade to a static text section.
 
-function buildScrollWorldDeps(opts: {
-  shouldStop: () => boolean;
-  onStatus?: (msg: string) => void;
-  appBaseUrl?: string;
-}): GenerateScrollWorldDeps {
-  return {
-    kieApiKey: KIE_API_KEY || "",
-    createUrl: NANO_BANANA_CREATE_URL,
-    statusUrl: NANO_BANANA_STATUS_URL,
-    kieRequestJson,
-    uploadToObjectStorage,
-    getFfmpegBin: () => getFfmpegBinary(),
-    appBaseUrl: opts.appBaseUrl || process.env.APP_BASE_URL || "https://craft-ai.ru",
-    shouldStop: opts.shouldStop,
-    onStatus: opts.onStatus,
-  };
-}
-
 function buildMotionRevealDeps(opts: {
   shouldStop: () => boolean;
   onStatus?: (msg: string) => void;
@@ -1816,6 +1851,7 @@ function buildAnimationalDeps(opts: {
   shouldStop: () => boolean;
   onStatus?: (msg: string) => void;
   appBaseUrl?: string;
+  productImageUrl?: string;
 }): GenerateAnimationalDeps {
   return {
     kieApiKey: KIE_API_KEY || "",
@@ -1826,6 +1862,17 @@ function buildAnimationalDeps(opts: {
     appBaseUrl: opts.appBaseUrl || process.env.APP_BASE_URL || "https://craft-ai.ru",
     shouldStop: opts.shouldStop,
     onStatus: opts.onStatus,
+    productImageUrl: opts.productImageUrl,
+    generateFrames: async (videoPrompt, shouldStop, referenceStillUrl) => {
+      // action layout → longer clip + denser frames for smooth 3D scrub
+      const out = await generateScrollFrames(
+        videoPrompt,
+        shouldStop,
+        referenceStillUrl,
+        "action",
+      );
+      return { frames: out.frames, confirmedKieFailure: out.confirmedKieFailure };
+    },
   };
 }
 
@@ -1836,6 +1883,7 @@ async function resolveAnimationalMarkers(
   runKey: string,
   res: any,
   isAborted: () => boolean = () => false,
+  productImageUrl?: string,
 ): Promise<{ generated: number; creditsUsed: number }> {
   const RE = /\{\{ANIMATIONAL:([\s\S]+?)\}\}/g;
   const markers = new Map<string, string>();
@@ -1852,12 +1900,13 @@ async function resolveAnimationalMarkers(
   const replaceMap = new Map<string, string>();
   let generated = 0;
   let creditsUsed = 0;
-  const phaseDeadline = Date.now() + 900000; // 15 min — image-only pipeline
+  // Kling video + frame extract — same budget class as scroll-anim
+  const phaseDeadline = Date.now() + 2520000;
 
   for (const [raw] of Array.from(markers.entries()).slice(0, 1)) {
     if (isAborted() || Date.now() >= phaseDeadline) break;
     try {
-      res.write(`data: ${JSON.stringify({ status: "Анимационный: генерирую кадры через KIE…" })}\n\n`);
+      res.write(`data: ${JSON.stringify({ status: "Анимационный · 3D: рендерим Kling для canvas-scrub…" })}\n\n`);
     } catch {}
 
     let billed = false;
@@ -1872,9 +1921,9 @@ async function resolveAnimationalMarkers(
 
       const keepAliveInterval = setInterval(() => {
         try {
-          res.write(`data: ${JSON.stringify({ status: "Анимационный: жду кадры от KIE…" })}\n\n`);
+          res.write(`data: ${JSON.stringify({ status: "Анимационный · 3D: жду Kling / кадры…" })}\n\n`);
         } catch {}
-      }, 15000);
+      }, 20000);
 
       let site: Awaited<ReturnType<typeof generateAnimationalSite>> = null;
       try {
@@ -1887,6 +1936,7 @@ async function resolveAnimationalMarkers(
                 res.write(`data: ${JSON.stringify({ status: msg })}\n\n`);
               } catch {}
             },
+            productImageUrl,
           }),
         });
       } finally {
@@ -1898,7 +1948,7 @@ async function resolveAnimationalMarkers(
         generated++;
         if (billed) creditsUsed += SCROLL_ANIMATIONAL_COST;
         try {
-          res.write(`data: ${JSON.stringify({ status: "Анимационный сайт готов" })}\n\n`);
+          res.write(`data: ${JSON.stringify({ status: `Анимационный · 3D готов (${site.frameCount} кадров)` })}\n\n`);
         } catch {}
       } else if (billed && userId) {
         try {
@@ -1906,7 +1956,7 @@ async function resolveAnimationalMarkers(
         } catch {}
       }
     } catch (e: any) {
-      console.error("[ANI] resolve failed:", e?.message || e);
+      console.error("[ANI3D] resolve failed:", e?.message || e);
       if (billed && userId) {
         try {
           await storage.refundCredits(userId, SCROLL_ANIMATIONAL_COST);
@@ -1972,10 +2022,10 @@ async function resolveScrollAnimMarkers(
   if (entries.length === 0) { return { generated: 0, creditsUsed: 0 }; }
 
   const layout = resolveScrollAnimLayout(interactiveStyle);
-  const planned = entries.slice(0, layout === "immersion" ? 1 : 2); // immersion: one world; others: at most 2
+  const planned = entries.slice(0, 2);
   // Immersion runs 2N−1 Kling jobs (dives + connectors); allow a longer wall-clock budget.
   // Motion is image-only (2 stills) — shorter budget is enough.
-  const phaseDeadline = Date.now() + (layout === "immersion" ? 5400000 : layout === "motion" ? 240000 : 2520000);
+  const phaseDeadline = Date.now() + (layout === "motion" ? 360000 : 2520000);
 
   // Product still is regenerated lazily (ONCE) AFTER the first successful credit
   // deduction inside the loop, so we never spend external API budget on a user who
@@ -1989,15 +2039,14 @@ async function resolveScrollAnimMarkers(
 
   for (const [raw, parsed] of planned) {
     if (isAborted() || Date.now() >= phaseDeadline) break;
-    const isImmersion = layout === "immersion";
     const isMotion = layout === "motion";
-    const blockCost = isImmersion ? SCROLL_IMMERSION_COST : isMotion ? SCROLL_MOTION_COST : SCROLL_ANIM_COST;
-    const blockReason = isImmersion ? "scroll-world" : isMotion ? "motion-reveal" : "scroll-anim";
+    const blockCost = isMotion ? SCROLL_MOTION_COST : SCROLL_ANIM_COST;
+    const blockReason = isMotion ? "motion-reveal" : "scroll-anim";
     try {
-      res.write(`data: ${JSON.stringify({ status: isImmersion
-        ? `Собираем мир погружения (${SW_SCENE_COUNT} сцен, ${2 * SW_SCENE_COUNT - 1} роликов Kling 3.0)…`
-        : isMotion
+      res.write(`data: ${JSON.stringify({ status: isMotion
         ? "Моушн: генерирую 2 цветных кадра параллельно (обычно <2 мин)…"
+        : layout === "trigger"
+        ? "Тригер: рендерим 3с поворот головы (Kling)…"
         : "Рендерю видео для анимации прокрутки (до 35 минут, зависит от очереди KIE)..." })}\n\n`);
     } catch {}
 
@@ -2009,38 +2058,6 @@ async function resolveScrollAnimMarkers(
       const ded = await storage.deductCredits(userId, blockCost, blockReason, ikey);
       if (!ded.success) break; // out of credits → leave for static fallback (finalize() still runs)
       billed = !ded.alreadyProcessed;
-    }
-
-    // Immersion (scroll-world): N stills + N dive clips + N−1 connectors via Kling 3.0.
-    // Skip product-still path — the world paints its own clay diorama stills.
-    if (isImmersion) {
-      const keepAliveInterval = setInterval(() => {
-        try { res.write(`data: ${JSON.stringify({ status: "Собираем мир погружения (ожидаю Kling 3.0 / nano-banana)…" })}\n\n`); } catch {}
-      }, 20000);
-      let world: Awaited<ReturnType<typeof generateScrollWorld>> = null;
-      try {
-        world = await generateScrollWorld({
-          videoPrompt: parsed.videoPrompt,
-          texts: parsed.texts,
-          deps: buildScrollWorldDeps({
-            shouldStop: () => isAborted() || Date.now() >= phaseDeadline,
-            onStatus: (msg) => {
-              try { res.write(`data: ${JSON.stringify({ status: msg })}\n\n`); } catch {}
-            },
-          }),
-        });
-      } finally {
-        clearInterval(keepAliveInterval);
-      }
-      if (world?.html) {
-        replaceMap.set(raw, world.html);
-        generated++;
-        if (billed) creditsUsed += blockCost;
-        try { res.write(`data: ${JSON.stringify({ status: `Мир готов (${world.mp4Urls.length} роликов, ${world.stillUrls.length} сцен)` })}\n\n`); } catch {}
-      } else if (billed && userId) {
-        try { await storage.refundCredits(userId, blockCost); } catch {}
-      }
-      continue;
     }
 
     // Motion: dual-image WebGL hover reveal (no Kling video).
@@ -2078,9 +2095,8 @@ async function resolveScrollAnimMarkers(
 
     // User is confirmed billable → safe to spend external API. Regenerate the uploaded
     // product photo ONCE onto a clean SOLID background (product positioned per layout)
-    // and feed THAT still to Kling. site3d uses cinematic environment flight — skip the
-    // product/vision detour (saves 20–60s of Gemini + product-still before Kling even starts).
-    if (productImageUrl && !productStillResolved && layout !== "site3d") {
+    // and feed THAT still to Kling. Trigger uses a mascot/character still — skip product path.
+    if (productImageUrl && !productStillResolved && layout !== "trigger") {
       productStillResolved = true;
       // Analyze the product ONCE and invent a creative, product-aware concept.
       if (!creativeConceptResolved) {
@@ -2112,10 +2128,14 @@ async function resolveScrollAnimMarkers(
 
     // Keep the SSE connection alive with periodic status pings while video renders
     const keepAliveInterval = setInterval(() => {
-      try { res.write(`data: ${JSON.stringify({ status: layout === "site3d"
-        ? "3D сайт: жду Kling (6с / 1080p)…"
-        : "Рендерю видео для анимации прокрутки (ожидаю результат от KIE)..." })}\n\n`); } catch {}
-    }, layout === "site3d" ? 12000 : 20000);
+      try {
+        res.write(`data: ${JSON.stringify({
+          status: layout === "trigger"
+            ? "Тригер: жду Kling 3с (поворот головы)…"
+            : "Рендерю видео для анимации прокрутки (ожидаю результат от KIE)...",
+        })}\n\n`);
+      } catch {}
+    }, 20000);
 
     // For product-photo sites, drive Kling with the vision-derived creative motion
     // (falls back to the LLM's videoPrompt when no concept was produced).
@@ -2154,24 +2174,25 @@ async function resolveScrollAnimMarkers(
       clearInterval(keepAliveInterval);
     }
 
-    const site3dReady = layout === "site3d" && !!videoUrl;
-    const framesReady = frames.length >= (layout === "site3d" ? 30 : 60);
-    if (site3dReady || framesReady) {
-      replaceMap.set(raw, buildScrollAnimHtml(frames, parsed.texts, layout, videoUrl));
+    // Trigger targets ~60 frames from a 4s clip; accept a lower bar so partial
+    // ffmpeg extracts still bake a usable mouse-look hero.
+    const minFrames = layout === "trigger" ? 24 : 60;
+    const framesReady = frames.length >= minFrames;
+    if (framesReady) {
+      const bakeFrames = await prepareScrollAnimFrames(frames, layout);
+      replaceMap.set(raw, buildScrollAnimHtml(bakeFrames, parsed.texts, layout, videoUrl));
       generated++;
       if (billed) creditsUsed += blockCost;
       try {
         res.write(`data: ${JSON.stringify({
-          status: site3dReady
-            ? "3D сайт готов (видео-скролл)"
-            : `Анимация готова (${frames.length} кадров)`,
+          status: `Анимация готова (${bakeFrames.length} кадров)`,
         })}\n\n`);
       } catch {}
     } else if (billed && userId && scrollKieFailed) {
       await refundIfConfirmedKie(true, userId, blockCost, ikey, true, "scroll-anim-empty-frames");
     }
     } catch (blockErr: any) {
-      // A helper (product still / creative concept / vision / frames / scroll-world) threw — never let
+      // A helper (product still / creative concept / vision / frames) threw — never let
       // it abort the whole function (which would skip finalize() and strand the 2nd block).
       // Refund ONLY on confirmed KIE failure; continue so finalize() can degrade to fallback.
       console.warn(`[SCROLLANIM] block failed (project ${projectId}):`, blockErr?.message || blockErr);
@@ -3360,25 +3381,29 @@ export async function registerRoutes(
   app.get("/api/credits/history", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
-      const txns = await storage.adminGetUserTransactions(user.id);
+      const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || "20"), 10) || 20));
+      const { items: txns, total, totalPages, page: safePage, limit: safeLimit } =
+        await storage.getUserTransactionsPage(user.id, page, limit);
       const OP_LABELS: Record<string, string> = {
         generate: "Генерация сайта",
         image: "Изображение",
         "scroll-anim": "Видеоанимация",
-        "scroll-world": "Погружение",
         "motion-reveal": "Моушн",
         animational: "Анимационный",
         enhance: "Улучшение промпта",
         "deep-research": "Deep Research",
         "3d": "3D модель",
+        "seo-article": "SEO статья",
+        "seo-edit": "SEO правка",
         refund: "Возврат",
         payment: "Пополнение",
         daily_publish: "Хостинг (день)",
         admin_add: "Начисление (админ)",
         admin_deduct: "Списание (админ)",
       };
-      res.json(
-        txns.slice(0, 100).map((t) => ({
+      res.json({
+        items: txns.map((t) => ({
           id: t.id,
           amount: t.amount,
           type: t.type,
@@ -3387,9 +3412,66 @@ export async function registerRoutes(
           note: t.note,
           createdAt: t.createdAt,
         })),
-      );
+        total,
+        page: safePage,
+        limit: safeLimit,
+        totalPages,
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Ошибка загрузки истории" });
+    }
+  });
+
+  // Permanent account deletion: wipe projects/files/media + user row, then end session.
+  app.delete("/api/auth/account", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userId = user.id as number;
+      if (!userId || typeof userId !== "number") {
+        return res.status(400).json({ message: "Некорректный пользователь" });
+      }
+      // Protect the primary admin account from accidental self-wipe via UI.
+      if (userId === 1) {
+        return res.status(403).json({ message: "Этот аккаунт нельзя удалить" });
+      }
+
+      const { objectPaths, published, projectIds } = await storage.deleteUserAccountData(userId);
+
+      for (const p of objectPaths) {
+        try {
+          const file = await objectStorage.getObjectEntityFile(p);
+          const absPath = (file as { absolutePath?: string }).absolutePath;
+          if (absPath) {
+            await fs.promises.unlink(absPath).catch(() => {});
+            await fs.promises.unlink(`${absPath}.meta.json`).catch(() => {});
+          } else if (typeof (objectStorage as any).deleteObjectEntity === "function") {
+            await (objectStorage as any).deleteObjectEntity(p);
+          }
+        } catch (e: any) {
+          console.warn(`[account-delete] object cleanup ${p}:`, e?.message || e);
+        }
+      }
+
+      for (const pub of published) {
+        deleteProjectFromYandex(pub.id, pub.customDomain, pub.ycStoragePoolId).catch((e) =>
+          console.warn(`[account-delete] Yandex cleanup project ${pub.id}:`, e?.message || e),
+        );
+      }
+
+      req.logout((err) => {
+        if (err) console.warn("[account-delete] logout warning:", err?.message || err);
+        req.session?.destroy(() => {
+          res.clearCookie("connect.sid");
+          res.json({
+            message: "Аккаунт удалён",
+            deletedProjects: projectIds.length,
+            deletedFiles: objectPaths.length,
+          });
+        });
+      });
+    } catch (err: any) {
+      console.error("[account-delete]", err);
+      res.status(500).json({ message: err.message || "Не удалось удалить аккаунт" });
     }
   });
 
@@ -3692,92 +3774,100 @@ VIDEO_PROMPT (на английском) — ты РЕЖИССЁР голлив�
 ⚠️ НЕ создавай canvas-код вручную. Маркер заменяется автоматически системой.
 🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
 ═══ КОНЕЦ ЭКШН-РЕЖИМА ═══\n`;
-        } else if (interactiveStyle === "site3d") {
+        } else if (interactiveStyle === "trigger") {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
-═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — 3D САЙТ» (видео на фоне + 3D-блоки при скролле) ═══
+═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — ТРИГЕР» (персонаж смотрит за мышкой) ═══
 Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
 
+РАЗДЕЛЕНИЕ РОЛЕЙ:
+→ ПАЙПЛАЙН заменяет маркер на Hero: персонаж СПРАВА + красивый фон СЛЕВА, ролик ~3 сек с ОДНИМ поворотом головы (центр→влево→вправо), scrub по позиции мыши.
+→ ТЫ пишешь маркер + обычные секции сайта после него.
+
+🚨 ГЛАВНОЕ ПРАВИЛО — ПЕРСОНАЖ = НИША КЛИЕНТА:
+1) СНАЧАЛА пойми нишу/тематику сайта из запроса пользователя (кофейня, стоматология, автосервис, юристы, стройка, детский сад, IT, цветы, ресторан и т.д.).
+2) Персонаж ОБЯЗАН быть маскотом ИМЕННО ЭТОЙ ниши — животное, робот, стилизованный герой или существо, которое сразу считывается как часть бренда клиента.
+3) Фон СЛЕВА тоже под нишу (интерьер, атмосфера, свет, цвета бренда) — не универсальный «студийный» фон.
+4) ЗАПРЕЩЕНО: случайный персонаж не по теме (волк для стоматологии, космонавт для пекарни, generic robot для флористики и т.п.), если он не продаёт именно эту нишу.
+5) В VIDEO_PROMPT явно назови нишу + конкретный тип персонажа + атрибуты тематики (форма, цвет, реквизит, окружение).
+
+🚨 ОРИЕНТАЦИЯ — ТОЛЬКО АНФАС + ОДИН ПОВОРОТ (ЦЕНТР → ВЛЕВО → ВПРАВО):
+6) Персонаж ОБЯЗАН смотреть в КАМЕРУ / на зрителя: лицо анфас, оба глаза/визор видны, корпус развёрнут к камере.
+7) ЗАПРЕЩЕНО: профиль, боковой силуэт, три четверти спины, «смотрит мимо камеры в сторону» как основная поза.
+8) ОБЯЗАТЕЛЬНЫЙ ТАЙМЛАЙН (~3с): ИСХОДНО взгляд в ЦЕНТР; затем РОВНО ОДИН раз поворот ВЛЕВО; затем ОДИН раз через центр ВПРАВО. ЗАПРЕЩЕНО: крутить головой туда-сюда несколько раз, дрожь, кивки, повторные реверсы.
+9) Тело остаётся анфас. В VIDEO_PROMPT ВСЕГДА пиши дословно: "front-facing en face toward camera, both eyes visible, not side profile, START looking CENTER at camera, then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT, never oscillate never repeat left-right".
+
 ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
-→ СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
-{{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|Блок1::Текст1||Блок2::Текст2||Блок3::Текст3||Блок4::Текст4||Блок5::Текст5}}
+→ СРАЗУ после </header> (или после <body>) на отдельной строке:
+{{SCROLLANIM:VIDEO_PROMPT_IN_ENGLISH|HeroЗаголовок::HeroПодзаголовок||Фишка1::Текст1||Фишка2::Текст2}}
 
-VIDEO_PROMPT (на английском) — кинематографичный ФОН под любую нишу: камера медленно летит ВГЛУБЬ красивой сцены бренда (интерьер, природа, студия, цех, витрина). Это видео будет на весь экран ПОД стеклянными 3D-карточками. Движение заметное, плавное, с глубиной и атмосферой. ТОЛЬКО запятые (без | :: и фигурных скобок):
-- Красота/косметика: "cinematic forward glide through a luminous spa atelier, soft volumetric light, floating silk and botanicals, premium film still, photorealistic"
-- Недвижимость: "smooth cinematic flight into a modern luxury villa at golden hour, glass walls opening to a panoramic terrace, warm volumetric haze, photorealistic"
-- Ресторан: "slow cinematic push through a candlelit fine-dining room toward an open kitchen, steam and bokeh lights, mouth-watering atmosphere, photorealistic"
-- Технологии/услуги: "cinematic dolly into a futuristic glass office at dusk, city lights bokeh, sleek reflections, volumetric god rays, photorealistic"
-- Общее: "breathtaking cinematic forward flight into the brand world, atmospheric depth, elegant light rays, premium commercial film look, photorealistic"
+VIDEO_PROMPT (английский, ТОЛЬКО запятые, без | :: {}): харизматичный персонаж ниши СПРАВА в АНФАС (исходно взгляд в ЦЕНТР) + фон СЛЕВА + locked camera + РОВНО ОДИН поворот влево затем вправо. Примеры (адаптируй под бренд; в каждом один цикл, без осцилляции):
+- IT/SaaS: "friendly matte-black desk robot mascot for a SaaS analytics brand on the right third, front-facing en face toward camera both eyes visible not side profile, START looking CENTER at camera then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT never oscillate never repeat left-right, luminous soft UI glow dashboard atmosphere on the left with calm negative space, locked camera, photorealistic cinematic"
+- Кофейня: "charming cartoon-realistic coffee fox barista mascot wearing a tiny apron on the right third, front-facing en face toward camera both eyes visible not side profile, START looking CENTER at camera then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT never oscillate never repeat left-right, warm artisan cafe interior bokeh and espresso steam on the left, locked camera, photorealistic stylized"
+- Стоматология: "friendly soft-white tooth fairy fox mascot in clean clinic whites on the right third, front-facing en face toward camera both eyes visible not side profile, START looking CENTER at camera then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT never oscillate never repeat left-right, bright modern dental clinic glow on the left with calm text space, locked camera, premium stylized 3D"
+- Автосервис: "charismatic mechanic wolf mascot in work overalls on the right third, front-facing en face toward camera both eyes visible not side profile, START looking CENTER at camera then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT never oscillate never repeat left-right, moody garage rim light and polished car bokeh on the left, locked camera, photorealistic"
+- Фитнес: "energetic athletic panther mascot for a premium gym on the right, front-facing en face toward camera both eyes visible not side profile, START looking CENTER at camera then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT never oscillate never repeat left-right, dramatic gym neon atmosphere on the left with empty space for text, locked camera, photorealistic"
+- Цветы/подарки: "elegant blossom rabbit mascot with soft petal accents on the right third, front-facing en face toward camera both eyes visible not side profile, START looking CENTER at camera then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT never oscillate never repeat left-right, romantic florist atelier light on the left, locked camera, premium stylized"
+- Юристы: "refined owl counsel mascot in subtle tailored vest on the right third, front-facing en face toward camera both eyes visible not side profile, START looking CENTER at camera then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT never oscillate never repeat left-right, calm premium law-office wood and brass atmosphere on the left, locked camera, photorealistic cinematic"
+- Детский/edu: "cute friendly robot owl tutor on the right third, front-facing en face toward camera both eyes visible not side profile, START looking CENTER at camera then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT never oscillate never repeat left-right, soft pastel classroom glow on the left, locked camera, premium stylized 3D"
+- Стройка/ремонт: "sturdy beaver builder mascot in a safety vest on the right third, front-facing en face toward camera both eyes visible not side profile, START looking CENTER at camera then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT never oscillate never repeat left-right, sunlit modern construction site depth on the left, locked camera, photorealistic"
+- Ресторан: "charming sous-chef raccoon mascot on the right third, front-facing en face toward camera both eyes visible not side profile, START looking CENTER at camera then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT never oscillate never repeat left-right, warm fine-dining kitchen bokeh on the left, locked camera, photorealistic stylized"
+- Гаджеты/Apple: "sleek friendly white product robot mascot for a premium smartphone brand on the right third, front-facing en face toward camera glowing visor eyes visible not side profile, START looking CENTER at camera then EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT never oscillate never repeat left-right, bright modern showroom atmosphere on the left with calm text space, locked camera, photorealistic cinematic"
 
-Тексты — РОВНО 5 пар на РУССКОМ (Заголовок::Подзаголовок): короткие мощные фразы для 3D-карточек (оффер → выгода → процесс → доказательство → CTA).
+Тексты — 2–3 пары на РУССКОМ под нишу клиента (Hero + 1–2 коротких фишки). После маркера — обычные секции сайта ЭТОЙ ниши.
 
-После маркера — обычные секции сайта (преимущества, отзывы, CTA, форма, футер).
-
-⚠️ НЕ пиши <section> или Hero-раздел ДО этого маркера. Маркер И ЕСТЬ Hero.
-⚠️ НЕ создавай canvas/3D-код вручную. Маркер заменяется автоматически системой (видео-фон + 3D-стек карточек).
-🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
-═══ КОНЕЦ РЕЖИМА 3D САЙТ ═══\n`;
+⚠️ НЕ пиши Hero <section> ДО маркера.
+⚠️ НЕ создавай canvas/video код вручную.
+⚠️ Персонаж ОБЯЗАН быть справа; слева — фон/пространство под текст.
+⚠️ Персонаж и фон ОБЯЗАНЫ совпадать с нишей клиента — иначе ответ неверен.
+⚠️ Персонаж ОБЯЗАН быть в АНФАС (front-facing) — профиль запрещён.
+⚠️ Взгляд: ИСХОДНО ЦЕНТР, затем РОВНО ОДИН раз влево, затем вправо — без многократного кручения.
+🚨 ПРОВЕРЬ: маркер {{SCROLLANIM:...}} есть; промпт содержит START looking CENTER + EXACTLY ONE turn to the LEFT then ONE continuous sweep to the RIGHT + never oscillate.
+═══ КОНЕЦ РЕЖИМА ТРИГЕР ═══\n`;
         } else if (interactiveStyle === "motion") {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
 ═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — МОУШН» (WebGL hover-reveal под ЛЮБУЮ нишу) ═══
 Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
 
-Ты — креативный арт-директор. Сначала ПОЙМИ нишу сайта из запроса пользователя (ресторан, стройка, клиника, недвижимость, авто, юристы, кофейня, спортзал, школа, салон, IT и т.д.). Затем придумай ПАРУ ЯРКИХ ЦВЕТНЫХ кадров «состояние A → состояние B», которая именно для ЭТОЙ ниши выглядит вау при наведении курсора. ОБА кадра в ПОЛНОМ ЦВЕТЕ (НЕ чёрно-белые). Это НЕ обязательно портрет человека и НЕ шлем/маска — субъект может быть блюдом, интерьером, зданием, инструментом, улыбкой, машиной, упаковкой, рабочим местом — чем угодно, что продаёт нишу.
+Ты — креативный арт-директор. Сначала ПОЙМИ нишу сайта из запроса пользователя (ресторан, стройка, клиника, недвижимость, авто, юристы, кофейня, спортзал, школа, салон, IT, ювелирка, мода и т.д.). Затем придумай ПАРУ ЯРКИХ ЦВЕТНЫХ кадров «объект A → объект B / до → после», где при наведении курсора ВИДНО, что сам предмет или результат услуги изменился (не только свет). ОБА кадра в ПОЛНОМ ЦВЕТЕ. Субъект может быть блюдом, платьем, кольцом, интерьером, машиной, улыбкой, букетом — чем угодно под нишу.
+
+РАЗДЕЛЕНИЕ РОЛЕЙ:
+→ ПАЙПЛАЙН: сначала базовый кадр, затем IMAGE-TO-IMAGE (тот же ракурс/место в кадре, но объект МОРФИТСЯ) + текст СЛЕВА.
+→ ТЫ пишешь маркер: состояние A /// состояние B (что именно превращается во что).
 
 ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
 → СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
 {{SCROLLANIM:BASE_SCENE_IN_ENGLISH /// REVEAL_SCENE_IN_ENGLISH|Блок1::Текст1||Блок2::Текст2||Блок3::Текст3||Блок4::Текст4}}
 
 Формат ENGLISH-части ОБЯЗАТЕЛЬНО с разделителем " /// " (пробел-три-слэша-пробел):
-- СЛЕВА от /// — базовый ЦВЕТНОЙ кадр: конкретная сцена ниши, композиция, субъект, свет, атмосфера (full color)
-- СПРАВА от /// — reveal ЦВЕТНОЙ кадр: ТА ЖЕ композиция/ракурс/субъект, но другое настроение/состояние — день↔ночь, спокойствие↔энергия, до↔после услуги, холодный↔тёплый свет, raw↔premium finish
-Пиши развёрнуто, ТОЛЬКО запятые внутри каждой половины (без | :: и фигурных скобок). Обе половины — про ОДНУ и ту же сцену, ОБЕ в цвете. ЗАПРЕЩЕНО писать black and white / monochrome / grayscale.
+- СЛЕВА от /// — базовый ЦВЕТНОЙ кадр: конкретный объект/сцена ниши справа/по центру-справа, спокойное пространство СЛЕВА под текст
+- СПРАВА от /// — МОРФИНГ САМОГО ОБЪЕКТА (главное!) + свет/материалы: алмаз→кольцо с бриллиантом, красное платье→синее, сырое блюдо→готовое, пустая комната→с ремонтом, тусклое авто→полированное. Тот же ракурс и место в кадре. ВСЕГДА добавляй: "same camera framing subject placement locked, metamorphose the main object into …, obviously different subject not just lighting"
+Пиши развёрнуто, ТОЛЬКО запятые внутри каждой половины (без | :: и фигурных скобок). Обе половины в цвете. ЗАПРЕЩЕНО: black and white / monochrome / grayscale. ЗАПРЕЩЕНО: reveal только про свет без смены объекта.
 
-Примеры под разные ниши (адаптируй под КОНКРЕТНЫЙ бренд пользователя, не копируй слепо):
-- Ресторан: "gourmet plated signature dish on dark slate, rising steam, warm candlelight, rich food colors, tight cinematic framing /// same dish and camera angle at brighter golden hour, golden oil sheen, vibrant herbs, festive fine-dining commercial glow"
-- Кофейня: "artisan latte in ceramic cup on wooden bar at dawn, soft cool window light, muted morning tones, cafe editorial /// same cup and framing in rich warm afternoon color, crema glow, sunlit espresso machine bokeh, premium coffee brand campaign"
-- Стройка/ремонт: "modern construction site with crane at blue hour, cool concrete tones, industrial cinematic color /// same site and angle in golden hour, sparks and warm concrete, vivid contractor commercial energy"
-- Недвижимость: "grand modern villa facade at blue hour twilight, cool glass reflections, luxury architecture photo in color /// same villa and camera angle at golden hour, warm interior lights glowing through glass, sunset real-estate campaign"
-- Клиника/стоматология: "confident close-up smile in soft cool clinic light, clean medical beauty color editorial /// same smile and framing with warmer luminous healthy glow, soft spa ambience, premium healthcare brand"
-- Автосервис/авто: "luxury car three-quarter view in moody garage, deep teal ambient light, glossy paint already in color /// same car and angle with brighter rim light streaks, richer paint pop, premium auto commercial energy"
-- Салон красоты: "elegant hairstyle portrait in salon chair, soft glam color, muted rose lighting /// same pose and framing with richer hair color shine, brighter glam lighting, beauty brand metamorphosis"
-- Фитнес: "athlete mid-pose in gym, cool stadium light, vivid sports color photography /// same pose and framing with warmer sweat glow, energetic neon accents, fitness brand campaign"
-- Юристы/услуги: "premium office desk with leather folder and city skyline dusk bokeh, refined cool color /// same desk and framing at golden hour, warm brass accents, trustworthy luxury firm campaign"
-- IT/SaaS: "minimal workspace with laptop and soft interface glow, cool blue color tech editorial /// same desk and framing with luminous richer UI reflections, brighter accent lights, modern software brand"
-- Цветы/подарки: "bouquet of roses on marble in soft daylight, natural petal colors /// same bouquet and angle under romantic evening light, deeper petal saturation, dewdrops, luxury floral campaign"
+Примеры под разные ниши (адаптируй под КОНКРЕТНЫЙ бренд; в каждом объект РЕАЛЬНО меняется):
+- Ювелирка: "raw uncut diamond crystal on dark velvet right of center, cool spotlight, calm left text space, luxury macro /// same camera framing subject placement locked, metamorphose the diamond into a finished platinum diamond engagement ring with brilliant sparkle, obviously different subject not just lighting"
+- Мода/платья: "elegant woman in a vivid red evening dress right of center, soft studio light, calm left text space /// same camera framing subject placement locked, metamorphose the dress into a deep sapphire blue evening gown same silhouette, obviously different subject not just lighting"
+- Ресторан: "raw plated ingredients arranged on dark slate right of center, cool prep light, left text space /// same camera framing subject placement locked, metamorphose into the finished gourmet signature dish with glaze and garnish, obviously different subject not just lighting"
+- Кофейня: "plain empty ceramic cup on wooden bar right of center at dawn, calm left text space /// same camera framing subject placement locked, metamorphose into a rich latte with crema art and rising steam, obviously different subject not just lighting"
+- Недвижимость: "empty unfinished modern villa room right-weighted, cool daylight, left copy space /// same camera framing subject placement locked, metamorphose into a fully furnished luxury interior with warm evening lamps, obviously different subject not just lighting"
+- Стройка/ремонт: "bare concrete apartment shell right of frame, cool industrial light, left text space /// same camera framing subject placement locked, metamorphose into a finished renovated living room with flooring furniture and warm lights, obviously different subject not just lighting"
+- Авто: "dusty dull luxury car three-quarter view right-weighted in garage, left text space /// same camera framing subject placement locked, metamorphose into a showroom-polished gleaming car with mirror paint and rim light, obviously different subject not just lighting"
+- Салон/красота: "client with dull flat hair in salon chair right of center, soft light, left text space /// same camera framing subject placement locked, metamorphose into glamorous colored styled hair with rich shine, obviously different subject not just lighting"
+- Фитнес: "soft untrained physique athlete stance right of center in gym, cool light, left text space /// same camera framing subject placement locked, metamorphose into a defined athletic after-transform physique same pose, obviously different subject not just lighting"
+- Стоматология: "close-up smile with imperfect teeth right of center, clinical light, left text space /// same camera framing subject placement locked, metamorphose into a perfect bright white healthy smile, obviously different subject not just lighting"
+- Цветы: "simple closed flower buds bouquet on marble right of center, soft daylight, left text space /// same camera framing subject placement locked, metamorphose into a full blooming luxury rose bouquet with dewdrops, obviously different subject not just lighting"
+- IT/SaaS: "blank dark laptop screen on desk right of center, cool tech light, left text space /// same camera framing subject placement locked, metamorphose into a glowing rich analytics dashboard UI on the same laptop, obviously different subject not just lighting"
 
-Тексты — РОВНО 4 пары на РУССКОМ (Заголовок::Подзаголовок): короткие мощные фразы под нишу (оффер → характер → выгода → CTA).
+Тексты — РОВНО 4 пары на РУССКОМ (Заголовок::Подзаголовок): короткие мощные фразы под нишу. Они будут показаны СЛЕВА поверх hero.
 
 После маркера — обычные секции сайта под эту нишу (преимущества, отзывы, CTA, форма, футер).
 
 ⚠️ НЕ пиши <section> или Hero-раздел ДО этого маркера. Маркер И ЕСТЬ Hero.
-⚠️ НЕ создавай canvas/WebGL-код вручную. Маркер заменяется автоматически системой (пара цветных кадров под нишу + fluid mouse reveal).
+⚠️ НЕ создавай canvas/WebGL-код вручную. Маркер заменяется автоматически системой.
 ⚠️ НЕ своди всё к портрету со шлемом — думай как арт-директор бренда ЭТОЙ ниши.
 ⚠️ НЕ делай базовый кадр чёрно-белым — оба кадра цветные и яркие.
+⚠️ Reveal ОБЯЗАН менять сам объект/результат (не только свет). Ракурс и место в кадре — те же.
 🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML и содержать " /// ".
 ═══ КОНЕЦ РЕЖИМА МОУШН ═══\n`;
-        } else if (interactiveStyle === "immersion") {
-          systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
-═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — ПОГРУЖЕНИЕ» (scroll-world / cinematic brand journey) ═══
-Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
-
-ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
-→ СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
-{{SCROLLANIM:WORLD_PROMPT_IN_ENGLISH|Сцена1::Описание1||Сцена2::Описание2||Сцена3::Описание3||Сцена4::Описание4||Финал::ОписаниеФинала}}
-
-WORLD_PROMPT (на английском) — опиши СВЯЗНЫЙ ПРЕМИАЛЬНЫЙ кинематографичный МИР бренда (одна эстетика на все сцены): photorealistic cinematic commercial photography, shallow depth of field, premium luxury lighting, editorial film still quality. Это НЕ миниатюрный город, НЕ clay-diorama, НЕ isometric 3D и НЕ cartoon — это ПРОФЕССИОНАЛЬНЫЕ кадры как в рекламе люксовых брендов (Pearl & Co, Belvedere). Путешествие сквозь 5 связанных реальных локаций/сцен бренда. Пиши развёрнуто, ТОЛЬКО запятые (без | :: и фигурных скобок), например:
-- Кофейня: "cohesive premium cinematic coffee brand world, photorealistic, warm golden hour lighting, artisan roastery with copper equipment, lush origin farm, modern tasting bar, hero latte art finale"
-- Косметика: "cohesive luxury skincare brand world, photorealistic, soft spa lighting, botanical greenhouse, pristine laboratory, elegant boutique counter, hero product on marble"
-- Еда/ресторан: "cohesive fine dining brand world, photorealistic, warm candlelit kitchen, farm-to-table garden, open kitchen with chefs plating, elegant dining room, hero dish finale"
-- Напитки/вода: "cohesive premium mineral water brand world, photorealistic, alpine spring source, historic thermal baths, modern bottling facility, crystal glass bottle hero shot"
-- Недвижимость: "cohesive luxury villa brand world, photorealistic, golden hour arrival, grand living room, spa wellness pool, panoramic terrace view, hero property finale"
-
-Тексты — РОВНО 5 пар на РУССКОМ (Заголовок::Подзаголовок): 4 этапа путешествия + финальный герой/CTA. Короткие, продающие, как остановки маршрута.
-
-⚠️ ШАПКА для режима Погружение: НЕ добавляй пункты меню в <header> — навигация по сценам создаётся автоматически движком scroll-world. В <header> размести ТОЛЬКО логотип «Craft AI» по центру (НЕ название проекта/бренда клиента). Без навигационных ссылок, без CTA-кнопок в шапке.
-⚠️ НЕ пиши <section> или Hero-раздел ДО этого маркера. Маркер И ЕСТЬ Hero.
-⚠️ НЕ создавай canvas/видео-код вручную. Маркер заменяется автоматически системой (5 сцен × 10с dive + 4 перелёта × 5с).
-🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML.
-═══ КОНЕЦ РЕЖИМА ПОГРУЖЕНИЕ ═══\n`;
         } else {
           systemContent += `\n\n🚨🚨🚨 ОБЯЗАТЕЛЬНОЕ ТРЕБОВАНИЕ — БЕЗ ВЫПОЛНЕНИЯ ОТВЕТ НЕВЕРЕН 🚨🚨🚨
 ═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ» — СКРОЛЛ-АНИМАЦИЯ ═══
@@ -3857,7 +3947,19 @@ VIDEO_PROMPT (на английском) — ты КИНОРЕЖИССЁР го�
         systemContent += `\nДля загруженных фото (с URL /uploads/... или /objects/...) — используй URL напрямую: <img src="URL" />\nДля изображений из библиотеки выше — используй маркер {{IMG:имя}}: <img src="{{IMG:имя}}" />\nДля НОВЫХ фото по теме (которых нет в библиотеке) — генерируй через {{GENIMG:промпт на английском|соотношение}} (см. правила изображений выше).`;
       }
 
-      const videoArray: Array<{url: string, fileName: string}> = Array.isArray(videoUrls) ? videoUrls : [];
+      const toAbsMediaUrl = (u: string): string => {
+        if (!u || typeof u !== "string") return u;
+        const t = u.trim();
+        if (!t) return t;
+        if (/^(https?:|data:|blob:)/i.test(t)) return t;
+        if (t.startsWith("//")) return `${reqProto}:${t}`;
+        if (t.startsWith("/")) return `${baseUrl.replace(/\/$/, "")}${t}`;
+        return `${baseUrl.replace(/\/$/, "")}/${t}`;
+      };
+
+      const videoArray: Array<{url: string, fileName: string}> = (Array.isArray(videoUrls) ? videoUrls : [])
+        .filter((v: any) => v && v.url)
+        .map((v: any) => ({ url: toAbsMediaUrl(String(v.url)), fileName: String(v.fileName || "video") }));
       if (videoArray.length > 0) {
         systemContent += `\n\n═══ ЗАГРУЖЕННЫЕ ВИДЕО ПОЛЬЗОВАТЕЛЯ ═══\nПользователь прикрепил видеофайлы. ОБЯЗАТЕЛЬНО встрой их на сайт с помощью тега <video>:\n`;
         for (const vid of videoArray) {
@@ -3866,7 +3968,9 @@ VIDEO_PROMPT (на английском) — ты КИНОРЕЖИССЁР го�
         systemContent += `\nИспользуй тег <video> с атрибутами controls, playsinline, и при необходимости autoplay muted loop:\n<video src="${videoArray[0].url}" controls playsinline style="width:100%; max-width:800px; border-radius:12px;"></video>\n\nМожно использовать видео как:\n- Фоновое видео секции (autoplay muted loop, без controls)\n- Видеоплеер в контенте (с controls)\n- Hero-видео с наложением текста\nВыбери подходящий вариант исходя из контекста запроса пользователя.\n═══ КОНЕЦ ВИДЕО ═══\n`;
       }
 
-      const modelArray: Array<{url: string, fileName: string}> = Array.isArray(modelUrls) ? modelUrls : [];
+      const modelArray: Array<{url: string, fileName: string}> = (Array.isArray(modelUrls) ? modelUrls : [])
+        .filter((m: any) => m && m.url)
+        .map((m: any) => ({ url: toAbsMediaUrl(String(m.url)), fileName: String(m.fileName || "model.glb") }));
       if (modelArray.length > 0) {
         systemContent += `\n\n═══ ЗАГРУЖЕННЫЕ 3D МОДЕЛИ ПОЛЬЗОВАТЕЛЯ ═══\nПользователь прикрепил 3D модели (.glb/.gltf). ОБЯЗАТЕЛЬНО встрой их на сайт используя Google Model Viewer:\n`;
         for (const mdl of modelArray) {
@@ -3875,16 +3979,18 @@ VIDEO_PROMPT (на английском) — ты КИНОРЕЖИССЁР го�
         systemContent += `\nДобавь в <head> скрипт: <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>\nЗатем встрой модель через тег <model-viewer>:\n<model-viewer src="${modelArray[0].url}" alt="${modelArray[0].fileName}" auto-rotate camera-controls shadow-intensity="1" style="width:100%;height:500px;background:#f0f0f0;border-radius:16px;"></model-viewer>\n\nИспользуй 3D модель как:\n- Интерактивный 3D-просмотрщик продукта\n- Hero-элемент с вращающейся моделью\n- Демонстрационный блок с управлением камерой\nВыбери подходящий вариант исходя из контекста.\n═══ КОНЕЦ 3D МОДЕЛЕЙ ═══\n`;
       }
 
-      const uploadedImageArray: Array<{url: string, fileName: string}> = Array.isArray(imageUrls) ? imageUrls.filter((i: any) => i && i.url) : [];
+      const uploadedImageArray: Array<{url: string, fileName: string}> = (Array.isArray(imageUrls) ? imageUrls.filter((i: any) => i && i.url) : [])
+        .map((i: any) => ({ url: toAbsMediaUrl(String(i.url)), fileName: String(i.fileName || "photo") }));
       if (uploadedImageArray.length > 0) {
-        systemContent += `\n\n═══ ЗАГРУЖЕННЫЕ ФОТО ПОЛЬЗОВАТЕЛЯ (ВЫСШИЙ ПРИОРИТЕТ) ═══\nПользователь загрузил эти фотографии. ОБЯЗАТЕЛЬНО встрой ИМЕННО ЭТИ фото на сайт через <img src="URL"> с указанными URL. КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО заменять их на Unsplash, Picsum или другие сток-фото — используй только эти точные URL:\n`;
+        systemContent += `\n\n═══ ЗАГРУЖЕННЫЕ ФОТО ПОЛЬЗОВАТЕЛЯ (ВЫСШИЙ ПРИОРИТЕТ) ═══\nПользователь загрузил эти фотографии в ЭТОМ сообщении. ОБЯЗАТЕЛЬНО встрой ИМЕННО ЭТИ фото на сайт через <img src="URL"> с указанными URL. КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО заменять их на Unsplash, Picsum, SVG-плейсхолдеры, emoji или другие сток-фото — используй только эти точные URL:\n`;
         for (const im of uploadedImageArray) {
           systemContent += `- "${im.fileName}" — URL: ${im.url}\n`;
         }
-        systemContent += `\nПример: <img src="${uploadedImageArray[0].url}" alt="${uploadedImageArray[0].fileName}" style="width:100%;height:100%;object-fit:cover;">\nРазмести каждое фото в подходящей по смыслу секции (hero, галерея, о нас, товар и т.д.) согласно запросу пользователя. Если фото несколько — используй их ВСЕ.\n═══ КОНЕЦ ФОТО ═══\n`;
+        systemContent += `\nПример: <img src="${uploadedImageArray[0].url}" alt="${uploadedImageArray[0].fileName}" style="height:40px;width:auto;object-fit:contain;">\nЕсли пользователь просит заменить логотип / иконку / фото в шапке или «на всём сайте» — найди ВСЕ старые <img> логотипа (в header/nav/footer и на каждой странице) и ЗАМЕНИ их src на URL из списка выше; старый логотип удали. НЕ оставляй прежний src.\nРазмести каждое фото согласно запросу. Если фото несколько — используй их ВСЕ.\n═══ КОНЕЦ ФОТО ═══\n`;
       }
 
-      const audioArray: Array<{url: string, fileName: string}> = Array.isArray(audioUrls) ? audioUrls.filter((a: any) => a && a.url) : [];
+      const audioArray: Array<{url: string, fileName: string}> = (Array.isArray(audioUrls) ? audioUrls.filter((a: any) => a && a.url) : [])
+        .map((a: any) => ({ url: toAbsMediaUrl(String(a.url)), fileName: String(a.fileName || "audio") }));
       if (audioArray.length > 0) {
         systemContent += `\n\n═══ ЗАГРУЖЕННЫЕ АУДИО ПОЛЬЗОВАТЕЛЯ ═══\nПользователь прикрепил аудиофайлы. ОБЯЗАТЕЛЬНО встрой их на сайт с помощью тега <audio> с указанными URL:\n`;
         for (const aud of audioArray) {
@@ -3892,6 +3998,39 @@ VIDEO_PROMPT (на английском) — ты КИНОРЕЖИССЁР го�
         }
         systemContent += `\nИспользуй тег <audio> с атрибутом controls:\n<audio src="${audioArray[0].url}" controls style="width:100%;max-width:500px;"></audio>\n\nМожно использовать аудио как:\n- Аудиоплеер в секции (с controls)\n- Подкаст-блок или плейлист\n- Фоновую музыку с кнопкой вкл/выкл (НЕ автозапуск со звуком — браузеры блокируют)\nВыбери подходящий вариант исходя из контекста запроса.\n═══ КОНЕЦ АУДИО ═══\n`;
       }
+
+      // User-turn media block — tools/stream often ignore long system appendices;
+      // put absolute URLs in the USER message so the agent always "sees" attachments.
+      let userMediaBlock = "";
+      if (uploadedImageArray.length > 0 || videoArray.length > 0 || modelArray.length > 0 || audioArray.length > 0) {
+        const lines: string[] = [
+          "",
+          "═══ ПРИКРЕПЛЁННЫЕ ФАЙЛЫ К ЭТОМУ СООБЩЕНИЮ (ОБЯЗАТЕЛЬНО ИСПОЛЬЗУЙ) ═══",
+          "Файлы уже загружены на сервер. Вставляй ИМЕННО эти абсолютные URL в HTML. Не игнорируй вложения и не придумывай другие src.",
+        ];
+        if (uploadedImageArray.length > 0) {
+          lines.push("ФОТО:");
+          for (const im of uploadedImageArray) lines.push(`- ${im.fileName}: ${im.url}`);
+          lines.push(`Пример логотипа в шапке: <img src="${uploadedImageArray[0].url}" alt="logo" style="height:40px;width:auto;object-fit:contain;">`);
+          lines.push("Если запрос про логотип — замени ВСЕ старые логотипы на этот URL и удали прежние.");
+        }
+        if (videoArray.length > 0) {
+          lines.push("ВИДЕО:");
+          for (const v of videoArray) lines.push(`- ${v.fileName}: ${v.url}`);
+          lines.push(`Пример: <video src="${videoArray[0].url}" controls playsinline style="width:100%;max-width:800px;border-radius:12px;"></video>`);
+        }
+        if (modelArray.length > 0) {
+          lines.push("3D:");
+          for (const m of modelArray) lines.push(`- ${m.fileName}: ${m.url}`);
+        }
+        if (audioArray.length > 0) {
+          lines.push("АУДИО:");
+          for (const a of audioArray) lines.push(`- ${a.fileName}: ${a.url}`);
+        }
+        lines.push("═══ КОНЕЦ ВЛОЖЕНИЙ ═══");
+        userMediaBlock = lines.join("\n");
+      }
+      const promptWithMedia = userMediaBlock ? `${prompt}${userMediaBlock}` : prompt;
 
       const isEditMode = !!project.generatedCode;
       const existingFiles = await storage.getProjectFiles(project.id);
@@ -3960,29 +4099,37 @@ VIDEO_PROMPT (на английском) — ты КИНОРЕЖИССЁР го�
       const inputContent: any[] = [];
       const savedImageUrls: string[] = [];
 
+      // Prefer client-uploaded URLs (already absolute in uploadedImageArray) over re-upload.
+      if (uploadedImageArray.length > 0) {
+        for (const im of uploadedImageArray) savedImageUrls.push(im.url);
+      }
+
       if (imageArray.length > 0) {
         for (const imgData of imageArray) {
           const mime = imgData.mimeType || "image/png";
           const isImage = mime.startsWith("image/");
           if (isImage) {
-            const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
-            const buffer = Buffer.from(imgData.base64, "base64");
-            const imageUrl = await uploadToObjectStorage(buffer, mime, ext);
-            savedImageUrls.push(imageUrl);
+            // Only re-upload when client didn't already provide a hosted URL for this turn.
+            if (uploadedImageArray.length === 0) {
+              const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
+              const buffer = Buffer.from(imgData.base64, "base64");
+              const imageUrl = await uploadToObjectStorage(buffer, mime, ext);
+              savedImageUrls.push(toAbsMediaUrl(imageUrl));
 
-            const imgName = imgData.fileName?.replace(/\.[^.]+$/, '').replace(/[^a-zA-Zа-яА-Я0-9_-]/g, '_') || `photo_${Date.now()}`;
-            await storage.createProjectImage({
-              projectId: project.id,
-              userId: project.userId,
-              name: imgName,
-              url: imageUrl,
-              prompt: prompt.substring(0, 200),
-            });
-            projectImgs.push({ id: 0, projectId: project.id, name: imgName, url: imageUrl, prompt: prompt.substring(0, 200), createdAt: new Date() } as any);
+              const imgName = imgData.fileName?.replace(/\.[^.]+$/, '').replace(/[^a-zA-Zа-яА-Я0-9_-]/g, '_') || `photo_${Date.now()}`;
+              await storage.createProjectImage({
+                projectId: project.id,
+                userId: project.userId,
+                name: imgName,
+                url: imageUrl,
+                prompt: prompt.substring(0, 200),
+              });
+              projectImgs.push({ id: 0, projectId: project.id, name: imgName, url: imageUrl, prompt: prompt.substring(0, 200), createdAt: new Date() } as any);
+            }
           }
         }
 
-        let textPart = isEditMode ? prompt : enhancedPrompt;
+        let textPart = isEditMode ? promptWithMedia : (userMediaBlock ? `${enhancedPrompt}${userMediaBlock}` : enhancedPrompt);
         
         if (mockupMode && savedImageUrls.length > 0) {
           // ═══ ДВУХЭТАПНЫЙ ПРОЦЕСС: ПРОФЕССИОНАЛ (референс → код) ═══
@@ -4082,7 +4229,7 @@ VIDEO_PROMPT (на английском) — ты КИНОРЕЖИССЁР го�
               .filter((p: any) => p.inlineData)
               .map((_p: any, idx: number) => ({
                 type: "input_image" as const,
-                image_url: savedImageUrls[idx] ? `${baseUrl}${savedImageUrls[idx]}` : "",
+                image_url: savedImageUrls[idx] ? toAbsMediaUrl(savedImageUrls[idx]) : "",
               }))
               .filter((c: KieContentItem) => (c as any).image_url);
             console.log(`[KIE Mockup] Analyzing ${analysisImageContent.length} image(s):`, analysisImageContent.map((c: any) => c.image_url));
@@ -4186,9 +4333,9 @@ ${designAnalysis}
           }
         }
       } else if (isEditMode) {
-        inputContent.push({ type: "text", text: prompt });
+        inputContent.push({ type: "text", text: promptWithMedia });
       } else {
-        inputContent.push({ type: "text", text: enhancedPrompt });
+        inputContent.push({ type: "text", text: userMediaBlock ? `${enhancedPrompt}${userMediaBlock}` : enhancedPrompt });
       }
 
       let fullResponse = "";
@@ -4217,7 +4364,7 @@ ${designAnalysis}
             userContent.push({ type: "input_image_inline", base64: imgB64, mime_type: imgMime });
           } else {
             const relUrl = savedImageUrls[imgIdx] || "";
-            if (relUrl) userContent.push({ type: "input_image", image_url: `${baseUrl}${relUrl}` });
+            if (relUrl) userContent.push({ type: "input_image", image_url: toAbsMediaUrl(relUrl) });
           }
           imgIdx++;
         }
@@ -4247,9 +4394,12 @@ ${designAnalysis}
       // ── Multipage tool-calling agent (Claude + Gemini / KIE) ────────────────
       // Tries function calling so the model can read/patch ANY page.
       // If KIE rejects tools, we fall through to the streaming multipage text protocol.
-      // Tool-calling path is text-tools only today — if the user attached images,
-      // skip tools and use the streaming path that already carries vision parts.
-      if (isEditMode && imageArray.length === 0) {
+      // Vision bytes need the streaming path. If the client already uploaded URLs
+      // (typical chat attach), prefer tools + absolute URLs in the user prompt —
+      // that reliably inserts logos/videos. Skipping tools while leaving
+      // useToolsHint:true caused «Сайт обновлён» with no HTML change.
+      const needsVisionStream = imageArray.length > 0 && (!!mockupMode || uploadedImageArray.length === 0);
+      if (isEditMode && !needsVisionStream) {
         try {
           res.write(`data: ${JSON.stringify({ status: useGemini ? "Gemini-агент изучает все страницы…" : "Агент изучает все страницы сайта…" })}\n\n`);
           const hist = conversationHistory
@@ -4263,7 +4413,7 @@ ${designAnalysis}
 
           const toolResult = await runToolCallingAgent({
             systemPrompt: systemContent,
-            userPrompt: prompt,
+            userPrompt: promptWithMedia,
             pages: sitePages,
             craftMd: craftMdForEdit,
             history: hist.slice(-8),
@@ -4288,6 +4438,13 @@ ${designAnalysis}
             console.log(`[AGENT] ${useGemini ? "Gemini" : "Claude"} tool-calling success. Changed: ${[...toolResult.changedFiles.keys()].join(", ")}`);
           } else if (toolResult.toolsSupported && toolResult.changedFiles.size === 0) {
             console.log(`[AGENT] ${useGemini ? "Gemini" : "Claude"} tools supported but no file changes — falling back to stream protocol`);
+            systemContent = buildMultipageEditSystemPrompt({
+              baseSystem: editPromptBase || SYSTEM_PROMPT,
+              activeFile: activeFile || "index.html",
+              craftMd: craftMdForEdit,
+              pages: sitePages,
+              useToolsHint: false,
+            });
           } else {
             console.log(`[AGENT] ${useGemini ? "Gemini" : "Claude"} tools unsupported by KIE — using multipage stream protocol`);
             systemContent = buildMultipageEditSystemPrompt({
@@ -4300,7 +4457,24 @@ ${designAnalysis}
           }
         } catch (agentErr: any) {
           console.warn("[AGENT] Tool-calling failed, stream fallback:", agentErr?.message || agentErr);
+          systemContent = buildMultipageEditSystemPrompt({
+            baseSystem: editPromptBase || SYSTEM_PROMPT,
+            activeFile: activeFile || "index.html",
+            craftMd: craftMdForEdit,
+            pages: sitePages,
+            useToolsHint: false,
+          });
         }
+      } else if (isEditMode && needsVisionStream) {
+        // Streaming+vision path: NEVER leave useToolsHint:true — there are no tools.
+        systemContent = buildMultipageEditSystemPrompt({
+          baseSystem: editPromptBase || SYSTEM_PROMPT,
+          activeFile: activeFile || "index.html",
+          craftMd: craftMdForEdit,
+          pages: sitePages,
+          useToolsHint: false,
+        });
+        console.log(`[AGENT] Edit with vision attachments — stream protocol (no tools hint)`);
       }
 
       const MAX_RETRIES = 3;
@@ -4733,7 +4907,7 @@ ${designAnalysis}
       // ── Auto-inject ANIMATIONAL if mode but AI missed the marker ──
       if (interactiveMode && isNewSite && interactiveStyle === "animational" && !mainHtmlCode.includes("{{ANIMATIONAL:")) {
         const brandGuess = (project.title || "Studio").replace(/[|{}]/g, "").slice(0, 40);
-        const markerAuto = `\n{{ANIMATIONAL:${brandGuess}|Создаём впечатления|#E8FF47|#0B0B0C|#F5F2EC|cinematic premium brand hero scene, dramatic monochrome editorial /// same composition vivid color metamorphosis reveal|atmospheric brand still one,atmospheric brand still two,atmospheric brand still three,atmospheric brand still four,atmospheric brand still five,atmospheric brand still six|Атмосфера::Почувствуйте характер бренда::cinematic brand atmosphere chapter||Детали::Сила в каждой детали::editorial detail close-up||Результат::Когда вау становится нормой::hero result scene||Ваш ход::Начните прямо сейчас::premium call to action scene|Обсудить проект}}\n`;
+        const markerAuto = `\n{{ANIMATIONAL:3d|${brandGuess}|Ощутите объём в движении|dark|premium hero product centered on pure black void, slow cinematic orbit and push-in revealing material and light, studio rim light, photorealistic commercial, no text no watermark|Форма::Каждый градус раскрывает характер||Деталь::Свет и материал в движении||Момент::Ваш следующий шаг|Связаться|Характер::Силуэт, который запоминают||Качество::Детали премиум-уровня||Опыт::Плавный scroll-scrub||Старт::Начните сейчас|Когда движение становится брендом}}\n`;
         if (mainHtmlCode.includes("</header>")) {
           mainHtmlCode = mainHtmlCode.replace("</header>", `</header>${markerAuto}`);
         } else if (/<body[^>]*>/i.test(mainHtmlCode)) {
@@ -4741,14 +4915,13 @@ ${designAnalysis}
         } else {
           mainHtmlCode = markerAuto + mainHtmlCode;
         }
-        console.log(`[ANIMATIONAL] Auto-injected marker (AI missed it)`);
+        console.log(`[ANIMATIONAL] Auto-injected 3d marker (AI missed it)`);
       }
 
       // ── Auto-inject SCROLLANIM if interactive mode but AI missed the marker ──
       if (interactiveMode && isNewSite && interactiveStyle !== "animational" && !mainHtmlCode.includes("{{SCROLLANIM:")) {
         const isSplitAuto = interactiveStyle === "split";
         const isActionAuto = interactiveStyle === "action";
-        const isImmersionAuto = interactiveStyle === "immersion";
         let videoPromptAuto: string;
         let textsAuto: string;
         if (isSplitAuto) {
@@ -4761,12 +4934,19 @@ ${designAnalysis}
             ? "epic slow-motion bullet-time orbit around the product as a splash of liquid and sparks are already exploding outward, frozen mid-air and still drifting further apart while the camera arcs around it, luminous beams and suspended particles continuing to scatter, dramatic premium lighting, cinematic macro"
             : "epic cinematic bullet-time shot orbiting the themed subject as particles, debris and light streaks are already bursting outward mid-air and keep drifting, spinning and scattering further in slow motion, the camera flying around in a dramatic arc, IMAX-grade blockbuster lighting, photorealistic";
           textsAuto = "Почувствуй мощь::Эффект, который впечатляет||Каждая деталь::Снято как в кино||Начни прямо сейчас::Сделай первый шаг";
-        } else if (isImmersionAuto) {
-          videoPromptAuto = "cohesive premium cinematic brand world, photorealistic commercial photography, shallow depth of field, luxury lighting, connected real locations from origin to hero product finale, editorial film still quality";
-          textsAuto = "Точка старта::История бренда начинается||Источник::Откуда всё началось||Мастерство::Где рождается качество||Результат::Готовый продукт||Ваш момент::Попробуйте сами";
-        } else if (interactiveStyle === "site3d") {
-          videoPromptAuto = "breathtaking cinematic forward flight into a premium brand environment, volumetric god rays, atmospheric depth and elegant bokeh, the camera gliding deeper through the space, epic film-still lighting, photorealistic";
-          textsAuto = "Новый уровень::Почувствуйте атмосферу бренда||Суть предложения::То, что меняет опыт||Как это работает::Простой и ясный путь||Почему мы::Доказанное качество||Ваш ход::Начните прямо сейчас";
+        } else if (interactiveStyle === "trigger") {
+          const nicheHint = [project.title, project.description, typeof prompt === "string" ? prompt : ""]
+            .filter(Boolean)
+            .join(" ")
+            .replace(/[|{}]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 120);
+          const nicheClause = nicheHint
+            ? `for this client niche (${nicheHint})`
+            : "perfectly matching the client's site niche and brand theme";
+          videoPromptAuto = `charismatic friendly mascot character ${nicheClause}, animal or stylized hero that instantly reads as this business, on the right third of frame, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both left and right extremes clearly visible, beautiful niche-themed atmospheric background with calm negative space on the left, locked camera, photorealistic cinematic`;
+          textsAuto = "Взгляд, который цепляет::Герой вашего бренда||Живой Hero::Атмосфера ниши слева и справа||Ваш ход::Начните диалог";
         } else if (interactiveStyle === "motion") {
           videoPromptAuto = "premium niche brand scene in full vivid color, iconic commercial subject, cinematic lighting /// same subject and framing in richer alternate color mood, brighter premium commercial lighting, day-to-night or calm-to-energy metamorphosis reveal";
           textsAuto = "Прикоснись::Открой другую сторону бренда||Характер::Сила в деталях||Преображение::Когда результат виден сразу||Твой ход::Начни прямо сейчас";
@@ -4861,6 +5041,10 @@ ${designAnalysis}
         content: (aiTextReply || "Сайт обновлён") + spendNote,
       });
 
+      // Chat-restorable checkpoint for this assistant turn (v1, v2, …).
+      // Updated again below when video bake finishes so restore gets the final hero.
+      await saveChatResultVersion(project.id, immediateHtml, prompt);
+
       // craft.md — Replit-style agent memory for this site
       try {
         const pagesNow: SitePage[] = [
@@ -4928,11 +5112,10 @@ ${designAnalysis}
         const _animStyle = interactiveStyle || (hasAniMarkers ? "animational" : "parallax");
         (async () => {
           const MAX_ANIM_ATTEMPTS = 2;
-          // Motion is image-only — retry quickly. Animational is lighter than Kling video.
-          // Other video modes keep a longer pause for Kling recovery.
+          // Motion is image-only — retry quickly. Animational 3D uses Kling like scroll-anim.
           const RETRY_DELAY_MS =
             _animStyle === "motion" ? 45 * 1000
-            : hasAniMarkers || _animStyle === "animational" ? 60 * 1000
+            : hasAniMarkers || _animStyle === "animational" ? 3 * 60 * 1000
             : 3 * 60 * 1000;
           let animSucceeded = false;
           for (let animAttempt = 0; animAttempt < MAX_ANIM_ATTEMPTS; animAttempt++) {
@@ -4944,7 +5127,7 @@ ${designAnalysis}
             try {
               console.log(`[BG ANIM] Starting attempt ${animAttempt + 1}/${MAX_ANIM_ATTEMPTS} for project ${project.id} (style=${_animStyle})`);
               const scrollResult = hasAniMarkers
-                ? await resolveAnimationalMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false)
+                ? await resolveAnimationalMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl)
                 : await resolveScrollAnimMarkers(bgFilesMap, project.id, user?.id, genRunKey, noopRes, () => false, absoluteProductImageUrl, _animStyle);
               // Soft-fail (0 generated) still puts fallback HTML into bgFilesMap via finalize().
               // Do NOT treat that as success — leave pending so Kling task ID / retry can finish.
@@ -5003,6 +5186,7 @@ ${designAnalysis}
                 mergedHtml = curHtml;
               }
               await storage.updateProject(project.id, { generatedCode: mergedHtml });
+              await saveChatResultVersion(project.id, mergedHtml, prompt);
               for (const [filename, code] of Array.from(bgFilesMap.entries())) {
                 if (filename === "index.html" || !isHtmlPage(filename)) continue;
                 await storage.upsertProjectFile({ projectId: project.id, filename, code });
@@ -5030,6 +5214,7 @@ ${designAnalysis}
                     scrollAnimFallbackHtml(_animTexts, _animVideoPrompt, _animStyle, savedTaskId),
                   );
               await storage.updateProject(project.id, { generatedCode: fallbackCode });
+              await saveChatResultVersion(project.id, fallbackCode, prompt);
               console.warn(`[BG ANIM] All attempts failed for project ${project.id} — fallback saved${savedTaskId ? ` (task ${savedTaskId.slice(0,12)}… preserved)` : ""}`);
             } catch {}
           }
@@ -5128,7 +5313,7 @@ ${designAnalysis}
         || "breathtaking cinematic forward flight into the scene, volumetric god rays and drifting atmospheric haze, epic film-still lighting, photorealistic";
       const animStyle = bodyStyle
         || (styleRaw ? decodeURIComponent(styleRaw) : "")
-        || "site3d";
+        || "parallax";
 
       const animTexts: Array<{title: string; sub: string}> = [];
       if (Array.isArray(req.body?.texts)) {
@@ -5165,7 +5350,7 @@ ${designAnalysis}
       const textsStr = animTexts.map(t => `${t.title}::${t.sub}`).join("||");
       const isAniRegen = animStyle === "animational" || html.includes('data-animational') || html.includes('data-animational-pending');
       const marker = isAniRegen
-        ? `\n{{ANIMATIONAL:${videoPrompt.includes("|") ? videoPrompt : `${animTexts[0]?.title || "Studio"}|${animTexts[0]?.sub || "Создаём впечатления"}|#E8FF47|#0B0B0C|#F5F2EC|${videoPrompt}|atmospheric one,atmospheric two,atmospheric three,atmospheric four,atmospheric five,atmospheric six|${textsStr}|Обсудить проект`}}}\n`
+        ? `\n{{ANIMATIONAL:${videoPrompt.includes("|") ? videoPrompt : `3d|${animTexts[0]?.title || "Studio"}|${animTexts[0]?.sub || "Ощутите объём"}|dark|${videoPrompt}|${animTexts[0]?.title || "Форма"}::${animTexts[0]?.sub || "Характер в движении"}||${animTexts[1]?.title || "Деталь"}::${animTexts[1]?.sub || "Свет и материал"}||${animTexts[2]?.title || "Момент"}::${animTexts[2]?.sub || "Ваш шаг"}|Связаться|Характер::Силуэт||Качество::Детали||Опыт::Scroll-scrub||Старт::Начните|Когда движение становится брендом`}}}\n`
         : `\n{{SCROLLANIM:${videoPrompt}|${textsStr}}}\n`;
       const pendingBlock = scrollAnimPendingHtml(animTexts, isAniRegen ? (videoPrompt.includes("|") ? videoPrompt : undefined) : videoPrompt, isAniRegen ? "animational" : animStyle)
         .replace(
@@ -5214,8 +5399,8 @@ ${designAnalysis}
       (async () => {
         let succeeded = false;
 
-        // Fast path: resume completed Kling task (site3d / parallax / etc.)
-        if (existingTaskId && layout !== "immersion" && layout !== "motion" && layout !== "animational") {
+        // Fast path: resume completed Kling task (parallax / split / action / etc.)
+        if (existingTaskId && layout !== "motion" && layout !== "animational") {
           console.log(`[REGEN ANIM] resuming from existing task ${existingTaskId} for project ${projectId}`);
           try {
             const scrollOutcome = await generateScrollFrames(
@@ -5223,9 +5408,10 @@ ${designAnalysis}
             );
             const frames = scrollOutcome.frames;
             const videoUrl = scrollOutcome.videoUrl;
-            const ready = (layout === "site3d" && !!videoUrl) || frames.length >= (layout === "site3d" ? 30 : 60);
+            const ready = frames.length >= (layout === "trigger" ? 24 : 60);
             if (ready) {
-              const canvasHtml = buildScrollAnimHtml(frames, animTexts, layout, videoUrl);
+              const bakeFrames = await prepareScrollAnimFrames(frames, layout);
+              const canvasHtml = buildScrollAnimHtml(bakeFrames, animTexts, layout, videoUrl);
               let finalCode = safeReplaceScrollAnimPending(pendingHtml, canvasHtml);
               if (isHollowCraftScrollAnim(finalCode)) {
                 finalCode = replaceHollowCraftScrollAnim(finalCode, [canvasHtml]);
@@ -6829,9 +7015,12 @@ ${fullHtml}`;
 
   app.get("/api/generations", requireAuth, async (req, res) => {
     try {
-      const userId = (req as any).user?.id || 1;
-      const images = await storage.getImagesByUser(userId);
-      res.json(images);
+      const userId = (req as any).user?.id;
+      if (!userId) return res.status(401).json({ message: "Не авторизован" });
+      const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
+      const limit = Math.min(48, Math.max(1, parseInt(String(req.query.limit || "24"), 10) || 24));
+      const result = await storage.getImagesByUserPage(userId, page, limit);
+      res.json(result);
     } catch (err) {
       res.status(500).json({ message: "Ошибка получения генераций" });
     }
@@ -7405,12 +7594,11 @@ ${fullHtml}`;
 
           // Background: try to fetch the already-created Kling video and build the animation,
           // so the user gets the real animation without paying again or losing the video.
-          if (savedTaskId && KIE_API_KEY && savedStyle !== "immersion" && savedStyle !== "motion" && savedStyle !== "animational") {
+          if (savedTaskId && KIE_API_KEY && savedStyle !== "immersion" && savedStyle !== "site3d" && savedStyle !== "motion" && savedStyle !== "animational") {
             const _projId  = proj.id;
-            const _layout: ScrollAnimLayout =
-              savedStyle === "split" ? "split" : savedStyle === "action" ? "action" : savedStyle === "site3d" ? "site3d" : "parallax";
-            const _vidDur  = _layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
-            const _frCnt   = _layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : SCROLL_FRAME_COUNT;
+            const _layout: ScrollAnimLayout = resolveScrollAnimLayout(savedStyle);
+            const _vidDur  = _layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : _layout === "trigger" ? SCROLL_TRIGGER_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
+            const _frCnt   = _layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : _layout === "trigger" ? SCROLL_TRIGGER_FRAME_COUNT    : SCROLL_FRAME_COUNT;
             const _texts   = savedTexts;
             (async () => {
               try {
@@ -7464,11 +7652,12 @@ ${fullHtml}`;
                     // Read current project code — only replace if it still has the fallback section
                     const cur = await storage.getProject(_projId);
                     if (!cur || !(cur.generatedCode || "").includes('data-scroll-anim-fallback="1"')) return;
+                    const bakeFrames = await prepareScrollAnimFrames(frameUrls, _layout);
                     let finalCode = (cur.generatedCode || "").replace(
-                      /<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/, buildScrollAnimHtml(frameUrls, _texts, _layout));
+                      /<section[^>]*data-scroll-anim-fallback="1"[\s\S]*?<\/section>/, buildScrollAnimHtml(bakeFrames, _texts, _layout));
                     finalCode = injectLoadingOverlay(finalCode);
                     await storage.updateProject(_projId, { generatedCode: finalCode });
-                    console.log(`[CLEANUP-RESUME] project ${_projId}: animation restored (${frameUrls.length} frames)`);
+                    console.log(`[CLEANUP-RESUME] project ${_projId}: animation restored (${bakeFrames.length} frames)`);
                   } else {
                     console.warn(`[CLEANUP-RESUME] project ${_projId}: too few frames (${frameUrls.length})`);
                   }
@@ -7561,15 +7750,15 @@ ${fullHtml}`;
               || "";
             const textsEnc   = sectionTag.match(/data-scroll-anim-texts="([^"]*)"/)?.[1] || "";
             const animStyle: string = styleEnc ? decodeURIComponent(styleEnc) : "parallax";
-            // Immersion uses multi-clip scroll-world pipeline — single-task frame resume does not apply.
             // Motion uses dual stills (no Kling video) — skip frame resume.
-            if (animStyle === "immersion" || animStyle === "motion" || animStyle === "animational") {
+            // Legacy immersion/site3d no longer supported for single-clip resume.
+            if (animStyle === "immersion" || animStyle === "site3d" || animStyle === "motion" || animStyle === "animational") {
               console.log(`[KLINGTASK] project ${proj.id}: ${animStyle} style — skip single-clip frame resume`);
               continue;
             }
-            const layout: ScrollAnimLayout = animStyle === "split" ? "split" : animStyle === "action" ? "action" : animStyle === "site3d" ? "site3d" : "parallax";
-            const vidDur  = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
-            const frCnt   = layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : SCROLL_FRAME_COUNT;
+            const layout: ScrollAnimLayout = resolveScrollAnimLayout(animStyle);
+            const vidDur  = layout === "action" ? SCROLL_ACTION_VIDEO_DURATION : layout === "trigger" ? SCROLL_TRIGGER_VIDEO_DURATION : SCROLL_VIDEO_DURATION;
+            const frCnt   = layout === "action" ? SCROLL_ACTION_FRAME_COUNT    : layout === "trigger" ? SCROLL_TRIGGER_FRAME_COUNT    : SCROLL_FRAME_COUNT;
             const texts: Array<{title:string;sub:string}> = textsEnc
               ? decodeURIComponent(textsEnc).split("||").map(seg => { const [t,s] = seg.split("::"); return {title:(t||"").trim(),sub:(s||"").trim()}; })
               : [{ title: "", sub: "" }];
@@ -7620,7 +7809,8 @@ ${fullHtml}`;
                   continue;
                 }
 
-                const canvasHtml = buildScrollAnimHtml(frameUrls, texts, layout);
+                const bakeFrames = await prepareScrollAnimFrames(frameUrls, layout);
+                const canvasHtml = buildScrollAnimHtml(bakeFrames, texts, layout);
                 let finalCode = latestHtml;
                 if (stillPending) {
                   finalCode = safeReplaceScrollAnimPending(finalCode, canvasHtml);

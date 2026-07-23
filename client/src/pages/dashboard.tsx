@@ -35,10 +35,12 @@ import {
   Upload,
   ImageIcon,
   X,
+  Rocket,
 } from "lucide-react";
 import { useRef, useCallback } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { STYLE_PICKER_BY_CATEGORY, type UITemplate } from "@/components/ui-templates";
+import { InteractiveStyleCards, type InteractiveStyleId } from "@/components/interactive-style-cards";
 
 function StyleTemplateCard({ tmpl, isCard, onClick }: { tmpl: UITemplate; isCard: boolean; onClick: () => void }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -241,7 +243,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createStep, setCreateStep] = useState<"choose" | "templates" | "details">("choose");
-  const [selectedMode, setSelectedMode] = useState<"prompt" | "interactive" | "photo" | "animational">("prompt");
+  const [selectedMode, setSelectedMode] = useState<"prompt" | "interactive" | "photo">("prompt");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -254,6 +256,7 @@ export default function DashboardPage() {
   const [researchData, setResearchData] = useState("");
   const [showDeepResearchPopup, setShowDeepResearchPopup] = useState(false);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [showPromoModal, setShowPromoModal] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState<number | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [multiPageEnabled, setMultiPageEnabled] = useState(false);
@@ -265,7 +268,7 @@ export default function DashboardPage() {
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImages, setPhotoImages] = useState<Array<{ base64: string; mimeType: string; preview: string }>>([]);
-  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split" | "action" | "immersion" | "site3d" | "motion">("parallax");
+  const [interactiveStyle, setInteractiveStyle] = useState<InteractiveStyleId>("parallax");
   const [interactiveProductImage, setInteractiveProductImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const [tourStep, setTourStep] = useState(-1);
   const [activeTour, setActiveTour] = useState<TourStep[] | null>(null);
@@ -361,7 +364,7 @@ export default function DashboardPage() {
         }
       }
       let productUrl = "";
-      if ((selectedMode === "interactive" || selectedMode === "animational") && interactiveProductImage) {
+      if (selectedMode === "interactive" && interactiveProductImage) {
         const uploadResp = await fetch("/api/upload-image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -387,8 +390,6 @@ export default function DashboardPage() {
         : description || title;
       const interactiveParam = selectedMode === "interactive"
         ? `&interactive=1&istyle=${interactiveStyle}`
-        : selectedMode === "animational"
-        ? `&interactive=1&istyle=animational`
         : "";
       const enhancedParam = isEnhanced ? "&enhanced=1" : "";
       const researchParam = researchData ? `&research=${encodeURIComponent(researchData)}` : "";
@@ -591,6 +592,17 @@ export default function DashboardPage() {
                   {unreadData!.count}
                 </span>
               )}
+            </button>
+
+            <button
+              onClick={() => setShowPromoModal(true)}
+              data-testid="button-promotion"
+              className="flex items-center justify-center gap-2 transition-all shrink-0"
+              style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: isMobile ? '0.45rem' : '0.45rem 1.1rem', fontSize: '0.82rem', fontWeight: 600, color: '#1D1D1F', cursor: 'pointer', width: isMobile ? 36 : undefined, height: isMobile ? 36 : undefined }}
+              title="Продвижение"
+            >
+              <Rocket className="w-3.5 h-3.5" style={{ color: '#86868B' }} />
+              <span className="hidden sm:inline">Продвижение</span>
             </button>
 
             <button
@@ -816,19 +828,19 @@ export default function DashboardPage() {
       </main>
 
       <Dialog open={showCreateModal} onOpenChange={(open) => { if (!open && isResearching) return; setShowCreateModal(open); if (!open) { setResearchData(""); setDeepResearchEnabled(false); setIsResearching(false); } }}>
-        <DialogContent className={`p-0 max-h-[92dvh] ${createStep === "templates" ? "overflow-hidden" : "overflow-y-auto"}`} style={{ width: '92vw', maxWidth: createStep === "templates" ? 1080 : 860, borderRadius: isMobile ? 20 : 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont, transition: 'max-width 0.3s ease' }}>
+        <DialogContent className={`p-0 max-h-[92dvh] ${createStep === "templates" ? "overflow-hidden" : "overflow-y-auto"}`} style={{ width: '92vw', maxWidth: createStep === "templates" ? 1080 : (createStep === "details" && selectedMode === "interactive" ? 980 : 860), borderRadius: isMobile ? 20 : 24, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 32px 80px rgba(0,0,0,0.12)', background: '#fff', fontFamily: appleFont, transition: 'max-width 0.3s ease' }}>
           <div className={createStep === "templates" ? undefined : "db-create-pad"} style={{ padding: createStep === "templates" ? '0' : (isMobile ? '1.25rem 1rem' : '2rem 2.5rem'), minHeight: createStep === "templates" ? 0 : (isMobile ? 0 : 440), display: 'flex', flexDirection: 'column' }}>
             {createStep !== "templates" && (
               <DialogHeader>
                 <DialogTitle style={{ fontSize: isMobile ? '1.25rem' : '1.5rem', fontWeight: 700, letterSpacing: '-0.035em', color: '#1D1D1F', textAlign: 'center' }}>
-                  {createStep === "choose" ? "С чего начнём?" : "Оживите мечту"}
+                  {createStep === "choose" ? "С чего начнём?" : selectedMode === "interactive" ? "Выберите режим" : "Оживите мечту"}
                 </DialogTitle>
               </DialogHeader>
             )}
 
             <AnimatePresence mode="wait">
               {createStep === "choose" ? (
-                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 flex-1 items-stretch sm:items-center" style={{ marginTop: isMobile ? 20 : 32 }}>
+                <motion.div key="c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 flex-1 items-stretch sm:items-center" style={{ marginTop: isMobile ? 20 : 32 }}>
                   {[
                     {
                       m: "prompt",
@@ -858,23 +870,6 @@ export default function DashboardPage() {
                             <path d="M10 8.5L15.5 12L10 15.5V8.5Z" fill="currentColor" className="text-teal-600 transition-transform duration-500 group-hover:translate-x-[2px]" />
                             <path d="M3 9H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75" />
                             <path d="M3 15H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-150" />
-                          </g>
-                        </svg>
-                      ),
-                    },
-                    {
-                      m: "animational",
-                      t: "Анимационный",
-                      d: "Awwwards-вау: morph, marquee, scroll",
-                      badge: "NEW" as string | null,
-                      icon: (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
-                          <g className="transition-transform duration-500 origin-center group-hover:scale-110">
-                            <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" className="text-amber-500" />
-                            <path d="M8 14c1.5-3 6.5-3 8 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                            <circle cx="9.5" cy="10" r="1.2" fill="currentColor" className="text-amber-500" />
-                            <circle cx="14.5" cy="10" r="1.2" fill="currentColor" className="text-amber-500" />
-                            <path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="text-amber-400 opacity-70" />
                           </g>
                         </svg>
                       ),
@@ -1004,6 +999,108 @@ export default function DashboardPage() {
                       </span>
                     </div>
                   )}
+                  {selectedMode === "interactive" ? (
+                    <div className="flex flex-col gap-5 flex-1">
+                      <div>
+                        <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4, marginBottom: 10 }}>
+                          Hero-режим
+                        </div>
+                        <InteractiveStyleCards value={interactiveStyle} onChange={setInteractiveStyle} />
+                      </div>
+
+                      <div className="db-details-grid grid gap-4 sm:gap-5" style={{ gridTemplateColumns: '1.15fr 0.85fr' }}>
+                        <div className="flex flex-col gap-3">
+                          <div className="space-y-1.5" data-tour="photo-title">
+                            <Label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Название</Label>
+                            <Input
+                              placeholder="Например: Моё кафе"
+                              value={title}
+                              onChange={e => setTitle(e.target.value)}
+                              className="h-10 rounded-xl font-medium text-gray-900 placeholder:text-gray-400 text-sm"
+                              style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.08)' }}
+                            />
+                          </div>
+                          <div className="space-y-1.5 flex-1 flex flex-col" data-tour="photo-desc">
+                            <div className="flex items-center justify-between px-1">
+                              <Label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B' }}>Описание</Label>
+                              {isEnhanced && (
+                                <span data-testid="text-enhanced-status" className="flex items-center gap-1" style={{ fontSize: '0.65rem', fontWeight: 600, color: '#34C759' }}>
+                                  <Sparkles className="w-3 h-3" /> Улучшено AI
+                                </span>
+                              )}
+                            </div>
+                            <Textarea
+                              placeholder="Сайт SPA студии, в бежевых тонах, с картинкой в Hero секции, и плавной анимацией"
+                              value={description}
+                              onChange={e => { setDescription(e.target.value); if (isEnhanced) setIsEnhanced(false); }}
+                              className="rounded-xl font-medium text-gray-900 placeholder:text-gray-400 text-sm flex-1"
+                              style={{ background: isEnhanced ? 'rgba(52,199,89,0.04)' : 'rgba(0,0,0,0.03)', border: isEnhanced ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(0,0,0,0.08)', resize: 'none', minHeight: 96 }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3">
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>
+                            Фото продукта <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#aaa' }}>(необязательно)</span>
+                          </div>
+                          <input
+                            ref={interactiveProductImgRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 10 * 1024 * 1024) {
+                                toast({ title: "Файл слишком большой", description: "Максимум 10 МБ", variant: "destructive" });
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const dataUrl = reader.result as string;
+                                const base64 = dataUrl.split(",")[1];
+                                setInteractiveProductImage({ base64, mimeType: file.type || "image/jpeg", preview: dataUrl });
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                          {interactiveProductImage ? (
+                            <div className="relative rounded-xl overflow-hidden flex-1" style={{ border: '1px solid rgba(20,184,166,0.3)', background: 'rgba(20,184,166,0.04)', minHeight: 96 }}>
+                              <img src={interactiveProductImage.preview} alt="Продукт" className="w-full h-full object-contain" style={{ maxHeight: 120 }} />
+                              <button
+                                type="button"
+                                onClick={() => { setInteractiveProductImage(null); if (interactiveProductImgRef.current) interactiveProductImgRef.current.value = ''; }}
+                                className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full"
+                                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer' }}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                              <div className="absolute bottom-2 left-2 px-2 py-1 rounded-md" style={{ background: 'rgba(13,148,136,0.85)', backdropFilter: 'blur(8px)' }}>
+                                <span className="text-white text-[10px] font-semibold flex items-center gap-1">
+                                  <ImageIcon className="w-3 h-3" /> Фото загружено
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => interactiveProductImgRef.current?.click()}
+                              className="flex flex-col items-center justify-center gap-2 rounded-xl transition-all hover:border-teal-400 flex-1"
+                              style={{ border: '2px dashed rgba(20,184,166,0.3)', background: 'rgba(20,184,166,0.02)', minHeight: 96, cursor: 'pointer' }}
+                            >
+                              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(20,184,166,0.08)' }}>
+                                <Upload className="w-4 h-4" style={{ color: '#0d9488' }} />
+                              </div>
+                              <div className="text-center">
+                                <p className="text-xs font-semibold" style={{ color: '#0d9488' }}>Загрузить фото продукта</p>
+                                <p className="text-[10px] mt-0.5" style={{ color: '#5eead4' }}>PNG, JPG до 10 МБ — AI оживит его</p>
+                              </div>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
                   <div className="db-details-grid grid gap-4 sm:gap-6 flex-1" style={{ gridTemplateColumns: '1fr 1fr' }}>
                     <div className="flex flex-col gap-3">
                       <div className="space-y-1.5" data-tour="photo-title">
@@ -1029,8 +1126,6 @@ export default function DashboardPage() {
                           placeholder={
                             selectedMode === "photo"
                               ? "Сделай сайт как у референса, но с моим товаром"
-                              : selectedMode === "animational"
-                              ? "Премиальная кофейня в центре — тёмный вау-сайт с morph-hero и горизонтальной галереей"
                               : "Сайт SPA студии, в бежевых тонах, с картинкой в Hero секции, и плавной анимацией"
                           }
                           value={description}
@@ -1041,189 +1136,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex flex-col gap-3">
-                      {selectedMode === "animational" ? (
-                        <div className="flex flex-col gap-3 flex-1">
-                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Что внутри</div>
-                          <div className="rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>
-                            <p style={{ fontSize: '0.85rem', color: '#1D1D1F', fontWeight: 600, margin: '0 0 8px', letterSpacing: '-0.02em' }}>Awwwards-уровень из коробки</p>
-                            <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.78rem', color: '#86868B', lineHeight: 1.55 }}>
-                              <li>Loader-счётчик и dual-hero morph (KIE)</li>
-                              <li>Бесконечный image marquee</li>
-                              <li>Sticky-главы + горизонтальная галерея</li>
-                              <li>Magnetic CTA и custom cursor</li>
-                            </ul>
-                            <p style={{ fontSize: '0.72rem', color: '#aaa', margin: '12px 0 0' }}>Опишите нишу и бренд — движок сам соберёт вау-сайт. −180 ток. на кадры.</p>
-                          </div>
-                        </div>
-                      ) : selectedMode === "interactive" ? (
-                        <div className="flex flex-col gap-3 flex-1">
-                          {/* Style picker */}
-                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Стиль анимации</div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                            {[
-                              {
-                                id: "parallax" as const,
-                                label: "Параллакс",
-                                desc: "Видео на весь экран, текст поверх",
-                                icon: (
-                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
-                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
-                                    <rect x="4" y="10" width="32" height="3" rx="1.5" fill="currentColor" opacity="0.4"/>
-                                    <rect x="10" y="16" width="20" height="2" rx="1" fill="currentColor" opacity="0.25"/>
-                                    <circle cx="20" cy="7" r="3" fill="currentColor" opacity="0.5"/>
-                                  </svg>
-                                ),
-                              },
-                              {
-                                id: "split" as const,
-                                label: "Сплит",
-                                desc: "Текст слева, продукт справа",
-                                icon: (
-                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
-                                    <rect x="0" y="0" width="18" height="28" rx="4" fill="currentColor" opacity="0.08"/>
-                                    <rect x="22" y="0" width="18" height="28" rx="4" fill="currentColor" opacity="0.15"/>
-                                    <rect x="3" y="10" width="12" height="2" rx="1" fill="currentColor" opacity="0.5"/>
-                                    <rect x="3" y="14" width="9" height="1.5" rx="0.75" fill="currentColor" opacity="0.3"/>
-                                    <circle cx="31" cy="14" r="5" fill="currentColor" opacity="0.4"/>
-                                  </svg>
-                                ),
-                              },
-                              {
-                                id: "action" as const,
-                                label: "Экшн",
-                                desc: "Слоумо и облёт камеры",
-                                icon: (
-                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
-                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
-                                    <circle cx="20" cy="14" r="4.5" fill="currentColor" opacity="0.5"/>
-                                    <path d="M20 3 L20 6 M20 22 L20 25 M5 14 L8 14 M32 14 L35 14 M9.5 9.5 L11.6 11.6 M30.5 9.5 L28.4 11.6 M9.5 18.5 L11.6 16.4 M30.5 18.5 L28.4 16.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.4"/>
-                                  </svg>
-                                ),
-                              },
-                              {
-                                id: "immersion" as const,
-                                label: "Погружение",
-                                desc: "Кинематографичный полёт по сценам",
-                                icon: (
-                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
-                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
-                                    <ellipse cx="20" cy="16" rx="11" ry="6" fill="currentColor" opacity="0.12"/>
-                                    <path d="M8 18 C12 10, 28 10, 32 18" stroke="currentColor" strokeWidth="1.4" fill="none" opacity="0.45"/>
-                                    <circle cx="14" cy="14" r="1.6" fill="currentColor" opacity="0.55"/>
-                                    <circle cx="20" cy="11" r="2" fill="currentColor" opacity="0.65"/>
-                                    <circle cx="26" cy="14" r="1.6" fill="currentColor" opacity="0.55"/>
-                                    <path d="M20 4 L20 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.4"/>
-                                  </svg>
-                                ),
-                              },
-                              {
-                                id: "site3d" as const,
-                                label: "3D сайт",
-                                desc: "Видео-фон + 3D-карточки (Kling)",
-                                icon: (
-                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
-                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
-                                    <rect x="10" y="6" width="20" height="14" rx="3" fill="currentColor" opacity="0.12" transform="translate(0 2) scale(0.86)" style={{ transformOrigin: "20px 14px" }}/>
-                                    <rect x="9" y="5" width="22" height="15" rx="3.5" fill="currentColor" opacity="0.2"/>
-                                    <rect x="8" y="4" width="24" height="16" rx="4" fill="currentColor" opacity="0.35"/>
-                                    <rect x="12" y="9" width="16" height="2.2" rx="1" fill="currentColor" opacity="0.55"/>
-                                    <rect x="14" y="13" width="12" height="1.6" rx="0.8" fill="currentColor" opacity="0.35"/>
-                                  </svg>
-                                ),
-                              },
-                              {
-                                id: "motion" as const,
-                                label: "Моушн",
-                                desc: "Цветной morph под любую нишу",
-                                icon: (
-                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
-                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
-                                    <circle cx="16" cy="14" r="7" fill="currentColor" opacity="0.22"/>
-                                    <path d="M22 7 C28 10, 30 18, 24 22" stroke="currentColor" strokeWidth="1.6" fill="none" opacity="0.45"/>
-                                    <circle cx="26" cy="14" r="5.5" fill="currentColor" opacity="0.45"/>
-                                    <circle cx="27.5" cy="12.5" r="1.2" fill="currentColor" opacity="0.7"/>
-                                  </svg>
-                                ),
-                              },
-                            ].map(s => (
-                              <button
-                                key={s.id}
-                                type="button"
-                                onClick={() => setInteractiveStyle(s.id)}
-                                className="flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all"
-                                style={{
-                                  border: interactiveStyle === s.id ? '1.5px solid rgba(20,184,166,0.5)' : '1.5px solid rgba(0,0,0,0.07)',
-                                  background: interactiveStyle === s.id ? 'rgba(20,184,166,0.07)' : 'rgba(0,0,0,0.02)',
-                                  color: interactiveStyle === s.id ? '#0d9488' : '#86868B',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                {s.icon}
-                                <span style={{ fontSize: '0.75rem', fontWeight: 700, lineHeight: 1.2 }}>{s.label}</span>
-                                <span style={{ fontSize: '0.62rem', opacity: 0.7, lineHeight: 1.3, textAlign: 'center' }}>{s.desc}</span>
-                              </button>
-                            ))}
-                          </div>
-                          {/* Product photo upload (optional) */}
-                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4, marginTop: 4 }}>
-                            Фото продукта <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#aaa' }}>(необязательно)</span>
-                          </div>
-                          <input
-                            ref={interactiveProductImgRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              if (file.size > 10 * 1024 * 1024) {
-                                toast({ title: "Файл слишком большой", description: "Максимум 10 МБ", variant: "destructive" });
-                                return;
-                              }
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                const dataUrl = reader.result as string;
-                                const base64 = dataUrl.split(",")[1];
-                                setInteractiveProductImage({ base64, mimeType: file.type || "image/jpeg", preview: dataUrl });
-                              };
-                              reader.readAsDataURL(file);
-                            }}
-                          />
-                          {interactiveProductImage ? (
-                            <div className="relative rounded-xl overflow-hidden flex-1" style={{ border: '1px solid rgba(20,184,166,0.3)', background: 'rgba(20,184,166,0.04)', minHeight: 80 }}>
-                              <img src={interactiveProductImage.preview} alt="Продукт" className="w-full h-full object-contain" style={{ maxHeight: 110 }} />
-                              <button
-                                type="button"
-                                onClick={() => { setInteractiveProductImage(null); if (interactiveProductImgRef.current) interactiveProductImgRef.current.value = ''; }}
-                                className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full"
-                                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer' }}
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                              <div className="absolute bottom-2 left-2 px-2 py-1 rounded-md" style={{ background: 'rgba(13,148,136,0.85)', backdropFilter: 'blur(8px)' }}>
-                                <span className="text-white text-[10px] font-semibold flex items-center gap-1">
-                                  <ImageIcon className="w-3 h-3" /> Фото загружено
-                                </span>
-                              </div>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => interactiveProductImgRef.current?.click()}
-                              className="flex flex-col items-center justify-center gap-2 rounded-xl transition-all hover:border-teal-400 flex-1"
-                              style={{ border: '2px dashed rgba(20,184,166,0.3)', background: 'rgba(20,184,166,0.02)', minHeight: 80, cursor: 'pointer' }}
-                            >
-                              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(20,184,166,0.08)' }}>
-                                <Upload className="w-4 h-4" style={{ color: '#0d9488' }} />
-                              </div>
-                              <div className="text-center">
-                                <p className="text-xs font-semibold" style={{ color: '#0d9488' }}>Загрузить фото продукта</p>
-                                <p className="text-[10px] mt-0.5" style={{ color: '#5eead4' }}>PNG, JPG до 10 МБ — AI оживит его</p>
-                              </div>
-                            </button>
-                          )}
-                        </div>
-                      ) : selectedMode === "photo" ? (
+                      {selectedMode === "photo" ? (
                         <div className="flex flex-col gap-3 flex-1">
                           <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Референсы (дизайн и/или фото товара) — необязательно</div>
                           <input
@@ -1479,6 +1392,7 @@ export default function DashboardPage() {
                       )}
                     </div>
                   </div>
+                  )}
                   <div className={`grid gap-2 sm:gap-3 ${selectedMode === "photo" ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`} style={{ marginTop: 16 }}>
                     <button
                       className="h-10 font-semibold transition-all text-sm"
@@ -1569,6 +1483,67 @@ export default function DashboardPage() {
       </Dialog>
 
 
+      <Dialog open={showPromoModal} onOpenChange={setShowPromoModal}>
+        <DialogContent
+          className="p-0 overflow-hidden"
+          style={{
+            maxWidth: 520,
+            width: '92vw',
+            borderRadius: isMobile ? 18 : 24,
+            border: '1px solid rgba(0,0,0,0.06)',
+            boxShadow: '0 28px 80px rgba(15,23,42,0.22)',
+            background: '#fff',
+            fontFamily: appleFont,
+          }}
+        >
+          <div style={{ position: 'relative' }}>
+            <img
+              src="/images/rookee-partner.jpg"
+              alt="Rookee — автоматическое SEO-продвижение"
+              style={{ display: 'block', width: '100%', height: 'auto', aspectRatio: '1074 / 480', objectFit: 'cover' }}
+            />
+          </div>
+          <div style={{ padding: isMobile ? '1.15rem 1.15rem 1.35rem' : '1.35rem 1.5rem 1.6rem' }}>
+            <DialogHeader className="space-y-2 text-left">
+              <DialogTitle style={{ fontSize: isMobile ? '1.15rem' : '1.35rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#0f172a', lineHeight: 1.2 }}>
+                Продвижение сайта в поиске
+              </DialogTitle>
+              <DialogDescription style={{ fontSize: '0.92rem', color: '#475569', lineHeight: 1.55 }}>
+                Это наши партнёры по <b style={{ color: '#0f172a', fontWeight: 700 }}>автоматическому SEO-продвижению</b> — Rookee.
+                Если нужно вывести сайт в топ Яндекса и Google, собрать семантику и вести позиции без рутины — обратитесь к ним.
+              </DialogDescription>
+            </DialogHeader>
+            <p style={{ margin: '0.9rem 0 1.15rem', fontSize: '0.86rem', color: '#64748b', lineHeight: 1.5 }}>
+              Создали сайт в Craft AI — следующий шаг: закажите SEO у Rookee и получайте стабильный органический трафик на ваши страницы.
+            </p>
+            <a
+              href="https://rookee.ru/?pid=444691eab5c96cc4daf30a755829e84d36c396&utm_source=_partnerprogram&utm_medium=_partnerprogram"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="button-rookee-try"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '0.85rem 1.1rem',
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, #2563eb 0%, #38bdf8 100%)',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '0.95rem',
+                textDecoration: 'none',
+                boxShadow: '0 10px 28px rgba(37,99,235,0.28)',
+              }}
+            >
+              <Rocket className="w-4 h-4" />
+              Попробовать
+            </a>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showTopUpModal} onOpenChange={setShowTopUpModal}>
         <DialogContent className="p-0 overflow-y-auto max-h-[92dvh]" style={{ maxWidth: 900, width: '92vw', borderRadius: isMobile ? 20 : 28, border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 40px 100px rgba(0,0,0,0.5)', background: 'linear-gradient(135deg,#1e1e24 10%,#050505 60%)', fontFamily: appleFont }}>
           <style dangerouslySetInnerHTML={{ __html: `
@@ -1617,10 +1592,10 @@ export default function DashboardPage() {
             <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)', marginTop: '0.4rem', marginBottom: isMobile ? '1.25rem' : '2rem' }}>Выберите подходящий тариф для пополнения токенов</p>
             <div className="db-topup-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
               {[
-                { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["1 сайт", "10 итераций редактирования"] },
-                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["2 сайта", "19 итераций редактирования"] },
-                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["3 сайта", "45 итераций редактирования", "Премиум шаблоны"] },
-                { price: 9990, tokens: 10000, label: "Ультра",  popular: true,  desc: ["5 сайтов", "100 итераций редактирования", "Премиум шаблоны"] },
+                { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
+                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
+                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
+                { price: 9990, tokens: 10000, label: "Ультра",  popular: true,  desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
               ].map((plan) => (
                 <div key={plan.price} style={{ position: 'relative', height: '100%' }}>
                   {plan.popular && (

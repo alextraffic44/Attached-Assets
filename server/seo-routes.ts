@@ -4,6 +4,15 @@ import { deployToYandex } from "./yandex-deploy";
 import { isInternalAgentFile } from "@shared/project-files";
 import type { SeoConfig, SeoCluster, SeoKeyword, SeoTheme } from "@shared/schema";
 import crypto from "crypto";
+import {
+  CRAFT_MD_FILENAME,
+  ensureCraftMd,
+  buildMultipageEditSystemPrompt,
+  runToolCallingAgent,
+  isEditableSiteFile,
+  isHtmlPage,
+  type SitePage,
+} from "./agent-runtime";
 
 const KIE_API_KEY = process.env.KIE_API_KEY || "";
 const KIE_GEMINI_MODEL = "gemini-3-5-flash";
@@ -13,6 +22,8 @@ const KIE_JOBS_CREATE = "https://api.kie.ai/api/v1/jobs/createTask";
 const KIE_JOBS_STATUS = "https://api.kie.ai/api/v1/jobs/recordInfo";
 
 const SEO_ARTICLE_COST = 70;
+const SEO_EDIT_COST = 30;
+const DAILY_PUBLISH_COST = 35;
 
 function slugify(text: string): string {
   return text
@@ -1340,7 +1351,7 @@ Respond with ONLY valid JSON, no explanation:
     res.end();
   });
 
-  // POST /api/seo/:id/publish — deploy to Yandex Cloud Object Storage
+  // POST /api/seo/:id/publish — deploy to Yandex Cloud Object Storage (+ domain mirror)
   app.post("/api/seo/:id/publish", async (req, res) => {
     const userId = requireAuth(req, res);
     if (!userId) return;
@@ -1350,15 +1361,46 @@ Respond with ONLY valid JSON, no explanation:
     const files = await storage.getProjectFiles(proj.id);
     if (files.length === 0) return res.status(400).json({ message: "No pages generated yet" });
 
-    const cfg = proj.seoConfig as SeoConfig;
-    const baseUrl = `https://craft-ai-p${proj.id}.website.yandexcloud.net`;
-
-    // Generate final sitemap before deploy
-    const sitemapContent = buildSitemap(cfg, baseUrl);
-    const sitemapFile = files.find(f => f.filename === "sitemap.xml");
-    if (!sitemapFile) {
-      await storage.upsertProjectFile({ projectId: proj.id, filename: "sitemap.xml", code: sitemapContent });
+    const user = await storage.getUser(userId);
+    if (!user) return res.status(401).json({ message: "Пользователь не найден" });
+    if (user.credits < DAILY_PUBLISH_COST) {
+      return res.status(403).json({
+        message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 35 токенов/сайт в день.",
+      });
     }
+
+    const alreadyLive =
+      proj.publishStatus === "published" ||
+      proj.publishStatus === "publishing" ||
+      proj.publishStatus === "suspended";
+
+    if (!alreadyLive) {
+      const today = new Date().toISOString().slice(0, 10);
+      const publishCharge = await storage.deductCredits(
+        userId,
+        DAILY_PUBLISH_COST,
+        "daily_publish",
+        `publish-start-${proj.id}-${today}`,
+      );
+      if (!publishCharge.success) {
+        return res.status(403).json({
+          message: "Недостаточно токенов для публикации. Ежедневная стоимость хостинга — 35 токенов/сайт в день.",
+          newBalance: publishCharge.newBalance,
+        });
+      }
+    }
+
+    await storage.updateProject(proj.id, { publishStatus: "publishing" } as any);
+
+    const cfg = proj.seoConfig as SeoConfig;
+    const customDomain = ((proj as any).customDomain || "").replace(/^www\./, "").trim();
+    const baseUrl = customDomain
+      ? `https://${customDomain}`
+      : `https://craft-ai-p${proj.id}.website.yandexcloud.net`;
+
+    // Generate final sitemap before deploy (always refresh so custom domain URLs stay current)
+    const sitemapContent = buildSitemap(cfg, baseUrl);
+    await storage.upsertProjectFile({ projectId: proj.id, filename: "sitemap.xml", code: sitemapContent });
 
     const allFiles = await storage.getProjectFiles(proj.id);
     const deployFiles = allFiles
@@ -1387,6 +1429,11 @@ Respond with ONLY valid JSON, no explanation:
 
       res.json({ url: finalUrl });
     } catch (e: any) {
+      // Roll status back so the user can retry; first-day charge already taken
+      // (same semantics as regular site publish).
+      await storage.updateProject(proj.id, {
+        publishStatus: alreadyLive ? "published" : "draft",
+      } as any).catch(() => {});
       res.status(500).json({ message: e?.message || "Publish failed" });
     }
   });
@@ -1503,6 +1550,196 @@ Respond ONLY with valid JSON (no markdown):
     if (!seoConfig) return res.status(400).json({ message: "seoConfig required" });
     await storage.updateProject(proj.id, { seoConfig } as any);
     res.json({ ok: true });
+  });
+
+  // POST /api/seo/:id/chat-edit — multipage agent chat for design/structure edits after site is ready
+  app.post("/api/seo/:id/chat-edit", async (req, res) => {
+    const userId = requireAuth(req, res);
+    if (!userId) return;
+    const proj = await storage.getProject(parseInt(req.params.id));
+    if (!proj || proj.userId !== userId) return res.status(404).json({ message: "Not found" });
+    if (proj.type !== "seo") return res.status(400).json({ message: "Только для SEO-проектов" });
+
+    const prompt = String(req.body?.prompt || "").trim();
+    if (!prompt) return res.status(400).json({ message: "Запрос обязателен" });
+
+    const activeFileRaw = String(req.body?.activeFile || "index.html").trim();
+    const agentVersion = req.body?.agentVersion === "v1" ? "v1" : "v2";
+    const useGemini = agentVersion === "v2";
+    const idempotencyKey =
+      String(req.body?.idempotencyKey || "").trim() ||
+      `seo-edit-${proj.id}-${userId}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
+
+    const cfg = (proj.seoConfig as SeoConfig) || ({} as SeoConfig);
+    if (!cfg.pagesGenerated && !(await storage.getProjectFiles(proj.id)).some((f) => isHtmlPage(f.filename))) {
+      return res.status(400).json({ message: "Сначала сгенерируйте сайт" });
+    }
+
+    const deduction = await storage.deductCredits(userId, SEO_EDIT_COST, "seo-edit", idempotencyKey);
+    if (!deduction.success) {
+      return res.status(402).json({
+        message: `Не хватает токенов. Нужно ${SEO_EDIT_COST}, у вас ${deduction.newBalance}.`,
+        newBalance: deduction.newBalance,
+      });
+    }
+    const billed = !deduction.alreadyProcessed;
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const send = (obj: Record<string, unknown>) => {
+      try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {}
+    };
+
+    try {
+      await storage.createProjectMessage({ projectId: proj.id, role: "user", content: prompt });
+
+      const existingFiles = await storage.getProjectFiles(proj.id);
+      // Ensure global CSS exists for design edits
+      if (!existingFiles.find((f) => f.filename === "assets/style.css")) {
+        const css = buildSiteCss(themeOf(cfg));
+        await storage.upsertProjectFile({ projectId: proj.id, filename: "assets/style.css", code: css });
+        existingFiles.push({ id: 0, projectId: proj.id, filename: "assets/style.css", code: css, createdAt: new Date() } as any);
+      }
+
+      const sitePages: SitePage[] = existingFiles
+        .filter((f) => isEditableSiteFile(f.filename))
+        .map((f) => ({ filename: f.filename, code: f.code || "" }));
+
+      // Prefer DB homepage code; fall back to generatedCode mirror
+      if (!sitePages.find((p) => p.filename === "index.html") && proj.generatedCode) {
+        sitePages.unshift({ filename: "index.html", code: proj.generatedCode });
+      }
+
+      const known = new Set(sitePages.map((p) => p.filename));
+      const activeFile = known.has(activeFileRaw) ? activeFileRaw : (known.has("index.html") ? "index.html" : (sitePages[0]?.filename || "index.html"));
+
+      const theme = themeOf(cfg);
+      const seoBrief = [
+        `SEO-сайт «${cfg.projectName || cfg.siteTitle || proj.title}»`,
+        cfg.niche ? `Ниша: ${cfg.niche}` : "",
+        `Тема: accent=${theme.accent}, bg=${theme.bg}, heading=${theme.headingFont}`,
+        "Глобальные стили: assets/style.css — меняй дизайн/палитру/типографику здесь",
+        "Страницы: index.html (главная), {раздел}/index.html (категории), {раздел}/{статья}/index.html (статьи)",
+        "Сохраняй SEO: title, meta description, H1, внутренние ссылки, структуру nav/footer",
+      ].filter(Boolean).join(". ");
+
+      let craftMd = await ensureCraftMd(proj.id, {
+        title: cfg.projectName || cfg.siteTitle || proj.title || "SEO сайт",
+        description: seoBrief,
+        userPrompt: prompt,
+        pages: sitePages,
+      });
+
+      // Enrich craft.md once with SEO machine notes if missing
+      if (!craftMd.includes("SEO Machine") && !craftMd.includes("assets/style.css")) {
+        craftMd += `\n\n## SEO Machine\n- ${seoBrief}\n- Для смены дизайна правь \`assets/style.css\`\n- Для структуры/контента — соответствующие HTML\n`;
+        await storage.upsertProjectFile({ projectId: proj.id, filename: CRAFT_MD_FILENAME, code: craftMd });
+      }
+
+      const baseSystem = `Ты — агент Craft AI для SEO Machine. Редактируешь уже готовый многостраничный SEO-сайт.
+Пользователь просит правки дизайна, структуры, текстов, навигации, стилей.
+Используй tools (read_page / apply_patch / write_page). Дизайн → assets/style.css. Общие блоки (header/footer) синхронизируй на затронутых страницах.
+Не выдумывай новые URL без нужды. Не ломай разметку статей без запроса. Отвечай кратко по-русски в finish(summary).`;
+
+      const systemPrompt = buildMultipageEditSystemPrompt({
+        baseSystem,
+        activeFile,
+        craftMd,
+        pages: sitePages,
+        useToolsHint: true,
+      });
+
+      const priorMessages = await storage.getProjectMessages(proj.id);
+      const history = priorMessages
+        .slice(-12, -1) // exclude the user message we just saved
+        .filter((m) => m.role === "user" || m.role === "model" || m.role === "assistant")
+        .map((m) => ({
+          role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+          text: String(m.content || "").slice(0, 2000),
+        }))
+        .filter((h) => h.text.trim());
+
+      send({ status: useGemini ? "Gemini-агент правит SEO-сайт…" : "Агент правит SEO-сайт…" });
+
+      let streamed = "";
+      const toolResult = await runToolCallingAgent({
+        systemPrompt,
+        userPrompt: prompt,
+        pages: sitePages,
+        craftMd,
+        history: history.slice(-8),
+        maxRounds: 10,
+        provider: useGemini ? "gemini" : "claude",
+        onStatus: (status) => send({ status }),
+        onContent: (chunk) => {
+          if (!chunk) return;
+          streamed += chunk;
+          send({ content: chunk });
+        },
+      });
+
+      if (!toolResult.toolsSupported) {
+        if (billed) {
+          try { await storage.refundCredits(userId, SEO_EDIT_COST, idempotencyKey); } catch {}
+        }
+        const bal = (await storage.getUser(userId))?.credits ?? deduction.newBalance;
+        send({ error: "Агент временно недоступен — попробуйте ещё раз", newBalance: bal, refunded: billed });
+        res.end();
+        return;
+      }
+
+      if (toolResult.changedFiles.size === 0) {
+        const summary = toolResult.summary || streamed.trim() || "Изменений не требуется";
+        await storage.createProjectMessage({ projectId: proj.id, role: "model", content: summary });
+        send({
+          done: true,
+          summary,
+          changedFiles: [],
+          newBalance: deduction.newBalance,
+          creditsUsed: SEO_EDIT_COST,
+        });
+        res.end();
+        return;
+      }
+
+      const changedList: string[] = [];
+      for (const [fn, code] of toolResult.changedFiles) {
+        await storage.upsertProjectFile({ projectId: proj.id, filename: fn, code });
+        changedList.push(fn);
+        if (fn === "index.html") {
+          await storage.updateProject(proj.id, { generatedCode: code } as any);
+        }
+      }
+      if (toolResult.craftMd) {
+        await storage.upsertProjectFile({ projectId: proj.id, filename: CRAFT_MD_FILENAME, code: toolResult.craftMd });
+      }
+
+      const summary = toolResult.summary || streamed.trim() || "Сайт обновлён";
+      await storage.createProjectMessage({
+        projectId: proj.id,
+        role: "model",
+        content: `${summary}\n\n−${SEO_EDIT_COST} токенов`,
+      });
+
+      send({
+        done: true,
+        summary,
+        changedFiles: changedList,
+        newBalance: deduction.newBalance,
+        creditsUsed: SEO_EDIT_COST,
+      });
+      res.end();
+    } catch (err: any) {
+      console.error("[SEO chat-edit]", err);
+      if (billed) {
+        try { await storage.refundCredits(userId, SEO_EDIT_COST, idempotencyKey); } catch {}
+      }
+      const bal = (await storage.getUser(userId))?.credits ?? deduction.newBalance;
+      send({ error: err?.message || "Ошибка редактирования", newBalance: bal, refunded: billed });
+      res.end();
+    }
   });
 
   // GET /api/seo/:id/file — serve file content for preview
