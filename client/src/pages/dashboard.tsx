@@ -35,6 +35,7 @@ import {
   Upload,
   ImageIcon,
   X,
+  Rocket,
 } from "lucide-react";
 import { useRef, useCallback } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -254,6 +255,7 @@ export default function DashboardPage() {
   const [researchData, setResearchData] = useState("");
   const [showDeepResearchPopup, setShowDeepResearchPopup] = useState(false);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [showPromoModal, setShowPromoModal] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState<number | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [multiPageEnabled, setMultiPageEnabled] = useState(false);
@@ -265,7 +267,7 @@ export default function DashboardPage() {
   const [seoH1, setSeoH1] = useState("");
   const [seoH2s, setSeoH2s] = useState<string[]>(["", ""]);
   const [photoImages, setPhotoImages] = useState<Array<{ base64: string; mimeType: string; preview: string }>>([]);
-  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split" | "action" | "immersion" | "site3d" | "motion">("parallax");
+  const [interactiveStyle, setInteractiveStyle] = useState<"parallax" | "split" | "action" | "motion" | "trigger">("parallax");
   const [interactiveProductImage, setInteractiveProductImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const [tourStep, setTourStep] = useState(-1);
   const [activeTour, setActiveTour] = useState<TourStep[] | null>(null);
@@ -594,6 +596,17 @@ export default function DashboardPage() {
             </button>
 
             <button
+              onClick={() => setShowPromoModal(true)}
+              data-testid="button-promotion"
+              className="flex items-center justify-center gap-2 transition-all shrink-0"
+              style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, padding: isMobile ? '0.45rem' : '0.45rem 1.1rem', fontSize: '0.82rem', fontWeight: 600, color: '#1D1D1F', cursor: 'pointer', width: isMobile ? 36 : undefined, height: isMobile ? 36 : undefined }}
+              title="Продвижение"
+            >
+              <Rocket className="w-3.5 h-3.5" style={{ color: '#86868B' }} />
+              <span className="hidden sm:inline">Продвижение</span>
+            </button>
+
+            <button
               onClick={() => setLocation("/generations")}
               data-testid="button-generations"
               className="flex items-center justify-center gap-2 transition-all shrink-0"
@@ -865,16 +878,15 @@ export default function DashboardPage() {
                     {
                       m: "animational",
                       t: "Анимационный",
-                      d: "Awwwards-вау: morph, marquee, scroll",
+                      d: "3D canvas-scrub · GSAP + Lenis",
                       badge: "NEW" as string | null,
                       icon: (
                         <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8">
                           <g className="transition-transform duration-500 origin-center group-hover:scale-110">
-                            <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" className="text-amber-500" />
-                            <path d="M8 14c1.5-3 6.5-3 8 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                            <circle cx="9.5" cy="10" r="1.2" fill="currentColor" className="text-amber-500" />
-                            <circle cx="14.5" cy="10" r="1.2" fill="currentColor" className="text-amber-500" />
-                            <path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="text-amber-400 opacity-70" />
+                            <rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="2" className="text-amber-500" />
+                            <path d="M8 15c2-4 6-4 8 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="text-amber-600" />
+                            <circle cx="12" cy="10" r="2.2" fill="currentColor" className="text-amber-500 opacity-80 group-hover:opacity-100 transition-opacity" />
+                            <path d="M7 8h2M15 8h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-amber-400 opacity-60" />
                           </g>
                         </svg>
                       ),
@@ -1043,23 +1055,91 @@ export default function DashboardPage() {
                     <div className="flex flex-col gap-3">
                       {selectedMode === "animational" ? (
                         <div className="flex flex-col gap-3 flex-1">
-                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Что внутри</div>
-                          <div className="rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>
-                            <p style={{ fontSize: '0.85rem', color: '#1D1D1F', fontWeight: 600, margin: '0 0 8px', letterSpacing: '-0.02em' }}>Awwwards-уровень из коробки</p>
-                            <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.78rem', color: '#86868B', lineHeight: 1.55 }}>
-                              <li>Loader-счётчик и dual-hero morph (KIE)</li>
-                              <li>Бесконечный image marquee</li>
-                              <li>Sticky-главы + горизонтальная галерея</li>
-                              <li>Magnetic CTA и custom cursor</li>
-                            </ul>
-                            <p style={{ fontSize: '0.72rem', color: '#aaa', margin: '12px 0 0' }}>Опишите нишу и бренд — движок сам соберёт вау-сайт. −180 ток. на кадры.</p>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Стиль</div>
+                          <div className="grid grid-cols-1 gap-2">
+                            <div
+                              className="flex flex-col items-start gap-1.5 p-3 rounded-xl"
+                              style={{
+                                border: '1.5px solid rgba(245,158,11,0.45)',
+                                background: 'rgba(245,158,11,0.07)',
+                                color: '#b45309',
+                              }}
+                            >
+                              <div className="flex items-center gap-2 w-full">
+                                <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7 shrink-0">
+                                  <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
+                                  <rect x="8" y="6" width="24" height="16" rx="2" fill="currentColor" opacity="0.2"/>
+                                  <ellipse cx="20" cy="14" rx="7" ry="5" fill="currentColor" opacity="0.45"/>
+                                  <path d="M12 20 C16 12, 24 12, 28 20" stroke="currentColor" strokeWidth="1.3" fill="none" opacity="0.5"/>
+                                </svg>
+                                <div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1D1D1F' }}>3D</div>
+                                  <div style={{ fontSize: '0.72rem', color: '#86868B', lineHeight: 1.35 }}>Canvas scrub · GSAP ScrollTrigger · Lenis · Tailwind</div>
+                                </div>
+                              </div>
+                            </div>
                           </div>
+                          <div className="rounded-xl p-3" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>
+                            <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.75rem', color: '#86868B', lineHeight: 1.55 }}>
+                              <li>Hero 350vh · sticky canvas · scrub по кадрам</li>
+                              <li>Типографика поверх сцены (3 бита)</li>
+                              <li>Bento + kinetic line + CTA после unpin</li>
+                            </ul>
+                            <p style={{ fontSize: '0.7rem', color: '#aaa', margin: '10px 0 0' }}>Свой промпт с нуля (без мастер-шаблонов). −{120} ток. на Kling-кадры.</p>
+                          </div>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4, marginTop: 4 }}>
+                            Фото продукта <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#aaa' }}>(рекомендуется для 3D)</span>
+                          </div>
+                          <input
+                            ref={interactiveProductImgRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 10 * 1024 * 1024) {
+                                toast({ title: "Файл слишком большой", description: "Максимум 10 МБ", variant: "destructive" });
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const dataUrl = reader.result as string;
+                                const base64 = dataUrl.split(",")[1];
+                                setInteractiveProductImage({ base64, mimeType: file.type || "image/jpeg", preview: dataUrl });
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                          {interactiveProductImage ? (
+                            <div className="relative rounded-xl overflow-hidden" style={{ border: '1px solid rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.04)', minHeight: 72 }}>
+                              <img src={interactiveProductImage.preview} alt="Продукт" className="w-full object-contain" style={{ maxHeight: 100 }} />
+                              <button
+                                type="button"
+                                onClick={() => { setInteractiveProductImage(null); if (interactiveProductImgRef.current) interactiveProductImgRef.current.value = ''; }}
+                                className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full"
+                                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer' }}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => interactiveProductImgRef.current?.click()}
+                              className="flex flex-col items-center justify-center gap-1.5 rounded-xl transition-all"
+                              style={{ border: '2px dashed rgba(245,158,11,0.35)', background: 'rgba(245,158,11,0.03)', minHeight: 72, cursor: 'pointer' }}
+                            >
+                              <Upload className="w-4 h-4" style={{ color: '#b45309' }} />
+                              <p className="text-xs font-semibold" style={{ color: '#b45309' }}>Загрузить фото продукта</p>
+                            </button>
+                          )}
                         </div>
                       ) : selectedMode === "interactive" ? (
                         <div className="flex flex-col gap-3 flex-1">
                           {/* Style picker */}
                           <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>Стиль анимации</div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                             {[
                               {
                                 id: "parallax" as const,
@@ -1101,40 +1181,9 @@ export default function DashboardPage() {
                                 ),
                               },
                               {
-                                id: "immersion" as const,
-                                label: "Погружение",
-                                desc: "Кинематографичный полёт по сценам",
-                                icon: (
-                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
-                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
-                                    <ellipse cx="20" cy="16" rx="11" ry="6" fill="currentColor" opacity="0.12"/>
-                                    <path d="M8 18 C12 10, 28 10, 32 18" stroke="currentColor" strokeWidth="1.4" fill="none" opacity="0.45"/>
-                                    <circle cx="14" cy="14" r="1.6" fill="currentColor" opacity="0.55"/>
-                                    <circle cx="20" cy="11" r="2" fill="currentColor" opacity="0.65"/>
-                                    <circle cx="26" cy="14" r="1.6" fill="currentColor" opacity="0.55"/>
-                                    <path d="M20 4 L20 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.4"/>
-                                  </svg>
-                                ),
-                              },
-                              {
-                                id: "site3d" as const,
-                                label: "3D сайт",
-                                desc: "Видео-фон + 3D-карточки (Kling)",
-                                icon: (
-                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
-                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
-                                    <rect x="10" y="6" width="20" height="14" rx="3" fill="currentColor" opacity="0.12" transform="translate(0 2) scale(0.86)" style={{ transformOrigin: "20px 14px" }}/>
-                                    <rect x="9" y="5" width="22" height="15" rx="3.5" fill="currentColor" opacity="0.2"/>
-                                    <rect x="8" y="4" width="24" height="16" rx="4" fill="currentColor" opacity="0.35"/>
-                                    <rect x="12" y="9" width="16" height="2.2" rx="1" fill="currentColor" opacity="0.55"/>
-                                    <rect x="14" y="13" width="12" height="1.6" rx="0.8" fill="currentColor" opacity="0.35"/>
-                                  </svg>
-                                ),
-                              },
-                              {
                                 id: "motion" as const,
                                 label: "Моушн",
-                                desc: "Цветной morph под любую нишу",
+                                desc: "Объект морфится · текст слева",
                                 icon: (
                                   <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
                                     <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
@@ -1142,6 +1191,21 @@ export default function DashboardPage() {
                                     <path d="M22 7 C28 10, 30 18, 24 22" stroke="currentColor" strokeWidth="1.6" fill="none" opacity="0.45"/>
                                     <circle cx="26" cy="14" r="5.5" fill="currentColor" opacity="0.45"/>
                                     <circle cx="27.5" cy="12.5" r="1.2" fill="currentColor" opacity="0.7"/>
+                                  </svg>
+                                ),
+                              },
+                              {
+                                id: "trigger" as const,
+                                label: "Тригер",
+                                desc: "Сначала влево, потом вправо — следит за мышкой",
+                                icon: (
+                                  <svg viewBox="0 0 40 28" fill="none" className="w-10 h-7">
+                                    <rect x="0" y="0" width="40" height="28" rx="4" fill="currentColor" opacity="0.08"/>
+                                    <rect x="3" y="5" width="16" height="18" rx="2" fill="currentColor" opacity="0.12"/>
+                                    <circle cx="28" cy="13" r="6" fill="currentColor" opacity="0.35"/>
+                                    <circle cx="26.2" cy="12.2" r="1.4" fill="currentColor" opacity="0.75"/>
+                                    <path d="M22 20 C25 17, 31 17, 34 20" stroke="currentColor" strokeWidth="1.3" fill="none" opacity="0.45"/>
+                                    <path d="M8 12 H16 M8 16 H14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.35"/>
                                   </svg>
                                 ),
                               },
@@ -1569,6 +1633,67 @@ export default function DashboardPage() {
       </Dialog>
 
 
+      <Dialog open={showPromoModal} onOpenChange={setShowPromoModal}>
+        <DialogContent
+          className="p-0 overflow-hidden"
+          style={{
+            maxWidth: 520,
+            width: '92vw',
+            borderRadius: isMobile ? 18 : 24,
+            border: '1px solid rgba(0,0,0,0.06)',
+            boxShadow: '0 28px 80px rgba(15,23,42,0.22)',
+            background: '#fff',
+            fontFamily: appleFont,
+          }}
+        >
+          <div style={{ position: 'relative' }}>
+            <img
+              src="/images/rookee-partner.jpg"
+              alt="Rookee — автоматическое SEO-продвижение"
+              style={{ display: 'block', width: '100%', height: 'auto', aspectRatio: '1074 / 480', objectFit: 'cover' }}
+            />
+          </div>
+          <div style={{ padding: isMobile ? '1.15rem 1.15rem 1.35rem' : '1.35rem 1.5rem 1.6rem' }}>
+            <DialogHeader className="space-y-2 text-left">
+              <DialogTitle style={{ fontSize: isMobile ? '1.15rem' : '1.35rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#0f172a', lineHeight: 1.2 }}>
+                Продвижение сайта в поиске
+              </DialogTitle>
+              <DialogDescription style={{ fontSize: '0.92rem', color: '#475569', lineHeight: 1.55 }}>
+                Это наши партнёры по <b style={{ color: '#0f172a', fontWeight: 700 }}>автоматическому SEO-продвижению</b> — Rookee.
+                Если нужно вывести сайт в топ Яндекса и Google, собрать семантику и вести позиции без рутины — обратитесь к ним.
+              </DialogDescription>
+            </DialogHeader>
+            <p style={{ margin: '0.9rem 0 1.15rem', fontSize: '0.86rem', color: '#64748b', lineHeight: 1.5 }}>
+              Создали сайт в Craft AI — следующий шаг: закажите SEO у Rookee и получайте стабильный органический трафик на ваши страницы.
+            </p>
+            <a
+              href="https://rookee.ru/?pid=444691eab5c96cc4daf30a755829e84d36c396&utm_source=_partnerprogram&utm_medium=_partnerprogram"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="button-rookee-try"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '0.85rem 1.1rem',
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, #2563eb 0%, #38bdf8 100%)',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '0.95rem',
+                textDecoration: 'none',
+                boxShadow: '0 10px 28px rgba(37,99,235,0.28)',
+              }}
+            >
+              <Rocket className="w-4 h-4" />
+              Попробовать
+            </a>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showTopUpModal} onOpenChange={setShowTopUpModal}>
         <DialogContent className="p-0 overflow-y-auto max-h-[92dvh]" style={{ maxWidth: 900, width: '92vw', borderRadius: isMobile ? 20 : 28, border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 40px 100px rgba(0,0,0,0.5)', background: 'linear-gradient(135deg,#1e1e24 10%,#050505 60%)', fontFamily: appleFont }}>
           <style dangerouslySetInnerHTML={{ __html: `
@@ -1617,10 +1742,10 @@ export default function DashboardPage() {
             <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.45)', marginTop: '0.4rem', marginBottom: isMobile ? '1.25rem' : '2rem' }}>Выберите подходящий тариф для пополнения токенов</p>
             <div className="db-topup-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
               {[
-                { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["1 сайт", "10 итераций редактирования"] },
-                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["2 сайта", "19 итераций редактирования"] },
-                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["3 сайта", "45 итераций редактирования", "Премиум шаблоны"] },
-                { price: 9990, tokens: 10000, label: "Ультра",  popular: true,  desc: ["5 сайтов", "100 итераций редактирования", "Премиум шаблоны"] },
+                { price: 990,  tokens: 1000, label: "Старт",   popular: false, desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
+                { price: 1690, tokens: 1900, label: "Базовый", popular: false, desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
+                { price: 3990, tokens: 4500, label: "Профи",   popular: false, desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
+                { price: 9990, tokens: 10000, label: "Ультра",  popular: true,  desc: ["AI генерация изображений, видео, кода.", "Анимационные сайты.", "Хостинг и свой домен."] },
               ].map((plan) => (
                 <div key={plan.price} style={{ position: 'relative', height: '100%' }}>
                   {plan.popular && (
