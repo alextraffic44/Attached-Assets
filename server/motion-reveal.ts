@@ -130,6 +130,7 @@ async function createStill(
     const input: any = inputUrl
       ? {
           prompt,
+          // Strict I2I: single reference = the finished previous frame (composition lock).
           image_input: [inputUrl],
           aspect_ratio: "16:9",
           resolution: STILL_RESOLUTION,
@@ -141,6 +142,9 @@ async function createStill(
           resolution: STILL_RESOLUTION,
           output_format: "jpg",
         };
+    if (inputUrl) {
+      console.log(`[MOTION] ${label}: I2I from prior frame ${inputUrl.slice(0, 96)}`);
+    }
     const createBody: any = await deps.kieRequestJson(
       deps.createUrl,
       {
