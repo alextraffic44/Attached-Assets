@@ -3381,7 +3381,10 @@ export async function registerRoutes(
   app.get("/api/credits/history", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
-      const txns = await storage.adminGetUserTransactions(user.id);
+      const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || "20"), 10) || 20));
+      const { items: txns, total, totalPages, page: safePage, limit: safeLimit } =
+        await storage.getUserTransactionsPage(user.id, page, limit);
       const OP_LABELS: Record<string, string> = {
         generate: "Генерация сайта",
         image: "Изображение",
@@ -3397,8 +3400,8 @@ export async function registerRoutes(
         admin_add: "Начисление (админ)",
         admin_deduct: "Списание (админ)",
       };
-      res.json(
-        txns.slice(0, 100).map((t) => ({
+      res.json({
+        items: txns.map((t) => ({
           id: t.id,
           amount: t.amount,
           type: t.type,
@@ -3407,9 +3410,59 @@ export async function registerRoutes(
           note: t.note,
           createdAt: t.createdAt,
         })),
-      );
+        total,
+        page: safePage,
+        limit: safeLimit,
+        totalPages,
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Ошибка загрузки истории" });
+    }
+  });
+
+  // Permanent account deletion: wipe projects/files/media + user row, then end session.
+  app.delete("/api/auth/account", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userId = user.id as number;
+      if (!userId || typeof userId !== "number") {
+        return res.status(400).json({ message: "Некорректный пользователь" });
+      }
+      // Protect the primary admin account from accidental self-wipe via UI.
+      if (userId === 1) {
+        return res.status(403).json({ message: "Этот аккаунт нельзя удалить" });
+      }
+
+      const { objectPaths, published, projectIds } = await storage.deleteUserAccountData(userId);
+
+      for (const p of objectPaths) {
+        try {
+          await objectStorage.deleteObjectEntity(p);
+        } catch (e: any) {
+          console.warn(`[account-delete] object cleanup ${p}:`, e?.message || e);
+        }
+      }
+
+      for (const pub of published) {
+        deleteProjectFromYandex(pub.id, pub.customDomain, pub.ycStoragePoolId).catch((e) =>
+          console.warn(`[account-delete] Yandex cleanup project ${pub.id}:`, e?.message || e),
+        );
+      }
+
+      req.logout((err) => {
+        if (err) console.warn("[account-delete] logout warning:", err?.message || err);
+        req.session?.destroy(() => {
+          res.clearCookie("connect.sid");
+          res.json({
+            message: "Аккаунт удалён",
+            deletedProjects: projectIds.length,
+            deletedFiles: objectPaths.length,
+          });
+        });
+      });
+    } catch (err: any) {
+      console.error("[account-delete]", err);
+      res.status(500).json({ message: err.message || "Не удалось удалить аккаунт" });
     }
   });
 
