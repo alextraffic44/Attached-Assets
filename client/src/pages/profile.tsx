@@ -196,6 +196,48 @@ export default function ProfilePage() {
           ))}
         </div>
 
+        {/* Nav items — right after registration date */}
+        <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", overflow: "hidden", marginBottom: "1.25rem" }}>
+          {navItems.map((item, i) => (
+            <button
+              key={i}
+              onClick={item.onClick}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.9rem 1.25rem", borderBottom: "1px solid rgba(0,0,0,0.05)", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(0,0,0,0.015)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: `${item.color}14`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: item.color }}>
+                {item.icon}
+              </div>
+              <span style={{ fontSize: "0.92rem", fontWeight: 600, color: "#1D1D1F", fontFamily: appleFont }}>{item.label}</span>
+              <span style={{ marginLeft: "auto", color: "#AEAEB2", fontSize: "1rem" }}>›</span>
+            </button>
+          ))}
+          <button
+            onClick={async () => { await logout(); setLocation("/auth"); }}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.9rem 1.25rem", background: "transparent", border: "none", borderBottom: "1px solid rgba(0,0,0,0.05)", cursor: "pointer", textAlign: "left" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,59,48,0.04)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+          >
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,59,48,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#FF3B30" }}>
+              <LogOut size={15} />
+            </div>
+            <span style={{ fontSize: "0.92rem", fontWeight: 600, color: "#FF3B30" }}>Выйти</span>
+          </button>
+          <button
+            onClick={() => { setDeleteConfirm(""); setShowDeleteDialog(true); }}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.9rem 1.25rem", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,59,48,0.04)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            data-testid="button-delete-account"
+          >
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,59,48,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#FF3B30" }}>
+              <Trash2 size={15} />
+            </div>
+            <span style={{ fontSize: "0.92rem", fontWeight: 600, color: "#FF3B30" }}>Удалить аккаунт</span>
+          </button>
+        </div>
+
         {/* Transparent token spend history */}
         <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", overflow: "hidden", marginBottom: "1.25rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.95rem 1.25rem", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
@@ -296,52 +338,6 @@ export default function ProfilePage() {
               )}
             </>
           )}
-        </div>
-
-        {/* Nav items */}
-        <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", overflow: "hidden", marginBottom: "1.25rem" }}>
-          {navItems.map((item, i) => (
-            <button
-              key={i}
-              onClick={item.onClick}
-              style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.9rem 1.25rem", borderBottom: i < navItems.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(0,0,0,0.015)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-            >
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: `${item.color}14`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: item.color }}>
-                {item.icon}
-              </div>
-              <span style={{ fontSize: "0.92rem", fontWeight: 600, color: "#1D1D1F", fontFamily: appleFont }}>{item.label}</span>
-              <span style={{ marginLeft: "auto", color: "#AEAEB2", fontSize: "1rem" }}>›</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Logout + delete */}
-        <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", overflow: "hidden" }}>
-          <button
-            onClick={async () => { await logout(); setLocation("/auth"); }}
-            style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.9rem 1.25rem", background: "transparent", border: "none", borderBottom: "1px solid rgba(0,0,0,0.05)", cursor: "pointer", textAlign: "left" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,59,48,0.04)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          >
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,59,48,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#FF3B30" }}>
-              <LogOut size={15} />
-            </div>
-            <span style={{ fontSize: "0.92rem", fontWeight: 600, color: "#FF3B30" }}>Выйти</span>
-          </button>
-          <button
-            onClick={() => { setDeleteConfirm(""); setShowDeleteDialog(true); }}
-            style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.9rem 1.25rem", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,59,48,0.04)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-            data-testid="button-delete-account"
-          >
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,59,48,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#FF3B30" }}>
-              <Trash2 size={15} />
-            </div>
-            <span style={{ fontSize: "0.92rem", fontWeight: 600, color: "#FF3B30" }}>Удалить аккаунт</span>
-          </button>
         </div>
       </main>
 
