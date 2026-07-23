@@ -192,38 +192,61 @@ function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
 }
 
 /**
- * I2I reveal: same camera/placement.
- * With a product photo — keep the exact product, morph environment/season/state.
+ * I2I reveal: EDIT the finished base frame — never recompose from scratch.
+ * With a product photo — keep the exact product locked in place; morph environment only.
  * Without product — subject/object may metamorphose (diamond→ring etc.).
  */
 function buildRevealPrompt(revealScene: string, hasProduct: boolean): string {
+  const atmosphere = sanitizeRevealAtmosphere(revealScene);
   if (hasProduct) {
     return (
-      `Image-to-image seasonal / environmental metamorphosis of the reference product photograph for a hover morph overlay. ` +
-      `KEEP the exact same product perfectly identical — same shape, label, logo, text, colors, proportions and silhouette. ` +
-      `KEEP the same camera angle, framing, scale and product placement (perfect registration for WebGL morph). ` +
-      `DO transform ONLY the surrounding atmosphere, season, weather and context around that same product. ` +
-      `Examples: summer sunny condensation → winter frozen in clear ice and frost; warm beach light → cold snowy night; ` +
-      `dry studio → product encased in cracked ice crystals; golden hour → blizzard rim light. ` +
-      `Apply this environment metamorphosis: ${revealScene}. ` +
-      `The reveal must be OBVIOUSLY a different season/context at a glance while the product itself stays faithful. ` +
-      `FULL VIVID COLOR. If the product label changed or the season barely shifted, the edit FAILED. ` +
-      `No text, no watermark, no logos added. Same 16:9 framing.`
+      `CRITICAL: This is an IMAGE-TO-IMAGE EDIT of the provided reference photograph (frame 1 already generated). ` +
+      `Do NOT generate a new composition. Do NOT re-place, re-frame, re-scale or re-center the product. ` +
+      `PIXEL-LOCK registration: the product must occupy the EXACT same pixels / silhouette / position / size / angle as in the reference image. ` +
+      `KEEP the exact product identity — same shape, label, logo, text, colors and proportions. ` +
+      `CHANGE ONLY the surrounding atmosphere, season, weather, lighting and background props around that locked product. ` +
+      `Target atmosphere: ${atmosphere}. ` +
+      `Classic success: summer condensation → winter ice/frost while the can/bottle stays glued in place. ` +
+      `FULL VIVID COLOR. If the product moved even slightly, the edit FAILED — keep position identical. ` +
+      `No text, no watermark, no logos added. Same 16:9 framing as the reference.`
     );
   }
   return (
-    `Image-to-image metamorphosis of the reference photograph for a hover morph overlay. ` +
-    `KEEP the same camera angle, framing, scale and the subject's place in the frame (perfect registration). ` +
+    `CRITICAL: This is an IMAGE-TO-IMAGE EDIT of the provided reference photograph (frame 1 already generated). ` +
+    `Do NOT generate a new composition from scratch. ` +
+    `KEEP the same camera angle, framing, scale and the subject's place in the frame (perfect pixel registration). ` +
     `DO transform the SUBJECT / OBJECT itself into the reveal state — not only light. ` +
-    `Examples of the intended change class: raw diamond → finished diamond ring, red dress → blue dress, ` +
+    `Examples: raw diamond → finished diamond ring, red dress → blue dress, ` +
     `plain cake → decorated celebration cake, unfinished room → finished interior, dull car → polished showroom car. ` +
-    `Apply this metamorphosis: ${revealScene}. ` +
+    `Apply this metamorphosis: ${atmosphere}. ` +
     `The reveal must be OBVIOUSLY a different object or clearly transformed product/outfit/scene element at a glance, ` +
     `while staying in the same spot and silhouette footprint so the morph overlay lines up. ` +
     `Also upgrade lighting, materials and atmosphere to sell the new state. FULL VIVID COLOR. ` +
-    `If the result still looks like the same unchanged object, the edit FAILED — push the object change harder. ` +
-    `No text, no watermark, no logos. Same 16:9 framing.`
+    `If the subject moved or was reframed, the edit FAILED. No text, no watermark, no logos. Same 16:9 framing.`
   );
+}
+
+/** Strip placement/composition chatter so I2I only receives the atmosphere change. */
+function sanitizeRevealAtmosphere(revealScene: string): string {
+  let s = (revealScene || "").trim();
+  // Drop common framing boilerplate that causes the model to recompose.
+  s = s
+    .replace(/\bsame camera framing[^,]*/gi, "")
+    .replace(/\bsubject placement locked[^,]*/gi, "")
+    .replace(/\bsame exact product identity and label[^,]*/gi, "")
+    .replace(/\bmetamorphose (the )?environment to\b/gi, "")
+    .replace(/\bobviously different[^,]*/gi, "")
+    .replace(/\bright of center[^,]*/gi, "")
+    .replace(/\bcenter-right[^,]*/gi, "")
+    .replace(/\bcalm left text space[^,]*/gi, "")
+    .replace(/\bleft text space[^,]*/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,;:]+|[\s,;:]+$/g, "")
+    .trim();
+  if (s.length < 12) {
+    return "winter ice frost snow crystalline cold atmosphere around the same locked product";
+  }
+  return s.slice(0, 400);
 }
 
 export async function generateMotionRevealPair(opts: {
@@ -236,8 +259,10 @@ export async function generateMotionRevealPair(opts: {
   const hasProduct = !!opts.productImageUrl;
   const t0 = Date.now();
 
-  // 1) Base still first
-  deps.onStatus?.("Моушн: создаю первый кадр…");
+  // 1) Wait for BASE to fully finish (including re-upload) before starting reveal.
+  //    Never launch both stills in parallel — registration depends on editing frame 1.
+  deps.onStatus?.("Моушн: генерирую первый кадр…");
+  console.log("[MOTION] step1: waiting for base still before any I2I…");
   const baseUrl = await createStill(
     deps,
     buildBasePrompt(baseScene, hasProduct),
@@ -248,37 +273,35 @@ export async function generateMotionRevealPair(opts: {
     console.warn(`[MOTION] base failed after ${Date.now() - t0}ms`);
     return null;
   }
+  console.log(`[MOTION] step1 done: base ready ${baseUrl.slice(0, 80)}… — starting sequential I2I`);
 
-  // 2) Reveal = image-to-image from the finished base (same placement; product keeps identity)
+  // 2) ONLY AFTER base is ready: I2I from that exact frame (locks product position).
   const morphBrief =
     !revealScene ||
     revealScene === baseScene ||
     revealScene.length < 20
       ? (hasProduct
-          ? `${baseScene}, same exact product identity and label, metamorphose the environment to the opposite season ` +
-            `(e.g. vivid summer daylight with warm condensation → winter ice frost snow crystalline cold around the product), ` +
-            `obviously different atmosphere not just lighting`
-          : `${baseScene}, metamorphose the main subject/object into its premium finished counterpart in the same place ` +
-            `(e.g. raw material → finished product, one product color → another, before → after result), ` +
-            `dramatically different look, richer materials and lighting, obviously not a copy`)
+          ? "winter ice frost snow cracked clear ice crystals and cold rim light around the product"
+          : "metamorphose the main subject into its premium finished counterpart, richer materials and lighting")
       : revealScene;
+
   deps.onStatus?.(
     hasProduct
-      ? "Моушн: второй кадр — тот же продукт, другая атмосфера…"
-      : "Моушн: image-to-image morph объекта поверх первого кадра…",
+      ? "Моушн: первый кадр готов — image-to-image второго (тот же объект на месте)…"
+      : "Моушн: первый кадр готов — image-to-image morph поверх него…",
   );
   const revealUrl = await createStill(
     deps,
     buildRevealPrompt(morphBrief, hasProduct),
     "MOTION reveal i2i",
-    baseUrl,
+    baseUrl, // MUST be the finished base, never the raw product photo
   );
   if (!revealUrl) {
     console.warn(`[MOTION] reveal i2i failed after ${Date.now() - t0}ms`);
     return null;
   }
 
-  console.log(`[MOTION] pair ready (sequential i2i) in ${Date.now() - t0}ms`);
+  console.log(`[MOTION] pair ready (strict sequential i2i from base) in ${Date.now() - t0}ms`);
   deps.onStatus?.(`Моушн готов за ${Math.round((Date.now() - t0) / 1000)} с`);
   return { baseUrl, revealUrl };
 }
