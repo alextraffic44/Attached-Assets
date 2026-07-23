@@ -134,6 +134,20 @@ export class ObjectStorageService {
     if (!(await file.exists())[0]) throw new ObjectNotFoundError();
     return file as any;
   }
+  /** Best-effort delete of a private `/objects/...` blob (and its `.meta.json`). */
+  async deleteObjectEntity(objectPath: string): Promise<boolean> {
+    try {
+      const normalized = this.normalizeObjectEntityPath(objectPath);
+      if (!normalized.startsWith("/objects/")) return false;
+      const file = await this.getObjectEntityFile(normalized);
+      const absPath = (file as LocalFile).absolutePath;
+      await fs.promises.unlink(absPath).catch(() => {});
+      await fs.promises.unlink(absPath + META).catch(() => {});
+      return true;
+    } catch {
+      return false;
+    }
+  }
   normalizeObjectEntityPath(rawPath: string) {
     if (!rawPath) return rawPath;
     if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
