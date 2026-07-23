@@ -68,10 +68,8 @@ export default function GenerationsPage() {
     placeholderData: (prev) => prev,
   });
 
-  // Jump to top of grid when flipping pages
-  useMemo(() => {
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-    return null;
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, [page]);
 
   const images = data?.items ?? [];
