@@ -28,6 +28,7 @@ export interface IStorage {
 
   getProjectImages(projectId: number): Promise<ProjectImage[]>;
   getImagesByUser(userId: number): Promise<(ProjectImage & { projectTitle: string })[]>;
+  getImagesByUserPage(userId: number, page: number, limit: number): Promise<{ items: (ProjectImage & { projectTitle: string })[]; total: number; page: number; limit: number; totalPages: number }>;
   createProjectImage(image: InsertProjectImage): Promise<ProjectImage>;
   deleteProjectImage(id: number): Promise<void>;
 
@@ -338,6 +339,41 @@ export class DatabaseStorage implements IStorage {
       )
       .orderBy(desc(projectImages.createdAt));
     return rows;
+  }
+
+  async getImagesByUserPage(userId: number, page: number, limit: number): Promise<{ items: (ProjectImage & { projectTitle: string })[]; total: number; page: number; limit: number; totalPages: number }> {
+    const safeLimit = Math.min(48, Math.max(1, Math.floor(limit) || 24));
+    const safePage = Math.max(1, Math.floor(page) || 1);
+    const offset = (safePage - 1) * safeLimit;
+    const ownerFilter = sql`(${projects.userId} = ${userId} OR ${projectImages.userId} = ${userId})`;
+
+    const countResult = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(projectImages)
+      .leftJoin(projects, eq(projectImages.projectId, projects.id))
+      .where(ownerFilter);
+    const total = Number(countResult[0]?.count || 0);
+
+    const items = await db
+      .select({
+        id: projectImages.id,
+        projectId: projectImages.projectId,
+        userId: projectImages.userId,
+        name: projectImages.name,
+        url: projectImages.url,
+        prompt: projectImages.prompt,
+        createdAt: projectImages.createdAt,
+        projectTitle: sql<string>`COALESCE(${projects.title}, 'Удалённый проект')`,
+      })
+      .from(projectImages)
+      .leftJoin(projects, eq(projectImages.projectId, projects.id))
+      .where(ownerFilter)
+      .orderBy(desc(projectImages.createdAt))
+      .limit(safeLimit)
+      .offset(offset);
+
+    const totalPages = Math.max(1, Math.ceil(total / safeLimit));
+    return { items, total, page: safePage, limit: safeLimit, totalPages };
   }
 
   async createProjectImage(image: InsertProjectImage): Promise<ProjectImage> {

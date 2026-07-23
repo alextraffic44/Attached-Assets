@@ -7015,9 +7015,12 @@ ${fullHtml}`;
 
   app.get("/api/generations", requireAuth, async (req, res) => {
     try {
-      const userId = (req as any).user?.id || 1;
-      const images = await storage.getImagesByUser(userId);
-      res.json(images);
+      const userId = (req as any).user?.id;
+      if (!userId) return res.status(401).json({ message: "Не авторизован" });
+      const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
+      const limit = Math.min(48, Math.max(1, parseInt(String(req.query.limit || "24"), 10) || 24));
+      const result = await storage.getImagesByUserPage(userId, page, limit);
+      res.json(result);
     } catch (err) {
       res.status(500).json({ message: "Ошибка получения генераций" });
     }
