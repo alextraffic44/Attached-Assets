@@ -567,12 +567,22 @@ export default function EditorPage() {
       return { ...old, credits: Math.max(0, old.credits - cost) };
     });
 
-    const images = effectiveImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }));
     const sentPreviews = effectiveImages.filter(img => img.preview).map(img => ({ preview: img.preview!, fileName: img.fileName }));
     const imageUrls = effectiveImages.filter(img => img.url).map(img => ({ url: img.url!, fileName: img.fileName }));
     const videoUrls = effectiveVideos.map(v => ({ url: v.url, fileName: v.fileName }));
     const modelUrlsToSend = effectiveModels.map(m => ({ url: m.url, fileName: m.fileName }));
     const audioUrls = effectiveAudios.map(a => ({ url: a.url, fileName: a.fileName }));
+
+    // Prefer already-uploaded URLs. Sending huge base64 on every edit forces the
+    // server off the tool-calling path into a broken "tools hint + no tools" stream
+    // where the model often replies «Сайт обновлён» without applying the file.
+    // Keep base64 only for «Профессионал» (needs vision) or when upload failed.
+    const isMockupActive = injectedImages ? true : mockupMode;
+    const allImagesUploaded = effectiveImages.length > 0 && effectiveImages.every(img => !!img.url);
+    const sendVisionBytes = effectiveImages.length > 0 && (isMockupActive || !allImagesUploaded);
+    const images = sendVisionBytes
+      ? effectiveImages.map(img => ({ base64: img.base64, mimeType: img.mimeType, fileName: img.fileName }))
+      : [];
 
     setAttachedImages([]);
     setAttachedVideos([]);
@@ -604,7 +614,6 @@ export default function EditorPage() {
     let gotFinalCode = false;
     let errorShown = false;
     try {
-      const isMockupActive = injectedImages ? true : mockupMode;
       const bodyData: any = { prompt: text, images, activeFile, skipEnhance: !!skipEnhance, mockupMode: isMockupActive && images.length > 0 };
       if (imageUrls.length > 0) {
         bodyData.imageUrls = imageUrls;
