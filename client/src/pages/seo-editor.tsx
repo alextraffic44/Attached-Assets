@@ -10,10 +10,17 @@ import {
   ChevronRight, ChevronDown, Globe, Zap, RefreshCw,
   CheckCircle2, XCircle, Clock, Loader2, ArrowLeft,
   BarChart2, FileText, Layers, PlusCircle, Settings2, X,
-  ExternalLink,
+  ExternalLink, Send, MessageSquare,
 } from "lucide-react";
 
 type Phase = "setup" | "structure" | "generating" | "done";
+
+type ChatMessage = {
+  id: number;
+  role: string;
+  content: string;
+  createdAt?: string;
+};
 
 /* ─── tiny helpers ─── */
 function StatusIcon({ status }: { status: SeoKeyword["status"] | "pending" }) {
@@ -77,6 +84,13 @@ export default function SeoEditorPage() {
   const [adHeadCode, setAdHeadCode]   = useState("");
   const [adUnitCode, setAdUnitCode]   = useState("");
 
+  const [chatPrompt, setChatPrompt]   = useState("");
+  const [isChatGenerating, setIsChatGenerating] = useState(false);
+  const [chatStatus, setChatStatus]   = useState("");
+  const [streamingReply, setStreamingReply] = useState("");
+  const [leftTab, setLeftTab]         = useState<"site" | "agent">("site");
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
   /* ── single query, no polling — SSE provides live updates ── */
   const { data, isLoading, refetch } = useQuery<{
     project: any;
@@ -87,6 +101,17 @@ export default function SeoEditorPage() {
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
+
+  const { data: chatMessages = [], refetch: refetchMessages } = useQuery<ChatMessage[]>({
+    queryKey: ["/api/projects", id, "messages"],
+    queryFn: () => fetch(`/api/projects/${id}/messages`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!id && phase === "done",
+    staleTime: 10_000,
+  });
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages.length, streamingReply, isChatGenerating]);
 
   const project = data?.project;
   const files   = data?.files || [];
@@ -399,6 +424,86 @@ export default function SeoEditorPage() {
     } catch {}
   }
 
+  async function handleChatEdit() {
+    const text = chatPrompt.trim();
+    if (!text || isChatGenerating || !id) return;
+    setIsChatGenerating(true);
+    setChatStatus("Агент думает…");
+    setStreamingReply("");
+    setChatPrompt("");
+    setLeftTab("agent");
+
+    const optimisticId = Date.now();
+    qc.setQueryData<ChatMessage[]>(["/api/projects", id, "messages"], (old) => [
+      ...(old || []),
+      { id: optimisticId, role: "user", content: text, createdAt: new Date().toISOString() },
+    ]);
+
+    try {
+      const res = await fetch(`/api/seo/${id}/chat-edit`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: text,
+          activeFile: selectedFile || "index.html",
+          agentVersion: "v2",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Ошибка запроса");
+      }
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("Нет потока ответа");
+      const decoder = new TextDecoder();
+      let buf = "";
+      let full = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() || "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          try {
+            const evt = JSON.parse(line.slice(5).trim());
+            if (evt.status) setChatStatus(evt.status);
+            if (evt.content) {
+              full += evt.content;
+              setStreamingReply(full);
+            }
+            if (evt.error) throw new Error(evt.error);
+            if (evt.done) {
+              setChatStatus("");
+              setStreamingReply("");
+              await refetchMessages();
+              await refetch();
+              const reload = selectedFile || "index.html";
+              await loadPreview(reload);
+              toast({
+                title: "Сайт обновлён",
+                description: evt.summary || (evt.changedFiles?.length ? `Изменено: ${evt.changedFiles.join(", ")}` : undefined),
+              });
+              qc.invalidateQueries({ queryKey: ["/api/auth/user"] });
+            }
+          } catch (parseErr: any) {
+            if (parseErr?.message && !parseErr.message.includes("JSON")) throw parseErr;
+          }
+        }
+      }
+    } catch (e: any) {
+      toast({ title: "Ошибка агента", description: e.message, variant: "destructive" });
+      await refetchMessages();
+    } finally {
+      setIsChatGenerating(false);
+      setChatStatus("");
+      setStreamingReply("");
+    }
+  }
+
   // Handle navigation messages from preview iframe
   useEffect(() => {
     function onMessage(e: MessageEvent) {
@@ -658,7 +763,41 @@ export default function SeoEditorPage() {
                 </div>
               )}
 
-              {/* Action buttons */}
+              {/* Tabs: site tree vs agent chat (when ready) */}
+              {phase === "done" && (
+                <div style={{ display: "flex", gap: 4, padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <button
+                    type="button"
+                    onClick={() => setLeftTab("site")}
+                    style={{
+                      flex: 1, padding: "7px 8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      border: leftTab === "site" ? "1px solid rgba(99,102,241,0.45)" : "1px solid transparent",
+                      background: leftTab === "site" ? "rgba(99,102,241,0.15)" : "transparent",
+                      color: leftTab === "site" ? "#c7d2fe" : "#666",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    }}
+                  >
+                    <Layers className="w-3.5 h-3.5" /> Сайт
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLeftTab("agent")}
+                    style={{
+                      flex: 1, padding: "7px 8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      border: leftTab === "agent" ? "1px solid rgba(99,102,241,0.45)" : "1px solid transparent",
+                      background: leftTab === "agent" ? "rgba(99,102,241,0.15)" : "transparent",
+                      color: leftTab === "agent" ? "#c7d2fe" : "#666",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    }}
+                    data-testid="button-seo-agent-tab"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" /> Агент
+                  </button>
+                </div>
+              )}
+
+              {/* Action buttons — site tab / generating */}
+              {(phase !== "done" || leftTab === "site") && (
               <div style={{ padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8 }}>
                 {phase === "generating" ? (
                   <div style={{ flex: 1, padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, color: "#555", fontSize: 12.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
@@ -696,8 +835,10 @@ export default function SeoEditorPage() {
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
               </div>
+              )}
 
               {/* Site tree */}
+              {(phase !== "done" || leftTab === "site") && (
               <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
                 {/* Home */}
                 <TreeRow
@@ -741,6 +882,91 @@ export default function SeoEditorPage() {
                   );
                 })}
               </div>
+              )}
+
+              {/* Agent chat */}
+              {phase === "done" && leftTab === "agent" && (
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+                  <div style={{ padding: "10px 14px 6px", fontSize: 11, color: "#666", lineHeight: 1.45, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    Попросите сменить дизайн, цвета, шапку, структуру или текст на любой странице. Стоимость правки — 30 токенов.
+                  </div>
+                  <div style={{ flex: 1, overflowY: "auto", padding: "12px 12px 8px", display: "flex", flexDirection: "column", gap: 10 }}>
+                    {chatMessages.length === 0 && !isChatGenerating && (
+                      <div style={{ fontSize: 12.5, color: "#555", lineHeight: 1.55, padding: "8px 4px" }}>
+                        Примеры: «сделай тёмную тему», «увеличь логотип», «поменяй цвет кнопок на зелёный», «добавь блок отзывов на главную».
+                      </div>
+                    )}
+                    {chatMessages.map((msg) => {
+                      const isUser = msg.role === "user";
+                      return (
+                        <div
+                          key={msg.id}
+                          style={{
+                            alignSelf: isUser ? "flex-end" : "flex-start",
+                            maxWidth: "92%",
+                            padding: "8px 11px",
+                            borderRadius: 12,
+                            fontSize: 12.5,
+                            lineHeight: 1.5,
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                            background: isUser ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.05)",
+                            border: isUser ? "1px solid rgba(99,102,241,0.35)" : "1px solid rgba(255,255,255,0.06)",
+                            color: isUser ? "#e0e7ff" : "#c8c8d0",
+                          }}
+                        >
+                          {msg.content}
+                        </div>
+                      );
+                    })}
+                    {isChatGenerating && (
+                      <div style={{ alignSelf: "flex-start", maxWidth: "92%", padding: "8px 11px", borderRadius: 12, fontSize: 12.5, lineHeight: 1.5, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)", color: "#a5b4fc" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: streamingReply ? 6 : 0 }}>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>{chatStatus || "Работаю…"}</span>
+                        </div>
+                        {streamingReply ? <div style={{ color: "#c8c8d0", whiteSpace: "pre-wrap" }}>{streamingReply}</div> : null}
+                      </div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
+                  <div style={{ padding: "10px 12px 12px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8 }}>
+                    <textarea
+                      value={chatPrompt}
+                      onChange={(e) => setChatPrompt(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void handleChatEdit();
+                        }
+                      }}
+                      disabled={isChatGenerating}
+                      placeholder="Напишите правку агенту…"
+                      rows={2}
+                      data-testid="input-seo-agent-chat"
+                      style={{
+                        flex: 1, resize: "none", borderRadius: 10, padding: "8px 10px",
+                        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                        color: "#e2e8f0", fontSize: 13, outline: "none", fontFamily: "inherit",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleChatEdit()}
+                      disabled={isChatGenerating || !chatPrompt.trim()}
+                      data-testid="button-seo-agent-send"
+                      style={{
+                        width: 42, height: 42, alignSelf: "flex-end", borderRadius: 10, border: "none",
+                        background: isChatGenerating || !chatPrompt.trim() ? "rgba(99,102,241,0.25)" : "linear-gradient(135deg,#4f46e5,#7c3aed)",
+                        color: "#fff", cursor: isChatGenerating || !chatPrompt.trim() ? "default" : "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                    >
+                      {isChatGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Gen log */}
               {phase === "generating" && genLog.length > 0 && (

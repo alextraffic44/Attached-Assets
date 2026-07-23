@@ -29,6 +29,24 @@ export function isHtmlPage(filename: string): boolean {
   return filename.toLowerCase().endsWith(".html");
 }
 
+/** HTML pages + global CSS the multipage/SEO agent may edit. */
+export function isEditableSiteFile(filename: string): boolean {
+  const f = filename.toLowerCase();
+  return f.endsWith(".html") || f.endsWith(".css");
+}
+
+export function normalizeSiteFilename(filename: string): string {
+  return String(filename || "").trim().replace(/^\/+/, "").toLowerCase();
+}
+
+/** Allowed write targets: flat/nested HTML or assets/style.css (SEO). */
+export function isValidAgentWriteFilename(filename: string): boolean {
+  const f = normalizeSiteFilename(filename);
+  if (f === "assets/style.css") return true;
+  // index.html, about.html, guides/foo/index.html, a/b/c.html
+  return /^(?:[a-z0-9][a-z0-9_-]*\/)*[a-z0-9][a-z0-9_-]*\.html$/.test(f);
+}
+
 export function stripBase64Images(code: string): { stripped: string; map: Map<string, string> } {
   const map = new Map<string, string>();
   let counter = 0;
@@ -74,10 +92,10 @@ export function buildInitialCraftMd(opts: {
   userPrompt?: string;
   pages: SitePage[];
 }): string {
-  const htmlPages = opts.pages.filter((p) => isHtmlPage(p.filename));
+  const htmlPages = opts.pages.filter((p) => isEditableSiteFile(p.filename));
   const pageLines = htmlPages.map((p) => {
-    const t = extractPageTitle(p.code);
-    const secs = extractSections(p.code);
+    const t = isHtmlPage(p.filename) ? extractPageTitle(p.code) : "глобальные стили";
+    const secs = isHtmlPage(p.filename) ? extractSections(p.code) : [];
     return `- \`${p.filename}\`${t ? ` — ${t}` : ""}${secs.length ? ` [${secs.join(", ")}]` : ""}`;
   });
 
@@ -177,14 +195,15 @@ export async function refreshCraftMdPages(
 }
 
 export function buildSiteManifest(pages: SitePage[], craftMd: string): string {
-  const htmlPages = pages.filter((p) => isHtmlPage(p.filename));
-  const lines = htmlPages.map((p) => {
-    const t = extractPageTitle(p.code);
-    const secs = extractSections(p.code);
-    return `• ${p.filename} — ${p.code.length} символов${t ? ` — «${t}»` : ""}${secs.length ? ` — секции: ${secs.join(", ")}` : ""}`;
+  const editable = pages.filter((p) => isEditableSiteFile(p.filename));
+  const lines = editable.map((p) => {
+    const t = isHtmlPage(p.filename) ? extractPageTitle(p.code) : "";
+    const secs = isHtmlPage(p.filename) ? extractSections(p.code) : [];
+    const kind = p.filename.toLowerCase().endsWith(".css") ? "CSS" : "HTML";
+    return `• ${p.filename} (${kind}) — ${p.code.length} символов${t ? ` — «${t}»` : ""}${secs.length ? ` — секции: ${secs.join(", ")}` : ""}`;
   });
 
-  return `═══ КАРТА САЙТА (все страницы доступны для редактирования) ═══
+  return `═══ КАРТА САЙТА (все страницы и CSS доступны для редактирования) ═══
 ${lines.join("\n") || "• index.html"}
 
 ═══ craft.md (память агента) ═══
@@ -200,14 +219,19 @@ export function buildPagesContext(
   maxTotalChars = 110_000,
 ): { context: string; base64Maps: Map<string, Map<string, string>> } {
   const base64Maps = new Map<string, Map<string, string>>();
-  const htmlPages = pages.filter((p) => isHtmlPage(p.filename));
+  const editable = pages.filter((p) => isEditableSiteFile(p.filename));
+  const activeNorm = normalizeSiteFilename(activeFile);
 
-  // Prioritize active file, then index, then others by size ascending (fit more small pages)
-  const ordered = [...htmlPages].sort((a, b) => {
-    if (a.filename === activeFile) return -1;
-    if (b.filename === activeFile) return 1;
-    if (a.filename === "index.html") return -1;
-    if (b.filename === "index.html") return 1;
+  // Prioritize active file, then index, then style.css, then others by size ascending
+  const ordered = [...editable].sort((a, b) => {
+    const an = normalizeSiteFilename(a.filename);
+    const bn = normalizeSiteFilename(b.filename);
+    if (an === activeNorm) return -1;
+    if (bn === activeNorm) return 1;
+    if (an === "index.html") return -1;
+    if (bn === "index.html") return 1;
+    if (an === "assets/style.css") return -1;
+    if (bn === "assets/style.css") return 1;
     return a.code.length - b.code.length;
   });
 
@@ -215,9 +239,13 @@ export function buildPagesContext(
   const parts: string[] = [];
 
   for (const page of ordered) {
-    const { stripped, map } = stripBase64Images(page.code || "");
+    const isCss = page.filename.toLowerCase().endsWith(".css");
+    const { stripped, map } = isCss
+      ? { stripped: page.code || "", map: new Map<string, string>() }
+      : stripBase64Images(page.code || "");
     base64Maps.set(page.filename, map);
 
+    const fence = isCss ? "css" : "html";
     const header = `\n─── FILE: ${page.filename} ───\n`;
     const remaining = maxTotalChars - used;
     if (remaining < 800) {
@@ -225,18 +253,19 @@ export function buildPagesContext(
       continue;
     }
 
-    if (stripped.length + 200 <= remaining || page.filename === activeFile) {
-      const budget = page.filename === activeFile ? Math.min(stripped.length, Math.max(remaining - 200, 20_000)) : Math.min(stripped.length, remaining - 200);
+    const isActive = normalizeSiteFilename(page.filename) === activeNorm;
+    if (stripped.length + 200 <= remaining || isActive) {
+      const budget = isActive ? Math.min(stripped.length, Math.max(remaining - 200, 20_000)) : Math.min(stripped.length, remaining - 200);
       if (budget >= stripped.length) {
-        parts.push(`${header}\`\`\`html\n${stripped}\n\`\`\`\n`);
+        parts.push(`${header}\`\`\`${fence}\n${stripped}\n\`\`\`\n`);
         used += stripped.length + 200;
       } else {
-        parts.push(`${header}\`\`\`html\n${stripped.slice(0, budget)}\n\`\`\`\n...[обрезано ${stripped.length - budget} символов — для полного кода вызови read_page("${page.filename}")]\n`);
+        parts.push(`${header}\`\`\`${fence}\n${stripped.slice(0, budget)}\n\`\`\`\n...[обрезано ${stripped.length - budget} символов — для полного кода вызови read_page("${page.filename}")]\n`);
         used += budget + 200;
       }
     } else {
       const excerpt = stripped.slice(0, Math.min(1800, remaining - 200));
-      parts.push(`${header}(превью ${excerpt.length}/${stripped.length} символов)\n\`\`\`html\n${excerpt}\n\`\`\`\n...[используй read_page для полного файла]\n`);
+      parts.push(`${header}(превью ${excerpt.length}/${stripped.length} символов)\n\`\`\`${fence}\n${excerpt}\n\`\`\`\n...[используй read_page для полного файла]\n`);
       used += excerpt.length + 200;
     }
   }
@@ -247,16 +276,16 @@ export function buildPagesContext(
 export const SITE_AGENT_TOOLS = [
   {
     name: "list_pages",
-    description: "Список всех HTML-страниц сайта с размерами, title и секциями.",
+    description: "Список всех HTML-страниц и CSS-файлов сайта с размерами, title и секциями.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "read_page",
-    description: "Прочитать полный код страницы (с плейсхолдерами __B64_N__ вместо base64).",
+    description: "Прочитать полный код файла (HTML или CSS; для HTML — с плейсхолдерами __B64_N__ вместо base64).",
     input_schema: {
       type: "object",
       properties: {
-        filename: { type: "string", description: "Имя файла, например about.html или index.html" },
+        filename: { type: "string", description: "Имя файла, например index.html, assets/style.css или guides/foo/index.html" },
       },
       required: ["filename"],
       additionalProperties: false,
@@ -265,7 +294,7 @@ export const SITE_AGENT_TOOLS = [
   {
     name: "apply_patch",
     description:
-      "Применить SEARCH/REPLACE патч к любой странице. SEARCH должен точно совпадать с фрагментом кода. Можно вызывать многократно для разных файлов. Если пользователь прикрепил фото/видео с URL — вставляй эти URL в src (логотип, галерея, video), не оставляй старые.",
+      "Применить SEARCH/REPLACE патч к любой странице или CSS. SEARCH должен точно совпадать с фрагментом кода. Можно вызывать многократно для разных файлов. Для смены дизайна SEO-сайта правь assets/style.css. Если пользователь прикрепил фото/видео с URL — вставляй эти URL в src (логотип, галерея, video), не оставляй старые.",
     input_schema: {
       type: "object",
       properties: {
@@ -279,12 +308,12 @@ export const SITE_AGENT_TOOLS = [
   },
   {
     name: "write_page",
-    description: "Полностью перезаписать страницу (только если правка затрагивает >50% файла или создаётся новая страница).",
+    description: "Полностью перезаписать HTML/CSS файл (только если правка затрагивает >50% файла или создаётся новая страница). Для SEO допускаются вложенные пути вида cluster/slug/index.html и assets/style.css.",
     input_schema: {
       type: "object",
       properties: {
         filename: { type: "string" },
-        code: { type: "string", description: "Полный HTML документа" },
+        code: { type: "string", description: "Полный HTML или CSS" },
       },
       required: ["filename", "code"],
       additionalProperties: false,
@@ -486,7 +515,7 @@ ${"═".repeat(43)}
 ⚠️ ПРАВИЛА:
 1. Меняй только то, что просит пользователь; сохраняй nav/footer и ссылки между страницами
 2. Плейсхолдеры __B64_N__ — изображения. НЕ удаляй и НЕ меняй их
-3. Если правка затрагивает общий стиль/навигацию — обнови все затронутые страницы
+3. Если правка затрагивает общий стиль/навигацию — обнови все затронутые страницы (и assets/style.css при смене дизайна)
 4. После существенных правок обнови craft.md (дизайн-заметки / журнал)
 
 ${manifest}
@@ -678,11 +707,15 @@ class SiteWorkspace {
   constructor(pages: SitePage[], craftMd: string) {
     this.files = new Map();
     for (const p of pages) {
-      if (!isHtmlPage(p.filename) && p.filename !== CRAFT_MD_FILENAME) continue;
-      if (isHtmlPage(p.filename)) {
+      const key = normalizeSiteFilename(p.filename);
+      if (!isEditableSiteFile(key) && key !== CRAFT_MD_FILENAME) continue;
+      if (isHtmlPage(key)) {
         const { stripped, map } = stripBase64Images(p.code || "");
-        this.files.set(p.filename, stripped);
-        this.base64Maps.set(p.filename, map);
+        this.files.set(key, stripped);
+        this.base64Maps.set(key, map);
+      } else if (key.endsWith(".css")) {
+        this.files.set(key, p.code || "");
+        this.base64Maps.set(key, new Map());
       }
     }
     this.craftMd = craftMd;
@@ -702,23 +735,22 @@ class SiteWorkspace {
         const list = [...this.files.entries()].map(([filename, code]) => ({
           filename,
           chars: code.length,
-          title: extractPageTitle(code),
-          sections: extractSections(code),
+          title: isHtmlPage(filename) ? extractPageTitle(code) : "(CSS)",
+          sections: isHtmlPage(filename) ? extractSections(code) : [],
         }));
         return { result: { pages: list } };
       }
       case "read_page": {
-        const filename = String(input.filename || "").trim().toLowerCase();
+        const filename = normalizeSiteFilename(String(input.filename || ""));
         const code = this.files.get(filename);
         if (code === undefined) return { result: { error: `Файл не найден: ${filename}`, available: [...this.files.keys()] } };
         return { result: { filename, code, chars: code.length } };
       }
       case "apply_patch": {
-        const filename = String(input.filename || "").trim().toLowerCase();
+        const filename = normalizeSiteFilename(String(input.filename || ""));
         const search = String(input.search ?? "");
         const replace = String(input.replace ?? "");
         if (!this.files.has(filename)) {
-          // Allow creating via patch only if file exists; use write_page for new
           return { result: { ok: false, error: `Файл не найден: ${filename}` } };
         }
         const current = this.files.get(filename)!;
@@ -729,16 +761,20 @@ class SiteWorkspace {
         return { result: { ok: true, filename, newChars: code.length } };
       }
       case "write_page": {
-        const filename = String(input.filename || "").trim().toLowerCase();
+        const filename = normalizeSiteFilename(String(input.filename || ""));
         let code = String(input.code ?? "");
-        if (!/^[a-z0-9][a-z0-9_-]*\.html$/.test(filename)) {
-          return { result: { ok: false, error: "Имя файла должно быть вида name.html (латиница, цифры, _ -)" } };
+        if (!isValidAgentWriteFilename(filename)) {
+          return { result: { ok: false, error: "Имя файла: name.html, path/to/index.html или assets/style.css" } };
+        }
+        if (filename.endsWith(".css")) {
+          if (code.trim().length < 20) return { result: { ok: false, error: "CSS слишком короткий" } };
+          this.files.set(filename, code);
+          this.changedFiles.add(filename);
+          return { result: { ok: true, filename, chars: code.length } };
         }
         if (!code.includes("<") || code.length < 50) return { result: { ok: false, error: "code слишком короткий или не HTML" } };
-        // Preserve existing base64 map if rewriting known file
         if (!this.base64Maps.has(filename)) this.base64Maps.set(filename, new Map());
         const { stripped, map } = stripBase64Images(code);
-        // Merge maps
         const existing = this.base64Maps.get(filename)!;
         for (const [k, v] of map) existing.set(k, v);
         this.files.set(filename, stripped);

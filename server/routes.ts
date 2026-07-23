@@ -3394,6 +3394,8 @@ export async function registerRoutes(
         enhance: "Улучшение промпта",
         "deep-research": "Deep Research",
         "3d": "3D модель",
+        "seo-article": "SEO статья",
+        "seo-edit": "SEO правка",
         refund: "Возврат",
         payment: "Пополнение",
         daily_publish: "Хостинг (день)",
