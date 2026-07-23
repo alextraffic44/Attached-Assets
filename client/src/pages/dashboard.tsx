@@ -1043,6 +1043,11 @@ export default function DashboardPage() {
                           <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#86868B', paddingLeft: 4 }}>
                             Фото продукта <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#aaa' }}>(необязательно)</span>
                           </div>
+                          {interactiveStyle === "motion" && (
+                            <p style={{ fontSize: '0.72rem', color: '#0d9488', margin: '0 0 2px', paddingLeft: 4, lineHeight: 1.4 }}>
+                              В Моушн ИИ проанализирует фото и сделает 2 кадра для hover — например лето → зима во льду
+                            </p>
+                          )}
                           <input
                             ref={interactiveProductImgRef}
                             type="file"
@@ -1093,7 +1098,11 @@ export default function DashboardPage() {
                               </div>
                               <div className="text-center">
                                 <p className="text-xs font-semibold" style={{ color: '#0d9488' }}>Загрузить фото продукта</p>
-                                <p className="text-[10px] mt-0.5" style={{ color: '#5eead4' }}>PNG, JPG до 10 МБ — AI оживит его</p>
+                                <p className="text-[10px] mt-0.5" style={{ color: '#5eead4' }}>
+                                  {interactiveStyle === "motion"
+                                    ? "PNG, JPG до 10 МБ — AI сделает пару кадров для morph"
+                                    : "PNG, JPG до 10 МБ — AI оживит его"}
+                                </p>
                               </div>
                             </button>
                           )}

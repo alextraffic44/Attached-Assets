@@ -172,6 +172,8 @@ function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
       `Take the exact product from the reference image and keep it perfectly identical ` +
       `(same shape, label, text, colors and proportions). Place it as the clear hero inside this niche scene: ${baseScene}. ` +
       leftTextSpace +
+      `This is STATE A of a two-frame hover morph — compose a vivid, photorealistic commercial scene ` +
+      `(season, weather, props and lighting must match the description exactly). ` +
       `FULL VIVID COLOR photorealistic commercial photography — rich brand colors, dramatic directional light, ` +
       `soft volumetric haze, premium campaign still. Match the niche environment and props from the description. ` +
       `Do NOT invent an unrelated portrait. No text, no watermark, no logos added. Ultra-high detail, 16:9.`
@@ -189,8 +191,26 @@ function buildBasePrompt(baseScene: string, hasProduct: boolean): string {
   );
 }
 
-/** I2I reveal: same camera/placement, but SUBJECT/OBJECT can metamorphose (plus look). */
-function buildRevealPrompt(revealScene: string): string {
+/**
+ * I2I reveal: same camera/placement.
+ * With a product photo — keep the exact product, morph environment/season/state.
+ * Without product — subject/object may metamorphose (diamond→ring etc.).
+ */
+function buildRevealPrompt(revealScene: string, hasProduct: boolean): string {
+  if (hasProduct) {
+    return (
+      `Image-to-image seasonal / environmental metamorphosis of the reference product photograph for a hover morph overlay. ` +
+      `KEEP the exact same product perfectly identical — same shape, label, logo, text, colors, proportions and silhouette. ` +
+      `KEEP the same camera angle, framing, scale and product placement (perfect registration for WebGL morph). ` +
+      `DO transform ONLY the surrounding atmosphere, season, weather and context around that same product. ` +
+      `Examples: summer sunny condensation → winter frozen in clear ice and frost; warm beach light → cold snowy night; ` +
+      `dry studio → product encased in cracked ice crystals; golden hour → blizzard rim light. ` +
+      `Apply this environment metamorphosis: ${revealScene}. ` +
+      `The reveal must be OBVIOUSLY a different season/context at a glance while the product itself stays faithful. ` +
+      `FULL VIVID COLOR. If the product label changed or the season barely shifted, the edit FAILED. ` +
+      `No text, no watermark, no logos added. Same 16:9 framing.`
+    );
+  }
   return (
     `Image-to-image metamorphosis of the reference photograph for a hover morph overlay. ` +
     `KEEP the same camera angle, framing, scale and the subject's place in the frame (perfect registration). ` +
@@ -229,19 +249,27 @@ export async function generateMotionRevealPair(opts: {
     return null;
   }
 
-  // 2) Reveal = image-to-image from the finished base (same placement, object+look morph)
+  // 2) Reveal = image-to-image from the finished base (same placement; product keeps identity)
   const morphBrief =
     !revealScene ||
     revealScene === baseScene ||
     revealScene.length < 20
-      ? `${baseScene}, metamorphose the main subject/object into its premium finished counterpart in the same place ` +
-        `(e.g. raw material → finished product, one product color → another, before → after result), ` +
-        `dramatically different look, richer materials and lighting, obviously not a copy`
+      ? (hasProduct
+          ? `${baseScene}, same exact product identity and label, metamorphose the environment to the opposite season ` +
+            `(e.g. vivid summer daylight with warm condensation → winter ice frost snow crystalline cold around the product), ` +
+            `obviously different atmosphere not just lighting`
+          : `${baseScene}, metamorphose the main subject/object into its premium finished counterpart in the same place ` +
+            `(e.g. raw material → finished product, one product color → another, before → after result), ` +
+            `dramatically different look, richer materials and lighting, obviously not a copy`)
       : revealScene;
-  deps.onStatus?.("Моушн: image-to-image morph объекта поверх первого кадра…");
+  deps.onStatus?.(
+    hasProduct
+      ? "Моушн: второй кадр — тот же продукт, другая атмосфера…"
+      : "Моушн: image-to-image morph объекта поверх первого кадра…",
+  );
   const revealUrl = await createStill(
     deps,
-    buildRevealPrompt(morphBrief),
+    buildRevealPrompt(morphBrief, hasProduct),
     "MOTION reveal i2i",
     baseUrl,
   );

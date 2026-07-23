@@ -550,6 +550,13 @@ type CreativeProductConcept = {
   productSummary?: string;
 };
 
+/** Dual hero scenes for Motion WebGL hover morph (product photo → summer / winter etc.). */
+type MotionDualConcept = {
+  productSummary?: string;
+  baseScene: string;
+  revealScene: string;
+};
+
 // Load product-image bytes for vision analysis. We ONLY read images we host
 // ourselves under "/objects/..." (the path uploaded product photos always use),
 // reading straight from object storage by entity id. We deliberately never
@@ -692,6 +699,88 @@ Return STRICT JSON only (no markdown, no commentary):
     return { stillAddition, motionPrompt, productSummary: typeof parsed.productSummary === "string" ? parsed.productSummary : undefined };
   } catch (e: any) {
     console.warn("[SCROLLANIM] creative-concept generation failed:", e?.message);
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Motion + product photo: Gemini vision invents TWO registered commercial scenes
+ * for the same exact product (e.g. summer condensation → winter ice) used as
+ * BASE /// REVEAL for the WebGL hover morph.
+ */
+async function generateMotionDualConcept(
+  productImageUrl: string,
+  shouldStop: () => boolean = () => false,
+): Promise<MotionDualConcept | null> {
+  if (shouldStop()) return null;
+  const img = await fetchProductImageForVision(productImageUrl);
+  if (!img || shouldStop()) return null;
+
+  const instruction =
+`You are the creative director of a premium product campaign (Apple, Chanel, Coca-Cola holiday spots).
+Study the product in the image carefully — category, packaging, label, colors, materials, mood.
+
+Invent TWO photorealistic commercial HERO scenes for a website hover morph:
+- STATE A (base): one vivid atmosphere / season / context around THIS exact product
+- STATE B (reveal): a dramatically DIFFERENT atmosphere / season / context around the SAME exact product
+
+Classic winning pairs (pick the best fit for THIS product, or invent a better pair):
+- beverage / soda / can / bottle: summer sunny beach or picnic with warm condensation beads → winter frozen in clear cracked ice and frost crystals
+- skincare / cream / jar: warm golden spa daylight with soft petals → cool crystalline frost morning with icy rim light
+- perfume: soft rose daylight mist → rainy night neon reflections around the bottle
+- coffee / food: warm sunrise steam and wood bar → cold snowy window-light winter morning
+- watch / jewellery: bright daylight sparkle → dramatic dark velvet with cold blue rim light
+- tech gadget: clean daylight desk → moody neon night desk with cool glow
+
+Hard rules:
+- preserve the REAL product perfectly (same shape, label text, logo, colors, proportions) in BOTH scenes;
+- SAME camera angle, framing, scale and product placement (center-right) so frames register for morph overlay;
+- leave calm darker negative space on the LEFT third for website overlay text;
+- the season/context change must be OBVIOUS at a glance (summer↔winter is ideal when it fits);
+- no humans, no hands, no invented logos; FULL VIVID COLOR; English only;
+- each scene is one rich comma-separated English phrase (no | :: {} newlines).
+
+Return STRICT JSON only (no markdown, no commentary):
+{"productSummary":"<3-6 words: product + category>","baseScene":"<STATE A English scene with product as hero, left text space>","revealScene":"same camera framing subject placement locked, same exact product identity and label, metamorphose environment to <STATE B>, obviously different season/context not just lighting"}`;
+
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const callP = gemini.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        { role: "user", parts: [
+          { inlineData: { data: img.base64, mimeType: img.mimeType } },
+          { text: instruction },
+        ] },
+      ],
+      config: { abortSignal: controller.signal },
+    });
+    const timeoutP = new Promise<null>((resolve) => { timer = setTimeout(() => { controller.abort(); resolve(null); }, 20000); });
+    const result: any = await Promise.race([callP, timeoutP]);
+    if (!result) { console.warn("[MOTION] dual-concept vision timed out"); return null; }
+    const text: string =
+      result?.text ??
+      result?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).filter(Boolean).join("") ??
+      "";
+    if (!text) return null;
+    const jsonStr = (text.match(/\{[\s\S]*\}/) || [text])[0];
+    const parsed = JSON.parse(jsonStr);
+    const baseScene = typeof parsed.baseScene === "string" ? parsed.baseScene.trim() : "";
+    const revealScene = typeof parsed.revealScene === "string" ? parsed.revealScene.trim() : "";
+    if (baseScene.length < 20 || revealScene.length < 20) return null;
+    console.log(
+      `[MOTION] dual concept (${parsed.productSummary || "?"}) → base: "${baseScene.slice(0, 100)}" | reveal: "${revealScene.slice(0, 100)}"`,
+    );
+    return {
+      baseScene,
+      revealScene,
+      productSummary: typeof parsed.productSummary === "string" ? parsed.productSummary : undefined,
+    };
+  } catch (e: any) {
+    console.warn("[MOTION] dual-concept generation failed:", e?.message);
     return null;
   } finally {
     if (timer) clearTimeout(timer);
@@ -2067,8 +2156,28 @@ async function resolveScrollAnimMarkers(
       }, 15000);
       let pair: Awaited<ReturnType<typeof generateMotionRevealPair>> = null;
       try {
+        // With a product photo: vision invents two registered scenes (e.g. summer → winter ice)
+        // and we prefer that over the LLM marker prompt — the photo is ground truth.
+        let scenePrompt = parsed.videoPrompt;
+        if (productImageUrl) {
+          try { res.write(`data: ${JSON.stringify({ status: "Моушн: анализирую фото продукта и придумываю пару сцен…" })}\n\n`); } catch {}
+          const dual = await generateMotionDualConcept(
+            productImageUrl,
+            () => isAborted() || Date.now() >= phaseDeadline,
+          );
+          if (dual?.baseScene && dual?.revealScene) {
+            scenePrompt = `${dual.baseScene} /// ${dual.revealScene}`;
+            try {
+              res.write(`data: ${JSON.stringify({
+                status: dual.productSummary
+                  ? `Моушн: идея для «${dual.productSummary}» — генерирую 2 кадра…`
+                  : "Моушн: генерирую 2 кадра по фото продукта…",
+              })}\n\n`);
+            } catch {}
+          }
+        }
         pair = await generateMotionRevealPair({
-          scenePrompt: parsed.videoPrompt,
+          scenePrompt,
           productImageUrl,
           deps: buildMotionRevealDeps({
             shouldStop: () => isAborted() || Date.now() >= phaseDeadline,
@@ -3828,11 +3937,19 @@ VIDEO_PROMPT (английский, ТОЛЬКО запятые, без | :: {})
 ═══ РЕЖИМ «ИНТЕРАКТИВНЫЙ — МОУШН» (WebGL hover-reveal под ЛЮБУЮ нишу) ═══
 Этот сайт ОБЯЗАН содержать специальный маркер {{SCROLLANIM:...}}. Если маркер отсутствует — сайт не будет работать.
 
-Ты — креативный арт-директор. Сначала ПОЙМИ нишу сайта из запроса пользователя (ресторан, стройка, клиника, недвижимость, авто, юристы, кофейня, спортзал, школа, салон, IT, ювелирка, мода и т.д.). Затем придумай ПАРУ ЯРКИХ ЦВЕТНЫХ кадров «объект A → объект B / до → после», где при наведении курсора ВИДНО, что сам предмет или результат услуги изменился (не только свет). ОБА кадра в ПОЛНОМ ЦВЕТЕ. Субъект может быть блюдом, платьем, кольцом, интерьером, машиной, улыбкой, букетом — чем угодно под нишу.
+Ты — креативный арт-директор. Сначала ПОЙМИ нишу сайта из запроса пользователя (ресторан, стройка, клиника, недвижимость, авто, юристы, кофейня, спортзал, школа, салон, IT, ювелирка, мода и т.д.). Затем придумай ПАРУ ЯРКИХ ЦВЕТНЫХ кадров «состояние A → состояние B», где при наведении курсора ВИДНО явное преображение. ОБА кадра в ПОЛНОМ ЦВЕТЕ.
+
+ЕСЛИ ЗАГРУЖЕНО ФОТО ПРОДУКТА:
+→ Оба кадра — ОДИН И ТОТ ЖЕ товар (этикетка/форма/цвета без изменений).
+→ Меняется ТОЛЬКО атмосфера/сезон/контекст вокруг него (классика: лето с конденсатом → зима во льду и инее).
+→ Ракурс, масштаб и место продукта в кадре — идентичны (для hover-morph).
+
+ЕСЛИ ФОТО НЕТ:
+→ Субъект может морфиться (алмаз→кольцо, красное платье→синее, пустая комната→с ремонтом и т.д.).
 
 РАЗДЕЛЕНИЕ РОЛЕЙ:
-→ ПАЙПЛАЙН: сначала базовый кадр, затем IMAGE-TO-IMAGE (тот же ракурс/место в кадре, но объект МОРФИТСЯ) + текст СЛЕВА.
-→ ТЫ пишешь маркер: состояние A /// состояние B (что именно превращается во что).
+→ ПАЙПЛАЙН: сначала базовый кадр, затем IMAGE-TO-IMAGE + текст СЛЕВА. Если есть фото продукта — пайплайн сам проанализирует его и усилит пару сцен.
+→ ТЫ пишешь маркер: состояние A /// состояние B.
 
 ЕДИНСТВЕННОЕ ТРЕБОВАНИЕ К СТРУКТУРЕ HTML:
 → СРАЗУ после закрывающего тега </header> (или сразу после <body> если нет header) на отдельной строке вставь:
@@ -3840,22 +3957,20 @@ VIDEO_PROMPT (английский, ТОЛЬКО запятые, без | :: {})
 
 Формат ENGLISH-части ОБЯЗАТЕЛЬНО с разделителем " /// " (пробел-три-слэша-пробел):
 - СЛЕВА от /// — базовый ЦВЕТНОЙ кадр: конкретный объект/сцена ниши справа/по центру-справа, спокойное пространство СЛЕВА под текст
-- СПРАВА от /// — МОРФИНГ САМОГО ОБЪЕКТА (главное!) + свет/материалы: алмаз→кольцо с бриллиантом, красное платье→синее, сырое блюдо→готовое, пустая комната→с ремонтом, тусклое авто→полированное. Тот же ракурс и место в кадре. ВСЕГДА добавляй: "same camera framing subject placement locked, metamorphose the main object into …, obviously different subject not just lighting"
-Пиши развёрнуто, ТОЛЬКО запятые внутри каждой половины (без | :: и фигурных скобок). Обе половины в цвете. ЗАПРЕЩЕНО: black and white / monochrome / grayscale. ЗАПРЕЩЕНО: reveal только про свет без смены объекта.
+- СПРАВА от /// — второе состояние: с фото продукта — другая среда/сезон вокруг ТОГО ЖЕ товара; без фото — морфинг объекта. ВСЕГДА добавляй: "same camera framing subject placement locked, …, obviously different … not just lighting"
+Пиши развёрнуто, ТОЛЬКО запятые внутри каждой половины (без | :: и фигурных скобок). Обе половины в цвете. ЗАПРЕЩЕНО: black and white / monochrome / grayscale.
 
-Примеры под разные ниши (адаптируй под КОНКРЕТНЫЙ бренд; в каждом объект РЕАЛЬНО меняется):
+Примеры С ФОТО ПРОДУКТА (адаптируй под реальный товар):
+- Газировка/банка: "exact soda can as hero right of center in vivid summer daylight picnic, warm condensation beads, calm left text space /// same camera framing subject placement locked, same exact product identity and label, metamorphose environment to winter ice frost snow cracked clear ice encasing the can, obviously different season not just lighting"
+- Крем/банка: "exact cream jar as hero right of center in warm golden spa daylight with soft petals, calm left text space /// same camera framing subject placement locked, same exact product identity and label, metamorphose environment to cool crystalline frost morning with icy rim light, obviously different season not just lighting"
+- Парфюм: "exact perfume bottle as hero right of center in soft rose daylight mist, calm left text space /// same camera framing subject placement locked, same exact product identity and label, metamorphose environment to rainy neon night reflections around the bottle, obviously different context not just lighting"
+
+Примеры БЕЗ фото (объект реально меняется):
 - Ювелирка: "raw uncut diamond crystal on dark velvet right of center, cool spotlight, calm left text space, luxury macro /// same camera framing subject placement locked, metamorphose the diamond into a finished platinum diamond engagement ring with brilliant sparkle, obviously different subject not just lighting"
 - Мода/платья: "elegant woman in a vivid red evening dress right of center, soft studio light, calm left text space /// same camera framing subject placement locked, metamorphose the dress into a deep sapphire blue evening gown same silhouette, obviously different subject not just lighting"
 - Ресторан: "raw plated ingredients arranged on dark slate right of center, cool prep light, left text space /// same camera framing subject placement locked, metamorphose into the finished gourmet signature dish with glaze and garnish, obviously different subject not just lighting"
-- Кофейня: "plain empty ceramic cup on wooden bar right of center at dawn, calm left text space /// same camera framing subject placement locked, metamorphose into a rich latte with crema art and rising steam, obviously different subject not just lighting"
 - Недвижимость: "empty unfinished modern villa room right-weighted, cool daylight, left copy space /// same camera framing subject placement locked, metamorphose into a fully furnished luxury interior with warm evening lamps, obviously different subject not just lighting"
-- Стройка/ремонт: "bare concrete apartment shell right of frame, cool industrial light, left text space /// same camera framing subject placement locked, metamorphose into a finished renovated living room with flooring furniture and warm lights, obviously different subject not just lighting"
 - Авто: "dusty dull luxury car three-quarter view right-weighted in garage, left text space /// same camera framing subject placement locked, metamorphose into a showroom-polished gleaming car with mirror paint and rim light, obviously different subject not just lighting"
-- Салон/красота: "client with dull flat hair in salon chair right of center, soft light, left text space /// same camera framing subject placement locked, metamorphose into glamorous colored styled hair with rich shine, obviously different subject not just lighting"
-- Фитнес: "soft untrained physique athlete stance right of center in gym, cool light, left text space /// same camera framing subject placement locked, metamorphose into a defined athletic after-transform physique same pose, obviously different subject not just lighting"
-- Стоматология: "close-up smile with imperfect teeth right of center, clinical light, left text space /// same camera framing subject placement locked, metamorphose into a perfect bright white healthy smile, obviously different subject not just lighting"
-- Цветы: "simple closed flower buds bouquet on marble right of center, soft daylight, left text space /// same camera framing subject placement locked, metamorphose into a full blooming luxury rose bouquet with dewdrops, obviously different subject not just lighting"
-- IT/SaaS: "blank dark laptop screen on desk right of center, cool tech light, left text space /// same camera framing subject placement locked, metamorphose into a glowing rich analytics dashboard UI on the same laptop, obviously different subject not just lighting"
 
 Тексты — РОВНО 4 пары на РУССКОМ (Заголовок::Подзаголовок): короткие мощные фразы под нишу. Они будут показаны СЛЕВА поверх hero.
 
@@ -3865,7 +3980,8 @@ VIDEO_PROMPT (английский, ТОЛЬКО запятые, без | :: {})
 ⚠️ НЕ создавай canvas/WebGL-код вручную. Маркер заменяется автоматически системой.
 ⚠️ НЕ своди всё к портрету со шлемом — думай как арт-директор бренда ЭТОЙ ниши.
 ⚠️ НЕ делай базовый кадр чёрно-белым — оба кадра цветные и яркие.
-⚠️ Reveal ОБЯЗАН менять сам объект/результат (не только свет). Ракурс и место в кадре — те же.
+⚠️ С фото продукта: этикетка/форма товара идентичны в обоих кадрах; меняется сезон/среда.
+⚠️ Без фото: reveal ОБЯЗАН менять сам объект/результат (не только свет). Ракурс и место в кадре — те же.
 🚨 ПРОВЕРЬ перед отправкой: маркер {{SCROLLANIM:...}} должен присутствовать в HTML и содержать " /// ".
 ═══ КОНЕЦ РЕЖИМА МОУШН ═══\n`;
         } else {
@@ -4370,15 +4486,17 @@ ${designAnalysis}
         }
       }
 
-      // For interactive split-mode sites: inject the uploaded product photo directly
-      // into the Gemini message so the model can see the actual product and write a
-      // product-specific {{SCROLLANIM:...}} video prompt and accurate alt-texts.
+      // For interactive sites with a product photo: inject into Gemini so it can write
+      // a product-aware {{SCROLLANIM:...}} prompt (and Motion dual A /// B scenes).
       if (useGemini && absoluteProductImageUrl) {
         const productImg = await fetchProductImageForVision(absoluteProductImageUrl);
         if (productImg) {
+          const productHint = interactiveStyle === "motion"
+            ? "⬇ ФОТО РЕАЛЬНОГО ТОВАРА (загружено для Hero в режиме Моушн). Внимательно изучи: форму, упаковку, цвета, текст на этикетке. В маркере {{SCROLLANIM:BASE /// REVEAL|...}} опиши ДВА состояния ОДНОГО И ТОГО ЖЕ продукта: например летний кадр с конденсатом / пляжем → зимний кадр во льду и инее при наведении. Сохрани точную идентичность товара в обеих половинах, один ракурс и место в кадре, спокойное пространство СЛЕВА под текст. Также используй фото для alt-текстов и цветовой палитры сайта."
+            : "⬇ ФОТО РЕАЛЬНОГО ТОВАРА (загружено для Hero-анимации). Внимательно изучи: форму, упаковку, цвета, текст на этикетке, стиль продукта. Используй это при создании: (1) точного описания товара в видео-промпте {{SCROLLANIM:...}} — укажи, что именно это за продукт и его ключевые визуальные особенности; (2) alt-текстов и подписей; (3) общей цветовой палитры и стиля сайта.";
           userContent.push({
             type: "input_text",
-            text: "⬇ ФОТО РЕАЛЬНОГО ТОВАРА (загружено для Hero-анимации в split-режиме). Внимательно изучи: форму, упаковку, цвета, текст на этикетке, стиль продукта. Используй это при создании: (1) точного описания товара в видео-промпте {{SCROLLANIM:...}} — укажи, что именно это за продукт и его ключевые визуальные особенности; (2) alt-текстов и подписей; (3) общей цветовой палитры и стиля сайта.",
+            text: productHint,
           });
           userContent.push({ type: "input_image_inline", base64: productImg.base64, mime_type: productImg.mimeType });
           console.log(`[KIE] Product image injected into Gemini message (${productImg.mimeType}, ${Math.round(productImg.base64.length * 0.75 / 1024)}KB)`);
@@ -4948,7 +5066,9 @@ ${designAnalysis}
           videoPromptAuto = `charismatic friendly mascot character ${nicheClause}, animal or stylized hero that instantly reads as this business, on the right third of frame, front-facing en face toward camera both eyes visible not side profile, starts looking clearly LEFT then turns through center to looking clearly RIGHT, full bidirectional head and eye yaw both left and right extremes clearly visible, beautiful niche-themed atmospheric background with calm negative space on the left, locked camera, photorealistic cinematic`;
           textsAuto = "Взгляд, который цепляет::Герой вашего бренда||Живой Hero::Атмосфера ниши слева и справа||Ваш ход::Начните диалог";
         } else if (interactiveStyle === "motion") {
-          videoPromptAuto = "premium niche brand scene in full vivid color, iconic commercial subject, cinematic lighting /// same subject and framing in richer alternate color mood, brighter premium commercial lighting, day-to-night or calm-to-energy metamorphosis reveal";
+          videoPromptAuto = absoluteProductImageUrl
+            ? "exact product as hero right of center in vivid summer daylight with warm condensation and soft outdoor glow, calm left text space, commercial photography /// same camera framing subject placement locked, same exact product identity and label, metamorphose environment to winter ice frost snow cracked clear ice crystals around the product, obviously different season not just lighting"
+            : "premium niche brand scene in full vivid color, iconic commercial subject, cinematic lighting /// same subject and framing in richer alternate color mood, brighter premium commercial lighting, day-to-night or calm-to-energy metamorphosis reveal";
           textsAuto = "Прикоснись::Открой другую сторону бренда||Характер::Сила в деталях||Преображение::Когда результат виден сразу||Твой ход::Начни прямо сейчас";
         } else {
           videoPromptAuto = absoluteProductImageUrl
